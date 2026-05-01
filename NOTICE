@@ -1,0 +1,56 @@
+Agent Pack
+Copyright 2026 Giuseppe Federico (giuseppefeder@gmail.com)
+
+This repository contains:
+
+  1. The Agent Pack Manifesto (MANIFESTO.md) and the Agent Pack
+     Specification (SPECIFICATION.md), written by Giuseppe Federico
+     in May 2026, licensed under the Creative Commons Attribution 4.0
+     International license (CC-BY-4.0). See LICENSE-docs.
+
+  2. The reference implementation (all source code in this repository
+     unless otherwise marked), authored by Giuseppe Federico, licensed
+     under the Apache License, Version 2.0. See LICENSE.
+
+Anyone redistributing or adapting these works must respect the
+respective licenses.
+
+Required attribution under CC-BY-4.0 for any redistribution,
+adaptation, or derivative reference of the manifesto or specification:
+
+    "Based on the Agent Pack paradigm by Giuseppe Federico (2026)."
+
+This NOTICE file must be preserved alongside any redistribution of
+the source code, as required by Section 4(d) of the Apache License 2.0.
+
+Scope of the claim
+------------------
+
+What is protected:
+
+  - The original text of MANIFESTO.md and SPECIFICATION.md
+    (copyright; CC-BY-4.0 conditions).
+  - The original source code of the reference implementation
+    (copyright; Apache-2.0 conditions, including a defensive patent
+    grant).
+  - The author's moral rights under French law (Code de la propriété
+    intellectuelle, art. L121-1) over the original expression of
+    these works — inalienable and perpetual.
+
+What is NOT claimed:
+
+  - Ownership of the abstract ideas, generic concepts, or technical
+    approaches described in these works. Copyright protects
+    expression, not ideas. Anyone is free to reach the same concepts
+    independently and to write their own expression of them.
+
+Proofs of authorship and anteriority
+------------------------------------
+
+The following are or will be filed to provide dated, third-party
+evidence that the works above existed at the dates indicated:
+
+  - e-Soleau (INPI, France):    <reference-id>
+  - Zenodo DOI:                 <10.5281/zenodo.XXXXXXX>
+  - Publication git commit:     <sha>
+  - GPG signature:              <key fingerprint>
