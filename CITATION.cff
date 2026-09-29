@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use or build on agent-pack, please cite it as below. Required attribution: Based on the Agent Pack paradigm by Giuseppe Federico (2026)."
+title: "agent-pack: a programming language to orchestrate agents across every harness"
+type: software
+authors:
+  - family-names: Federico
+    given-names: Giuseppe
+    email: giuseppefeder@gmail.com
+license: Apache-2.0
+keywords:
+  - AI agents
+  - programming language
+  - agent orchestration
+  - context engineering
+version: "0.26.0"
+repository-code: "https://github.com/digitex3d/agent-pack"
+date-released: "2026-09-25"
+# To fill at release: doi (Zenodo).

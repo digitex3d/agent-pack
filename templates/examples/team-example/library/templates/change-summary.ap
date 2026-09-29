@@ -1,0 +1,19 @@
+# change-summary
+
+EXPORT TEMPLATE change-summary:
+  ABOUT  what the developer hands the reviewer — the change, the files it touched, the tests run
+  SLOTS:
+    change: TEXT MAX_WORDS 30        "the change, in one sentence"
+    files:  TEXT                     "every file touched, comma-separated"
+    tests:  ENUM[passed failed none] "the result of the test run after the change"
+    risks:  TEXT MAX_WORDS 30        "what the reviewer should look at first, or none"
+  BODY:
+    change: {change}
+    files: {files}
+    tests: {tests}
+    risks: {risks}
+  EXAMPLE:
+    change: validate the email field before saving a user
+    files: src/users/create.ts, test/users/create.test.ts
+    tests: passed
+    risks: the regex rejects addresses with a plus sign

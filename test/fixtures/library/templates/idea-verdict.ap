@@ -1,0 +1,62 @@
+# idea-verdict
+IMPORT  score-row FROM @main.templates
+
+EXPORT TEMPLATE idea-verdict:
+  ABOUT   severe single-idea verdict — scorecard, utility score, overengineering check, REJECT/RESHAPE/REFINE/ADOPT
+  TAGS    #concept-shaper #evaluation #scoring #overengineering #verdict #upstream-of-pm
+  APPLIES role:concept-shaper — applied when the idea-evaluation advisor returns a verdict on one atomic idea
+
+  SLOTS:
+    idea:           TEXT MAX_WORDS 25 "one-line restatement of the single atomic idea under evaluation"
+    scorecard:      LIST <score-row> "nine rows — canonical criteria, order, weights and gates as in the example"
+      MUST   score all nine criteria 1-5 (integers); (score-1)/4 normalizes, so straight-3s map to 50 by design
+    surplus:        TEXT MAX_WORDS 25 "overengineering check: the heavy/general/speculative machinery, or none"
+    leaner:         TEXT MAX_WORDS 25 "the smaller specific thing that would do"
+    cost-signal:    TEXT MAX_WORDS 25 "objective cost: new files / abstractions / deps / public surface / config"
+    utility:        NUMBER 0..100 "100 * sum(w_i * (score_i - 1)/4), rounded"
+    band:           ENUM[weak mediocre solid strong]
+    verdict:        ENUM[REJECT RESHAPE REFINE ADOPT]
+      MUST!  apply the ladder top-down, first match wins — gates decide, the utility score is severity/confidence
+      MUST   REJECT when feasibility=1 or problem-reality=1 or net-roi=1 or full duplicate or (no gate, utility<45)
+      MUST   RESHAPE when overengineering=1 or cheaper-alternative=1 or (overeng=2, cheaper<=3) or (overeng=3, roi<=3)
+      MUST   REFINE when no gate fired and utility in [45,72), or utility>=72 with a gated axis below its ADOPT floor
+      MUST   ADOPT only when no gate fired, utility>=72, the four gates are all >=4 and capability-redundancy>=3
+      SHOULD calibrate: non-problem=REJECT, overengineered one-off=RESHAPE, break-even roi=REFINE, lean +EV=ADOPT
+    binding-axes:   TEXT MAX_WORDS 10 "the two axes that decided the verdict"
+    brief?:         TEXT MAX_WORDS 60 "only on ADOPT — carries verdict, utility + band, binding axes, for pm"
+    open-questions?: TEXT MAX_WORDS 30 "unfilled gaps, or the cheap test that would de-risk the riskiest assumption"
+    status:         ENUM[verdict-emitted refine-needs-specification advanced-to-pm reshape-invited]
+  BODY:
+    idea: {idea}
+
+    scorecard (criterion | w | score | note):
+    {scorecard}
+
+    overengineering-check: surplus={surplus} | leaner={leaner} | cost={cost-signal}
+
+    utility: {utility} ({band})
+    verdict: {verdict} | binding-axes: {binding-axes}
+    brief: {brief}
+    open-questions: {open-questions}
+    status: {status}
+  EXAMPLE:
+    idea: cache bundle output keyed by source hash to skip recompiles
+
+    scorecard (criterion | w | score | note):
+    overengineering-proportionality [G] | w=0.20 | 4/5 | small mechanism, no new deps
+    problem-reality [G] | w=0.18 | 4/5 | rebuilds measured at 6s on every save
+    cheaper-alternative [G] | w=0.15 | 4/5 | cheapest named: watch mode — loses cross-run reuse
+    net-roi [G] | w=0.12 | 4/5 | est. 2h build vs minutes saved daily
+    desirability | w=0.10 | 4/5 | maintainer hits this daily
+    feasibility | w=0.08 | 5/5 | hash + cache dir, proven pattern
+    value-fit | w=0.07 | 4/5 | aligns with the fast-compile goal
+    capability-redundancy [G] | w=0.05 | 4/5 | no existing cache layer
+    clarity | w=0.05 | 5/5 | precise and measurable
+
+    overengineering-check: surplus=none | leaner=watch mode (loses cross-run reuse) | cost=1 file, 0 deps
+
+    utility: 78 (solid)
+    verdict: ADOPT | binding-axes: problem-reality, net-roi
+    brief: ADOPT, utility 78 (solid); real measured cost, lean mechanism, gates clear — proceed to plan
+    open-questions: invalidation on config change — cheap test: include the config file in the hash
+    status: advanced-to-pm

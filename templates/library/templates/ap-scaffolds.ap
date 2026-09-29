@@ -1,0 +1,224 @@
+# ap-scaffolds
+
+EXPORT TEMPLATE ap-statement:
+  ABOUT   one statement of an action body — an allowed keyword plus its text
+  TAGS    #agent-pack #authoring #scaffold #rule
+
+  SLOTS:
+    key:  ENUM[DO RUN IF ELSE UNTIL]  "the statement keyword — DO/RUN act, IF/ELSE/UNTIL branch or loop"
+    text: TEXT  "the statement body (ELSE takes none)"
+  BODY:
+    {key} {text}
+  EXAMPLE:
+    DO retrieve the existing diagrams and update them
+
+EXPORT TEMPLATE ap-action:
+  ABOUT   an imperative action body — the ordered statements a procedure or workflow runs
+  TAGS    #agent-pack #authoring #scaffold #rule
+
+  SLOTS:
+    steps: LIST <ap-statement> >=1  "one statement per line, in execution order"
+      MUST   indent the body of an IF / ELSE / UNTIL under its head
+  BODY:
+    {steps}
+  EXAMPLE:
+    IF the feature already exists
+      DO retrieve the existing diagrams and update them
+    RUN draw-component-diagram
+
+EXPORT TEMPLATE ap-rule:
+  ABOUT   scaffold for one force-level directive line — the unit a policy's or role's rules are built from
+  TAGS    #agent-pack #authoring #scaffold #rule
+
+  SLOTS:
+    force: ENUM[MUST ALWAYS NEVER SHOULD MAY MEM]  "force-level keyword — how binding it is (MEM: remember)"
+      MUST   suffix ! to strengthen (MUST! hard, MUST!! identity); prefix ! to negate (!MUST = must not)
+    rule:  TEXT  "the directive — one imperative the agent must follow"
+  BODY:
+    {force} {rule}
+  EXAMPLE:
+    ALWAYS  validate every input crossing a trust boundary
+
+EXPORT TEMPLATE ap-workflow:
+  ABOUT   scaffold for one WHEN-triggered workflow block — a conditional behaviour a role or agent runs
+  TAGS    #agent-pack #authoring #scaffold #rule
+
+  SLOTS:
+    trigger: TEXT MAX_WORDS 15  "the situation that activates the block (WHEN); the header ends with a colon"
+    body:    <ap-action>  "the response run when the trigger fires"
+  BODY:
+    WHEN {trigger}:
+        {body}
+  EXAMPLE:
+    WHEN asked to design or review a feature's architecture:
+        IF the feature already exists
+          DO retrieve the existing diagrams and update them
+        RUN draw-component-diagram
+
+EXPORT TEMPLATE ap-block-step:
+  ABOUT   scaffold for a STEP — a single executable node inside a FLOW or a PARALLEL group
+  TAGS    #agent-pack #authoring #scaffold #block
+
+  SLOTS:
+    label:    TEXT MAX_WORDS 8  "imperative step label; the header ends with a colon"
+    by?:      TEXT MAX_WORDS 1  "agent or team that executes it (BY); omit if unbound"
+    context?: ENUM[isolated summary full inherited]  "how much upstream context to pass (CONTEXT); omit for default"
+    actions:  TEXT  "one DO or RUN line per action"
+      MUST   give at least one DO or RUN line — a step with neither is invalid
+    shape?:   TEXT MAX_WORDS 1  "input-contract template for the step (AS); omit if none"
+  BODY:
+    STEP {label}:
+        BY {by}
+        CONTEXT {context}
+        {actions}
+        AS {shape}
+  EXAMPLE:
+    STEP audit for DRY:
+        BY dry-keeper
+        CONTEXT full
+        DO audit the implementation for DRY violations and duplicated logic
+
+EXPORT TEMPLATE ap-block-flow:
+  ABOUT   scaffold for a FLOW — an ordered sequence of STEP (and PARALLEL) nodes, referenced by RUN
+  TAGS    #agent-pack #authoring #scaffold #block
+
+  SLOTS:
+    flow-name: TEXT MAX_WORDS 1  "kebab-case flow name, referenced by RUN"
+    steps:     LIST <ap-block-step> >=1  "one STEP per node, in execution order"
+      MUST   order steps as they execute; wrap concurrent steps in a PARALLEL group
+  BODY:
+    FLOW {flow-name}:
+        {steps}
+  EXAMPLE:
+    FLOW simple-task:
+        STEP implement the change:
+            BY senior-typescript
+            DO implement the requested change
+            DO run npm test before declaring done
+
+EXPORT TEMPLATE ap-block-parallel:
+  ABOUT   scaffold for a PARALLEL group — sibling STEPs that run concurrently inside a FLOW
+  TAGS    #agent-pack #authoring #scaffold #block
+
+  SLOTS:
+    branches: LIST <ap-block-step> >=1  "one STEP per concurrent branch"
+      MUST   keep branches independent — they run concurrently, with no ordering dependence
+  BODY:
+    PARALLEL
+        {branches}
+  EXAMPLE:
+    PARALLEL
+        STEP audit documentation:
+            BY docs-auditor
+            DO audit README, guide and examples
+        STEP audit onboarding:
+            BY onboarding-auditor
+            DO execute the install-to-first-bundle path from scratch
+
+EXPORT TEMPLATE ap-block-agent:
+  ABOUT   scaffold for an agent-pack AGENT block — fill the slots to emit a valid `AGENT … AS …:` definition
+  TAGS    #agent-pack #authoring #scaffold #block
+
+  SLOTS:
+    importable?: ENUM[EXPORT]  "prefix EXPORT to make the agent importable cross-file; omit for a local agent"
+    agent-name:  TEXT MAX_WORDS 1  "kebab-case agent name, matching the filename"
+    role-name:   TEXT MAX_WORDS 1  "the role bound via AS — defined inline as ROLE or imported"
+    about:       TEXT MAX_WORDS 20  "external catalog blurb — what the agent does here and how it is routed to"
+      MUST   say what the agent does and how it is routed to — never paraphrase the bound role's ABOUT
+    mandate:     TEXT MAX_WORDS 20  "the agent's operating directive"
+      MUST   carry exactly one MANDATE line
+    owns?:       TEXT MAX_WORDS 10  "glob(s) the agent exclusively owns, or ALL; omit the OWNS line if unscoped"
+    rules?:      LIST <ap-rule>  "project-level contracts for THIS agent; omit if none — behaviour lives in the role"
+  BODY:
+    {importable} AGENT {agent-name} AS {role-name}:
+        ABOUT    {about}
+        MANDATE  {mandate}
+        OWNS     {owns}
+        {rules}
+  EXAMPLE:
+    EXPORT AGENT architect AS software-architect:
+        ABOUT    Maintains the application architecture as PlantUML diagrams stored in the project wiki
+        MANDATE  keep architecture diagrams current, consistent, and organized in the project wiki
+        OWNS     wiki/**
+        MUST     store every diagram in the project wiki — never write diagram files directly
+
+EXPORT TEMPLATE ap-block-role:
+  ABOUT   scaffold for a ROLE — the craft an agent binds via AS; identity lives here, never in the agent
+  TAGS    #agent-pack #authoring #scaffold #block
+
+  SLOTS:
+    importable?: ENUM[EXPORT]  "prefix EXPORT to import the role cross-file; omit for an inline role"
+    role-name:   TEXT MAX_WORDS 1  "kebab-case role name — the craft, vendor- and project-agnostic"
+    about:       TEXT MAX_WORDS 25  "self-description of the craft — the practitioner"
+      MUST   describe the craft itself — never restate the binding agent's wiring or mandate
+    expertise?:  TEXT MAX_WORDS 8  "space-separated capability domains (EXPERTISE); omit if none"
+    tags?:       TEXT MAX_WORDS 6  "space-separated #tags (TAGS); omit if none"
+    rules:       LIST <ap-rule> >=1  "the role's ALWAYS / NEVER / MUST directives, one per line"
+      MUST   keep all identity here — rules and EXPERTISE live in the role, never in the agent
+    workflows?:  LIST <ap-workflow>  "optional WHEN-triggered behaviour blocks the role runs"
+  BODY:
+    {importable} ROLE {role-name}:
+        ABOUT      {about}
+        EXPERTISE  {expertise}
+        TAGS       {tags}
+        {rules}
+        {workflows}
+  EXAMPLE:
+    EXPORT ROLE software-architect:
+        ABOUT      keeps the system legible as a small set of consistent PlantUML diagrams
+        EXPERTISE  plantuml system-design domain-modeling
+        TAGS       #architecture #plantuml
+        ALWAYS  model the system as nodes and labelled edges, never prose
+        NEVER   leave a dependency edge without a protocol and an intent
+
+EXPORT TEMPLATE ap-block-policy:
+  ABOUT   scaffold for a POLICY — ABOUT plus ALWAYS/NEVER assertions, no control flow and no triggers
+  TAGS    #agent-pack #authoring #scaffold #block
+
+  SLOTS:
+    importable?: ENUM[EXPORT]  "prefix EXPORT to import the policy cross-file; omit for local"
+    policy-name: TEXT MAX_WORDS 1  "kebab-case policy name"
+    about:       TEXT MAX_WORDS 15  "one-line description of what the policy governs"
+    tags?:       TEXT MAX_WORDS 6  "space-separated #tags (TAGS); omit if none"
+    applies?:    TEXT MAX_WORDS 12  "gate — universal | requires:<cap> | role:<role> | domain-scoped; omit if none"
+    rules:       LIST <ap-rule> >=1  "one ALWAYS / NEVER directive per line"
+      MUST   use only ALWAYS / NEVER force — a policy admits no control flow and no triggers
+  BODY:
+    {importable} POLICY {policy-name}:
+        ABOUT    {about}
+        TAGS     {tags}
+        APPLIES  {applies}
+        {rules}
+  EXAMPLE:
+    EXPORT POLICY security:
+        ABOUT    baseline security rules every agent respects
+        TAGS     #security #baseline
+        APPLIES  universal — every agent respects the security baseline
+        ALWAYS  validate every input crossing a trust boundary
+        NEVER   commit credentials, .env files, or private keys
+
+EXPORT TEMPLATE ap-block-procedure:
+  ABOUT   scaffold for a PROCEDURE — an ordered DO/RUN routine with optional IF/ELSE/UNTIL and an output shape
+  TAGS    #agent-pack #authoring #scaffold #block
+
+  SLOTS:
+    importable?:    ENUM[EXPORT]  "prefix EXPORT to import the procedure cross-file; omit for local"
+    procedure-name: TEXT MAX_WORDS 1  "kebab-case procedure name, referenced by RUN"
+    about:          TEXT MAX_WORDS 15  "one-line description of what the procedure does"
+    tags?:          TEXT MAX_WORDS 6  "space-separated #tags (TAGS); omit if none"
+    body:           <ap-action>  "the steps the procedure runs"
+    shape?:         TEXT MAX_WORDS 1  "output template (AS); declare only when downstream steps reference the result"
+  BODY:
+    {importable} PROCEDURE {procedure-name}:
+        ABOUT  {about}
+        TAGS   {tags}
+        {body}
+        AS     {shape}
+  EXAMPLE:
+    EXPORT PROCEDURE create-bug-card:
+        ABOUT  open a bug report card shaped as a bug-card
+        TAGS   #product #planning #bug
+        DO     create the card in the Backlog list
+        IF     the bug has no reproduction steps
+          DO   move the card to Needs Clarification
+        AS     bug-card

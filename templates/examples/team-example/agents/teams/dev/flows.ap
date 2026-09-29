@@ -1,0 +1,18 @@
+# team — dev
+
+ABOUT  the development team — a developer implements, a reviewer checks the change
+
+IMPORT  change-summary FROM @main.templates
+
+WHEN asked to implement a change:
+    RUN implement-and-review
+
+FLOW implement-and-review:
+    STEP implement the change:
+        BY developer
+        DO implement the requested change and run the tests
+    STEP review the change:
+        BY reviewer
+        CONTEXT summary
+        AS change-summary
+        DO review the change for bugs and duplicated logic

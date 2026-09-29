@@ -1,0 +1,19 @@
+# project-backlog
+IMPORT  backlog-item  FROM @main.templates
+
+EXPORT TEMPLATE project-backlog:
+  ABOUT   the final deliverable — every agreed improvement across all domains, ordered by impact
+  TAGS    #agent-pack #analysis #scaffold #block
+  APPLIES role:improvement-analyst — emitted when converge-project has walked every domain
+
+  SLOTS:
+    items: LIST <backlog-item> >=1  "one row per agreed improvement, highest impact first"
+      MUST   list only findings the developer accepted — rejected and open notes stay in domain-decisions
+      MUST   order the whole backlog by impact, not by domain
+  BODY:
+    improvement backlog:
+    {items}
+  EXAMPLE:
+    improvement backlog:
+    [high] parser/structure: centralise scattered parse helpers into one module
+    [medium] objective/functionality: write the missing README quickstart

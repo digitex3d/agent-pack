@@ -1,0 +1,20 @@
+node_modules/
+.compiled/
+dist/
+.agent-pack/
+*.pdf
+.idea/
+
+.agent-pack/apx/
+.agent-pack/reference/
+
+# Private design and legal dossier — never public
+dossier-v1/
+
+# Local development agents of this repository — not published
+agents/
+AGENTS.md
+CLAUDE.md
+PROJECT.ap
+agent-pack.config.mjs
+.mailmap

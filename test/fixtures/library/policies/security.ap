@@ -1,0 +1,13 @@
+# Security baseline
+
+EXPORT POLICY security:
+  ABOUT  baseline security rules every agent in this project respects
+  TAGS   #security #baseline
+  APPLIES universal — every agent in this project respects the security baseline
+
+  ALWAYS  validate every input crossing a trust boundary
+  ALWAYS  treat secrets as opaque tokens — never log, never echo
+  ALWAYS  fail closed when a permission check is ambiguous
+
+  NEVER  commit credentials, .env files, or private keys
+  NEVER  bypass authentication for "internal" callers

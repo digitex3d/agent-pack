@@ -1,0 +1,9 @@
+{
+  "lifecycles": [
+    { "alias": "ON-INVOKE",         "when": "this agent is called" },
+    { "alias": "ON-AGENT-PROMPTED", "when": "the agent receives a new user prompt" },
+    { "alias": "ON-TASK-COMPLETED", "when": "the agent is about to declare the task complete" },
+    { "alias": "ON-ERROR",          "when": "a step or tool call fails unexpectedly" },
+    { "alias": "ON-DELEGATE",       "when": "the agent is about to delegate work to another agent" }
+  ]
+}

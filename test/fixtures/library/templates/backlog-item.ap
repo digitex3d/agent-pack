@@ -1,0 +1,15 @@
+# backlog-item
+
+EXPORT TEMPLATE backlog-item:
+  ABOUT   one agreed improvement in the final backlog — its domain, action, and impact
+  TAGS    #agent-pack #analysis #scaffold
+  APPLIES role:improvement-analyst — one row per accepted finding across all domains
+
+  SLOTS:
+    domain: TEXT MAX_WORDS 4          "the domain the improvement came from"
+    action: TEXT MAX_WORDS 20         "the concrete improvement the developer agreed to"
+    impact: ENUM[high medium low]     "the impact ranking that ordered it"
+  BODY:
+    [{impact}] {domain}: {action}
+  EXAMPLE:
+    [high] parser/structure: centralise scattered parse helpers into one module

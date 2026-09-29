@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "node20",
+    "moduleResolution": "nodenext",
+    "outDir": "dist",
+    "rootDir": ".",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "sourceMap": false,
+    "resolveJsonModule": true
+  },
+  "include": ["src/**/*.ts", "adapters/**/*.ts", "index.ts"],
+  "exclude": ["node_modules", "dist", "test"]
+}

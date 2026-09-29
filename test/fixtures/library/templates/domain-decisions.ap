@@ -1,0 +1,19 @@
+# domain-decisions
+IMPORT  finding-decision  FROM @main.templates
+
+EXPORT TEMPLATE domain-decisions:
+  ABOUT   the outcome of analysing one domain — the domain plus every finding's verdict
+  TAGS    #agent-pack #analysis #scaffold #block
+  APPLIES role:improvement-analyst — emitted when a domain's analysis closes
+
+  SLOTS:
+    domain:   TEXT MAX_WORDS 4            "the analysed domain name"
+    findings: LIST <finding-decision> >=1 "one row per finding presented to the developer"
+      MUST   record every finding presented, accepted or not — the rejected ones justify what was skipped
+  BODY:
+    domain: {domain}
+    {findings}
+  EXAMPLE:
+    domain: parser/structure
+    [accepted] parser logic spread across four functions -> centralise into one module (added to backlog)
+    [rejected] no caching of bundle output -> add a compile cache (parked as premature)

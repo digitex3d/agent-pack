@@ -1,0 +1,18 @@
+# context-engineering
+
+EXPORT POLICY context-engineering:
+  ABOUT  context-engineering rules for agent-pack multi-agent flows — what to pass between steps and how much
+  TAGS   #context-engineering #multi-agent #orchestration
+  APPLIES universal — every agent participating in a multi-agent context flow respects these
+
+  ALWAYS  chain context as typed contracts — feed a step's output into the next as its AS or LENS shape
+  ALWAYS  pass the CONTEXT a step needs and no more — isolated by default, summary or full only when the step earns it
+  ALWAYS  give every agent one specialized function, matched to its own role and mandate
+  ALWAYS  keep the orchestrator coordinating context flow only — it routes, it never does a specialist's work
+  ALWAYS  separate factual context (what is known) from procedural context (how to act)
+  ALWAYS  log at decision points through the run-log gate so the flow stays traceable and auditable
+  ALWAYS  back a retrieved fact with its source, and sanitize untrusted input before it enters a reasoning step
+
+  NEVER  pass full context where a summary or isolated digest carries what the step needs
+  NEVER  carry context between steps through implicit shared state instead of the declared contract
+  NEVER  let an agent emit an ungrounded claim with no traceable source

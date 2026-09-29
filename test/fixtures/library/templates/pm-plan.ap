@@ -1,0 +1,46 @@
+# pm-plan
+
+EXPORT TEMPLATE pm-plan:
+  ABOUT   the routing Plan — text Gantt with phases, parallelism, dependencies, and assigns
+  TAGS    #pm #planning #orchestration #product-manager #planner
+  APPLIES role:pm — applied when the pm planner emits a routing Plan
+
+  SLOTS:
+    request:        TEXT MAX_WORDS 25 "one-line restatement of the user's request"
+    chart:          TEXT "text Gantt — one row per task, one cell per phase T1..Tn"
+      MUST   format each row as `task-<n> <slug>  <cells>  (assign: <agent-or-team>[, depends: <task-ids>])`
+      MUST   mark the task's active phase with ████ and idle phases with ░░░░, one cell per phase
+      MUST   schedule independent tasks in the same phase — same phase means they run in parallel
+    phases:         TEXT "one line per phase: `T<n>: [task-ids]`"
+    critical-path:  TEXT MAX_WORDS 12 "task-id → task-id → task-id"
+    notes?:         TEXT MAX_WORDS 40 "blockers, unknowns, replan triggers"
+    status:         ENUM[plan-emitted replanning done]
+  BODY:
+    request: {request}
+
+    chart:
+    {chart}
+
+    phases:
+    {phases}
+
+    critical-path: {critical-path}
+    notes: {notes}
+    status: {status}
+  EXAMPLE:
+    request: add OAuth login to the web app
+
+    chart:
+    task-1 schema-migration  ████ ░░░░ ░░░░  (assign: senior-typescript)
+    task-2 oauth-endpoints   ░░░░ ████ ░░░░  (assign: senior-typescript, depends: task-1)
+    task-3 login-ui          ░░░░ ████ ░░░░  (assign: frontend, depends: task-1)
+    task-4 e2e-tests         ░░░░ ░░░░ ████  (assign: test-writer, depends: task-2,task-3)
+
+    phases:
+    T1: [task-1]
+    T2: [task-2, task-3]
+    T3: [task-4]
+
+    critical-path: task-1 → task-2 → task-4
+    notes: replan if the OAuth provider rejects the redirect URLs
+    status: plan-emitted

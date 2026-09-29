@@ -1,0 +1,17 @@
+# feature-card
+
+EXPORT TEMPLATE feature-card:
+  ABOUT   a feature card — a user story with acceptance criteria, priority and goal link
+  TAGS    #product #planning
+
+  SLOTS:
+    story:    TEXT               "the feature as a user story — As a <role>, I want <action>, so that <benefit>"
+    criteria: TEXT               "acceptance criteria, each in Given/When/Then form"
+    priority: ENUM[P0 P1 P2 P3]  "assigned priority"
+    goal:     TEXT               "the main goal or subgoal this supports"
+  BODY:
+    type: Feature
+    {story}
+    acceptance: {criteria}
+    priority: {priority}
+    goal: {goal}

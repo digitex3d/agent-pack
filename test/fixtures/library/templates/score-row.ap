@@ -1,0 +1,18 @@
+# score-row
+
+EXPORT TEMPLATE score-row:
+  ABOUT   one scored criterion row of the idea-verdict scorecard
+  TAGS    #concept-shaper #evaluation #scoring
+  APPLIES role:concept-shaper — one row per criterion in idea-verdict.scorecard
+
+  SLOTS:
+    criterion: TEXT MAX_WORDS 4  "criterion name, suffixed [G] when it is a verdict gate"
+    weight:    NUMBER 0..1       "the canonical weight of this criterion"
+    score:     NUMBER 1..5       "integer score, never fractional"
+      MUST   score an unanswered gate question at the floor after one follow-up — never a charitable mid value
+      MUST   cap problem-reality at 3 when un-cited; cap cheaper-alternative at 2 when no cheapest path is named
+    note:      TEXT MAX_WORDS 15 "binding evidence or cap reason"
+  BODY:
+    {criterion} | w={weight} | {score}/5 | {note}
+  EXAMPLE:
+    problem-reality [G] | w=0.18 | 4/5 | cited recurring cost in real sessions

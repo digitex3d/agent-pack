@@ -1,0 +1,14 @@
+# acceptance-criteria
+
+EXPORT TEMPLATE acceptance-criteria:
+  ABOUT   the canonical Given/When/Then acceptance-criteria format
+  TAGS    #product #planning
+
+  SLOTS:
+    context: TEXT  "the precondition or situation"
+    action:  TEXT  "the action taken"
+    result:  TEXT  "the expected, observable result"
+  BODY:
+    Given {context}, when {action}, then {result}.
+  EXAMPLE:
+    Given a card with no priority, when it enters Ready, then it is moved to Needs Clarification.

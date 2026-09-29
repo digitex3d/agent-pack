@@ -1,0 +1,25 @@
+# board-governance
+
+EXPORT POLICY board-discipline:
+  ABOUT   how the board and its cards must be kept — resolve, reconcile, order, satisfy invariants
+  TAGS    #board #planning #hygiene #project-management
+  APPLIES every agent that drives the project board
+
+  ALWAYS  shape every active card to the `card` contract
+  ALWAYS  place blockers before the cards they block, and main-goal cards before secondary-goal cards
+  ALWAYS  keep every list ordered by priority
+
+  NEVER   invent a board, list or swimlane ID
+  NEVER   edit a card you did not create unless the user authorises it — cards are contracts
+  NEVER   delete a card to mean "cancel" — move it to a Cancelled list or comment the reason
+  NEVER   keep unclear or stale cards in Ready
+
+EXPORT POLICY prioritization:
+  ABOUT   what to prioritise — one main goal, severity-ranked, goal-aligned
+  TAGS    #product #planning #priority
+
+  ALWAYS  keep exactly one active main goal and link every card to it, a subgoal, or a critical necessity
+  ALWAYS  assign one priority per card — P0 critical, P1 high goal-aligned, P2 useful, P3 nice-to-have
+  ALWAYS  prioritize work that protects the product and work that supports the main goal
+  ALWAYS  prioritize blockers before dependent work, and validated user problems before speculative ideas
+  ALWAYS  deprioritize unclear work and non-aligned work

@@ -1,0 +1,35 @@
+IMPORT board-rules FROM @main.policies
+
+EXPORT TEMPLATE plan:
+    ABOUT  the routing plan — text gantt
+    TAGS   #board
+    SLOTS:
+        request: TEXT MAX_WORDS 25  "one-line restatement"
+    BODY:
+        request: {request}
+
+EXPORT PROCEDURE open-card:
+    ABOUT  open a card on the board
+    DO  create the card in the Backlog list
+    AS plan
+
+EXPORT STORE notes:
+    ABOUT  working notes kept between sessions
+    TYPE   tabeli
+    LASTS  project
+    KEY    topic
+    SLOTS:
+        topic:  TEXT MAX_WORDS 1   "the one word the note is filed under"
+        note:   TEXT MAX_WORDS 30  "what is known"
+
+EXPORT AGENT pm AS planner:
+    ABOUT     product manager — turns requests into a plan
+    MANDATE   decompose requests into a plan
+    LENS-OUT  plan
+
+    WHEN a new feature is requested:
+        RUN open-card
+
+EXPORT ROLE planner:
+    ABOUT  a planner of routed work
+    ALWAYS  plan before acting

@@ -1,0 +1,78 @@
+# board-procedures
+
+IMPORT  feature-card, bug-card, read-board-state-template  FROM @main.templates
+
+EXPORT PROCEDURE create-feature-card:
+  ABOUT   open a feature card and shape it as a feature-card
+  TAGS    #product #planning #card
+  DO      create the card in the Backlog list
+  DO      write it as a user story with acceptance criteria
+  DO      assign a priority
+  DO      link it to the main goal or a subgoal
+  AS      feature-card
+
+EXPORT PROCEDURE create-bug-card:
+  ABOUT   open a bug report card shaped as a bug-card
+  TAGS    #product #planning #card #bug
+  DO      create the card in the Backlog list
+  DO      describe the current behavior, the expected behavior, and the steps to reproduce
+  DO      assign a priority and evaluate impact
+  IF      the bug has no reproduction steps
+    DO    move the card to Needs Clarification
+  AS      bug-card
+
+EXPORT PROCEDURE triage-inbox-card:
+  ABOUT   classify, prioritise and route a single Inbox card
+  TAGS    #product #planning #triage
+  DO      classify the card type
+  DO      assign a priority
+  DO      link the card to a goal or subgoal
+  IF      the card lacks required information
+    DO    move it to Needs Clarification
+  ELSE
+    IF    the card is not aligned with current goals
+      DO  move it to Future Ideas
+    ELSE
+      DO  move it to Ready
+
+EXPORT PROCEDURE verify-ready:
+  ABOUT   verify a card meets every Ready requirement
+  TAGS    #product #planning #verify
+  DO      verify the card has a type, a priority, and a goal or subgoal
+  DO      verify the card has execution criteria and a definition of done
+  IF      any Ready requirement is missing
+    DO    move the card to Needs Clarification
+
+EXPORT PROCEDURE block-card:
+  ABOUT   move a card to Blocked and capture why
+  TAGS    #product #planning #block
+  DO      move the card to Blocked
+  DO      state the blocking reason
+  DO      identify the next action required to unblock it
+  IF      the card is blocked by another card
+    DO    prioritize the blocking card
+
+EXPORT PROCEDURE review-board-daily:
+  ABOUT   the daily sweep — drain the Inbox, clean Ready, reorder, check goal alignment
+  TAGS    #product #planning #board
+  UNTIL the Inbox is empty:
+    RUN triage-inbox-card
+  UNTIL every Ready card satisfies the board invariants:
+    RUN verify-ready
+  DO   reorder Ready by priority
+  DO   confirm active work supports the main goal
+
+EXPORT PROCEDURE read-board-state:
+  ABOUT   read the board's IDs and existing cards before acting
+  TAGS    #board #planning
+  DO      resolve boardId, listId and swimlaneId via the mcp__wekan__list* tools
+  DO      list the cards already on the board to reconcile the Plan against current state
+  DO      ask the user before acting when a card title match is ambiguous
+  AS      read-board-state-template
+
+EXPORT PROCEDURE project-plan-to-cards:
+  ABOUT   create one contract card per Plan task, reconciling against the board
+  TAGS    #board #planning
+  DO      create one card per Plan task in the Backlog list, with the task description as the title
+  DO      write the description as a contract — Agent, Depends on, Input, Output, Acceptance
+  DO      skip a Plan task that already has a matching card on the board

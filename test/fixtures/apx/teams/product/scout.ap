@@ -1,0 +1,6 @@
+EXPORT AGENT scout AS scout-role:
+    ABOUT  evaluates ideas
+    MANDATE  score one idea
+
+EXPORT ROLE scout-role:
+    ABOUT  an idea scout

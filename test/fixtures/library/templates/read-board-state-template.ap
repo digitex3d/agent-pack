@@ -1,0 +1,15 @@
+# read-board-state-template
+
+EXPORT TEMPLATE read-board-state-template:
+  ABOUT   the resolved board context — the IDs plus the cards already present
+  TAGS    #board #planning
+
+  SLOTS:
+    board-id:    TEXT  "resolved id of the project board"
+    swimlane-id: TEXT  "resolved id of the swimlane work goes under"
+    columns:     TEXT  "the board lists as id:title pairs"
+    cards:       TEXT  "titles of the cards already on the board, to reconcile against"
+  BODY:
+    board={board-id} swimlane={swimlane-id}
+    columns: {columns}
+    existing-cards: {cards}

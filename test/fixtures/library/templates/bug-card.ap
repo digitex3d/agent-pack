@@ -1,0 +1,23 @@
+# bug-card
+
+EXPORT TEMPLATE bug-card:
+  ABOUT   the required fields of a bug report card
+  TAGS    #product #planning #bug
+
+  SLOTS:
+    title:              TEXT              "short bug title"
+    current:            TEXT              "the current, wrong behavior"
+    expected:           TEXT              "the expected behavior"
+    steps:              TEXT              "steps to reproduce"
+    impact:             TEXT              "who or what is affected, and how badly"
+    priority:           ENUM[P0 P1 P2 P3] "assigned priority"
+    definition-of-done: TEXT              "what makes this bug resolved"
+  BODY:
+    type: Bug
+    title: {title}
+    current behavior: {current}
+    expected behavior: {expected}
+    steps to reproduce: {steps}
+    impact: {impact}
+    priority: {priority}
+    definition of done: {definition-of-done}

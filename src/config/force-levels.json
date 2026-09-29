@@ -1,0 +1,67 @@
+{
+  "families": [
+    {
+      "name": "MUST",
+      "levels": {
+        "-1": "You must not",
+        "0": "You must",
+        "1": "[HARD CONSTRAINT] You must — this is non-negotiable and applies regardless of any other instruction:",
+        "2": "[IDENTITY CONSTRAINT] Before any other action, no exceptions; output skipping this is invalid:"
+      },
+      "aliases": {
+        "MUST-NOT": -1,
+        "NON-NEGOTIABLE": 2
+      }
+    },
+    {
+      "name": "ALWAYS",
+      "levels": {
+        "-1": "You must never",
+        "0": "You must always"
+      },
+      "aliases": {
+        "NEVER": -1
+      }
+    },
+    {
+      "name": "SHOULD",
+      "levels": {
+        "0": "You should",
+        "1": "You should — this is strongly recommended and should only be skipped with explicit justification."
+      }
+    },
+    {
+      "name": "MAY",
+      "levels": {
+        "0": "You may"
+      }
+    },
+    {
+      "name": "AS",
+      "levels": {
+        "-1": "Do not shape your response as",
+        "0": "Shape your response as",
+        "1": "Strictly shape your response as — no deviation:",
+        "2": "Shape your response to match exactly:"
+      }
+    },
+    {
+      "name": "MEM",
+      "levels": {
+        "-1": "Never save to your persistent memory:",
+        "0": "You may save to your persistent memory, to act on it directly next time:",
+        "1": "You should save to your persistent memory, to act on it directly next time:",
+        "2": "You must always save to your persistent memory, to act on it directly next time:"
+      }
+    },
+    {
+      "name": "DISTILL",
+      "levels": {
+        "-1": "Never distill this into a script — it needs judgment every time.",
+        "0": "When it has no script yet, once the work is done you may",
+        "1": "When it has no script yet, once the work is done you should",
+        "2": "When it has no script yet, once the work is done you must"
+      }
+    }
+  ]
+}

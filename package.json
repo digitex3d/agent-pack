@@ -1,0 +1,69 @@
+{
+  "name": "agent-pack",
+  "version": "0.26.0",
+  "description": "A programming language to orchestrate agents across every harness.",
+  "author": "Giuseppe Federico <giuseppefeder@gmail.com>",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digitex3d/agent-pack.git"
+  },
+  "homepage": "https://github.com/digitex3d/agent-pack#readme",
+  "bugs": {
+    "url": "https://github.com/digitex3d/agent-pack/issues"
+  },
+  "keywords": [
+    "ai-agents",
+    "agents",
+    "agent-orchestration",
+    "dsl",
+    "compiler",
+    "claude-code",
+    "cursor",
+    "junie",
+    "agents-md",
+    "context-engineering"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "type": "module",
+  "bin": {
+    "agent-pack": "./dist/index.js"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./adapters/*": "./dist/adapters/*/index.js"
+  },
+  "dependencies": {
+    "chokidar": "^5.0.0",
+    "js-yaml": "^4.3.2"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.7.0",
+    "vitepress": "^1.6.0"
+  },
+  "files": [
+    "dist/",
+    "templates/",
+    "CITATION.cff",
+    "LICENSE",
+    "LICENSE-docs",
+    "LICENSE-spec",
+    "NOTICE",
+    "TRADEMARKS.md"
+  ],
+  "scripts": {
+    "ap": "node dist/index.js",
+    "build": "tsc && mkdir -p dist/src/config && cp src/config/*.json dist/src/config/ && npm run build:apx",
+    "test": "npm run build && node test/test.mjs",
+    "prepare": "npm run build",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs",
+    "build:apx": "esbuild src/apx/main.ts --bundle --platform=node --format=cjs --target=node20 --log-level=error --define:import.meta.url=__apxUrl \"--banner:js=/*! agent-pack — Copyright (c) 2026 Giuseppe Federico — Apache-2.0 — keep this notice and the NOTICE file */\nconst __apxUrl = require('url').pathToFileURL(__filename).href;\" --outfile=dist/apx-engine.js"
+  }
+}

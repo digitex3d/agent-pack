@@ -2,11 +2,12 @@ Creative Commons Attribution 4.0 International (CC BY 4.0)
 
 Copyright (c) 2026 Giuseppe Federico
 
-This license applies to the original text of the Agent Pack Manifesto
-(`MANIFESTO.md`), the Agent Pack Specification (`SPECIFICATION.md`), the
-documentation under `docs/`, and any other non-code documentation in
-this repository. It protects the original expression — not the abstract
-ideas or concepts described, which copyright cannot cover.
+This license applies to the documentation under `docs/` and any other
+non-code documentation in this repository, except the Agent Pack
+Specification (`SPECIFICATION.md`), which is licensed under CC BY-ND 4.0
+(see LICENSE-spec). It protects the
+original expression — not the abstract ideas or concepts described,
+which copyright cannot cover.
 
 You are free to:
 

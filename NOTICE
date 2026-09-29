@@ -3,20 +3,24 @@ Copyright 2026 Giuseppe Federico (giuseppefeder@gmail.com)
 
 This repository contains:
 
-  1. The Agent Pack Manifesto (MANIFESTO.md) and the Agent Pack
-     Specification (SPECIFICATION.md), written by Giuseppe Federico
-     in May 2026, licensed under the Creative Commons Attribution 4.0
-     International license (CC-BY-4.0). See LICENSE-docs.
+  1. The Agent Pack Specification (SPECIFICATION.md), written by
+     Giuseppe Federico, first written in May 2026, licensed under the
+     Creative Commons Attribution-NoDerivatives 4.0 International license
+     (CC-BY-ND-4.0). See LICENSE-spec.
 
   2. The reference implementation (all source code in this repository
      unless otherwise marked), authored by Giuseppe Federico, licensed
      under the Apache License, Version 2.0. See LICENSE.
 
+  3. The documentation (docs/), authored by Giuseppe Federico, licensed
+     under the Creative Commons Attribution 4.0 International license
+     (CC-BY-4.0). See LICENSE-docs.
+
 Anyone redistributing or adapting these works must respect the
 respective licenses.
 
-Required attribution under CC-BY-4.0 for any redistribution,
-adaptation, or derivative reference of the manifesto or specification:
+Required attribution for any redistribution or reference of the
+specification, and for any work based on agent-pack:
 
     "Based on the Agent Pack paradigm by Giuseppe Federico (2026)."
 
@@ -28,7 +32,9 @@ Scope of the claim
 
 What is protected:
 
-  - The original text of MANIFESTO.md and SPECIFICATION.md
+  - The original text of SPECIFICATION.md
+    (copyright; CC-BY-ND-4.0 conditions: no modified versions).
+  - The original text of the documentation
     (copyright; CC-BY-4.0 conditions).
   - The original source code of the reference implementation
     (copyright; Apache-2.0 conditions, including a defensive patent
@@ -50,7 +56,11 @@ Proofs of authorship and anteriority
 The following are or will be filed to provide dated, third-party
 evidence that the works above existed at the dates indicated:
 
-  - e-Soleau (INPI, France):    <reference-id>
   - Zenodo DOI:                 <10.5281/zenodo.XXXXXXX>
-  - Publication git commit:     <sha>
-  - GPG signature:              <key fingerprint>
+  - Software Heritage:          <swh:1:rel:…>
+  - OpenTimestamps proof:       <release hashes .ots>
+  - Publication git tag:        <v1.0.0, sha>
+  - GPG signature key:          B23BE20D928E5D6669974E0489EC35DFC694212C
+
+The name "agent-pack" and its use by forks and third-party products are
+governed by TRADEMARKS.md.

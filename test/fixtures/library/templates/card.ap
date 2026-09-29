@@ -1,0 +1,29 @@
+# card
+
+EXPORT TEMPLATE card:
+  ABOUT   the contract every board card satisfies — the shape plus the obligation on each field
+  TAGS    #board #planning
+
+  SLOTS:
+    type:               ENUM[Feature Bug Chore Spike]  "card type"
+    title:              TEXT               "short imperative title"
+    priority:           ENUM[P0 P1 P2 P3]  "assigned priority"
+      MUST   carry exactly one priority while the card is active
+    goal:               TEXT               "the main goal or subgoal it supports"
+      MUST   link to the main goal, a subgoal, or a critical operational necessity
+    execution-criteria: TEXT               "what 'ready to execute' means"
+      MUST   be present before the card may enter Ready
+    owner:              TEXT               "the executing agent"
+      MUST   be set once the card is In Progress
+    blocking-reason:    TEXT               "why blocked, and the next action to unblock"
+      MUST   be present whenever the card is Blocked
+    definition-of-done: TEXT               "what makes the card Done"
+      MUST   be satisfied before the card moves to Done
+  BODY:
+    type: {type}   priority: {priority}
+    title: {title}
+    goal: {goal}
+    execution-criteria: {execution-criteria}
+    owner: {owner}
+    blocking-reason: {blocking-reason}
+    definition-of-done: {definition-of-done}

@@ -1,0 +1,14 @@
+# domain-spec
+
+EXPORT TEMPLATE domain-spec:
+  ABOUT   one analysis domain — its name and what the scan should look for within it
+  TAGS    #agent-pack #analysis #scaffold
+  APPLIES role:improvement-analyst — one per domain fed to analyze-domain
+
+  SLOTS:
+    name:  TEXT MAX_WORDS 4   "the analysis domain name, e.g. parser/structure or performance"
+    focus: TEXT MAX_WORDS 20  "what to look for when scanning the project for this domain"
+  BODY:
+    {name}: {focus}
+  EXAMPLE:
+    parser/structure: how parsing is organised — centralisation, module boundaries, dead code

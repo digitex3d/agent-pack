@@ -1,0 +1,53 @@
+# readiness-verdict
+IMPORT  score-row FROM @main.templates
+
+EXPORT TEMPLATE readiness-verdict:
+  ABOUT   OSS production-readiness verdict — scorecard on docs/onboarding/hygiene, utility score, gaps, SHIP/HOLD/BLOCK
+  TAGS    #readiness #evaluation #scoring #release #verdict #oss
+  APPLIES role:readiness-judge — applied when the judge aggregates the three audits into a go/no-go verdict
+
+  SLOTS:
+    target:          TEXT MAX_WORDS 25 "what is being evaluated for readiness (repo/release)"
+    scorecard:       LIST <score-row> "nine rows — canonical criteria, order, weights and gates as in the example"
+      MUST   score all nine criteria 1-5 (integers); (score-1)/4 normalizes, so straight-3s map to 50 by design
+    blocking-gaps:   TEXT MAX_WORDS 40 "gaps keeping a gate below SHIP threshold — actionable dev team handoff, or none"
+    utility:         NUMBER 0..100 "100 * sum(w_i * (score_i - 1)/4), rounded"
+    band:            ENUM[weak mediocre solid strong]
+    verdict:         ENUM[SHIP HOLD BLOCK]
+      MUST!  apply the ladder top-down, first match wins — gates decide, utility is severity/confidence
+      MUST   BLOCK when first-run-success=1, install-reproducibility=1, readme-clarity=1, test-and-ci=1, or utility<45
+      MUST   HOLD when no gate is at floor but utility in [45,75), or a gate is below its SHIP threshold (=4)
+      MUST   SHIP only when all four gates are >=4 and utility>=75
+      SHOULD calibrate: broken install=BLOCK, thin README + no CI=HOLD, polished + green gates=SHIP
+    binding-axes:    TEXT MAX_WORDS 10 "the two criteria that decided the verdict"
+    status:          ENUM[verdict-emitted hold-needs-remediation blocked advanced-to-dev]
+  BODY:
+    target: {target}
+
+    scorecard (criterion | w | score | note):
+    {scorecard}
+
+    blocking-gaps: {blocking-gaps}
+
+    utility: {utility} ({band})
+    verdict: {verdict} | binding-axes: {binding-axes}
+    status: {status}
+  EXAMPLE:
+    target: agent-pack v0.21.0 OSS release
+
+    scorecard (criterion | w | score | note):
+    first-run-success [G] | w=0.18 | 3/5 | npx path works, prerequisites undocumented
+    readme-clarity [G] | w=0.15 | 2/5 | README is 17 lines, no quickstart or value prop
+    install-reproducibility [G] | w=0.13 | 4/5 | tsc build deterministic, lockfile committed
+    test-and-ci [G] | w=0.12 | 2/5 | custom test.mjs exists, no CI runs it
+    docs-completeness | w=0.10 | 4/5 | VitePress guide+reference cover the features
+    community-health | w=0.10 | 1/5 | no CONTRIBUTING, COC, SECURITY, issue/PR templates, .github
+    versioning-release | w=0.08 | 4/5 | semver + 19KB changelog maintained
+    api-stability | w=0.07 | 3/5 | plugin contracts documented, surface still moving
+    example-coverage | w=0.07 | 3/5 | getting-started present, few runnable examples
+
+    blocking-gaps: README lacks quickstart/value prop; no CI; no CONTRIBUTING/COC/SECURITY/.github — hand to dev team
+
+    utility: 46 (mediocre)
+    verdict: HOLD | binding-axes: readme-clarity, test-and-ci
+    status: hold-needs-remediation

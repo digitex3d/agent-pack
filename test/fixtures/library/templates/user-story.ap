@@ -1,0 +1,14 @@
+# user-story
+
+EXPORT TEMPLATE user-story:
+  ABOUT   the canonical user-story format for a feature card
+  TAGS    #product #planning
+
+  SLOTS:
+    user-type: TEXT  "the user role the story serves"
+    action:    TEXT  "the capability the user wants"
+    benefit:   TEXT  "the outcome the capability delivers"
+  BODY:
+    As a {user-type}, I want {action}, so that {benefit}.
+  EXAMPLE:
+    As a board owner, I want cards auto-prioritised, so that the most important work surfaces first.
