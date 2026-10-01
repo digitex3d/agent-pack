@@ -82,6 +82,15 @@ export function aliasToCanonical(name: string): string {
 }
 
 /**
+ * A force-level keyword in its canonical form: an alias (`NEVER`, `MUST-NOT`)
+ * becomes its derived keyword (`!ALWAYS`, `!MUST`); any other keyword is
+ * returned as is.
+ */
+export function toCanonicalKeyword(keyword: string): string {
+  return getAliasNames().includes(keyword) ? aliasToCanonical(keyword) : keyword;
+}
+
+/**
  * All canonical force-level keywords for a specific family (e.g. 'ALWAYS').
  * Returns all derived forms (ALWAYS, !ALWAYS) for that family only.
  */

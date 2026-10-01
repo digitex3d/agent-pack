@@ -12,6 +12,7 @@
  * The document is produced by a passive recorder inside the existing bundle
  * pipeline (see recorder.ts) — never by re-parsing the rendered markdown.
  */
+import type { ApBlock } from './block.js';
 
 /**
  * A pointer to another block. `id` is the stable identity of the target
@@ -42,6 +43,8 @@ export interface ApShape {
  */
 export interface ApDirectiveNode {
   type: 'directive';
+  /** Where the node was written — provenance, never serialized. */
+  pos?: ApPos;
   /** Source indentation (spaces) within the block body; absent = 0. */
   indent?: number;
   keyword: string;
@@ -56,6 +59,8 @@ export interface ApDirectiveNode {
 /** `RUN <name>` — invocation of a runnable (procedure/flow), always a Ref. */
 export interface ApRunNode {
   type: 'run';
+  /** Where the node was written — provenance, never serialized. */
+  pos?: ApPos;
   /** Source indentation (spaces) within the block body; absent = 0. */
   indent?: number;
   ref: ApRef;
@@ -65,6 +70,8 @@ export interface ApRunNode {
 /** Verbatim text: RAW regions, prose lines. */
 export interface ApTextNode {
   type: 'text';
+  /** Where the node was written — provenance, never serialized. */
+  pos?: ApPos;
   /** Source indentation (spaces) within the block body; absent = 0. */
   indent?: number;
   raw: string;
@@ -74,6 +81,8 @@ export interface ApTextNode {
 /** `IF <condition>:` with its two branches; ELSE is the second branch, not a node. */
 export interface ApIfNode {
   type: 'if';
+  /** Where the node was written — provenance, never serialized. */
+  pos?: ApPos;
   /** Source indentation (spaces) within the block body; absent = 0. */
   indent?: number;
   condition: string;
@@ -85,6 +94,8 @@ export interface ApIfNode {
 /** `UNTIL <condition>:` loop head. */
 export interface ApUntilNode {
   type: 'until';
+  /** Where the node was written — provenance, never serialized. */
+  pos?: ApPos;
   /** Source indentation (spaces) within the block body; absent = 0. */
   indent?: number;
   condition: string;
@@ -95,6 +106,8 @@ export interface ApUntilNode {
 /** `WHEN <trigger>:` block inside a body. */
 export interface ApWhenNode {
   type: 'when';
+  /** Where the node was written — provenance, never serialized. */
+  pos?: ApPos;
   /** Source indentation (spaces) within the block body; absent = 0. */
   indent?: number;
   condition: string;
@@ -105,6 +118,8 @@ export interface ApWhenNode {
 /** A flow STEP: signature lifted to fields (title/by/context/shape), DOs in body. */
 export interface ApStepNode {
   type: 'step';
+  /** Where the node was written — provenance, never serialized. */
+  pos?: ApPos;
   title: string;
   by: ApRef | null;
   context: string | null;
@@ -121,6 +136,8 @@ export interface ApStepNode {
  */
 export interface ApInNode {
   type: 'in';
+  /** Where the node was written — provenance, never serialized. */
+  pos?: ApPos;
   chars: number;
   indent?: number;
   store: ApRef;
@@ -129,6 +146,8 @@ export interface ApInNode {
 
 export interface ApParallelNode {
   type: 'parallel';
+  /** Where the node was written — provenance, never serialized. */
+  pos?: ApPos;
   chars: number;
   steps: ApStepNode[];
 }
@@ -140,6 +159,8 @@ export interface ApParallelNode {
  */
 export interface ApDistillNode {
   type: 'distill';
+  /** Where the node was written — provenance, never serialized. */
+  pos?: ApPos;
   force: number;
   id: string;
   shape: ApShape;
@@ -147,6 +168,42 @@ export interface ApDistillNode {
   outputExample: string;
   inputExample?: string;
   chars: number;
+}
+
+/**
+ * A source position: the 1-based line, the column of its first character (the
+ * primitive's keyword), and the column just past its last non-blank character.
+ * Provenance, never serialized — a document revived from JSON has none.
+ */
+export interface ApPos {
+  line: number;
+  col: number;
+  endCol: number;
+}
+
+/** Where a block was written: its file and the position of its header. Provenance, never serialized. */
+export interface ApSource {
+  file: string;
+  line: number;
+  col: number;
+}
+
+/**
+ * One keyword line of the document — `DO <text>`, `IF <condition>`, `STEP
+ * <title>`, … — with where it was written, the block it belongs to and the
+ * nodes that contain it (outermost first). Position fields are null on a
+ * document revived from JSON.
+ */
+export interface ApLine {
+  primitive: string;
+  force: number | null;
+  text: string;
+  file: string | null;
+  line: number | null;
+  col: number | null;
+  endCol: number | null;
+  block: ApBlock;
+  containers: ApNode[];
 }
 
 export type ApNode =
@@ -171,6 +228,17 @@ export type ApSlotType =
   | { kind: 'any'; raw: string };
 
 /** One template slot: resolved type + nested rules as plain directives. */
+/**
+ * One check a template states about the text filling a slot: a slot rule as a
+ * neutral statement — `<template>.<slot>.<n>`, the rule text verbatim, and its
+ * force (family keyword and level). What a judge is asked to verify.
+ */
+export interface ApCheck {
+  id: string;
+  statement: string;
+  force: { keyword: string; level: number | null };
+}
+
 export interface ApSlot {
   name: string;
   optional: boolean;

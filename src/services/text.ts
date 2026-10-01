@@ -130,6 +130,19 @@ export function exportedBlockBodies(source: string): ExportedBlockBody[] {
  */
 export function nonExportedSource(source: string): string {
   const lines = source.split(/\r?\n/);
+  return nonExportedLines(source)
+    .map(lineNo => lines[lineNo - 1])
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
+ * The 1-based numbers of the lines {@link nonExportedSource} keeps, in order —
+ * the one line-ownership computation, so a caller composing a text from them
+ * knows which file line each one was.
+ */
+export function nonExportedLines(source: string): number[] {
   const owned = new Set<number>();
   for (const block of exportedBlocksOf(parseBlocks(source).blocks)) {
     owned.add(block.startLine);
@@ -137,11 +150,7 @@ export function nonExportedSource(source: string): string {
     indexBlockDedent(block, dedentByLine);
     for (const lineNo of dedentByLine.keys()) owned.add(lineNo);
   }
-  return lines
-    .filter((_, idx) => !owned.has(idx + 1))
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+  return source.split(/\r?\n/).map((_, idx) => idx + 1).filter(lineNo => !owned.has(lineNo));
 }
 
 /**

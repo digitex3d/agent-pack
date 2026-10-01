@@ -35,7 +35,7 @@
 
 import { refSuffix } from './formulas.js';
 import { markVerbatim } from "./services/text.js";
-import { getIntroByKeyword, getAliasNames, aliasToCanonical } from './forceLevelConfig.js';
+import { getIntroByKeyword, toCanonicalKeyword } from './forceLevelConfig.js';
 
 export interface Range {
   min?: number;
@@ -147,10 +147,7 @@ function dedent(lines: string[]): string {
 
 /** Calibrated intro for a force-level rule token (direct form or alias), or null. */
 function ruleIntro(token: string): string | null {
-  const direct = getIntroByKeyword(token);
-  if (direct) return direct;
-  if (getAliasNames().includes(token)) return getIntroByKeyword(aliasToCanonical(token));
-  return null;
+  return getIntroByKeyword(toCanonicalKeyword(token));
 }
 
 /**

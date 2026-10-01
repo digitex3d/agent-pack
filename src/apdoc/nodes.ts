@@ -19,6 +19,7 @@ import type {
   ApNode, ApRef, ApShape,
   ApDirectiveNode, ApRunNode, ApTextNode,
   ApIfNode, ApUntilNode, ApWhenNode, ApStepNode, ApParallelNode, ApInNode, ApDistillNode,
+  ApPos, ApLine,
 } from './types.js';
 import { distillLines } from '../distill.js';
 import {
@@ -29,10 +30,15 @@ import {
   stepSignature, stepsHeader, storeScopeLine,
 } from '../../adapters/md/phrases.js';
 
-/** Common base: chars stamped by measure, optional source indent. */
+/** What a node answers as a line: its primitive and the text after it. */
+export type LineHead = Pick<ApLine, 'primitive' | 'text'>;
+
+/** Common base: chars stamped by measure, optional source indent, source position. */
 abstract class NodeBase {
   chars = 0;
   indent?: number;
+  /** Where the node was written — provenance, stamped by the builder, never serialized. */
+  pos?: ApPos;
 
   constructor(indent?: number) {
     if (indent) this.indent = indent;
@@ -40,6 +46,9 @@ abstract class NodeBase {
 
   /** The md lines of THIS node alone (grouping is the sequence renderer's job). */
   abstract asMdLines(env: MdEnv, ordered: boolean): string[];
+
+  /** This node as a keyword line (primitive + its text), or null when it is none. */
+  abstract asLine(): LineHead | null;
 }
 
 export class DirectiveNode extends NodeBase implements ApDirectiveNode {
@@ -82,6 +91,10 @@ export class DirectiveNode extends NodeBase implements ApDirectiveNode {
       ...renderNodes(env, this.body ?? [], ordered),
     ];
   }
+
+  asLine(): LineHead {
+    return { primitive: this.keyword, text: this.text };
+  }
 }
 
 export class RunNode extends NodeBase implements ApRunNode {
@@ -110,6 +123,10 @@ export class RunNode extends NodeBase implements ApRunNode {
       : runLine(this.ref.kind, refName(this.ref), env.refOf(this.ref.target));
     return indentLines([line], this.indent ?? 0);
   }
+
+  asLine(): LineHead {
+    return { primitive: 'RUN', text: refName(this.ref) };
+  }
 }
 
 export class TextNode extends NodeBase implements ApTextNode {
@@ -131,6 +148,11 @@ export class TextNode extends NodeBase implements ApTextNode {
 
   asMdLines(env: MdEnv): string[] {
     return [env.substitute(this.raw)]; // verbatim, indentation included in raw
+  }
+
+  /** Prose is no keyword line. */
+  asLine(): null {
+    return null;
   }
 }
 
@@ -170,6 +192,10 @@ export class IfNode extends NodeBase implements ApIfNode {
     }
     return out;
   }
+
+  asLine(): LineHead {
+    return { primitive: 'IF', text: this.condition };
+  }
 }
 
 export class UntilNode extends NodeBase implements ApUntilNode {
@@ -202,6 +228,10 @@ export class UntilNode extends NodeBase implements ApUntilNode {
       ...renderNodes(env, this.body, ordered),
     ];
   }
+
+  asLine(): LineHead {
+    return { primitive: 'UNTIL', text: this.condition };
+  }
 }
 
 export class WhenNode extends NodeBase implements ApWhenNode {
@@ -232,6 +262,10 @@ export class WhenNode extends NodeBase implements ApWhenNode {
       ...indentLines([`${controlHead('WHEN')} ${env.substitute(this.condition)}:`], this.indent ?? 0),
       ...renderNodes(env, this.body, ordered),
     ];
+  }
+
+  asLine(): LineHead {
+    return { primitive: 'WHEN', text: this.condition };
   }
 }
 
@@ -288,6 +322,10 @@ export class StepNode extends NodeBase implements ApStepNode {
   asMdLines(env: MdEnv, ordered: boolean): string[] {
     return [stepsHeader(), ...this.asMdItem(env, 0, ordered)];
   }
+
+  asLine(): LineHead {
+    return { primitive: 'STEP', text: this.title };
+  }
 }
 
 /**
@@ -326,6 +364,10 @@ export class InNode extends NodeBase implements ApInNode {
       ...renderNodes(env, this.body, ordered),
     ];
   }
+
+  asLine(): LineHead {
+    return { primitive: 'IN', text: refName(this.store) };
+  }
 }
 
 export class ParallelNode extends NodeBase implements ApParallelNode {
@@ -349,6 +391,10 @@ export class ParallelNode extends NodeBase implements ApParallelNode {
       stepsHeader(),
       ...this.steps.flatMap((s, i) => (s as StepNode).asMdItem(env, i, false)),
     ];
+  }
+
+  asLine(): LineHead {
+    return { primitive: 'PARALLEL', text: '' };
   }
 }
 
@@ -415,16 +461,34 @@ export class DistillNode extends NodeBase implements ApDistillNode {
       ...(this.inputExample !== undefined ? { inputExample: this.inputExample } : {}),
     });
   }
+
+  /** The mark is the compiler's, not a line of the source. */
+  asLine(): null {
+    return null;
+  }
 }
 
 /**
- * Whether any node — at any depth: bodies, branches, steps — satisfies the
- * predicate. Containers are found by shape (arrays of typed nodes), so a new
+ * Every node — at any depth: bodies, branches, steps — in source order
+ * (pre-order), with the nodes containing it, outermost first. THE traversal of
+ * a node tree: containers are found by shape (arrays of typed nodes), so a new
  * node kind needs no change here.
  */
+export function* walk(nodes: readonly ApNode[], containers: readonly ApNode[] = []): Generator<{ node: ApNode; containers: ApNode[] }> {
+  for (const node of nodes) {
+    yield { node, containers: [...containers] };
+    for (const v of Object.values(node)) {
+      if (Array.isArray(v) && v.length > 0 && typeof v[0] === 'object' && v[0] !== null && 'type' in v[0]) {
+        yield* walk(v as ApNode[], [...containers, node]);
+      }
+    }
+  }
+}
+
+/** Whether any node — at any depth — satisfies the predicate. */
 export function someNode(nodes: readonly ApNode[], pred: (n: ApNode) => boolean): boolean {
-  return nodes.some(n => pred(n) || Object.values(n).some(v =>
-    Array.isArray(v) && v.length > 0 && typeof v[0] === 'object' && v[0] !== null && 'type' in v[0] && someNode(v as ApNode[], pred)));
+  for (const { node } of walk(nodes)) if (pred(node)) return true;
+  return false;
 }
 
 /** Revive an array of serialized nodes into typed node instances. */

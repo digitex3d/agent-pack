@@ -3,7 +3,8 @@
 import { readFileSync, readdirSync, existsSync, statSync } from 'fs';
 import { resolve, dirname, basename } from 'path';
 import { parseAgentSignature } from '../definitionArgs.js';
-import { exportedBlockBodies, nonExportedSource, extractAbout, extractPrimitive, ExportedBlockBody } from './text.js';
+import { exportedBlockBodies, nonExportedSource, nonExportedLines, extractAbout, extractPrimitive, ExportedBlockBody } from './text.js';
+import { SourceRegistry, type SourceSpan } from '../sources.js';
 
 /**
  * The single reader for team/agent metadata pulled straight from `.ap` source.
@@ -62,6 +63,12 @@ export interface AgentFile {
    * directory's files take.
    */
   unitSource: string;
+  /**
+   * Where the agent block's text was written: the lines kept by
+   * {@link nonExportedSource}, in order, then the AGENT block's lines — the
+   * order the agent's body is composed in. Null when the block is not found.
+   */
+  span: SourceSpan | null;
 }
 
 /** Re-indent a de-indented role body one step so it reads as a `ROLE <name>:` block. */
@@ -115,9 +122,10 @@ function asAgentBody(agent: ExportedBlockBody): string {
  *   - the sibling ROLE block → a bare `ROLE <name>:` block so
  *     `extractInlineDefinitions` collects it into `ctx.roles`;
  *   - the prologue (imports) and any non-exported workflow blocks → verbatim.
+ * Given a compilation's source registry, the file is read through it.
  */
-export function readAgentFile(path: string): AgentFile {
-  const source = readFileSync(path, 'utf-8');
+export function readAgentFile(path: string, sources: SourceRegistry = new SourceRegistry()): AgentFile {
+  const source = sources.read(path);
   const blocks = exportedBlockBodies(source);
   const agent = blocks.find(b => b.key === 'AGENT');
   if (!agent) {
@@ -144,7 +152,14 @@ export function readAgentFile(path: string): AgentFile {
     .replace(/\n{3,}/g, '\n\n')
     .trim() + '\n';
 
-  return { path, info, unitSource };
+  const lines = source.split(/\r?\n/);
+  const agentSpan = sources.span(path, 'agent', agent.name);
+  const span = agentSpan && {
+    ...agentSpan,
+    lines: [...nonExportedLines(source).map(line => ({ line, text: lines[line - 1] })), ...agentSpan.lines],
+  };
+
+  return { path, info, unitSource, span };
 }
 
 /** True when a `.ap` source holds at least one `EXPORT AGENT` block. */

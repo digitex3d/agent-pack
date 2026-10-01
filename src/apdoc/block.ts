@@ -11,7 +11,7 @@
  * known. The CHILD structure (nodes, slots, refs) stays plain data from
  * types.ts: classes wrap the block level only, never the tree below.
  */
-import type { ApBlockData, ApNode, ApShape } from './types.js';
+import type { ApBlockData, ApNode, ApShape, ApSource } from './types.js';
 import { stableId, blockContentHash } from './ids.js';
 import { measure } from './measure.js';
 import { renderNodes, shapeLine, MdEnv } from '../../adapters/md/toolkit.js';
@@ -58,6 +58,11 @@ export abstract class ApBlock {
    * metadata for the md projection, never serialized.
    */
   shapePos: number | null = null;
+  /**
+   * Where the block was written — its file and header position. Provenance,
+   * stamped by the builder, never serialized: null on a revived block.
+   */
+  source: ApSource | null = null;
 
   constructor(init: ApBlockInit) {
     this.name = init.name;

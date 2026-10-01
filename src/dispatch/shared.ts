@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { readFileSync, existsSync } from 'fs';
+import { existsSync } from 'fs';
 import { resolve, basename, isAbsolute } from 'path';
 import { BundleContext } from './types.js';
 import { lintFile } from '../lint.js';
@@ -38,7 +38,7 @@ export function allLibraryRoots(ctx: BundleContext): string[] {
  * import paths, so neither can drift on lint options.
  */
 export function readAndLint(path: string, ctx: BundleContext): string {
-  const raw = readFileSync(path, 'utf-8');
+  const raw = ctx.sources.read(path);
   ctx.lintErrors.push(...lintFile(path, raw, ctx.lintOptions));
   return raw;
 }

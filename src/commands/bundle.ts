@@ -11,6 +11,7 @@ import { emitProjectContext, ensureProjectPointers, AGENTS_MD, PROJECT_SOURCE } 
 import { ensureOrchestrationSection } from '../orchestrationSection.js';
 import { discoverAgentsByWalk } from '../agentDiscovery.js';
 import { standaloneDir } from '../services/teamMetadata.js';
+import { openJudgeRun, finishJudgeRun, type JudgeRun } from '../judge/phase.js';
 
 /**
  * CLI command: parse args, build a bundle (agent or playbook), optionally
@@ -31,14 +32,16 @@ export async function bundle(args: string[]): Promise<void> {
     else if (args[i] === '--watch') watch = true;
     else if (args[i] === '--apx-compress') config.bundle.apxCompress = true;
     else if (args[i] === '--no-apx-compress') config.bundle.apxCompress = false;
+    else if (args[i] === '--no-judge') config.judge = null;
+    else if (args[i] === '--judge-strict') { if (config.judge) config.judge.offline = 'error'; }
     else if (args[i] === '--config') i++;
     else if (!args[i].startsWith('--') && !source) source = args[i];
   }
 
   if (!source) {
     console.error('Usage:');
-    console.error('  agent-pack bundle <name|path> [--adapter <name>] [--out <dir>] [--apx-compress|--no-apx-compress]');
-    console.error('  agent-pack bundle all       [--adapter <name>] [--out <dir>] [--watch] [--apx-compress|--no-apx-compress]');
+    console.error('  agent-pack bundle <name|path> [--adapter <name>] [--out <dir>] [--apx-compress|--no-apx-compress] [--no-judge|--judge-strict]');
+    console.error('  agent-pack bundle all       [--adapter <name>] [--out <dir>] [--watch] [--apx-compress|--no-apx-compress] [--no-judge|--judge-strict]');
     process.exit(1);
   }
 
@@ -68,15 +71,21 @@ export async function bundle(args: string[]): Promise<void> {
     }
   }
 
+  let judge: JudgeRun | null = null;
+  let failed = false;
   try {
-    const { bundle: built, files } = await bundleAndEmit(source, config, adapter, ctx);
+    judge = openJudgeRun(config, ctx.projectRoot);
+    const { bundle: built, files } = await bundleAndEmit(source, config, adapter, ctx, { judge });
     writeFiles(files);
     const suffix = adapterName ? ` (adapter: ${adapterName})` : '';
     console.error(`[agent-pack] ${built.name} bundled${suffix}`);
   } catch (err) {
     console.error(err instanceof Error ? err.message : String(err));
-    process.exit(1);
+    failed = true;
+  } finally {
+    if (judge) finishJudgeRun(judge, { prune: false });
   }
+  if (failed) process.exit(1);
 }
 
 async function runBundleAll(
@@ -118,6 +127,14 @@ export async function bundleAllOnce(
   }
 
   let totalErrors = 0;
+  // The judge run of this build — shared by every agent and adapter, closed once at the end.
+  let judge: JudgeRun | null = null;
+  try {
+    judge = openJudgeRun(config, ctx.projectRoot);
+  } catch (err) {
+    console.error(`[agent-pack] judge: ${err instanceof Error ? err.message : err}`);
+    return false;
+  }
   const distillIds = new Set<string>();
   /** path → the adapter that wrote it and what: each file is written and listed once. */
   const written = new Map<string, { adapter: string; content: string }>();
@@ -129,7 +146,7 @@ export async function bundleAllOnce(
   for (const agent of agents) {
     for (const adapter of adapters) {
       try {
-        const { bundle, files } = await bundleAndEmit(agent.name, config, adapter, ctx);
+        const { bundle, files } = await bundleAndEmit(agent.name, config, adapter, ctx, { judge });
         for (const { mark } of bundle.structure?.distillMarks() ?? []) distillIds.add(mark.id);
         for (const f of files) {
           const prior = written.get(f.path);
@@ -187,6 +204,8 @@ export async function bundleAllOnce(
       console.error(`[agent-pack] ${orphan} matches no DISTILL construct any more (edited or removed) — review it, then delete it`);
     }
   }
+
+  if (judge) finishJudgeRun(judge, { prune: totalErrors === 0 });
 
   const suffix = totalErrors > 0 ? ` (${totalErrors} error(s))` : '';
   console.error(`[agent-pack] bundled ${agents.length} agent(s) × ${adapters.length} adapter(s) → ${written.size} file(s)${suffix}`);

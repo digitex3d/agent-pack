@@ -3,6 +3,7 @@
 import { LintError, LintOptions } from '../lint.js';
 import type { Definition } from '../definition.js';
 import type { ExportedBlockBody } from '../services/text.js';
+import type { SourceRegistry } from '../sources.js';
 
 export interface ToolEntry {
   name: string;
@@ -49,6 +50,8 @@ export interface BundleContext {
   /** The command that says how to run a flow, by its id — set while a team's routing renders. */
   flowCommand?: (id: string) => string;
   importedPaths: Set<string>;
+  /** The compilation's source registry — every `.ap` file it reads, read once. */
+  sources: SourceRegistry;
   /**
    * Per-path cache of a module's exported blocks, parsed exactly once. Lets an
    * N-export module imported M times read+parse+lint+side-effect a single time

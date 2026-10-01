@@ -40,8 +40,10 @@ FLOW complex-task:
 
 - `ABOUT` is the team's purpose.
 - The top-level `WHEN … RUN <flow>` lines are the **routing**: which flow a request goes to.
-- A `FLOW` is an ordered list of `STEP`s. Each step names who carries it out (`BY`, an agent or a team), what to do (`DO`), and optionally how much upstream context to pass (`CONTEXT`) and the template to hand the step's agent (`AS`).
+- A `FLOW` is an ordered list of `STEP`s — some of them, when the flow says so, under a condition or in a loop (below). Each step names who carries it out (`BY`, an agent or a team), what to do (`DO`), and optionally how much upstream context to pass (`CONTEXT`) and the template to hand the step's agent (`AS`).
+- A step may carry rules — `MUST`, `NEVER`, `SHOULD`, … (write `NEVER skip a finding`, not `DO never skip a finding`) — and put some of its `DO`, `RUN` and rule lines under `IF <condition>:` and its `ELSE`. A rule is not an action: the step still needs a `DO` or `RUN`.
 - `PARALLEL` groups steps that run at the same time.
+- The flow itself may put its `STEP`, `PARALLEL` and `RUN` lines under `IF <condition>:` and its `ELSE`, or repeat them under `UNTIL <condition>:` — a fix round, a plan revision — nesting further `IF`/`ELSE`/`UNTIL` inside. The condition is prose, judged by whoever runs the flow; see [Language reference — FLOW](/reference/language#flow).
 
 ```
 FLOW assess:

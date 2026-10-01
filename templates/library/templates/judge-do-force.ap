@@ -1,0 +1,13 @@
+# judge-do-force
+
+EXPORT TEMPLATE judge-do-force:
+  ABOUT   judge rule for every DO line — a force level is written with its primitive (MUST, NEVER…), never inside the DO
+  TAGS    #judge
+
+  SLOTS:
+    action: TEXT  "the action the agent performs, as a plain imperative"
+      SHOULD not open with a word setting how firmly to act, like 'never', 'always', 'must', 'do not' or 'make sure'
+  BODY:
+    DO {action}
+  EXAMPLE:
+    DO run npm test before declaring done

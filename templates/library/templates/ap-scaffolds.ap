@@ -63,8 +63,10 @@ EXPORT TEMPLATE ap-block-step:
     label:    TEXT MAX_WORDS 8  "imperative step label; the header ends with a colon"
     by?:      TEXT MAX_WORDS 1  "agent or team that executes it (BY); omit if unbound"
     context?: ENUM[isolated summary full inherited]  "how much upstream context to pass (CONTEXT); omit for default"
-    actions:  TEXT  "one DO or RUN line per action"
+    actions:  TEXT  "one DO, RUN or force-level line per action; IF/ELSE branches hold the same lines"
       MUST   give at least one DO or RUN line — a step with neither is invalid
+      MUST   write a rule with its force keyword (NEVER, MUST, SHOULD …) — never as DO never
+      MUST   not use MEM or DISTILL in a step — memory belongs to an agent, a role or a procedure
     shape?:   TEXT MAX_WORDS 1  "input-contract template for the step (AS); omit if none"
   BODY:
     STEP {label}:
@@ -77,15 +79,24 @@ EXPORT TEMPLATE ap-block-step:
         BY dry-keeper
         CONTEXT full
         DO audit the implementation for DRY violations and duplicated logic
+        NEVER rewrite the code under review
+        IF a pattern repeats in three places or more:
+            DO recommend a single source of truth
+        ELSE
+            DO report the step as clean
 
 EXPORT TEMPLATE ap-block-flow:
-  ABOUT   scaffold for a FLOW — an ordered sequence of STEP (and PARALLEL) nodes, referenced by RUN
+  ABOUT   scaffold for a FLOW — ordered STEP, PARALLEL and RUN nodes, IF/ELSE/UNTIL around them; referenced by RUN
   TAGS    #agent-pack #authoring #scaffold #block
 
   SLOTS:
     flow-name: TEXT MAX_WORDS 1  "kebab-case flow name, referenced by RUN"
-    steps:     LIST <ap-block-step> >=1  "one STEP per node, in execution order"
-      MUST   order steps as they execute; wrap concurrent steps in a PARALLEL group
+    steps:     TEXT  "one node per line — STEP, PARALLEL, RUN, or IF/ELSE/UNTIL around them"
+      MUST   order nodes as they execute; wrap concurrent steps in a PARALLEL group
+      MUST   head a branch `IF <condition>:` and a loop `UNTIL <condition>:` — the condition is prose
+      MUST   indent STEP, PARALLEL, RUN or a nested IF/ELSE/UNTIL under an IF, ELSE or UNTIL head
+      MUST   place a bare ELSE right after an IF in the same body
+      MAY    nest IF/ELSE/UNTIL at any depth — a step under them still counts as the flow's step
   BODY:
     FLOW {flow-name}:
         {steps}
@@ -95,6 +106,16 @@ EXPORT TEMPLATE ap-block-flow:
             BY senior-typescript
             DO implement the requested change
             DO run npm test before declaring done
+        UNTIL the review reports no open finding — three rounds at most:
+            STEP fix the open findings:
+                BY senior-typescript
+                DO fix each open finding with the smallest change
+        IF the review reports no open finding:
+            STEP audit for DRY:
+                BY dry-keeper
+                DO audit the implementation for DRY violations
+        ELSE
+            RUN escalate-to-maintainer
 
 EXPORT TEMPLATE ap-block-parallel:
   ABOUT   scaffold for a PARALLEL group — sibling STEPs that run concurrently inside a FLOW

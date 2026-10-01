@@ -325,5 +325,16 @@ await import('./inlineBlocks.test.mjs');
 
 // --- Slot-schema validator: TYPE grammar + record validation against a TEMPLATE ---
 await import('./shapeSchema.test.mjs');
+await import('./apdocLines.test.mjs');
+await import('./judge.test.mjs');
+
+// --- IF/ELSE inside a flow STEP: lint, document lines, md, apx flow, Workflow script ---
+await import('./stepIf.test.mjs');
+
+// --- force-level lines in PROCEDURE, STEP and STEP IF/ELSE bodies: lint, document, md, apx, Workflow script ---
+await import('./forceInBodies.test.mjs');
+
+// --- force-level lines at an AGENT's top level: every family but DISTILL — lint, document, md, apx ---
+await import('./forceInAgent.test.mjs');
 
 console.log('All tests passed.');

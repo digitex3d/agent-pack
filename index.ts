@@ -36,6 +36,8 @@ Options:
   --out <dir>       Output directory override (bundle / bundle all)
   --watch           Rebuild on .ap changes (bundle all only)
   --apx-compress    Store the apx data gzipped; --no-apx-compress stores it as JSON (bundle / bundle all)
+  --no-judge        Skip the judge phase (bundle / bundle all)
+  --judge-strict    A line the judge cannot check yet is an error, not a warning (bundle / bundle all)
   --help            Show this help
   --version         Show the version
 

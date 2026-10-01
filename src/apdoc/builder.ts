@@ -22,7 +22,7 @@
  *             returns typed ApBlock subclasses. The JSON/md shape of every
  *             kind lives in its class, never here.
  */
-import { readFileSync, existsSync } from 'fs';
+import { existsSync } from 'fs';
 import { resolve, basename } from 'path';
 import type { BundleContext } from '../dispatch/types.js';
 import type { Definition } from '../definition.js';
@@ -36,7 +36,7 @@ import { extractPrimitive, stripPrimitives, exportedBlockBodies } from '../servi
 import { strategyFor } from '../definition.js';
 import { stripHeaderKeyword } from '../primitives.js';
 import { buildNamespace } from '../namespace.js';
-import { parseBlocks, Block } from '../parseBlocks.js';
+import { align, positionOf, type SourceSpan } from '../sources.js';
 import { apxCommand } from '../apx/paths.js';
 import type { StoreBlock } from './blocks.js';
 import { renderTree } from '../bundlers/renderTree.js';
@@ -49,11 +49,11 @@ import {
 } from '../services/teamMetadata.js';
 import type { ApNode, ApRef, ApShape, ApSlotType, ApStepNode, ApIfNode, ApDocumentMeta, ApStoreProjection } from './types.js';
 import { introOf } from '../formulas.js';
-import { parseForceLevel, getAliasNames, aliasToCanonical, getIntroByKeyword, forceLevelFamilies } from '../forceLevelConfig.js';
+import { parseForceLevel, toCanonicalKeyword, getIntroByKeyword, forceLevelFamilies } from '../forceLevelConfig.js';
 
 /** Keyword (post-desugar or alias) → family base + numeric force; null force for bullets. */
 function parseForce(keyword: string): { base: string; force: number | null } {
-  const canonical = getAliasNames().includes(keyword) ? aliasToCanonical(keyword) : keyword;
+  const canonical = toCanonicalKeyword(keyword);
   const parsed = parseForceLevel(canonical);
   return parsed ? { base: parsed.family, force: parsed.level } : { base: canonical, force: null };
 }
@@ -86,6 +86,8 @@ export interface RecorderFinishOpts {
   boundRole: Definition | null;
   agentBody: string;
   agentFilePath: string;
+  /** Where the agent body was written — the span its reader composed it from. */
+  agentSpan: SourceSpan | null;
   /** The lazy WHEN→RUN triggers of the Dynamic-rules chapter (bodies fetched on demand). */
   /** The md bootstrap prose (team membership + shared + runtime defaults). */
   bootstrap: string;
@@ -108,6 +110,10 @@ export class DocumentBuilder implements BlockCx {
   private team: TeamScan | null = null;
   /** The source file being built — where an unresolved name is reported. */
   private sourcePath = '';
+  /** The span of the block being built — where its nodes were written (null: no positions). */
+  private span: SourceSpan | null = null;
+  /** The file line of each line of the body being walked (null: no positions). */
+  private bodyLines: number[] | null = null;
   /** Every name that resolved to no block: a compile error, reported by the caller. */
   readonly unresolved: { path: string; name: string; kind: string }[] = [];
   /** address → auto tags ('#segment') — md-projection data gathered from Definitions. */
@@ -127,7 +133,28 @@ export class DocumentBuilder implements BlockCx {
    * builder owns its traversal; a block-level AS lands on `host.shape`.
    */
   walk(body: string, sink: ApNode[], host?: ApBlock): void {
+    this.bodyLines = this.span ? align(body.split(/\r?\n/), this.span) : null;
     this.visit(buildTree(lex(body)), sink, host ?? null, []);
+    this.bodyLines = null;
+  }
+
+  /** Stamp where a node was written: the file line its body line came from. */
+  private at<T extends ApNode>(node: T, t: Token): T {
+    if (this.span && this.bodyLines) node.pos = positionOf(this.span, this.bodyLines[t.line - 1] ?? this.span.line);
+    return node;
+  }
+
+  /**
+   * Build one block from its source span: its nodes get their positions while
+   * it walks, the block its header. No span (a file or block not found) → no
+   * positions, never an error.
+   */
+  private fromSource<T extends ApBlock>(span: SourceSpan | null, build: () => T): T {
+    this.span = span;
+    const block = build();
+    if (this.span) block.source = { file: this.span.file, line: this.span.line, col: positionOf(this.span, this.span.line).col };
+    this.span = null;
+    return block;
   }
 
   private visit(nodes: WalkNode[], sink: ApNode[], host: ApBlock | null, steps: ApStepNode[]): void {
@@ -149,7 +176,7 @@ export class DocumentBuilder implements BlockCx {
 
       if (t.kind !== 'keyword') {
         // Prose (or unknown token) with an indented body: verbatim head, children flattened.
-        this.pushText(sink, rawOf(t));
+        this.pushText(sink, t);
         this.visit(n.children, sink, host, steps);
         i++;
         continue;
@@ -164,11 +191,11 @@ export class DocumentBuilder implements BlockCx {
           if (item.token.kind !== 'keyword' || (item.token.keyword as string) !== kw) break;
           const { body, args } = splitArgs(kw, item.children);
           const by = args.get('BY');
-          const step = new StepNode(
+          const step = this.at(new StepNode(
             stripColon(restOf(item.token)),
             by ? this.ref(this.agents.get(stripColon(by)), stripColon(by), 'agent') : null,
             args.get('CONTEXT') ?? null,
-          );
+          ), item.token);
           sink.push(step);
           this.visit(body, step.body, host, [...steps, step]);
           i++;
@@ -181,7 +208,7 @@ export class DocumentBuilder implements BlockCx {
       // rather than reading as prose.
       if (kw === 'IN') {
         const name = stripTrailingColon(t.rest).trim();
-        const node = new InNode(this.ref(this.stores.get(name), name, 'store'), t.indent);
+        const node = this.at(new InNode(this.ref(this.stores.get(name), name, 'store'), t.indent), t);
         sink.push(node);
         this.visit(n.children, node.body, host, steps);
         i++;
@@ -189,7 +216,7 @@ export class DocumentBuilder implements BlockCx {
       }
 
       if (kw === 'PARALLEL') {
-        const node = new ParallelNode();
+        const node = this.at(new ParallelNode(), t);
         sink.push(node);
         this.visit(n.children, node.steps as unknown as ApNode[], host, steps);
         i++;
@@ -197,7 +224,7 @@ export class DocumentBuilder implements BlockCx {
       }
 
       if (kw === 'IF') {
-        const node = new IfNode(stripTrailingColon(t.rest), t.indent);
+        const node = this.at(new IfNode(stripTrailingColon(t.rest), t.indent), t);
         sink.push(node);
         this.visit(n.children, node.then, host, steps);
         i++;
@@ -211,7 +238,7 @@ export class DocumentBuilder implements BlockCx {
         continue;
       }
       if (kw === 'UNTIL') {
-        const node = new UntilNode(stripTrailingColon(t.rest), t.indent);
+        const node = this.at(new UntilNode(stripTrailingColon(t.rest), t.indent), t);
         sink.push(node);
         this.visit(n.children, node.body, host, steps);
         i++;
@@ -223,7 +250,7 @@ export class DocumentBuilder implements BlockCx {
       const rest = stripColon(t.rest);
       // `MEM <event>` with an `AS <template>` line beneath: the memory's shape.
       if (base === 'MEM') {
-        const node = new DirectiveNode(base, force, rest, t.indent);
+        const node = this.at(new DirectiveNode(base, force, rest, t.indent), t);
         for (const c of n.children) {
           if (c.token.kind !== 'keyword') continue;
           const as = parseForce(c.token.keyword as string);
@@ -234,11 +261,11 @@ export class DocumentBuilder implements BlockCx {
         continue;
       }
       if (base === 'WHEN') {
-        const node = new WhenNode(rest, t.indent);
+        const node = this.at(new WhenNode(rest, t.indent), t);
         sink.push(node);
         this.visit(n.children, node.body, host, steps);
       } else {
-        const node = new DirectiveNode(base, force, rest, t.indent, []);
+        const node = this.at(new DirectiveNode(base, force, rest, t.indent, []), t);
         sink.push(node);
         this.visit(n.children, node.body!, host, steps);
       }
@@ -252,7 +279,7 @@ export class DocumentBuilder implements BlockCx {
     while (i < tokens.length) {
       const t = tokens[i];
       if (t.kind !== 'keyword') {
-        if (t.kind !== 'blank' && t.kind !== 'comment') this.pushText(sink, rawOf(t));
+        if (t.kind !== 'blank' && t.kind !== 'comment') this.pushText(sink, t);
         i++;
         continue;
       }
@@ -270,10 +297,10 @@ export class DocumentBuilder implements BlockCx {
       const { base, force } = parseForce(keyword);
       if (base === 'RUN') {
         // The Ref resolves on the builder's own symbol table.
-        for (const raw of actions) {
+        actions.forEach((raw, k) => {
           const name = raw.trim();
-          sink.push(new RunNode(this.ref(this.runnables.get(name), name, 'procedure'), indent));
-        }
+          sink.push(this.at(new RunNode(this.ref(this.runnables.get(name), name, 'procedure'), indent), tokens[i + k]));
+        });
       } else if (base === 'AS') {
         this.applyShape(force ?? 0, actions[0] ?? '', sink, host, steps);
       } else if (base === 'DISTILL') {
@@ -292,22 +319,21 @@ export class DocumentBuilder implements BlockCx {
       } else if (getIntroByKeyword(keyword) !== null || BULLET_KEYWORDS.has(keyword)) {
         // Plain grouped lines: text travels VERBATIM (a trailing colon may be
         // legitimate prose); the source indent is presentation, recorded apart.
-        for (const a of actions) {
-          sink.push(new DirectiveNode(base, force, a, indent));
-        }
+        actions.forEach((a, k) => sink.push(this.at(new DirectiveNode(base, force, a, indent), tokens[i + k])));
       } else {
         // Unclaimed keyword lines pass through verbatim (the legacy raw path).
-        for (let k = i; k < j; k++) this.pushText(sink, rawOf(tokens[k]));
+        for (let k = i; k < j; k++) this.pushText(sink, tokens[k]);
       }
       i = j;
     }
   }
 
-  private pushText(sink: ApNode[], raw: string): void {
+  private pushText(sink: ApNode[], token: Token): void {
+    const raw = rawOf(token);
     const t = raw.trim();
     if (t === '' || t.startsWith('#')) return;
     // Keep the line as written (indentation included) — it is verbatim text.
-    sink.push(new TextNode(raw.replace(/\s+$/, '')));
+    sink.push(this.at(new TextNode(raw.replace(/\s+$/, '')), token));
   }
 
   private applyShape(force: number, rawName: string, sink: ApNode[], host: ApBlock | null, steps: ApStepNode[]): void {
@@ -477,18 +503,14 @@ export class DocumentBuilder implements BlockCx {
     if (!root) return null;
     const name = basename(root);
     const flowsPath = resolve(root, TEAM_FLOWS_FILE);
-    const flowsSource = existsSync(flowsPath) ? readFileSync(flowsPath, 'utf-8') : '';
-    const lines = flowsSource.split(/\r?\n/);
-    const topBlocks = flowsSource ? parseBlocks(flowsSource).blocks : [];
+    const sources = this.ctx!.sources;
+    const flowsSource = existsSync(flowsPath) ? sources.read(flowsPath) : '';
+    const topBlocks = flowsSource ? sources.tree(flowsPath).blocks : [];
     // A FLOW's body runs from the line after its header to the next TOP-LEVEL
     // block (any kind — a WHEN can sit between two FLOWs), or to EOF.
     const flows = topBlocks
       .filter(b => b.key === 'FLOW' && b.name !== null)
-      .map(b => {
-        const next = topBlocks.find(o => o.startLine > b.startLine);
-        const end = next ? next.startLine - 1 : lines.length;
-        return { name: b.name!, body: lines.slice(b.startLine, end).join('\n') };
-      });
+      .map(b => ({ name: b.name!, body: sources.blockSpan(flowsPath, b).lines.slice(1).map(l => l.text).join('\n') }));
     return { root, name, flowsSource, topBlocks, flows };
   }
 
@@ -524,7 +546,8 @@ export class DocumentBuilder implements BlockCx {
       if (!strategy.entries || !strategy.from) continue;
       for (const def of strategy.entries(ctx, opts)) {
         this.sourcePath = def.path;
-        const block = strategy.from(def, this);
+        const from = strategy.from;
+        const block = this.fromSource(ctx.sources.span(def.path, def.kind, def.name), () => from(def, this));
         // A procedure's `DISTILL` line: its mark closes the body, with the
         // procedure's own contract — output AS (required), input LENS-IN.
         if (block.distill !== null) {
@@ -554,18 +577,22 @@ export class DocumentBuilder implements BlockCx {
   /** The team block (built by its class from the scan) + its flow blocks. */
   private teamBlocks(): ApBlock[] {
     if (!this.team) return [];
-    this.sourcePath = resolve(this.team.root, TEAM_FLOWS_FILE);
-    const flowsNs = TeamBlock.flowsNamespace(this.team.name);
+    const team = this.team;
+    const sources = this.ctx!.sources;
+    const flowsPath = resolve(team.root, TEAM_FLOWS_FILE);
+    this.sourcePath = flowsPath;
+    const flowsNs = TeamBlock.flowsNamespace(team.name);
     return [
-      ...this.team.flows.map(f => RuleBlock.fromBody('flow', { name: f.name, namespace: flowsNs }, f.body, this)),
-      TeamBlock.fromScan(this.team, this),
+      ...team.flows.map(f => this.fromSource(sources.span(flowsPath, 'flow', f.name), () => RuleBlock.fromBody('flow', { name: f.name, namespace: flowsNs }, f.body, this))),
+      // The team is its flows.ap as a whole: no TEAM block there, so the file from line 1.
+      this.fromSource(sources.span(flowsPath, 'team', team.name), () => TeamBlock.fromScan(team, this)),
     ];
   }
 
   /** The agent root block — built by its class from the pipeline's state. */
   private agentBlock(ctx: BundleContext, opts: RecorderFinishOpts): ApBlock {
     this.sourcePath = opts.agentFilePath;
-    return AgentBlock.fromContext({ agentName: ctx.agentName, ...opts }, this);
+    return this.fromSource(opts.agentSpan, () => AgentBlock.fromContext({ agentName: ctx.agentName, ...opts }, this));
   }
 
   // -------------------------------------------------------------------- meta

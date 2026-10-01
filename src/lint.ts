@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from 'fs';
 import { lex, Token, Keyword, KEYWORDS } from './lexer.js';
 import { desugar } from './desugar.js';
 import { TAG_RE } from './services/tags.js';
-import { getFamilyBases, getIntroByKeyword, forceLevelBaseOf, forceLevelFamilies } from './forceLevelConfig.js';
+import { getFamilyBases, getIntroByKeyword, forceLevelBaseOf, forceLevelFamilies, toCanonicalKeyword } from './forceLevelConfig.js';
 import { enumPrimitiveFor } from './primitives.js';
 import { BLOCK_CONTRACTS, BlockContract } from './blockContracts.js';
 import { parseBlocks, type Block } from './parseBlocks.js';
@@ -14,12 +14,22 @@ import { kindFromDir, unitNameFromPath } from './ingest.js';
 import { BLOCK_TYPES, blockTypeOf, EXPORT_MODIFIER } from './blockTypes.js';
 import { parseTypeSpec } from './shapeSchema.js';
 import { STORE_LIFETIMES } from './storeTypes/types.js';
+import { stripTrailingColon } from './bundlers/renderTree.js';
 
 export interface LintError {
   file: string;
   line: number;
   message: string;
   severity?: 'error' | 'warning';
+  /** 1-based column of the first character, and just past the last — when known. */
+  col?: number;
+  endCol?: number;
+  /** What reported it: the id of the rule or check, when it has one. */
+  code?: string;
+  /** Which phase reported it — the lint (default) or the judge. */
+  source?: 'lint' | 'judge';
+  /** Machine data of the diagnostic (a judge verdict: p, key). */
+  data?: Record<string, unknown>;
 }
 
 export interface LintOptions {
@@ -338,19 +348,39 @@ function triggerHandler(label: 'WHEN' | 'IF', onAccept?: (state: State) => void)
   };
 }
 
+/**
+ * IF/ELSE/UNTIL line at `index`: its IF or UNTIL condition is valid, an ELSE
+ * comes right after an IF in the same body, and its body is indented ≥ 2 deeper.
+ */
+function ifElseErrors(t: KeywordToken, tokens: Token[], index: number, file: string): LintError[] {
+  const errors: LintError[] = [];
+  if (t.keyword === 'IF' || t.keyword === 'UNTIL') {
+    const err = validateTriggerContent(t.rest);
+    if (err) errors.push({ file, line: t.line, message: `${t.keyword} trigger: ${err}` });
+  }
+  if (t.keyword === 'ELSE') {
+    // An ELSE is the second branch of an IF before it in the same body (the document
+    // builder binds it to the last one) — never a line of its own.
+    let hasIf = false;
+    for (let j = index - 1; j >= 0 && !hasIf; j--) {
+      const p = tokens[j];
+      if (p.kind === 'blank' || p.kind === 'comment' || p.kind === 'rawLine' || p.indent > t.indent) continue;
+      if (p.indent < t.indent) break;
+      hasIf = p.kind === 'keyword' && p.keyword === 'IF';
+    }
+    if (!hasIf) errors.push({ file, line: t.line, message: 'ELSE must follow an IF in the same body' });
+  }
+  const next = nextSubstantive(tokens, index + 1);
+  if (next === -1 || tokens[next].indent < t.indent + 2) {
+    const head = t.keyword === 'UNTIL' ? 'UNTIL' : 'IF/ELSE';
+    errors.push({ file, line: t.line, message: `${head} block body must be indented (Python-style): "${quoteRaw(t)}"` });
+  }
+  return errors;
+}
+
 /** IF/ELSE block: validate IF trigger and require ≥ 2-deeper indent on the body. */
 const ifElseHandler: KeywordHandler = (t, ctx) => {
-  if (t.keyword === 'IF') {
-    const err = validateTriggerContent(t.rest);
-    if (err) ctx.errors.push({ file: ctx.file, line: t.line, message: `IF trigger: ${err}` });
-  }
-  const next = nextSubstantive(ctx.tokens, ctx.index + 1);
-  if (next === -1 || ctx.tokens[next].indent < t.indent + 2) {
-    ctx.errors.push({
-      file: ctx.file, line: t.line,
-      message: `IF/ELSE block body must be indented (Python-style): "${quoteRaw(t)}"`,
-    });
-  }
+  ctx.errors.push(...ifElseErrors(t, ctx.tokens, ctx.index, ctx.file));
 };
 
 /** Header keyword (PROCEDURE, TEMPLATE): bump counter on `state[key]`, optional first-time capture. */
@@ -511,9 +541,10 @@ const PLAYBOOK_SPEC: LintSpec = {
   },
 };
 
-// `AS` (base) admits every declension via handlerFor — a procedure declares
-// its output shape with `AS <shape>`, replacing the former `RETURN AS` combo.
-const PROCEDURE_FLOW_KEYWORDS: Keyword[] = ['IMPORT', 'DO', 'RETURN', 'UNTIL', 'RUN', 'AS'];
+// Force-level family bases — the list roles and playbooks admit — plus the
+// action/flow keywords. handlerFor expands each base to all its declensions:
+// `AS <shape>` declares the procedure's output, `NEVER …`/`MUST! …` are its rules.
+const PROCEDURE_FLOW_KEYWORDS: Keyword[] = ['IMPORT', 'DO', 'RETURN', 'UNTIL', 'RUN', ...getFamilyBases()];
 
 const PROCEDURE_SPEC: LintSpec = {
   topLevelOnly: true,
@@ -526,6 +557,8 @@ const PROCEDURE_SPEC: LintSpec = {
     ['IF',        ifElseHandler],
     ['ELSE',      ifElseHandler],
     ...PROCEDURE_FLOW_KEYWORDS.map(kw => [kw, accept] as const),
+    // DISTILL stands alone on its line; its place and its text are checkVocabulary's.
+    ['DISTILL', passthrough],
     ...agentOnlyEntries,
     ...roleIdentityEntries,
     ...flowOnlyEntries,
@@ -611,7 +644,7 @@ const TEMPLATE_SPEC: LintSpec = {
 
 // A flat agent file is a `.ap` file holding an `EXPORT AGENT <name> AS <role>:`
 // block. Its surface contract — required AS + MANDATE, forbidden EXPERTISE/TAGS,
-// allowed ALWAYS/NEVER/MUST/WHEN — lives entirely in `BLOCK_CONTRACTS.AGENT` and
+// allowed force-level lines (every family but DISTILL) and WHEN — lives entirely in `BLOCK_CONTRACTS.AGENT` and
 // is validated by `lintAgentBlocks` (below). There is no separate file-top
 // `agent.ap` spec: the block IS the unit.
 
@@ -674,10 +707,7 @@ export function lintAgentBlocks(file: string, body: string): LintError[] {
       // signature, never a body line. Everything else defers to the contract
       // (which expands force-level declensions to their family base internally).
       if (child.keyword === 'AS' || !isAllowedChild(contract, child.keyword as Keyword)) {
-        errors.push({
-          file, line: child.line,
-          message: `${child.keyword} is not allowed inside AGENT (expected one of: ${contract.allows.join(', ')})`,
-        });
+        errors.push({ file, line: child.line, message: notAllowed(child.keyword as Keyword, 'AGENT', contract) });
       }
     }
 
@@ -714,6 +744,9 @@ interface OpenBlock {
   line: number;
   indent: number;
   children: Map<string, number>;
+  contract: BlockContract;
+  /** For a branch (IF/ELSE/UNTIL), at any depth: the block it belongs to, which counts its children too. */
+  host?: OpenBlock;
 }
 
 /**
@@ -730,9 +763,34 @@ interface OpenBlock {
  * `AS`, `AS!`, `AS!!`, `!AS` without enumerating every declension).
  */
 function isAllowedChild(contract: BlockContract, keyword: Keyword): boolean {
-  if (contract.allows.includes(keyword)) return true;
-  const base = forceLevelBaseOf(keyword);
+  if (contract.allows.includes(keyword) || isBranch(contract, keyword)) return true;
+  const base = familyBaseOf(keyword);
   return base !== null && contract.allows.includes(base as Keyword);
+}
+
+/**
+ * The force-level family base of a keyword in any declension or alias
+ * (`MUST!`, `!ALWAYS`, `NEVER`, `MUST-NOT` → their base), or null. An alias
+ * reaches here undesugared from `lintAgentBlocks`, which reads raw blocks.
+ */
+function familyBaseOf(keyword: string): string | null {
+  return forceLevelBaseOf(toCanonicalKeyword(keyword));
+}
+
+/**
+ * The "not allowed" error for `keyword` under `parent`: the reason the
+ * contract's `excluded` gives for its family, when it gives one, and what the
+ * block admits instead.
+ */
+function notAllowed(keyword: Keyword, parent: string, contract: BlockContract): string {
+  const why = contract.excluded?.[(familyBaseOf(keyword) ?? keyword) as Keyword];
+  const expected = [...contract.allows, ...(contract.branches?.keywords ?? [])].join(', ');
+  return `${keyword} is not allowed inside ${parent}${why ? ` — ${why}` : ''} (expected one of: ${expected})`;
+}
+
+/** Whether `keyword` opens a branch (IF/ELSE, UNTIL) of a block under `contract`. */
+function isBranch(contract: BlockContract, keyword: Keyword): boolean {
+  return contract.branches?.keywords.includes(keyword) ?? false;
 }
 
 export function validateBlockContracts(
@@ -745,46 +803,51 @@ export function validateBlockContracts(
 
   const popClosedBlocks = (currentIndent: number) => {
     while (stack.length > 0 && currentIndent <= stack[stack.length - 1].indent) {
-      finalizeBlock(stack.pop()!, contracts, errors, file);
+      finalizeBlock(stack.pop()!, errors, file);
     }
   };
 
-  for (const t of tokens) {
+  for (const [index, t] of tokens.entries()) {
     if (t.kind !== 'keyword') continue;
     popClosedBlocks(t.indent);
 
     const parent = stack[stack.length - 1];
     if (parent) {
-      const c = contracts[parent.keyword];
-      if (c && !isAllowedChild(c, t.keyword)) {
-        errors.push({
-          file,
-          line: t.line,
-          message: `${t.keyword} is not allowed inside ${parent.keyword} (expected one of: ${c.allows.join(', ')})`,
-        });
+      const c = parent.contract;
+      const allowed = isAllowedChild(c, t.keyword);
+      if (!allowed) {
+        errors.push({ file, line: t.line, message: notAllowed(t.keyword, parent.keyword, c) });
       }
-      parent.children.set(t.keyword, (parent.children.get(t.keyword) ?? 0) + 1);
+      // A branch is transparent: the lines it admits are its host block's lines too.
+      for (const b of parent.host && allowed ? [parent, parent.host] : [parent]) {
+        b.children.set(t.keyword, (b.children.get(t.keyword) ?? 0) + 1);
+      }
     }
 
-    if (contracts[t.keyword]) {
-      stack.push({ keyword: t.keyword, line: t.line, indent: t.indent, children: new Map() });
+    if (parent && isBranch(parent.contract, t.keyword)) {
+      // The branch is an IF/ELSE/UNTIL like anywhere else: same trigger and body
+      // checks. It holds its block's branch lines — and, when the block's
+      // branches nest, further branches, all hosted by that same block.
+      errors.push(...ifElseErrors(t, tokens, index, file));
+      const branches = parent.contract.branches!;
+      stack.push({
+        keyword: t.keyword, line: t.line, indent: t.indent, children: new Map(),
+        contract: { allows: branches.allows, excluded: parent.contract.excluded, branches: branches.nests ? branches : undefined },
+        host: parent.host ?? parent,
+      });
+    } else if (contracts[t.keyword]) {
+      stack.push({ keyword: t.keyword, line: t.line, indent: t.indent, children: new Map(), contract: contracts[t.keyword] });
     }
   }
 
   while (stack.length > 0) {
-    finalizeBlock(stack.pop()!, contracts, errors, file);
+    finalizeBlock(stack.pop()!, errors, file);
   }
   return errors;
 }
 
-function finalizeBlock(
-  block: OpenBlock,
-  contracts: Record<string, BlockContract>,
-  errors: LintError[],
-  file: string,
-): void {
-  const c = contracts[block.keyword];
-  if (!c) return;
+function finalizeBlock(block: OpenBlock, errors: LintError[], file: string): void {
+  const c = block.contract;
 
   for (const required of c.requiresAll ?? []) {
     if (!block.children.has(required)) {
@@ -850,7 +913,7 @@ export function lintFlow(file: string, body: string, options: LintOptions = {}):
   } else {
     const flowToken = flowTokens[0];
     if (flowToken.kind === 'keyword') {
-      const flowName = flowToken.rest.trim().split(/\s+/)[0] ?? '';
+      const flowName = stripTrailingColon(flowToken.rest.trim()).split(/\s+/)[0] ?? '';
       const fileSlug = unitNameFromPath(file);
       if (fileSlug && flowName && fileSlug !== flowName) {
         errors.push({
@@ -1159,7 +1222,11 @@ function lintByKind(file: string, body: string, options: LintOptions): LintError
   // recognised by content, ahead of the dir switch, because they carry FLOW/ROLE
   // blocks that are NOT the file's kind and may sit under a build-output
   // `templates/` ancestor that the dir switch would misread.
-  if (isAgentOrOrchestration(file, body)) return lintAgentBlocks(file, body);
+  // Their FLOW blocks (a team's flows.ap) take the same block contracts as a
+  // flow file: FLOW, STEP, PARALLEL and their branches, wherever they live.
+  if (isAgentOrOrchestration(file, body)) {
+    return [...lintAgentBlocks(file, body), ...validateBlockContracts(desugar(lex(body)), file)];
+  }
 
   // Otherwise the lint dispatch is dir-authoritative: the kind-folder a file
   // lives under names the linter, never a suffix and never a block. A loose
@@ -1197,6 +1264,8 @@ export function lineOfName(path: string, name: string, on: 'use' | 'import' = 'u
 export function formatErrors(errors: LintError[]): string {
   return errors.map(e => {
     const tag = e.severity === 'warning' ? 'warning' : 'error';
-    return `${tag}  ${e.file}:${e.line}  ${e.message}`;
+    const col = e.col !== undefined ? `:${e.col}` : '';
+    const code = e.code ? `[${e.code}] ` : '';
+    return `${tag}  ${e.file}:${e.line}${col}  ${code}${e.message}`;
   }).join('\n');
 }

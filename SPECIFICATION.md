@@ -1,6 +1,6 @@
 # Agent Pack Specification
 
-**Version 1.0 — September 2026.** First written in May 2026 by Giuseppe Federico.
+**Version 1.1 — October 2026.** First written in May 2026 by Giuseppe Federico.
 
 This document is the canonical reference for the Agent Pack paradigm.
 It elaborates the principles, the trade-offs, and the primitive
@@ -109,7 +109,7 @@ items on the left more.
 ## 3. Primitives
 
 The shared vocabulary of the paradigm. Each primitive has a stable
-identifier (`D1`–`D35`) for external citation as `Agent Pack §D<n>`.
+identifier (`D1`–`D37`) for external citation as `Agent Pack §D<n>`.
 These terms have precise meaning and are not interchangeable.
 
 - **D1 — agent** — an executable unit defined by a mission (what it
@@ -183,7 +183,11 @@ These terms have precise meaning and are not interchangeable.
   family that expresses obligation — the answer shape (D35), memory
   (D21), distillation (D22). At compile time each level expands into
   one exact formula. Obligation is a first-class primitive of the
-  language, not a documentation convention.
+  language, not a documentation convention: a level is always written
+  with its keyword, never as an action (`DO`) carrying a strength word —
+  `NEVER skip a finding`, not `DO never skip a finding`. Every body that
+  holds actions — agent, role, playbook, procedure (D16), flow step
+  (D24) — admits the levels for that reason. (Rule added in 1.1.)
 
 - **D12 — *deprecated*.** Previously defined the *dynamic rule*. Never
   implemented as specified; the ID is retained per the append-only rule
@@ -204,7 +208,10 @@ These terms have precise meaning and are not interchangeable.
 - **D16 — procedure** — a reusable sequence of directives with control
   flow (D27), invoked by name with `RUN` from an agent, a role, another
   procedure or a flow step. Its contract is optional: the shape of its
-  input (`LENS-IN`, D6) and of its result (`AS`, D35).
+  input (`LENS-IN`, D6) and of its result (`AS`, D35). Beside its
+  actions (`DO`, `RUN`), its body holds directives at any force level
+  (D11) — memory (D21) included — at its top and under its `IF`, `ELSE`
+  and `UNTIL`; `DISTILL` (D22) alone is bound to its top.
 
 - **D17 — role** — a way of thinking and acting: an identity, its
   expertise and its rules, reusable across agents. An agent binds one
@@ -234,7 +241,8 @@ These terms have precise meaning and are not interchangeable.
   remember an event, to act on it directly the next time: `MEM <event>`,
   at a force level (D11), optionally shaped by a template (D35). The
   memory is the harness's own; the language states what is worth
-  remembering.
+  remembering. It is written in an agent, a role or a procedure (D16),
+  never in a flow step (D24).
 
 - **D22 — distillation (`DISTILL`)** — the line, set by the author
   inside a procedure (D16), that marks its reasoning as able to become a
@@ -253,8 +261,15 @@ These terms have precise meaning and are not interchangeable.
 - **D24 — flow** — the ordered steps a team follows for one kind of
   work. Each `STEP` names who carries it out (`BY`, an agent or a team),
   what to do (`DO`), how much upstream context to pass (D25) and the
-  template it hands over (D35); `PARALLEL` groups steps that run at the
-  same time. A team's routing (D7) points each request at one flow.
+  template it hands over (D35); a step may put some of its actions under
+  a condition (D36); `PARALLEL` groups steps that run at the same time;
+  `RUN` carries out another flow; `IF` / `ELSE` and `UNTIL` put steps
+  under a condition or in a loop (D37). A team's routing (D7) points
+  each request at one flow. A step also holds directives at any force
+  level (D11), except `DISTILL` (D22), which marks a procedure, and memory (`MEM`, D21), since the agent a step
+  names with `BY` may have no memory in its harness — memory belongs to
+  an agent, a role or a procedure. A directive is a rule of the step,
+  never its action: a step needs at least one `DO` or `RUN`.
 
 - **D25 — context mode** — how much upstream context a step's executor
   receives: `isolated` (only its own intent), `summary` (a synthesized
@@ -270,6 +285,9 @@ These terms have precise meaning and are not interchangeable.
 - **D27 — control flow** — `IF` / `ELSE` branch, `UNTIL` repeats until
   its condition holds, `RUN` carries out a procedure or a flow by name.
   Structure is indentation: a construct's body is what sits beneath it.
+  An `ELSE` is the second branch of the `IF` right before it in the same
+  body, never a line of its own. Inside a flow step, only the branch is
+  admitted (D36); around a flow's steps, both are (D37).
 
 - **D28 — mandate** — `MANDATE`: the one statement of what an agent is
   responsible for, distinct from how it behaves.
@@ -305,6 +323,26 @@ These terms have precise meaning and are not interchangeable.
   template, at a force level (D11) — an agent's answer, a procedure's
   result, what a step hands its executor, the structure of a memory.
 
+- **D36 — step branch** — a flow step (D24) may hold `IF <condition>:`
+  and a bare `ELSE`; under them sit only `DO` and `RUN` lines and the
+  step's directives (D24) — no `AS`, which belongs to the signature, and,
+  as in the step itself, no `DISTILL` and no `MEM`.
+  The branch is transparent: its lines are the step's own, so a
+  step whose every action sits under an `IF` still has its action. The
+  step's signature — `BY`, `CONTEXT`, `AS` — stays unconditional, and a
+  branch holds no further `IF`. Conditions and loops around whole steps
+  belong to the flow (D37). (Added in 1.1.)
+
+- **D37 — flow control** — a flow (D24) may hold `IF <condition>:`, its
+  `ELSE` and `UNTIL <condition>:` around its steps. Under them sit what
+  the flow itself holds — `STEP`, `PARALLEL`, `RUN` — and further `IF`,
+  `ELSE` and `UNTIL`, nested at any depth. A step under them is the
+  flow's own: a flow whose only step sits under an `UNTIL` still has its
+  step, while a lone `RUN` is not a step. The condition is prose, judged
+  by whoever runs the flow; the language adds no syntax for it and sets
+  no bound on an `UNTIL` — a bound, when wanted, is written in the
+  condition. (Added in 1.1.)
+
 ## 4. Citation
 
 External works referencing this specification should use the stable
@@ -323,7 +361,7 @@ deprecated ID is marked deprecated; it is not reused.
 
 The Agent Pack paradigm, its language and this specification were
 created by **Giuseppe Federico**. The specification was first written
-in May 2026; this version 1.0 dates from September 2026.
+in May 2026; this version 1.1 dates from October 2026.
 
 Its text is released under the Creative Commons
 Attribution-NoDerivatives 4.0 International license — see

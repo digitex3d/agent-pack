@@ -5,7 +5,8 @@ import { fileURLToPath } from 'url';
 import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { AdapterPlugin } from '../adapters/types.js';
-import { resolveAdapter } from './adapter-registry.js';
+import { resolveAdapter, resolveJudge } from './adapter-registry.js';
+import type { JudgeConfig, JudgePlugin } from './judge/types.js';
 import { defaultBundleConfig } from './bundleDefaults.js';
 
 function expandHome(p: string): string {
@@ -205,6 +206,8 @@ export interface Config {
   bundle: BundleConfig;
   lint: LintConfig;
   adapters: AdapterPlugin[];
+  /** The judge phase — null (no `judge` key) turns it off. */
+  judge?: JudgeConfig | null;
 }
 
 /** Library roots searched by `IMPORT … FROM library.<kind>` (unqualified path).
@@ -230,7 +233,36 @@ const LINT_DEFAULTS: LintConfig = {
   maxLineLength: 120,
 };
 
-const DEFAULTS: Omit<Config, 'bundle' | 'lint' | 'adapters' | 'userRoot'> = {
+const JUDGE_DEFAULTS = {
+  adapter: 'jev',
+  threshold: 0.5,
+  offline: 'warn',
+  lock: 'agent-pack.judge.lock',
+  concurrency: 8,
+} as const;
+
+/**
+ * The `judge` key resolved: a built-in judge by name or a judge object, the
+ * defaults filled in, the lock anchored to the project root. Absent →
+ * null (the phase is off). A value the phase cannot use is an error, never a guess.
+ */
+function resolveJudgeConfig(raw: unknown, projectRoot: string): JudgeConfig | null {
+  if (raw === undefined || raw === null || raw === false) return null;
+  if (!isPlainObject(raw)) throw new Error("judge must be an object, e.g. { adapter: 'jev' }");
+  const j = { ...JUDGE_DEFAULTS, ...raw } as Record<string, unknown>;
+  const adapter = resolveJudge(j.adapter as JudgePlugin | string);
+  if (!isPlainObject(adapter) || adapter.type !== 'judge' || typeof adapter.ask !== 'function') {
+    throw new Error("judge.adapter must be a built-in judge name or an object { type: 'judge', name, ask }");
+  }
+  const { threshold, offline, lock, concurrency } = j;
+  if (typeof threshold !== 'number' || !(threshold >= 0 && threshold <= 1)) throw new Error('judge.threshold must be a number between 0 and 1');
+  if (offline !== 'warn' && offline !== 'error') throw new Error("judge.offline must be 'warn' or 'error'");
+  if (typeof lock !== 'string' || lock.trim() === '') throw new Error('judge.lock must be a file path');
+  if (!Number.isInteger(concurrency) || (concurrency as number) < 1) throw new Error('judge.concurrency must be a whole number ≥ 1');
+  return { adapter, threshold, offline, lock: resolve(projectRoot, expandHome(lock)), concurrency: concurrency as number };
+}
+
+const DEFAULTS: Omit<Config, 'bundle' | 'lint' | 'adapters' | 'userRoot' | 'judge'> = {
   agentsDir: 'agents',
   teamsDir: 'agents/teams',
   outputDir: OUTPUT_DIR,
@@ -305,5 +337,6 @@ export async function loadConfig(args: string[]): Promise<Config> {
       maxLineLength: userLint.maxLineLength ?? LINT_DEFAULTS.maxLineLength,
     },
     adapters: (userConfig.adapters || []).map(resolveAdapter),
+    judge: resolveJudgeConfig(userConfig.judge, projectRoot),
   };
 }

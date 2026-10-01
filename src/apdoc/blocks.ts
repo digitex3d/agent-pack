@@ -11,7 +11,7 @@
  * the KIND_STRATEGIES registry, whose rows only point back at the classes —
  * consumers iterate or look up, they never branch on kind.
  */
-import type { ApRef, ApShape, ApSlot, ApSlotType, ApNode, ApBlockData, ApStoreProjection } from './types.js';
+import type { ApRef, ApShape, ApSlot, ApSlotType, ApNode, ApBlockData, ApStoreProjection, ApCheck } from './types.js';
 import type { Definition } from '../definition.js';
 import type { BundleContext } from '../dispatch/types.js';
 import { ApBlock, ApBlockInit } from './block.js';
@@ -334,6 +334,15 @@ export class TemplateBlock extends ApBlock {
     }
     if (this.scalar) return { scalar: this.scalar };
     return this.shape ? { shape: this.shape } : {};
+  }
+
+  /** The slot rules as neutral checks, in order — id `<template>.<slot>.<n>`, the rule text verbatim. */
+  asChecks(): ApCheck[] {
+    return (this.slots ?? []).flatMap(slot => slot.rules.map((rule, i) => ({
+      id: `${this.name}.${slot.name}.${i + 1}`,
+      statement: rule.text,
+      force: { keyword: rule.keyword, level: rule.force },
+    })));
   }
 
   /** Mirror of the legacy renderTemplate — sourced from the typed fields. */

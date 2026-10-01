@@ -39,7 +39,7 @@ One agent per file, anywhere under `agents/`.
 | `OWNS <globs>` | the files it may write; the definition opens with a perimeter warning |
 | `LENS-IN <template>` | the shape requests to it arrive in |
 | `LENS-OUT <template>` | the shape of its answers |
-| rules and `WHEN` workflows | its own behaviour — see [Rules](#rules) and [Control flow](#control-flow) |
+| rules and `WHEN` workflows | its own behaviour — rules at every level, `SHOULD`, `MAY` and [`MEM`](#memory) included (see [Rules](#rules)), and [Control flow](#control-flow); never `DISTILL`, which marks a procedure |
 
 ### ROLE
 
@@ -104,6 +104,7 @@ An answer is bound to a template with `AS` (see [Shapes](#shapes)).
 PROCEDURE verify-claim:
     ABOUT  back one claim with independent sources before it enters the brief
     DO     search for the claim and read the most authoritative result
+    NEVER  count two pages that quote the same origin as two sources
     UNTIL  the claim has two independent sources, or no new source turns up
       DO   search again with different terms and read one more source
     IF     the sources disagree
@@ -113,7 +114,7 @@ PROCEDURE verify-claim:
     AS     finding
 ```
 
-Reusable steps, invoked with `RUN verify-claim` from an agent, a role, another procedure or a flow. `AS <template>` is the shape of its result; `LENS-IN <template>` the shape of its input, when it has one. A procedure that always gives the same result for the same input can be [distilled](#distillation) into a script.
+Reusable steps, invoked with `RUN verify-claim` from an agent, a role, another procedure or a flow. Besides `DO` and `RUN`, a procedure takes [rule](#rules) lines — `MUST`, `NEVER`, `SHOULD`, … — at its top and under its `IF`/`ELSE` and `UNTIL`: write `NEVER …`, not `DO never …`. `AS <template>` is the shape of its result; `LENS-IN <template>` the shape of its input, when it has one. A procedure that always gives the same result for the same input can be [distilled](#distillation) into a script.
 
 ### STORE
 
@@ -161,7 +162,30 @@ FLOW complex-task:
 | `CONTEXT isolated \| summary \| full \| inherited` | how much upstream context the step's agent receives |
 | `AS <template>` | the shape of what is handed to the step's agent |
 | `DO` | what to do |
+| `MUST`, `NEVER`, `SHOULD`, … | a [rule](#rules) of the step — `NEVER skip a finding`, not `DO never skip a finding`; never `MEM` or `DISTILL` |
+| `IF <condition>:` / `ELSE` | the `DO`, `RUN` and rule lines indented under it apply only when the condition holds (or, under `ELSE`, when it does not); `BY`, `CONTEXT` and `AS` stay unconditional |
 | `PARALLEL` | the steps indented under it run at the same time |
+
+A flow itself may put its `STEP`, `PARALLEL` and `RUN` lines under `IF <condition>:` and its `ELSE`, or repeat them under `UNTIL <condition>:`, and nest further `IF`/`ELSE`/`UNTIL` inside them. The condition is prose, judged by whoever runs the flow; an `UNTIL` takes no mandatory bound — write it in the condition when there is one.
+
+```
+FLOW build-change:
+    STEP write the plan:
+        BY planner
+        DO write the implementation plan
+    UNTIL the audit says pass or fail — three revisions at most:
+        STEP revise the plan:
+            BY planner
+            DO amend the plan to close every gap the audit lists
+    IF the audit says pass:
+        RUN deliver-task
+```
+
+A flow needs at least one `STEP`, directly or under its `IF`/`ELSE`/`UNTIL`. A flow in a team's `flows.ap` is checked like one in a flow file.
+
+A step needs at least one `DO` or `RUN`, directly or under its `IF`/`ELSE`: a rule line says how to act, never what to do.
+
+A step takes no `MEM`, nor do its `IF`/`ELSE` branches: the agent its `BY` names may have no memory in its harness. `DISTILL` marks a procedure, never a step.
 
 ## Rules
 
@@ -180,9 +204,11 @@ A rule is a keyword and an action. The keyword says how binding it is:
 | `NEVER` | You must never |
 | `DO` | a step to carry out |
 
+A level is written with its keyword — `NEVER skip a finding`, `ALWAYS cite the line` — never as `DO never …` or `DO always …`.
+
 ## Memory
 
-`MEM <event>` tells the agent to save an event to its persistent memory, to act on it directly the next time instead of working it out again. It is a rule like any other — in an agent, a role, a procedure, a `WHEN` or a flow step — with the same levels:
+`MEM <event>` tells the agent to save an event to its persistent memory, to act on it directly the next time instead of working it out again. It is a rule like any other — in an agent, a role, a procedure or a `WHEN`, never in a flow step — with the same levels:
 
 | Write | Reads as |
 |---|---|
@@ -247,7 +273,7 @@ Agents run a script through their apx — `node .agent-pack/apx/<agent>.apx run 
 | Construct | |
 |---|---|
 | `WHEN <condition>:` | a workflow: the indented lines apply when the condition holds |
-| `IF <condition>` … `ELSE` | a branch; the indented lines are its body |
+| `IF <condition>` … `ELSE` | a branch; the indented lines are its body. An `ELSE` must come right after an `IF` in the same body |
 | `UNTIL <condition>` | repeat the indented lines until the condition holds |
 | `RUN <procedure or flow>` | carry out that procedure or flow |
 | `IN <store>:` | the indented lines work on that store |

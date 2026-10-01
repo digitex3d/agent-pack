@@ -25,6 +25,7 @@ const EXCLUDED_KEYS = new Set([
   'id', 'contentHash', 'chars',
   'keyword', 'force', 'optional', 'resolved', 'indent',
   'target',        // Ref address (also fully skipped via isRef)
+  'pos',           // source position — provenance, never content
 ]);
 
 /** A Ref-shaped object: pure address, skipped wholesale. */

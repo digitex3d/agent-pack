@@ -4,9 +4,12 @@ import { AgentBundle, AdapterPlugin } from '../../adapters/types.js';
 import { Config } from '../config.js';
 import { bundleAgentObjectFromConfig, resolveAgentDir } from '../compiler/index.js';
 import { loadVarsAp } from '../varsAp.js';
+import type { JudgeRun } from '../judge/phase.js';
 
 export interface BuildAgentOptions {
   adapter?: AdapterPlugin;
+  /** The command's judge run, shared by every agent it compiles. */
+  judge?: JudgeRun | null;
 }
 
 export async function buildAgentBundle(
@@ -19,6 +22,7 @@ export async function buildAgentBundle(
     bundleConfig: config.bundle,
     lintConfig: config.lint,
     adapter: opts.adapter,
+    judge: opts.judge,
     vars: { name, ...fileVars },
   });
   return Object.assign(new AgentBundle(), {

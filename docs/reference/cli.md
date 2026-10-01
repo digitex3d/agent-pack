@@ -21,8 +21,8 @@ Writes a default `agent-pack.config.mjs` (the `claude-code` adapter) and the `.a
 ## `bundle`
 
 ```bash
-agent-pack bundle all            [--adapter <name>] [--out <dir>] [--watch] [--apx-compress | --no-apx-compress]
-agent-pack bundle <name|path>    [--adapter <name>] [--out <dir>] [--apx-compress | --no-apx-compress]
+agent-pack bundle all            [--adapter <name>] [--out <dir>] [--watch] [--apx-compress | --no-apx-compress] [--no-judge | --judge-strict]
+agent-pack bundle <name|path>    [--adapter <name>] [--out <dir>] [--apx-compress | --no-apx-compress] [--no-judge | --judge-strict]
 ```
 
 **`bundle all`** discovers every agent under `agentsDir` and compiles it for every configured adapter. It writes:
@@ -42,6 +42,8 @@ AGENTS.md and CLAUDE.md are written as managed blocks: whatever you write outsid
 | `--watch` | `bundle all` only: rebuild on every change to a `.ap` file; stop with Ctrl+C |
 | `--apx-compress` | store the apx data gzipped (overrides `bundle.apxCompress`) |
 | `--no-apx-compress` | store the apx data as compact JSON (overrides `bundle.apxCompress`) |
+| `--no-judge` | skip the judge phase for this run |
+| `--judge-strict` | a line the judge cannot check yet (judge unreachable, no saved verdict) is an error — `judge.offline: 'error'` for this run |
 
 ## `agents list`
 

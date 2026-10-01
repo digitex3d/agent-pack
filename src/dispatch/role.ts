@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { readFileSync, existsSync } from 'fs';
+import { existsSync } from 'fs';
 import { resolve, basename, dirname } from 'path';
 import { BundleContext, RoleEntry } from './types.js';
 import { lintFile } from '../lint.js';
@@ -64,7 +64,7 @@ function resolveRoleFile(
 ): { name: string; about: string | null; rules: string; tags: string[] } {
   seen.add(absPath);
 
-  const raw = readFileSync(absPath, 'utf-8');
+  const raw = ctx.sources.read(absPath);
   ctx.lintErrors.push(...lintFile(absPath, raw, ctx.lintOptions));
   // TRANSITIONAL: route the column-0 metadata regexes through the shared EXPORT
   // seam (services/text.ts). unwrapExportFile lifts an `EXPORT ROLE <name>:`
@@ -85,7 +85,7 @@ function resolveRoleFile(
 
 /** A broken EXTENDS fails the compilation, pointing at the child's EXTENDS line. */
 function extendsError(ctx: BundleContext, childPath: string, message: string): { rules: string; tags: string[] } {
-  const line = readFileSync(childPath, 'utf-8').split('\n').findIndex(l => /^\s*EXTENDS\s/.test(l)) + 1;
+  const line = ctx.sources.read(childPath).split('\n').findIndex(l => /^\s*EXTENDS\s/.test(l)) + 1;
   ctx.lintErrors.push({ file: childPath, line: line || 1, message });
   return { rules: '', tags: [] };
 }
@@ -129,7 +129,7 @@ export async function resolveRole(imp: LoadRequest, ctx: BundleContext): Promise
   // Breadcrumb is taken from the leaf file (the role that was imported).
   // ingestRaw is the single source of truth for breadcrumb walking and shares
   // the same library-root + alias resolution as every other importer.
-  const raw = readFileSync(r.path, 'utf-8');
+  const raw = ctx.sources.read(r.path);
   const ingested = ingestRaw(raw, r.path, allLibraryRoots(ctx), ctx.libraries);
 
   const breadcrumbTags = ingested.breadcrumb.map(s => `#${s}`);

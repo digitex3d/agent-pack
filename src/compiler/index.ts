@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { readFileSync, existsSync } from 'fs';
+import { existsSync } from 'fs';
 import { FORMULAS, fill, introOf } from '../formulas.js';
 import { resolve, join, dirname, basename } from 'path';
 import { unitNameFromPath } from '../ingest.js';
@@ -26,6 +26,8 @@ import { parseNamespace } from '../namespace.js';
 import { DocumentBuilder } from '../apdoc/builder.js';
 import type { ApDocument } from '../apdoc/document.js';
 import type { StoreBlock } from '../apdoc/blocks.js';
+import { SourceRegistry } from '../sources.js';
+import { judgeDocument, type JudgeRun } from '../judge/phase.js';
 
 
 // --- Public interfaces ---
@@ -44,6 +46,10 @@ export interface BundleOptions {
   vars?: Record<string, string>;
   /** Adapter selected for the bundle. */
   adapter?: AdapterPlugin;
+  /** The source registry to read through — a fresh one per compilation when absent. */
+  sources?: SourceRegistry;
+  /** The command's judge run — the judge phase runs when present. */
+  judge?: JudgeRun | null;
 }
 
 /**
@@ -79,6 +85,7 @@ export interface BundleFromConfigOverrides {
   projectRoot?: string;
   vars?: Record<string, string>;
   adapter?: AdapterPlugin;
+  judge?: JudgeRun | null;
 }
 
 /**
@@ -123,6 +130,7 @@ function buildBundleOpts(
     projectRoot: overrides.projectRoot,
     vars: overrides.vars,
     adapter: overrides.adapter,
+    judge: overrides.judge,
   };
 }
 
@@ -146,6 +154,8 @@ export interface MakeContextOpts {
   libraries?: Record<string, string>;
   lintOptions?: LintConfig;
   renderings?: Record<string, Record<string, string>>;
+  /** The compilation's source registry — a fresh one when absent. */
+  sources?: SourceRegistry;
 }
 
 export function makeBundleContext(opts: MakeContextOpts): BundleContext {
@@ -165,6 +175,7 @@ export function makeBundleContext(opts: MakeContextOpts): BundleContext {
     lintOptions: opts.lintOptions,
     renderings: opts.renderings,
     importedPaths: new Set<string>(),
+    sources: opts.sources ?? new SourceRegistry(),
   };
 }
 
@@ -223,7 +234,7 @@ function checkVars(ctx: BundleContext, agentFilePath: string, vars: Record<strin
   const files = new Set([agentFilePath, ...kinds.flat().map(d => d.path)]);
   for (const file of files) {
     if (!existsSync(file)) continue;
-    readFileSync(file, 'utf-8').split(/\r?\n/).forEach((line, i) => {
+    ctx.sources.read(file).split(/\r?\n/).forEach((line, i) => {
       for (const [, name] of line.matchAll(/\{\{(\w+)\}\}/g)) {
         if (!(name in vars)) ctx.lintErrors.push({ file, line: i + 1, message: `unknown variable \`{{${name}}}\` — declare it with \`VAR ${name} = …\` in vars.ap` });
       }
@@ -248,7 +259,7 @@ function storeErrors(doc: ApDocument, ctx: BundleContext, agentFilePath: string)
 
 /** Check the words of a source the pipeline reads itself (not through an IMPORT), into `ctx`. */
 export function lintSource(path: string, ctx: BundleContext): void {
-  if (existsSync(path)) ctx.lintErrors.push(...checkVocabulary(path, readFileSync(path, 'utf-8')));
+  if (existsSync(path)) ctx.lintErrors.push(...checkVocabulary(path, ctx.sources.read(path)));
 }
 
 /** Lint check shared by every bundle entry point. Throws on errors, logs warnings. */
@@ -388,11 +399,7 @@ export async function buildPlaybookBundle(
   } = {},
 ): Promise<PlaybookBundle> {
   const absolute = resolve(path);
-  const raw = readFileSync(absolute, 'utf-8');
-  const fileName = unitNameFromPath(absolute);
-  const header = parsePlaybookHeader(raw);
-  const name = fileName;
-  const whens = header.metadata.get('WHEN') ?? [];
+  const name = unitNameFromPath(absolute);
 
   const ctx = makeBundleContext({
     agentName: name,
@@ -401,6 +408,8 @@ export async function buildPlaybookBundle(
     libraries: { ...librariesAliasMap(config), ...(opts.extraLibraries ?? {}) },
     renderings: opts.adapter?.renderings,
   });
+  const header = parsePlaybookHeader(ctx.sources.read(absolute));
+  const whens = header.metadata.get('WHEN') ?? [];
 
   let body = await resolveInlineBlocks(header.stripped, ctx, absolute);
   // Order: declarations first (Templates / Procedures) so every
@@ -440,10 +449,7 @@ export async function bundleStandaloneToString(
   opts: { extraLibraryRoots?: string[]; extraLibraries?: Record<string, string>; adapter?: AdapterPlugin } = {},
 ): Promise<string> {
   const absolute = resolve(path);
-  const raw = readFileSync(absolute, 'utf-8');
-  const fileName = unitNameFromPath(absolute);
-  const header = parsePlaybookHeader(raw);
-  const name = fileName;
+  const name = unitNameFromPath(absolute);
 
   const ctx = makeBundleContext({
     agentName: name,
@@ -452,6 +458,7 @@ export async function bundleStandaloneToString(
     libraries: { ...librariesAliasMap(config), ...(opts.extraLibraries ?? {}) },
     renderings: opts.adapter?.renderings,
   });
+  const header = parsePlaybookHeader(ctx.sources.read(absolute));
   lintSource(absolute, ctx);
 
   let body = await resolveInlineBlocks(header.stripped, ctx, absolute);
@@ -483,6 +490,7 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     libraries: opts.libraries,
     lintOptions: opts.lintConfig,
     renderings: opts.adapter?.renderings,
+    sources: opts.sources,
   });
   // The document builder — walks the resolved sources directly (no events)
   // and assembles the ApDocument in `finish()` below.
@@ -512,12 +520,13 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     lintSource(flowsPath, ctx);
     // The team's flows travel in every member's document; so do the blocks
     // flows.ap imports (a step's AS template), or their ids would lead nowhere.
-    const imports = readFileSync(flowsPath, 'utf-8').split(/\r?\n/).filter(l => /^IMPORT\s/.test(l)).join('\n');
+    const imports = ctx.sources.read(flowsPath).split(/\r?\n/).filter(l => /^IMPORT\s/.test(l)).join('\n');
     if (imports) await expandImports(imports, ctx, flowsPath);
   }
 
   const metadata = new Map<string, string[]>();
-  const { metadata: fileMeta, stripped } = partitionMetadata(readAgentFile(agentFilePath).unitSource, AGENT_METADATA_KEYWORDS);
+  const agentFile = readAgentFile(agentFilePath, ctx.sources);
+  const { metadata: fileMeta, stripped } = partitionMetadata(agentFile.unitSource, AGENT_METADATA_KEYWORDS);
   mergeMetadata(metadata, fileMeta);
   // Symmetric to resolveFile: inline `<KIND> <name>:` blocks (the agent's
   // sibling ROLE) end up in the same ctx collections that imported files
@@ -552,11 +561,14 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     boundRole,
     agentBody,
     agentFilePath,
+    agentSpan: agentFile.span,
     bootstrap,
     vars: opts.vars ?? {},
     ownsInBody,
   });
   failOnErrors([...unresolvedErrors(builder.unresolved), ...storeErrors(structure, ctx, agentFilePath)], 'Bundle');
+  // The judge phase: a well-formed document's lines checked by the judge.
+  if (opts.judge) failOnErrors(await judgeDocument(structure, opts.judge, ctx.sources), 'Bundle');
   const body = renderMd(structure) + await emitTools(ctx);
 
   return {

@@ -16,7 +16,9 @@
  * contract); the class only adds addressing, queries and projections — no
  * consumer ever needs `instanceof` (duck-typing survives module realms).
  */
-import type { ApDocumentMeta, ApMdMeta, ApOutlineItem, ApOutlinePart, ApRef, ApDistillNode } from './types.js';
+import { resolve as resolvePath } from 'path';
+import type { ApDocumentMeta, ApMdMeta, ApOutlineItem, ApOutlinePart, ApRef, ApDistillNode, ApNode, ApLine } from './types.js';
+import { walk, type LineHead } from './nodes.js';
 import { DISTILLED_DIR } from '../apx/paths.js';
 import { ApBlock } from './block.js';
 import type { AgentBlock, TemplateBlock } from './blocks.js';
@@ -112,9 +114,49 @@ export class ApDocument {
 
   /** Every DISTILL mark of the document, with the procedure whose body it closes. */
   distillMarks(): { mark: ApDistillNode; block: ApBlock }[] {
-    return this.all().flatMap(block => block.body
-      .filter((n): n is ApDistillNode => n.type === 'distill')
-      .map(mark => ({ mark, block })));
+    return this.nodes()
+      .filter((n): n is { node: ApDistillNode; block: ApBlock; containers: ApNode[] } => n.node.type === 'distill')
+      .map(({ node, block }) => ({ mark: node, block }));
+  }
+
+  /**
+   * Every node of each block's body, at any depth, with its block and the nodes
+   * containing it. Body nodes only — a template's slot rules and a team's
+   * routing are not body nodes.
+   */
+  nodes(): { node: ApNode; block: ApBlock; containers: ApNode[] }[] {
+    return this.all().flatMap(block => [...walk(block.body)].map(w => ({ ...w, block })));
+  }
+
+  /**
+   * Every keyword line of each block's body — of one primitive (`DO`, `IF`,
+   * `STEP`, …) when given — with where it was written. Prose and compiler marks
+   * are no lines; neither are a template's slot rules or a team's routing, which
+   * are not body nodes.
+   */
+  lines(primitive?: string): ApLine[] {
+    const out: ApLine[] = [];
+    for (const { node, block, containers } of this.nodes()) {
+      const head = (node as unknown as { asLine(): LineHead | null }).asLine();
+      if (!head || (primitive !== undefined && head.primitive !== primitive)) continue;
+      out.push({
+        ...head,
+        force: node.type === 'directive' ? node.force : null,
+        file: block.source?.file ?? null,
+        line: node.pos?.line ?? null,
+        col: node.pos?.col ?? null,
+        endCol: node.pos?.endCol ?? null,
+        block,
+        containers,
+      });
+    }
+    return out;
+  }
+
+  /** The line written at `file:line`, or null. */
+  lineAt(file: string, line: number): ApLine | null {
+    const path = resolvePath(file);
+    return this.lines().find(l => l.file === path && l.line === line) ?? null;
   }
 
   /** The slots of the template a Ref points at — null when it is no template of this document. */
