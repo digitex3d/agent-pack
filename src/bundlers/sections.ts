@@ -22,7 +22,7 @@ export interface SectionEntry {
  *                    Procedures, Tools, Policies, Flows)
  *
  * `afterEmit` runs after each entry is emitted; used by Templates to copy
- * the `refId` back to `ctx.templates[i]` for RETURN AS resolution.
+ * the `refId` back to `ctx.templates[i]` for AS resolution.
  */
 export interface SectionSpec<E = unknown> {
   title: string;

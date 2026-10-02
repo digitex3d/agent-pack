@@ -10,8 +10,8 @@ EXPORT POLICY security:
 
 - `EXPORT` makes a block importable by other files. Without it, the block belongs to the file it is written in.
 - A line starting with `#` at the top of a file is a title, for the reader.
-- Names are lowercase words joined by dashes (`verify-claim`). Every block gets a stable id from its kind, library and name.
-- Nothing compiles quietly: a word the language does not have, a level a keyword does not declare (`MEM!!!`), a value outside its set (`CONTEXT isolatd`), a name that points at no block, an undeclared `{{variable}}` — each fails the build, with its file and line, and a suggestion when a keyword is misspelled.
+- Names are lowercase words joined by dashes (`verify-claim`) — variable names too (`{{best-pizza}}`). Every block gets a stable id from its kind, library and name.
+- Nothing compiles quietly: a word the language does not have, a level a keyword does not declare (`MEM!!!`), a value outside its set (`CONTEXT isolatd`), a name that points at no block, an undeclared `{{variable}}`, an `INTO` naming no variable — each fails the build, with its file and line, and a suggestion when a keyword is misspelled.
 
 ## Blocks
 
@@ -137,7 +137,7 @@ The data an agent keeps, declared like a schema. `TYPE` names the backing (`tabe
             DO  add the record when its topic is not there yet
 ```
 
-Stores are read and written through the agent's [apx](/guide/apx#stores).
+Stores are read and written through the agent's [apx](/guide/apx#stores). A store may not be named like one of the [apx's verbs](/guide/apx#reading): the apx reads that word as the verb, so the store could never be reached.
 
 ### FLOW
 
@@ -277,6 +277,8 @@ Agents run a script through their apx — `node .agent-pack/apx/<agent>.apx run 
 | `UNTIL <condition>` | repeat the indented lines until the condition holds |
 | `RUN <procedure or flow>` | carry out that procedure or flow |
 | `IN <store>:` | the indented lines work on that store |
+| `VAR <name>:` | the indented lines work out a [variable](#variables): its value is their final outcome |
+| `DO <action> INTO <name>` | do it, and store its result in a variable |
 
 Lifecycle shorthands expand to a `WHEN`:
 
@@ -300,6 +302,115 @@ Lifecycle shorthands expand to a `WHEN`:
 | `!AS` | Do not shape your response as |
 
 On an agent, `LENS-OUT` sets the shape of every answer and `LENS-IN` the shape of every request it receives. In a procedure, `AS` is the shape of the procedure's result; in a flow step, of what the step's agent is handed.
+
+On a `VAR`, `AS <template>` is the variable's type: it takes no force level (`VAR report AS! task-report` is an error), and it shapes — at the strength of `AS!` — every step that fills the variable. See [Variables](#types).
+
+## Variables
+
+A variable is a named value. A **constant** is fixed when the agent is compiled; a **variable** is filled while the agent works and read back later. The form of the `VAR` line says which:
+
+| Write | Means |
+|---|---|
+| `VAR board = Product` | a constant: `{{board}}` is replaced by `Product` at compile time |
+| `VAR draft` | a variable, declared, still empty |
+| `VAR report AS task-report` | a variable with a type: a template |
+| `VAR draft:` + an indented block | declared and assigned: its value is the final outcome of the block |
+| `VAR report AS task-report:` + an indented block | the same, typed |
+| `DO <action> INTO draft` | assigns, or reassigns, a declared variable |
+| `{{draft}}` | reads it |
+
+A variable is stored, and read back, only through the agent's [apx](/guide/apx#variables), which keeps the exact text stored — a later reader gets it verbatim, never a summary.
+
+### Scope
+
+A word before `VAR` says who sees a variable and how long it lives — as `EXPORT` before a block says who may import it:
+
+| Write | Who sees it | How long | Declared in |
+|---|---|---|---|
+| `VAR x` (no word: **private**) | only the agent that declares it | the session | the agent's own `vars.ap`, or the body of the agent, of a role or of a procedure |
+| `SESSION VAR x` | every agent of the project | the session | a team's or the project's `vars.ap` only |
+| `GLOBAL VAR x` | every agent | every session | not available yet — an error today |
+
+- **Private** is the default: there is no word for it. A private variable declared in a procedure or a role belongs to the agent that runs it — two agents running the same procedure each have their own. The same agent, called again in the same session, finds its own earlier values.
+- **SESSION** is how agents hand work to each other: a planner stores the plan, an auditor reads it. It is declared in a shared `vars.ap` — a team's, or the project's — so that every agent that reads it sees the declaration when it is compiled. `SESSION` in an agent's `vars.ap` or in a body is an error.
+- A private declaration in a team's or the project's `vars.ap` is an error: a private variable belongs to one agent.
+- A scope word stands only right before `VAR`. A constant has no scope: `SESSION VAR x = v` is an error.
+
+A session is the harness's: one conversation, with the agents it calls. See [Configuration](/reference/config#vars-ap) for which line goes in which `vars.ap`.
+
+### Declaring once
+
+A name is declared once for an agent, whatever its scope: a second declaration — at any level, or in any body — is an error, and so is a private variable taking the name of a `SESSION` variable the agent sees (no shadowing). A loop reassigns a variable with `INTO`, it never declares it again: `VAR` never stands inside an `UNTIL`, nor inside another `VAR` block, a flow step, a template, a store or a policy. A playbook takes no variable — it has no executable yet; it neither declares, assigns nor reads one.
+
+### Assigning
+
+Every block is a value. `VAR <name>:` absorbs the block beneath it — `DO` lines, a `RUN`, an `IF`/`ELSE`, an `UNTIL`, rule lines, `IN <store>:`, `DO … INTO` another variable — and its value is the block's final outcome:
+
+```
+VAR verdict AS review-verdict:
+    IF the claim has two independent sources
+        DO  accept it, citing both
+    ELSE
+        DO  reject it, saying what is missing
+
+VAR claim:
+    RUN  verify-claim
+```
+
+**`VAR x:` assigns a variable a `vars.ap` declares.** In a body, `VAR x:` normally declares a private `x` and assigns it. When `x` is already declared in a `vars.ap` the agent reads — a `SESSION` variable of its team, a private one of its own file — `VAR x:` only assigns it: it declares nothing. This is how a procedure's result goes into a shared variable (`VAR plan:` with `RUN make-plan` beneath). It takes no `AS` there: the type is the declaration's — `VAR plan AS x:` would declare `plan` again, an error.
+
+A single step registers its result with a trailing `INTO <name>`, on a `DO` line only — uppercase, at the very end of the line; anywhere else, `into` is plain text:
+
+```
+VAR summary
+DO  sum up the findings in one paragraph INTO summary
+```
+
+`RUN verify-claim INTO claim` is an error: write `VAR claim:` with `RUN verify-claim` beneath. `VAR x = …` never opens a block, even when its value ends with `:`; `VAR x` followed by indented lines is missing its `:`. The target of an `INTO` must be a declared variable — never a constant.
+
+### Types
+
+A variable has one type for its whole life. `VAR report AS task-report` declares it; `VAR claim:` with `RUN verify-claim` beneath takes the type of the procedure's result (its `AS`). A block whose type differs from the declared one, or an `IF` and an `ELSE` yielding different types, fail the compilation. A typed variable shapes the step that fills it: the compiled text tells that step to shape its result as the template, and the apx refuses to store a value that is not JSON with the template's fields.
+
+### Reading
+
+`{{name}}` reads a variable, in any line. A constant's read is its value; a variable's read compiles into the command that prints its value (`node .agent-pack/apx/<agent>.apx get <name>`). Reading a field of a typed variable (`{{report.status}}`) is not supported yet. A template's `BODY` and `EXAMPLE` are literal text: no `{{…}}` there. A comment line is never read. A block of a shared or builtin library reads no variable — a library block takes its input through `LENS-IN`; constants it may read.
+
+### Examples
+
+A private draft, in an agent's body:
+
+```
+EXPORT AGENT writer AS technical-writer:
+    ABOUT    writes the release notes
+    MANDATE  turn the changes into notes a user reads in one minute
+
+    WHEN asked for the release notes:
+        VAR draft:
+            DO  list the user-visible changes since the last tag
+            DO  write one sentence per change
+        DO  shorten {{draft}} to the five changes that matter INTO draft
+```
+
+A plan shared by a team — declared once, in the team's `vars.ap`:
+
+```
+# agents/teams/delivery/vars.ap
+SESSION VAR plan AS implementation-plan
+```
+
+the planner fills it with its procedure's result, and the auditor reads it:
+
+```
+# planner.ap, in its body
+    WHEN a request arrives:
+        VAR plan:
+            RUN  write-plan
+
+# goal-auditor.ap, in its body
+    WHEN the plan is ready:
+        DO  audit {{plan}} against the goal, from the goal backwards
+```
 
 ## Imports and tags
 

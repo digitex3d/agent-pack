@@ -6,7 +6,7 @@ import { desugar } from './desugar.js';
 import { TAG_RE } from './services/tags.js';
 import { getFamilyBases, getIntroByKeyword, forceLevelBaseOf, forceLevelFamilies, toCanonicalKeyword } from './forceLevelConfig.js';
 import { enumPrimitiveFor } from './primitives.js';
-import { BLOCK_CONTRACTS, BlockContract } from './blockContracts.js';
+import { BLOCK_CONTRACTS, BlockContract, VAR_BLOCK } from './blockContracts.js';
 import { parseBlocks, type Block } from './parseBlocks.js';
 import { isExportFile } from './services/text.js';
 import { parseAgentSignature } from './definitionArgs.js';
@@ -15,6 +15,8 @@ import { BLOCK_TYPES, blockTypeOf, EXPORT_MODIFIER } from './blockTypes.js';
 import { parseTypeSpec } from './shapeSchema.js';
 import { STORE_LIFETIMES } from './storeTypes/types.js';
 import { stripTrailingColon } from './bundlers/renderTree.js';
+import { parseVarLine, isVarKeyword, splitInto, takesInto, varRefRe, NO_PLAYBOOK_VARIABLES } from './vars.js';
+import { VARS_FILE, isVarsFile, parseVarsAp } from './varsAp.js';
 
 export interface LintError {
   file: string;
@@ -515,7 +517,7 @@ const POLICY_SPEC: LintSpec = {
 // Force-level family bases (post-desugar), plus DO. handlerFor() expands each
 // base to all its declensions at lookup time — no enumeration needed here.
 const PLAYBOOK_ACTION_KEYWORDS: Keyword[] = ['DO', ...getFamilyBases()];
-const PLAYBOOK_FLOW_KEYWORDS: Keyword[] = ['RETURN', 'UNTIL', 'RUN', 'IMPORT'];
+const PLAYBOOK_FLOW_KEYWORDS: Keyword[] = ['UNTIL', 'RUN', 'IMPORT'];
 
 const PLAYBOOK_SPEC: LintSpec = {
   topLevelOnly: true,
@@ -529,6 +531,8 @@ const PLAYBOOK_SPEC: LintSpec = {
     ['ELSE',  ifElseHandler],
     ...PLAYBOOK_ACTION_KEYWORDS.map(kw => [kw, counts('doCount')] as const),
     ...PLAYBOOK_FLOW_KEYWORDS.map(kw => [kw, accept] as const),
+    // A playbook takes no VAR yet — it has no executable; the error is checkVocabulary's.
+    ['VAR', passthrough],
     ...agentOnlyEntries,
     ...roleIdentityEntries,
     ...flowOnlyEntries,
@@ -544,7 +548,7 @@ const PLAYBOOK_SPEC: LintSpec = {
 // Force-level family bases — the list roles and playbooks admit — plus the
 // action/flow keywords. handlerFor expands each base to all its declensions:
 // `AS <shape>` declares the procedure's output, `NEVER …`/`MUST! …` are its rules.
-const PROCEDURE_FLOW_KEYWORDS: Keyword[] = ['IMPORT', 'DO', 'RETURN', 'UNTIL', 'RUN', ...getFamilyBases()];
+const PROCEDURE_FLOW_KEYWORDS: Keyword[] = ['IMPORT', 'DO', 'VAR', 'UNTIL', 'RUN', ...getFamilyBases()];
 
 const PROCEDURE_SPEC: LintSpec = {
   topLevelOnly: true,
@@ -572,7 +576,7 @@ const PROCEDURE_SPEC: LintSpec = {
 // base to all declensions at lookup time.
 const ROLE_RULE_KEYWORDS: Keyword[] = [
   'DO', ...getFamilyBases(),
-  'IF', 'ELSE', 'UNTIL', 'RETURN', 'RUN', 'IMPORT',
+  'IF', 'ELSE', 'UNTIL', 'VAR', 'RUN', 'IMPORT',
 ];
 
 const ROLE_SPEC: LintSpec = {
@@ -1132,15 +1136,79 @@ function unknownLevel(word: string, base: string): string {
 }
 
 /**
+ * The block a line belongs to: its nearest enclosing declaration (AGENT,
+ * PROCEDURE, …) or a flow's step, from the keys of the lines enclosing it —
+ * else, at a legacy file's top level, the kind of the file (by its folder).
+ */
+function ownerOf(ancestors: string[], file: string): string {
+  return [...ancestors].reverse().find(k => blockTypeOf(k) !== null || k === 'STEP') ?? kindFromDir(file).toUpperCase();
+}
+
+/** The lines each body admits — a VAR stands in those whose list holds it. */
+const BODY_KEYWORDS: Record<string, readonly Keyword[]> = {
+  AGENT: BLOCK_CONTRACTS.AGENT.allows,
+  ROLE: ROLE_RULE_KEYWORDS,
+  PROCEDURE: PROCEDURE_FLOW_KEYWORDS,
+  PLAYBOOK: [...PLAYBOOK_ACTION_KEYWORDS, ...PLAYBOOK_FLOW_KEYWORDS],
+};
+const VAR_HOMES = new Set(Object.keys(BODY_KEYWORDS).filter(k => BODY_KEYWORDS[k].includes('VAR')));
+
+/**
+ * What is wrong with a `VAR` line of a body: its form, its place, and the block
+ * beneath it. `ancestors` are the keys of the lines enclosing it, outermost
+ * first; `deeper` says whether indented lines follow it. vars.ap is not a body:
+ * its own lint (`parseVarsAp`) checks it.
+ */
+function varLineErrors(t: Extract<Token, { kind: 'keyword' }>, ancestors: string[], deeper: boolean, file: string): string[] {
+  const decl = parseVarLine(t.keyword as string, t.rest);
+  if (!decl) return [];
+  if ('error' in decl) return [decl.error];
+  const written = t.raw.trim();
+  const errors: string[] = [];
+  const owner = ownerOf(ancestors, file);
+  if (owner === 'PLAYBOOK') {
+    errors.push(NO_PLAYBOOK_VARIABLES);
+  } else if (ancestors.includes('VAR')) {
+    errors.push('a VAR block holds no VAR — declare it before the block');
+  } else if (ancestors.includes('UNTIL')) {
+    errors.push('a VAR inside UNTIL would declare its variable again on every pass — declare it before the loop and reassign it with `DO … INTO`');
+  } else if (!VAR_HOMES.has(owner)) {
+    errors.push(`VAR goes in the body of one of: ${[...VAR_HOMES].join(', ')}${ancestors.length ? ` — found inside ${owner}` : ` — shared declarations go in ${VARS_FILE}`}`);
+  }
+  if (decl.form === 'constant') {
+    errors.push(`a constant is declared in ${VARS_FILE} — a body declares private variables: \`VAR ${decl.name}\` or \`VAR ${decl.name} AS <template>\``);
+  } else if (decl.scope === 'session') {
+    errors.push(`a SESSION variable is declared in a team's or the project's ${VARS_FILE}, where every agent that reads it sees it — in a body, assign it with \`VAR ${decl.name}:\` or \`DO … INTO ${decl.name}\``);
+  } else if (decl.block && !deeper) {
+    errors.push(`\`${written}\` assigns the outcome of a block — indent that block beneath it`);
+  } else if (!decl.block && deeper) {
+    errors.push(`\`${written}\` has indented lines beneath — missing ':' (\`${written}:\` assigns their outcome)`);
+  }
+  return errors;
+}
+
+/** What is wrong with a line's trailing `INTO <name>`: only a DO line takes one, and never in a playbook. */
+function intoError(t: Extract<Token, { kind: 'keyword' }>, owner: string): string | null {
+  const into = splitInto(t.rest);
+  if (!into || isVarKeyword(t.keyword as string)) return null;
+  if (takesInto(t.keyword)) return owner === 'PLAYBOOK' ? NO_PLAYBOOK_VARIABLES : null;
+  return t.keyword === 'RUN'
+    ? `\`RUN ${into.text} INTO ${into.name}\`: RUN takes no INTO — write \`VAR ${into.name}:\` with \`RUN ${into.text}\` beneath`
+    : `INTO ends only a DO line — \`${t.raw.trim().split(/\s/)[0]}\` takes none`;
+}
+
+/**
  * The language's own words, checked in every file whatever its kind: an unknown
  * keyword, an undeclared force level, an enum value outside its set, the old
  * DISTILL suffix, and DISTILL's place — alone, directly inside a PROCEDURE that
- * has an `AS` result, once. Template regions and RAW blocks are the author's text.
+ * has an `AS` result, once. VAR's place and form, a trailing INTO, a `{{…}}` read
+ * where none is possible. Template regions and RAW blocks are the author's text.
  */
 export function checkVocabulary(file: string, body: string): LintError[] {
   const errors: LintError[] = [];
   const err = (line: number, message: string) => errors.push({ file, line, message });
   const tokens = lex(body);
+  const varsFile = isVarsFile(file);
   /** Enclosing lines, innermost last — a line's parent is the nearest shallower one. */
   const stack: { indent: number; key: string; line: number }[] = [];
   const distills = new Map<number, number[]>();   // procedure line → DISTILL lines
@@ -1148,18 +1216,24 @@ export function checkVocabulary(file: string, body: string): LintError[] {
   let region = -1;
   let regionKey = '';
 
-  for (const t of tokens) {
+  for (const [index, t] of tokens.entries()) {
     if (t.kind === 'blank' || t.kind === 'comment' || t.kind === 'rawLine') continue;
     if (region >= 0) {
       if (t.indent > region) {
         const typeError = regionKey === 'SLOTS' && 'raw' in t ? slotTypeError(t.raw) : null;
         if (typeError) err(t.line, typeError);
+        if (regionKey !== 'SLOTS' && 'raw' in t && varRefRe().test(t.raw)) {
+          err(t.line, `a template's ${regionKey} is literal text — no \`{{…}}\` is read there`);
+        }
         continue;
       }
       region = -1;
     }
     while (stack.length && stack[stack.length - 1].indent >= t.indent) stack.pop();
     const parent = stack[stack.length - 1];
+    for (const [read, name, field] of ('raw' in t ? t.raw : '').matchAll(varRefRe())) {
+      if (field) err(t.line, `\`${read}\`: reading a field of a variable is not supported yet — read \`{{${name}}}\``);
+    }
 
     let key = '';
     if (t.kind === 'blockOpener') {
@@ -1190,6 +1264,16 @@ export function checkVocabulary(file: string, body: string): LintError[] {
         }
       }
       if (base === 'AS' && parent?.key === 'PROCEDURE') results.add(parent.line);
+      if (!isVarKeyword(key) && stack.some(a => a.key === 'VAR') && !isAllowedChild(VAR_BLOCK, key as Keyword)) {
+        err(t.line, notAllowed(key as Keyword, 'VAR', VAR_BLOCK));
+      }
+      if (isVarKeyword(key) && !varsFile) {
+        const next = nextSubstantive(tokens, index + 1);
+        const deeper = next !== -1 && tokens[next].indent > t.indent;
+        for (const message of varLineErrors(t, stack.map(a => a.key), deeper, file)) err(t.line, message);
+      }
+      const into = intoError(t, ownerOf(stack.map(a => a.key), file));
+      if (into) err(t.line, into);
     } else if (t.kind === 'unknown') {
       const word = t.raw.match(KEYWORD_LIKE_RE)?.[1];
       if (word) {
@@ -1218,6 +1302,8 @@ function lintByKind(file: string, body: string, options: LintOptions): LintError
       message: 'retired layout: agents are flat `<name>.ap` files holding an EXPORT AGENT block, not `definitions/<name>/agent.ap`',
     }];
   }
+  // A vars.ap holds only declarations: its own parser is its lint.
+  if (isVarsFile(file)) return parseVarsAp(body, file).errors;
   // Agent and orchestration files are validated by `lintAgentBlocks`. They are
   // recognised by content, ahead of the dir switch, because they carry FLOW/ROLE
   // blocks that are NOT the file's kind and may sit under a build-output

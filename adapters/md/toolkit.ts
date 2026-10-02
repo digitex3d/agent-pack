@@ -17,7 +17,7 @@ import {
   stepsHeader, refName, runLine, unresolvedRun, SHAPE_INTRO_FALLBACK,
   rangePhrase, textTypePhrase, numberTypePhrase, enumTypePhrase,
   shapeRefPhrase as shapeRefPhraseOf, listTypePhrase,
-  minWordsHint, maxWordsHint, regexHint,
+  minWordsHint, maxWordsHint, regexHint, varCommand,
 } from './phrases.js';
 
 export interface MdEnv {
@@ -46,6 +46,18 @@ export function forceIntro(env: MdEnv, keyword: string, force: number | null): s
 export function shapeLine(env: MdEnv, shape: ApShape): string {
   const intro = env.forceLevels['AS']?.[String(shape.force)] ?? SHAPE_INTRO_FALLBACK;
   return fill(FORMULAS.keywords.AS.line, { intro, name: refName(shape.ref), ref: env.refOf(shape.ref.target) });
+}
+
+/**
+ * How the result of a step is stored in a variable: through the apx,
+ * the value on stdin — as JSON with the fields of its template when the
+ * variable is typed (the shape line above names it; the apx refuses a value
+ * outside it).
+ */
+export function storeVarLine(env: MdEnv, ref: ApRef, typed: boolean): string {
+  const V = FORMULAS.keywords.VAR;
+  const name = refName(ref);
+  return fill(typed ? V.storeTyped : V.store, { name, command: varCommand(env.apxOf(null), 'set', name) });
 }
 
 /** One RUN line, resolved or not — formulations from phrases. */
@@ -81,13 +93,13 @@ export function renderNodes(env: MdEnv, nodes: ApNode[], ordered = true): string
   while (i < nodes.length) {
     const n = nodes[i];
 
-    if (n.type === 'directive' && !n.body) {
+    if (n.type === 'directive' && !n.body && !n.into) {
       const texts: string[] = [];
       const { keyword, force } = n;
       const indent = n.indent ?? 0;
       while (i < nodes.length) {
         const c = nodes[i];
-        if (c.type !== 'directive' || c.body || c.keyword !== keyword || c.force !== force || (c.indent ?? 0) !== indent) break;
+        if (c.type !== 'directive' || c.body || c.into || c.keyword !== keyword || c.force !== force || (c.indent ?? 0) !== indent) break;
         texts.push(c.shape ? fill(FORMULAS.keywords.MEM.shaped, { text: c.text, name: refName(c.shape.ref), ref: env.refOf(c.shape.ref.target) }) : c.text);
         i++;
       }

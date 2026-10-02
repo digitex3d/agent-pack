@@ -19,6 +19,9 @@ function sha256Hex(input: string): string {
   return createHash('sha256').update(input, 'utf-8').digest('hex');
 }
 
+/** The shape of every stable id: a three-letter prefix and eight hex digits (`tpl-1a2b3c4d`). */
+export const BLOCK_ID_RE = /^[a-z]{3}-[0-9a-f]{8}$/;
+
 /**
  * Stable id: `<prefix>-<first 8 hex of sha256("kind|namespace|name")>`.
  * Pure utility — the prefix is NOT known here: each block class declares its

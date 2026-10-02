@@ -137,7 +137,7 @@ A complete team you can bundle as it is — two members, routing, a two-step flo
 | `DISTILL` | inside a procedure: its reasoning is distilled into a deterministic script, run from then on |
 | `AS`, `LENS-IN`, `LENS-OUT` | which template an answer — or an incoming request — is shaped as |
 | `IMPORT … FROM @main.<kind>` | reuse blocks from the project library (`library/`) |
-| `VAR` | values substituted at compile time, from a `vars.ap` next to the agent — never secrets |
+| `VAR`, `SESSION VAR`, `INTO`, `{{name}}` | constants substituted at compile time, and variables the agent fills (`VAR x:`, `DO … INTO x`) and reads back through its apx — private to it, or shared by the session's agents — never secrets |
 | `PLAYBOOK` (`*.playbook.ap`) | one triggered workflow compiled into a harness skill |
 
 The full reference is [docs/reference/language.md](./docs/reference/language.md).

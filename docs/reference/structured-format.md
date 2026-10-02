@@ -23,6 +23,7 @@ A consumer holding only the JSON can render the agent's markdown without the `.a
 | `root` | the address of the agent block |
 | `forceLevels` | how each rule keyword reads at each force — see below |
 | `enums` | the prose of enum values, e.g. each `CONTEXT` mode |
+| `sessionEnv` | the environment variable the adapter's harness puts its session id in — where the apx finds the session its variables live in (absent: no variable can be read or written) |
 | `md` | what the markdown projection needs and the blocks do not carry: the opening text (team membership, the agent-pack introduction), the introduction of every kind present, `{{vars}}`, tag breadcrumbs, and, for stores, what their backing makes of them (file, commands) |
 
 ### `forceLevels`
@@ -67,9 +68,9 @@ A rule renders as `forceLevels[keyword][force] + " " + text`. Source sugar — `
 
 | Field | |
 |---|---|
-| `kind` | `agent`, `role`, `policy`, `template`, `procedure`, `flow`, `store`, `team`, `playbook` |
+| `kind` | `agent`, `role`, `policy`, `template`, `procedure`, `flow`, `store`, `team`, `playbook`, `var` |
 | `about`, `tags`, `applies`, `when` | on every block, whatever its kind |
-| `args` | what is specific to the kind — a template's slots and layout, an agent's mandate, perimeter and lenses, a team's members and routing, a store's type and key |
+| `args` | what is specific to the kind — a template's slots and layout, an agent's mandate, perimeter and lenses, a team's members and routing, a store's type and key, a variable's scope (`private` or `session`), its type (a `Ref` to its template) and where it is declared |
 | `body` | the behaviour, as nodes |
 | `chars` | the length of the semantic text — on a container, the total of its children |
 
@@ -90,16 +91,17 @@ Every reference between blocks is a `Ref`, never a bare string:
 { "id": "agt-b340326b", "target": "@main.agents/scout", "kind": "agent" }
 ```
 
-`RUN` points at a procedure or flow, `AS`, `LENS-IN` and `LENS-OUT` at a template, `BY` at an agent or team, `IN` at a store.
+`RUN` points at a procedure or flow, `AS`, `LENS-IN` and `LENS-OUT` at a template, `BY` at an agent or team, `IN` at a store, `INTO` and `VAR x:` at a variable (`var-…`, namespace `@main.vars`: its id depends on its name alone).
 
 ## Nodes
 
 | `type` | Carries |
 |---|---|
-| `directive` | `keyword`, `force`, `text` |
+| `directive` | `keyword`, `force`, `text`; a `DO … INTO` line also `into` (a `Ref` to the variable) and `shape` (its type) |
 | `run` | a `Ref` to the procedure or flow |
 | `when`, `until`, `if` | a condition and a body; `if` has `then` and `else` |
 | `in` | a `Ref` to a store and a body |
+| `var` | `var` (a `Ref` to the variable the body fills), its `shape` when typed, and a body |
 | `step` | `title`, `by` (a `Ref`), `context`, `shape`, and its `DO`s as body |
 | `parallel` | steps |
 | `text` | prose as written |

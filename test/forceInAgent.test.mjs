@@ -53,7 +53,7 @@ try {
   // --- lint: every family but DISTILL, in any declared declension or alias ---
   assert.deepEqual(lintFile(agentFile, agentLines()), [], 'SHOULD/MAY/MEM and declensions lint clean in an agent');
   const errorsWith = (...extra) => lintFile(agentFile, agentLines(...extra)).map(e => [e.line, e.message]);
-  const EXPECTED = 'ABOUT, MANDATE, OWNS, LENS-OUT, LENS-IN, IMPORT, ON-INVOKE, WHEN, MUST, ALWAYS, SHOULD, MAY, AS, MEM';
+  const EXPECTED = 'ABOUT, MANDATE, OWNS, LENS-OUT, LENS-IN, IMPORT, ON-INVOKE, WHEN, VAR, MUST, ALWAYS, SHOULD, MAY, AS, MEM';
   assert.deepEqual(errorsWith('    DISTILL'), [
     [13, 'DISTILL goes directly inside a PROCEDURE — found inside AGENT'],
     [13, `DISTILL is not allowed inside AGENT — DISTILL marks a PROCEDURE, never an agent (expected one of: ${EXPECTED})`],

@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Giuseppe Federico
 import { existsSync } from 'fs';
 import { FORMULAS, fill, introOf } from '../formulas.js';
-import { resolve, join, dirname, basename } from 'path';
+import { resolve, join, dirname, basename, sep } from 'path';
 import { unitNameFromPath } from '../ingest.js';
 import { Config, BundleConfig, LintConfig, libraryRoots as libraryRootsOf, librariesAliasMap } from '../config.js';
 import { BundleContext, RoleEntry } from '../dispatch/index.js';
@@ -28,6 +28,9 @@ import type { ApDocument } from '../apdoc/document.js';
 import type { StoreBlock } from '../apdoc/blocks.js';
 import { SourceRegistry } from '../sources.js';
 import { judgeDocument, type JudgeRun } from '../judge/phase.js';
+import { parseVarsAp, varsFilesFor, scopeLevelError, VARS_FILE, type VarsFile, type PlacedVariable } from '../varsAp.js';
+import { varRefRe, constantOf, NO_PLAYBOOK_VARIABLES } from '../vars.js';
+import { APX_VERBS } from '../apx/verbs.js';
 
 
 // --- Public interfaces ---
@@ -43,7 +46,10 @@ export interface BundleOptions {
   bundleConfig?: BundleConfig;
   lintConfig?: LintConfig;
   projectRoot?: string;
+  /** Constants known before the vars.ap files are read (the implicit `name`); the files override them. */
   vars?: Record<string, string>;
+  /** The agent's vars.ap files, outermost first (`varsFilesFor`). */
+  varsFiles?: VarsFile[];
   /** Adapter selected for the bundle. */
   adapter?: AdapterPlugin;
   /** The source registry to read through — a fresh one per compilation when absent. */
@@ -84,6 +90,7 @@ export interface BundleFromConfigOverrides {
   lintConfig?: LintConfig;
   projectRoot?: string;
   vars?: Record<string, string>;
+  varsFiles?: VarsFile[];
   adapter?: AdapterPlugin;
   judge?: JudgeRun | null;
 }
@@ -129,6 +136,7 @@ function buildBundleOpts(
     lintConfig: overrides.lintConfig,
     projectRoot: overrides.projectRoot,
     vars: overrides.vars,
+    varsFiles: overrides.varsFiles,
     adapter: overrides.adapter,
     judge: overrides.judge,
   };
@@ -154,6 +162,8 @@ export interface MakeContextOpts {
   libraries?: Record<string, string>;
   lintOptions?: LintConfig;
   renderings?: Record<string, Record<string, string>>;
+  /** The environment variable the adapter's harness puts its session id in. */
+  sessionEnv?: string;
   /** The compilation's source registry — a fresh one when absent. */
   sources?: SourceRegistry;
 }
@@ -174,6 +184,7 @@ export function makeBundleContext(opts: MakeContextOpts): BundleContext {
     lintErrors: [],
     lintOptions: opts.lintOptions,
     renderings: opts.renderings,
+    sessionEnv: opts.sessionEnv,
     importedPaths: new Set<string>(),
     sources: opts.sources ?? new SourceRegistry(),
   };
@@ -226,20 +237,70 @@ function bindRoleIdentity(metadata: Map<string, string[]>, ctx: BundleContext): 
 
 
 /**
- * Every `{{name}}` the agent reads — its own file and every block it imports —
- * names a declared VAR, or the compilation fails where it is written.
+ * The agent's vars.ap files, read through the registry and linted: the
+ * constants, merged over `known` level by level (a deeper level overrides), and
+ * the variables, each with where it was declared — a scope out of its level
+ * (a private one above the agent, a SESSION one in an agent's file) is an error.
  */
-function checkVars(ctx: BundleContext, agentFilePath: string, vars: Record<string, string>): void {
+function readVarsFiles(files: VarsFile[], known: Record<string, string>, ctx: BundleContext) {
+  const constants = { ...known };
+  const variables: PlacedVariable[] = [];
+  for (const f of files) {
+    const parsed = parseVarsAp(ctx.sources.read(f.path), f.path);
+    ctx.lintErrors.push(...parsed.errors);
+    Object.assign(constants, parsed.constants);
+    for (const v of parsed.variables) {
+      const misplaced = scopeLevelError(v.scope, f.level);
+      if (misplaced) ctx.lintErrors.push({ file: f.path, line: v.line, message: misplaced });
+      else variables.push({ ...v, where: `${VARS_FILE} (${f.level})` });
+    }
+  }
+  return { constants, variables };
+}
+
+/**
+ * Every `{{name}}` a compilation reads — its source file and every block it
+ * imports, comment lines aside — names a constant or a variable, or the
+ * compilation fails where it is written (`unknown` false: an undeclared read is
+ * left alone, as a playbook does). `sessionRead` says why a file may not read a
+ * variable, or null when it may.
+ */
+function variableReadErrors(
+  ctx: BundleContext, sourcePath: string, constants: Record<string, string>, variables: Set<string>,
+  sessionRead: (file: string) => string | null, unknown = true,
+): LintError[] {
   const kinds = [ctx.policies, ctx.roles, ctx.templates, ctx.procedures, ctx.flows, ctx.stores] as { path: string }[][];
-  const files = new Set([agentFilePath, ...kinds.flat().map(d => d.path)]);
+  const files = new Set([sourcePath, ...kinds.flat().map(d => d.path)]);
+  const errors: LintError[] = [];
   for (const file of files) {
     if (!existsSync(file)) continue;
+    const refused = sessionRead(file);
     ctx.sources.read(file).split(/\r?\n/).forEach((line, i) => {
-      for (const [, name] of line.matchAll(/\{\{(\w+)\}\}/g)) {
-        if (!(name in vars)) ctx.lintErrors.push({ file, line: i + 1, message: `unknown variable \`{{${name}}}\` — declare it with \`VAR ${name} = …\` in vars.ap` });
+      if (line.startsWith('#')) return;
+      for (const [read, name, field] of line.matchAll(varRefRe())) {
+        if (field || constantOf(constants, name) !== undefined) continue;   // a field read is the vocabulary check's
+        if (!variables.has(name)) {
+          if (unknown) errors.push({ file, line: i + 1, message: `unknown variable \`${read}\` — declare it in ${VARS_FILE}: \`VAR ${name} = …\` for a constant, \`VAR ${name}\` for a variable` });
+        } else if (refused) {
+          errors.push({ file, line: i + 1, message: `\`${read}\`: ${refused}` });
+        }
       }
     });
   }
+  return errors;
+}
+
+/**
+ * A block of a shared or builtin library reads no variable: it takes
+ * its input through LENS-IN (P4). The project's own blocks — its library, the
+ * agent's own file — may.
+ */
+function libraryReadRule(ctx: BundleContext, agentFilePath: string): (file: string) => string | null {
+  const own = resolve(ctx.libraryRoot) + sep;
+  const foreign = Object.entries(ctx.libraries ?? {}).filter(([alias]) => alias !== '@main').map(([, root]) => resolve(root) + sep);
+  return file => file !== agentFilePath && !file.startsWith(own) && foreign.some(root => file.startsWith(root))
+    ? 'a block of a shared library reads no variable — take the value as its input, through LENS-IN'
+    : null;
 }
 
 /** A store its type cannot hold — an unknown TYPE, a slot the backing refuses — fails the compilation. */
@@ -253,7 +314,11 @@ function storeErrors(doc: ApDocument, ctx: BundleContext, agentFilePath: string)
     const key = store.storeKey && !store.slots.some(sl => sl.name === store.storeKey)
       ? [{ file, line: lineOfName(file, store.storeKey), message: `STORE ${store.name}: KEY \`${store.storeKey}\` is none of its slots (${store.slots.map(sl => sl.name).join(', ')})` }]
       : [];
-    return [...key, ...Object.entries(p.rejects).map(([slot, why]) => ({ file, line: lineOfName(file, slot), message: `STORE ${store.name}: ${why}` }))];
+    // The apx reads its first word as a verb before a store name: a store named so is unreachable.
+    const verb = (APX_VERBS as readonly string[]).includes(store.name)
+      ? [{ file, line: lineOfName(file, store.name), message: `STORE ${store.name}: \`${store.name}\` is a verb of the apx (${APX_VERBS.join(', ')}) — give the store another name` }]
+      : [];
+    return [...verb, ...key, ...Object.entries(p.rejects).map(([slot, why]) => ({ file, line: lineOfName(file, slot), message: `STORE ${store.name}: ${why}` }))];
   });
 }
 
@@ -410,8 +475,12 @@ export async function buildPlaybookBundle(
   });
   const header = parsePlaybookHeader(ctx.sources.read(absolute));
   const whens = header.metadata.get('WHEN') ?? [];
+  lintSource(absolute, ctx);
 
   let body = await resolveInlineBlocks(header.stripped, ctx, absolute);
+  // A playbook reads no variable — it has no executable yet; its other reads stay as today.
+  const declared = readVarsFiles(varsFilesFor(absolute, process.cwd()), {}, ctx).variables.map(v => v.name);
+  ctx.lintErrors.push(...variableReadErrors(ctx, absolute, {}, new Set(declared), () => NO_PLAYBOOK_VARIABLES, false));
   // Order: declarations first (Templates / Procedures) so every
   // reference inside the steps is already defined when the LLM reads it,
   // entry-point body last.
@@ -490,6 +559,7 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     libraries: opts.libraries,
     lintOptions: opts.lintConfig,
     renderings: opts.adapter?.renderings,
+    sessionEnv: opts.adapter?.sessionEnv,
     sources: opts.sources,
   });
   // The document builder — walks the resolved sources directly (no events)
@@ -532,7 +602,7 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
   // sibling ROLE) end up in the same ctx collections that imported files
   // target. Downstream rendering is identical.
   const agentBody = `${await resolveInlineBlocks(stripped, ctx, agentFilePath)}\n\n`;
-  checkVars(ctx, agentFilePath, opts.vars ?? {});
+  const variables = readVarsFiles(opts.varsFiles ?? [], opts.vars ?? {}, ctx);
 
   // Role binding: `AS <role>` resolves the bound role's display name / ABOUT /
   // EXPERTISE into the identity metadata (the agent itself may not declare them —
@@ -563,10 +633,17 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     agentFilePath,
     agentSpan: agentFile.span,
     bootstrap,
-    vars: opts.vars ?? {},
+    vars: variables.constants,
+    declaredVars: variables.variables,
     ownsInBody,
   });
-  failOnErrors([...unresolvedErrors(builder.unresolved), ...storeErrors(structure, ctx, agentFilePath)], 'Bundle');
+  const declared = new Set(structure.byKind('var').map(b => b.name));
+  failOnErrors([
+    ...unresolvedErrors(builder.unresolved),
+    ...storeErrors(structure, ctx, agentFilePath),
+    ...builder.varErrors.map(e => ({ file: e.path, line: e.line ?? lineOfName(e.path, e.name), message: e.message })),
+    ...variableReadErrors(ctx, agentFilePath, variables.constants, declared, libraryReadRule(ctx, agentFilePath)),
+  ], 'Bundle');
   // The judge phase: a well-formed document's lines checked by the judge.
   if (opts.judge) failOnErrors(await judgeDocument(structure, opts.judge, ctx.sources), 'Bundle');
   const body = renderMd(structure) + await emitTools(ctx);

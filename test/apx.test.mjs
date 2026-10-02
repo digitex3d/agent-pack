@@ -201,7 +201,7 @@ has(run('help').out, `${CMD} start`, `${CMD} get <id> [json]`, `${CMD} <store> <
 {
   let r = run('get', 'nope');
   assert.equal(r.code, 1);
-  assert.equal(r.out, `# error: no block with id 'nope' — list them: ${CMD} ls`);
+  assert.equal(r.out, `# error: no block with id 'nope' and no variable named so — list them: ${CMD} ls`);
   r = run('get');
   assert.equal(r.code, 2);
   has(r.out, `# error: get needs a block id — example: ${CMD} get ${idOf('agent', 'pm')}`);

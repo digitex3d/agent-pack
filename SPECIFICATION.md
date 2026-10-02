@@ -1,6 +1,6 @@
 # Agent Pack Specification
 
-**Version 1.1 — October 2026.** First written in May 2026 by Giuseppe Federico.
+**Version 1.2 — October 2026.** First written in May 2026 by Giuseppe Federico.
 
 This document is the canonical reference for the Agent Pack paradigm.
 It elaborates the principles, the trade-offs, and the primitive
@@ -109,7 +109,7 @@ items on the left more.
 ## 3. Primitives
 
 The shared vocabulary of the paradigm. Each primitive has a stable
-identifier (`D1`–`D37`) for external citation as `Agent Pack §D<n>`.
+identifier (`D1`–`D38`) for external citation as `Agent Pack §D<n>`.
 These terms have precise meaning and are not interchangeable.
 
 - **D1 — agent** — an executable unit defined by a mission (what it
@@ -221,7 +221,8 @@ These terms have precise meaning and are not interchangeable.
   like a schema: slots, a key that identifies a record, and how long it
   lasts. The language defines the structure; the backing is chosen
   apart, and the agent reads and writes only through the executable
-  (D20), inside `IN <store>:`.
+  (D20), inside `IN <store>:`. A store is never named like a verb of the
+  executable. (Amended in 1.2.)
 
 - **D19 — block id** — the stable identity of every block: a kind prefix
   and a hash of its kind, namespace and name (e.g. `tpl-d82fd6de`),
@@ -307,9 +308,16 @@ These terms have precise meaning and are not interchangeable.
   common heading in the compiled definition, under a filter in the
   executable — and link blocks that share them.
 
-- **D32 — variable** — `VAR <name> = <value>`, declared beside an agent
-  and substituted as `{{name}}` at compile time. Variables carry
-  configuration, never secrets: those stay in the environment.
+- **D32 — variable** — a named value, read whole as `{{name}}`. A
+  constant, `VAR <name> = <value>`, is declared in `vars.ap` at the
+  project, team or agent level and substituted at compile time; when the
+  same name is declared at several levels, the agent's overrides the
+  team's, which overrides the project's. A constant takes no scope word:
+  `SESSION VAR <name> = <value>` fails the compilation. A session
+  variable (D38) gets its value at run time and is declared once: a
+  second declaration fails the compilation. Variables carry
+  configuration, never secrets: those stay in the environment. (Amended
+  in 1.2.)
 
 - **D33 — project context** — `PROJECT.ap`: the rules every agent of a
   project follows, compiled with the orchestration of every standalone
@@ -343,6 +351,36 @@ These terms have precise meaning and are not interchangeable.
   no bound on an `UNTIL` — a bound, when wanted, is written in the
   condition. (Added in 1.1.)
 
+- **D38 — session variable** — a variable (D32) whose value is set while
+  a session runs, its scope written as a word before `VAR`, as `EXPORT`
+  before a block. With no word, `VAR <name>` or `VAR <name> AS
+  <template>` is private: seen only by the agent that declares it, in its
+  own `vars.ap` or in an agent, role or procedure body — a procedure's
+  private variable belongs to the agent running it. `SESSION VAR <name>`,
+  optionally `AS <template>`, is seen by every agent of the project and
+  is declared only in a team or project `vars.ap`, so that every reader
+  sees the declaration at compile time. `GLOBAL` — every agent, every
+  session, persisted — is reserved: this version refuses it at
+  compilation. An agent never sees a private and a `SESSION` variable of
+  the same name. `INTO <name>` at the end of a `DO` line puts the
+  action's result into a variable of either scope, and reassigns it — in
+  a loop too — without redeclaring it. The block form `VAR <name>:`
+  assigns a variable already declared in a `vars.ap` the agent reads, and
+  otherwise declares a private one; `VAR <name> AS <template>:` always
+  declares. The block holds, beneath, any lines of a procedure body
+  (D16) — `DO`, `RUN`, `IF` / `ELSE`, `UNTIL` — but no further `VAR`; its
+  value is the block's final outcome, a procedure's result included. A variable
+  declared `AS <template>` keeps that type for life: it gives the line or
+  block that fills it its shape (D35), and a value of another template
+  fails the compilation; an untyped variable takes the type of its first
+  typed assignment. The executable (D20) keeps the values in a builtin
+  session store (D18), keyed by name — private values per session and
+  agent, `SESSION` values per session, shared by every agent; the last
+  write wins. The session id comes from the harness adapter (D8); without
+  it the executable refuses. A block of a shared or builtin library (D30)
+  never reads a session variable (P4): it takes its input through
+  `LENS-IN` (D6). (Added in 1.2.)
+
 ## 4. Citation
 
 External works referencing this specification should use the stable
@@ -361,7 +399,7 @@ deprecated ID is marked deprecated; it is not reused.
 
 The Agent Pack paradigm, its language and this specification were
 created by **Giuseppe Federico**. The specification was first written
-in May 2026; this version 1.1 dates from October 2026.
+in May 2026; this version 1.2 dates from October 2026.
 
 Its text is released under the Creative Commons
 Attribution-NoDerivatives 4.0 International license — see

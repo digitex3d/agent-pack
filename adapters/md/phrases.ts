@@ -82,6 +82,13 @@ export const storeScopeLine = (env: { refOf(target: string): string }, store: Ap
     ? fill(K.IN.unresolved, { head: K.IN.head, name: refName(store) })
     : fill(K.IN.store, { head: K.IN.head, name: refName(store), ref: env.refOf(store.target) });
 
+/** The apx command that reads a variable (`get`), or stores it with the value on stdin (`set`). */
+export const varCommand = (apx: string, verb: 'get' | 'set', name: string): string =>
+  verb === 'get' ? `${apx} get ${name}` : `${apx} set ${name} -`;
+
+/** The head of a `VAR <name>:` block — the lines beneath work out its value. */
+export const varBlockHead = (name: string): string => fill(K.VAR.block, { name });
+
 /** Where a store's data lives, and whether it outlives the session. */
 export const storeHomeLine = (file: string, lasts: string): string =>
   fill(S.home, { file, lasts: lasts === 'project' ? S.lasts.project : S.lasts.session });

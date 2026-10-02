@@ -22,11 +22,12 @@ import { MdEnv, slotTypePhrase, forceIntro, renderNodes, shapeLine } from '../..
 import {
   templateScaffoldIntro, scalarTemplateLine, FIELDS_LABEL, OPTIONAL_MARK,
   EXAMPLE_OPEN, EXAMPLE_CLOSE, lensInLine, lensBridgeLine, refName,
-  storeHomeLine, storeUsageLabel, storeRejectLine, storeUnknownTypeLine,
+  storeHomeLine, storeUsageLabel, storeRejectLine, storeUnknownTypeLine, varCommand,
 } from '../../adapters/md/phrases.js';
 import { storeTypeOf, storeTypeNames } from '../storeTypes/registry.js';
 import { phraseOf, STORE_LIFETIMES, type StoreDecl, type StoreLifetime } from '../storeTypes/types.js';
 import { parseTemplate } from '../shapeCompiler.js';
+import type { VarScope } from '../vars.js';
 import { extractPrimitive, extractPrimitives } from '../services/text.js';
 import { renderIdentityBlock } from '../primitives.js';
 import { DirectiveNode, reviveNodes } from './nodes.js';
@@ -378,6 +379,60 @@ export class TemplateBlock extends ApBlock {
   }
 }
 
+/**
+ * A variable (I7): a name the agent's work fills while it runs, kept by the apx
+ * for the session — private to the agent, or shared by the session's agents
+ * (`SESSION`) — with a type when a template shapes it. Declared in a vars.ap or
+ * a body; one variable namespace, so the id depends on the name alone.
+ */
+export class VarBlock extends ApBlock {
+  static readonly PREFIX = 'var';
+  static readonly NAMESPACE = '@main.vars';
+  readonly kind = 'var';
+  protected readonly idPrefix = VarBlock.PREFIX;
+  /** Who sees it: the declaring agent alone, or every agent of the session. */
+  scope: VarScope = 'private';
+  /** The template that types it, or null. */
+  type: ApRef | null = null;
+  /** Where it is declared: `vars.ap (team)`, `procedure verify`, … */
+  declared = '';
+
+  /** The reference to a variable by name — derivable without the block. */
+  static ref(name: string): ApRef {
+    return { id: refId('var', VarBlock.NAMESPACE, name), target: `${VarBlock.NAMESPACE}/${name}`, kind: 'var' };
+  }
+
+  static fromDeclaration(name: string, scope: VarScope, type: ApRef | null, declared: string): VarBlock {
+    const V = FORMULAS.keywords.VAR;
+    const block = new VarBlock({
+      name, namespace: VarBlock.NAMESPACE,
+      about: fill(V.about, { scope: V.scopes[scope], type: type ? fill(V.typed, { name: refName(type) }) : '', where: declared }),
+    });
+    block.scope = scope;
+    block.type = type;
+    block.declared = declared;
+    return block;
+  }
+
+  static fromData(data: ApBlockData): VarBlock {
+    const block = restore(new VarBlock(initOf(data)), data);
+    block.scope = (data.args['scope'] as VarScope | undefined) ?? 'private';
+    block.type = (data.args['type'] as ApRef | undefined) ?? null;
+    block.declared = (data.args['declared'] as string | undefined) ?? '';
+    return block;
+  }
+
+  protected override argsJson(): Record<string, unknown> {
+    return { scope: this.scope, ...(this.type ? { type: this.type } : {}), declared: this.declared };
+  }
+
+  /** How to read and store it, through the apx. */
+  override asMdBody(env: MdEnv): string {
+    const apx = env.apxOf(null);
+    return fill(FORMULAS.keywords.VAR.entry, { read: varCommand(apx, 'get', this.name), write: varCommand(apx, 'set', this.name) });
+  }
+}
+
 /** A team's scanned context: read once by the recorder, consumed here and by the index. */
 export interface TeamScan {
   root: string;
@@ -588,6 +643,7 @@ export const KIND_STRATEGIES: KindStrategy[] = [
   { kind: 'playbook', revive: RuleBlock.fromData, folder: 'playbooks',  prefix: RuleBlock.PREFIXES['playbook'],  ref: 'runnables' },
   { kind: 'team', revive: TeamBlock.fromData, folder: 'teams',      prefix: TeamBlock.PREFIX,                ref: null },
   { kind: 'agent', revive: AgentBlock.fromData, folder: 'agents',     prefix: AgentBlock.PREFIX,               ref: null },
+  { kind: 'var', revive: VarBlock.fromData, folder: 'vars',         prefix: VarBlock.PREFIX,                 ref: null },
 ];
 
 export function strategyOf(kind: string): KindStrategy | null {

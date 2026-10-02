@@ -52,8 +52,13 @@ export interface ApDirectiveNode {
   text: string;
   chars: number;
   body?: ApNode[];
-  /** The template the directive's subject takes (`MEM <event>` + `AS <template>`). */
+  /**
+   * The template the directive's subject takes (`MEM <event>` + `AS <template>`),
+   * or — with `into` — the type of the variable its result fills.
+   */
   shape?: ApShape;
+  /** `DO … INTO <name>`: the session variable the step's result is stored in. */
+  into?: ApRef;
 }
 
 /** `RUN <name>` — invocation of a runnable (procedure/flow), always a Ref. */
@@ -89,6 +94,23 @@ export interface ApIfNode {
   chars: number;
   then: ApNode[];
   else: ApNode[];
+}
+
+/**
+ * `VAR <name>:` — the session variable the block beneath fills: its value is the
+ * block's final outcome. `shape` is the variable's type, declared or inferred,
+ * imposed on the block.
+ */
+export interface ApVarNode {
+  type: 'var';
+  /** Where the node was written — provenance, never serialized. */
+  pos?: ApPos;
+  /** Source indentation (spaces) within the block body; absent = 0. */
+  indent?: number;
+  var: ApRef;
+  shape?: ApShape;
+  chars: number;
+  body: ApNode[];
 }
 
 /** `UNTIL <condition>:` loop head. */
@@ -214,6 +236,7 @@ export type ApNode =
   | ApTextNode
   | ApIfNode
   | ApUntilNode
+  | ApVarNode
   | ApWhenNode
   | ApStepNode
   | ApParallelNode;
@@ -342,6 +365,12 @@ export interface ApDocumentMeta {
    * read the steps). Absent = the flow's steps are carried out as written.
    */
   flowRun?: string;
+  /**
+   * The environment variable the active adapter's harness puts its session id
+   * in — where the apx finds the session its variables live in. Absent = no
+   * adapter named one: session variables cannot be read or written.
+   */
+  sessionEnv?: string;
   /** Md-projection metadata — present when the document renders prose. */
   md?: ApMdMeta;
 }

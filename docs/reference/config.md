@@ -95,10 +95,20 @@ IMPORT security FROM @main.policies
 
 ## vars.ap
 
-A `vars.ap` in an agent's folder defines values substituted into the text of the agents there at compile time, written `{{name}}`:
+A `vars.ap` declares [variables](/reference/language#variables) for the agents below it, at three levels: the project root, a team's folder, an agent's folder (a team member's folder is its team's). It holds only `VAR` lines:
 
 ```
-VAR board = Product
+VAR board = Product                        # a constant — any level
+SESSION VAR plan AS implementation-plan    # shared by the session's agents — a team's or the project's vars.ap
+VAR draft                                  # private to one agent — the agent's own vars.ap
 ```
 
-Never put secrets in `vars.ap`: the values are compiled into the agent's output. Tools read secrets from the environment.
+| Level | Constants | `SESSION VAR` | private `VAR` |
+|---|---|---|---|
+| project root | yes | yes | no |
+| team folder | yes | yes | no |
+| agent folder | yes | no | yes |
+
+A constant at a deeper level overrides the same one above it: agent over team over project. Every agent also has the constant `name`, its own name. How variables are assigned and read, and what their scopes mean, is in [Language → Variables](/reference/language#variables).
+
+Never put secrets in `vars.ap`: constants are compiled into the agent's output. Tools read secrets from the environment.

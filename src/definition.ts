@@ -82,7 +82,7 @@ function capitalize(s: string): string {
  *   getEntries     = ctx => ctx[`${kind}s`]
  *   afterEmit      = propagateRefId (so the source Definition carries
  *                    its emitted section number; consumed by the
- *                    cross-references appendix and by `RETURN AS` for templates)
+ *                    cross-references appendix and by `AS` for templates)
  */
 export function defaults(kind: string): DefinitionStrategy {
   return {
@@ -98,7 +98,7 @@ export function defaults(kind: string): DefinitionStrategy {
 
 /**
  * Side-effect helper that propagates the assigned section number back to the
- * source entry. Consumed by `RETURN AS`/`@shape` (template) and by `RUN`
+ * source entry. Consumed by `AS`/`@shape` (template) and by `RUN`
  * cross-references (procedure, flow), which print its id.
  */
 function propagateRefId(source: Definition, entry: { refId?: string }): void {

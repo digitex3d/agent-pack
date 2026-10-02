@@ -337,4 +337,7 @@ await import('./forceInBodies.test.mjs');
 // --- force-level lines at an AGENT's top level: every family but DISTILL — lint, document, md, apx ---
 await import('./forceInAgent.test.mjs');
 
+// --- variables: constants, session variables (VAR x:, DO … INTO x, {{x}}), their types, the apx get/set ---
+await import('./variables.test.mjs');
+
 console.log('All tests passed.');

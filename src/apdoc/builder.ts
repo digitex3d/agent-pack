@@ -48,6 +48,8 @@ import {
   TEAM_FLOWS_FILE,
 } from '../services/teamMetadata.js';
 import type { ApNode, ApRef, ApShape, ApSlotType, ApStepNode, ApIfNode, ApDocumentMeta, ApStoreProjection } from './types.js';
+import { parseVarLine, splitInto, takesInto, constantOf, type VarScope } from '../vars.js';
+import type { PlacedVariable } from '../varsAp.js';
 import { introOf } from '../formulas.js';
 import { parseForceLevel, toCanonicalKeyword, getIntroByKeyword, forceLevelFamilies } from '../forceLevelConfig.js';
 
@@ -64,11 +66,11 @@ function stripColon(s: string): string {
 }
 import { ApBlock, ApBlockInit } from './block.js';
 import {
-  BlockCx, RuleBlock, TeamBlock, AgentBlock,
+  BlockCx, RuleBlock, TeamBlock, AgentBlock, VarBlock,
   TemplateBlock, TeamScan, KIND_STRATEGIES, strategyOf, kindOfFolder, refId, namespaceOf, RefClass,
 } from './blocks.js';
 import { ApDocument, BlockProvenance } from './document.js';
-import { DirectiveNode, RunNode, TextNode, IfNode, UntilNode, WhenNode, StepNode, ParallelNode, InNode, DistillNode } from './nodes.js';
+import { DirectiveNode, RunNode, TextNode, IfNode, UntilNode, WhenNode, StepNode, ParallelNode, InNode, DistillNode, VarNode } from './nodes.js';
 
 
 /** Bullet-group keywords (DO, BY, WHEN, LOG, …) that group like force levels. */
@@ -91,10 +93,27 @@ export interface RecorderFinishOpts {
   /** The lazy WHEN→RUN triggers of the Dynamic-rules chapter (bodies fetched on demand). */
   /** The md bootstrap prose (team membership + shared + runtime defaults). */
   bootstrap: string;
-  /** Body substitution vars ({{name}} …). */
+  /** Body substitution vars ({{name}} …) — the constants. */
   vars: Record<string, string>;
+  /** The variables declared in the agent's vars.ap files, with where (`vars.ap (team)`). */
+  declaredVars: PlacedVariable[];
   /** Whether the OWNS fence renders in the body (adapter did not claim it). */
   ownsInBody: boolean;
+}
+
+/** A variable's declaration: its name, scope, template, and where it was written. */
+interface VarSite {
+  name: string;
+  scope: VarScope;
+  type: string | null;
+  /** A `VAR x:` block: it assigns as well — or only assigns, a variable a vars.ap declares. */
+  block: boolean;
+  /** How `ls kind=var` says where it lives: `vars.ap (team)`, `procedure verify`. */
+  where: string;
+  path: string;
+  line: number | null;
+  /** Declared in a body of this agent — not shared through a vars.ap. */
+  inBody: boolean;
 }
 
 export class DocumentBuilder implements BlockCx {
@@ -118,6 +137,12 @@ export class DocumentBuilder implements BlockCx {
   readonly unresolved: { path: string; name: string; kind: string }[] = [];
   /** address → auto tags ('#segment') — md-projection data gathered from Definitions. */
   private breadcrumbs = new Map<string, string[]>();
+  /** The variables declared in the bodies walked, in walk order. */
+  private varSites: VarSite[] = [];
+  /** Every assignment of a variable — a `VAR x:` block, a `DO … INTO x` — in walk order. */
+  private varWrites: { name: string; node: VarNode | DirectiveNode; path: string }[] = [];
+  /** What is wrong with the variables: a compile error each, reported by the caller. */
+  readonly varErrors: { path: string; name: string; line: number | null; message: string }[] = [];
 
   /** The reference index a kind's strategy names — lookup, never a branch. */
   private refIndex(ref: RefClass): Map<string, IndexedBlock> {
@@ -140,8 +165,14 @@ export class DocumentBuilder implements BlockCx {
 
   /** Stamp where a node was written: the file line its body line came from. */
   private at<T extends ApNode>(node: T, t: Token): T {
-    if (this.span && this.bodyLines) node.pos = positionOf(this.span, this.bodyLines[t.line - 1] ?? this.span.line);
+    const line = this.fileLine(t);
+    if (line !== null) node.pos = positionOf(this.span!, line);
     return node;
+  }
+
+  /** The file line a body token came from — null when the block has no positions. */
+  private fileLine(t: Token): number | null {
+    return this.span && this.bodyLines ? this.bodyLines[t.line - 1] ?? this.span.line : null;
   }
 
   /**
@@ -244,6 +275,11 @@ export class DocumentBuilder implements BlockCx {
         i++;
         continue;
       }
+      if (kw === 'VAR') {
+        this.variable(t, n.children, sink, host, steps);
+        i++;
+        continue;
+      }
 
       // Bodied leaf keyword head (e.g. `WHEN <trigger>:`): open its container.
       const { base, force } = parseForce(kw);
@@ -301,6 +337,8 @@ export class DocumentBuilder implements BlockCx {
           const name = raw.trim();
           sink.push(this.at(new RunNode(this.ref(this.runnables.get(name), name, 'procedure'), indent), tokens[i + k]));
         });
+      } else if (base === 'VAR') {
+        for (let k = i; k < j; k++) this.variable(tokens[k] as Token & { kind: 'keyword' }, [], sink, host, steps);
       } else if (base === 'AS') {
         this.applyShape(force ?? 0, actions[0] ?? '', sink, host, steps);
       } else if (base === 'DISTILL') {
@@ -319,13 +357,42 @@ export class DocumentBuilder implements BlockCx {
       } else if (getIntroByKeyword(keyword) !== null || BULLET_KEYWORDS.has(keyword)) {
         // Plain grouped lines: text travels VERBATIM (a trailing colon may be
         // legitimate prose); the source indent is presentation, recorded apart.
-        actions.forEach((a, k) => sink.push(this.at(new DirectiveNode(base, force, a, indent), tokens[i + k])));
+        actions.forEach((a, k) => sink.push(this.at(this.directive(base, force, a, indent), tokens[i + k])));
       } else {
         // Unclaimed keyword lines pass through verbatim (the legacy raw path).
         for (let k = i; k < j; k++) this.pushText(sink, tokens[k]);
       }
       i = j;
     }
+  }
+
+  /** A plain line — a DO ending in `INTO <name>` records the variable its result fills. */
+  private directive(base: string, force: number | null, text: string, indent: number): DirectiveNode {
+    const into = takesInto(base) ? splitInto(text) : null;
+    const node = new DirectiveNode(base, force, into ? into.text : text, indent);
+    if (into) {
+      node.into = VarBlock.ref(into.name);
+      this.varWrites.push({ name: into.name, node, path: this.sourcePath });
+    }
+    return node;
+  }
+
+  /**
+   * A `VAR` line of a body: it declares a private variable and, with a block
+   * beneath (`VAR x:`), assigns it the block's outcome — a node holding that
+   * block; a block naming a variable a vars.ap declares only assigns it. A
+   * malformed line, a constant or a scope word is the lint's to report.
+   */
+  private variable(t: Token & { kind: 'keyword' }, children: WalkNode[], sink: ApNode[], host: ApBlock | null, steps: ApStepNode[]): void {
+    const decl = parseVarLine(t.keyword as string, t.rest);
+    if (!decl || 'error' in decl || decl.form === 'constant') return;
+    const where = host ? `${host.kind} ${host.name}` : basename(this.sourcePath);
+    this.varSites.push({ name: decl.name, scope: decl.scope, type: decl.type, block: decl.block, where, path: this.sourcePath, line: this.fileLine(t), inBody: true });
+    if (!decl.block) return;
+    const node = this.at(new VarNode(VarBlock.ref(decl.name), t.indent), t);
+    sink.push(node);
+    this.visit(children, node.body, host, steps);
+    this.varWrites.push({ name: decl.name, node, path: this.sourcePath });
   }
 
   private pushText(sink: ApNode[], token: Token): void {
@@ -393,9 +460,9 @@ export class DocumentBuilder implements BlockCx {
 
   // ------------------------------------------------------------- references
 
-  private ref(entry: IndexedBlock | undefined, rawName: string, expectedKind: string): ApRef {
+  private ref(entry: IndexedBlock | undefined, rawName: string, expectedKind: string, report = true): ApRef {
     if (!entry) {
-      if (!this.unresolved.some(u => u.path === this.sourcePath && u.name === rawName)) {
+      if (report && !this.unresolved.some(u => u.path === this.sourcePath && u.name === rawName)) {
         this.unresolved.push({ path: this.sourcePath, name: rawName, kind: expectedKind });
       }
       return { id: null, target: rawName, kind: expectedKind, resolved: false };
@@ -417,8 +484,9 @@ export class DocumentBuilder implements BlockCx {
     return { id: refId(kind, namespace, name), target: address, kind };
   }
 
-  templateRef(name: string): ApRef {
-    return this.ref(this.templates.get(name), name, 'template');
+  /** A template by name; `report` false leaves an unknown one unresolved without an error. */
+  templateRef(name: string, report = true): ApRef {
+    return this.ref(this.templates.get(name), name, 'template', report);
   }
 
   agentRef(name: string): ApRef {
@@ -595,6 +663,83 @@ export class DocumentBuilder implements BlockCx {
     return this.fromSource(opts.agentSpan, () => AgentBlock.fromContext({ agentName: ctx.agentName, ...opts }, this));
   }
 
+  // -------------------------------------------------------------- variables
+
+  /**
+   * The variables — one block each — from every declaration: the vars.ap
+   * files' and the bodies'. Each name is declared once, in one scope — no
+   * private variable shadows a SESSION one; a body's `VAR x:` naming a variable
+   * a vars.ap declares assigns it, never redeclares it. A variable is assigned
+   * only when declared (a constant takes no value at run time), and keeps one
+   * type: its declared template, or the result type of the block that yields
+   * one — a `RUN` of a procedure with an `AS`. Every step that fills a typed
+   * variable is shaped by its template.
+   */
+  private variableBlocks(doc: ApDocument, opts: RecorderFinishOpts): ApBlock[] {
+    const fail = (path: string, name: string, line: number | null, message: string) => this.varErrors.push({ path, name, line, message });
+    const table = new Map<string, VarSite>();
+    const sites: VarSite[] = [...opts.declaredVars.map(v => ({ ...v, block: false, path: v.file, inBody: false })), ...this.varSites];
+    for (const site of sites) {
+      const first = table.get(site.name);
+      if (constantOf(opts.vars, site.name) !== undefined) {
+        fail(site.path, site.name, site.line, `\`${site.name}\` is already a constant — a variable needs a name of its own`);
+      } else if (!first) {
+        table.set(site.name, site);
+      } else if (first.inBody || !site.block || site.type) {
+        // A body's plain `VAR x:` assigns what a vars.ap declares; anything else declares again.
+        fail(site.path, site.name, site.line, first.scope !== site.scope
+          ? `\`${site.name}\` is already a ${first.scope === 'session' ? 'SESSION' : 'private'} variable (${first.where}) — no variable of another scope takes its name; assign it with \`VAR ${site.name}:\` or \`DO … INTO ${site.name}\``
+          : `variable \`${site.name}\` is declared twice — first in ${first.where}; assign it with \`VAR ${site.name}:\` or \`DO … INTO ${site.name}\`, never redeclare it`);
+      }
+    }
+    for (const w of this.varWrites) {
+      if (table.has(w.name)) continue;
+      fail(w.path, w.name, w.node.pos?.line ?? null, constantOf(opts.vars, w.name) !== undefined
+        ? `INTO ${w.name}: \`${w.name}\` is a constant — only a variable takes a value while the agent works`
+        : `INTO ${w.name}: no variable \`${w.name}\` — declare it with \`VAR ${w.name}\`, in the agent's body or vars.ap, or \`SESSION VAR ${w.name}\` in a team's`);
+    }
+    return [...table.values()].map(site => {
+      const writes = this.varWrites.filter(w => w.name === site.name);
+      this.sourcePath = site.path;
+      // A shared declaration nobody here fills needs no template here; one this agent fills, or declares, does.
+      let type = site.type ? this.templateRef(site.type, site.inBody || writes.length > 0) : null;
+      for (const w of writes) {
+        if (w.node.type !== 'var') continue;
+        const line = w.node.pos?.line ?? null;
+        const yielded = this.yieldOf(w.node.body, doc, (a, b) =>
+          fail(w.path, site.name, line, `\`${site.name}\`: the IF and ELSE branches yield different types — \`${refName(a)}\` and \`${refName(b)}\``));
+        if (!yielded) continue;
+        if (!type) type = yielded;
+        else if (yielded.target !== type.target) {
+          fail(w.path, site.name, line, `\`${site.name}\` is a \`${refName(type)}\`, but this block yields a \`${refName(yielded)}\` — a variable keeps one type for its whole life`);
+        }
+      }
+      if (type) for (const w of writes) w.node.shape = { force: 1, ref: type };
+      return VarBlock.fromDeclaration(site.name, site.scope, type, site.where);
+    });
+  }
+
+  /**
+   * The type a block of lines yields — its final outcome's: the result template
+   * of a procedure its last line runs, through the last line of an IF/ELSE
+   * (each branch, which must agree), an UNTIL or an IN. Null when untyped.
+   */
+  private yieldOf(nodes: ApNode[], doc: ApDocument, conflict: (a: ApRef, b: ApRef) => void): ApRef | null {
+    const last = nodes[nodes.length - 1];
+    switch (last?.type) {
+      case 'run': return doc.resolve(last.ref)?.shape?.ref ?? null;
+      case 'if': {
+        const a = this.yieldOf(last.then, doc, conflict);
+        const b = this.yieldOf(last.else, doc, conflict);
+        if (a && b && a.target !== b.target) conflict(a, b);
+        return a ?? b;
+      }
+      case 'until':
+      case 'in': return this.yieldOf(last.body, doc, conflict);
+      default: return null;
+    }
+  }
+
   // -------------------------------------------------------------------- meta
 
   private buildMeta(ctx: BundleContext): ApDocumentMeta {
@@ -615,6 +760,7 @@ export class DocumentBuilder implements BlockCx {
       forceLevels,
       enums,
       ...(flowRun ? { flowRun } : {}),
+      ...(ctx.sessionEnv ? { sessionEnv: ctx.sessionEnv } : {}),
     };
   }
 
@@ -685,6 +831,8 @@ export class DocumentBuilder implements BlockCx {
       ['definition', () => this.definitionBlocks(ctx, opts)],
       ['team',       () => this.teamBlocks()],
       ['agent',      () => [this.agentBlock(ctx, opts)]],
+      // Last: a variable's type may come from any procedure the others hold.
+      ['definition', () => this.variableBlocks(doc, opts)],
     ];
     const provenanceMap: Record<string, string> = {};
     for (const [provenance, produce] of producers) {

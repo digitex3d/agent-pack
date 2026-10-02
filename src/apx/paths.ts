@@ -9,6 +9,16 @@
 /** The apx files — build output, outside git. */
 export const APX_DIR = '.agent-pack/apx';
 
+/** Where an agent's `LASTS session` stores live: beside its apx. */
+export function storeStateDir(agent: string): string {
+  return `${APX_DIR}/${agent}.state`;
+}
+
+/** Where an agent's `LASTS project` stores live: at the project root, the project's to version. */
+export function projectStoreDir(agent: string): string {
+  return `stores/${agent}`;
+}
+
 /** The path of an agent's apx — how every printed command names it. */
 export function apxPath(agent: string): string {
   return `${APX_DIR}/${agent}.apx`;
@@ -39,6 +49,12 @@ export function flowScriptStem(id: string, contentHash: string): string {
 export function flowScriptFile(id: string, contentHash: string, ext: string): string {
   return `${flowScriptStem(id, contentHash)}.${ext}`;
 }
+
+/**
+ * The session state — build output's sibling, outside git: one folder per
+ * harness session. What sits inside is the variables seam's (sessionVars.ts).
+ */
+export const STATE_DIR = '.agent-pack/state';
 
 /** The distilled scripts — written by agents, versioned with the sources. */
 export const DISTILLED_DIR = 'distilled';

@@ -10,7 +10,7 @@
  *   as a Definition. extractInlineDefinitions does the same for an inline
  *   `PROCEDURE foo:` block found in the agent's own file. Downstream
  *   `emitCollectedSections` is agnostic about the origin — the chapter,
- *   numbering, RUN resolution, and `RETURN AS` back-reference all work
+ *   numbering, RUN resolution, and `AS` back-reference all work
  *   identically.
  *
  * Reuses STRATEGIES → every kind with a `headerKeyword` (procedure,

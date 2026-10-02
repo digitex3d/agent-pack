@@ -18,6 +18,7 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { parseBlocks, ParseResult, Block } from './parseBlocks.js';
 import type { ApPos } from './apdoc/types.js';
+import { splitOnReads } from './vars.js';
 
 /** How a path becomes text — the file on disk by default, an editor's buffer tomorrow. */
 export type SourceReader = (path: string) => string;
@@ -144,8 +145,7 @@ function linePattern(line: string): RegExp | null {
   if (text === '') return null;
   const step = /^STEP\s+/.exec(text);
   const head = step ? '(?:STEP\\s+|\\d+\\.\\s+)' : '';
-  const rest = (step ? text.slice(step[0].length) : text)
-    .split(/\{\{\w+\}\}/)
+  const rest = splitOnReads(step ? text.slice(step[0].length) : text)
     .map(escape)
     .join('[\\s\\S]*?');
   return new RegExp(`^${head}${rest}$`);

@@ -12,20 +12,25 @@
  * Exit codes: 0 ok, 1 something does not exist, 2 wrong usage. Every error is
  * one `# error:` line carrying the command that fixes it.
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync } from 'fs';
+import { existsSync, readdirSync, readFileSync } from 'fs';
 import { dirname, join, basename, resolve } from 'path';
 import { spawnSync, type SpawnSyncOptionsWithStringEncoding } from 'child_process';
-import { homedir } from 'os';
 import type { ApDocument } from '../apdoc/document.js';
 import type { ApBlock } from '../apdoc/block.js';
-import type { ApRef, ApNode, ApShape, ApWhenNode, ApRunNode, ApDirectiveNode } from '../apdoc/types.js';
-import { KIND_STRATEGIES, type AgentBlock, type TeamBlock, type StoreBlock } from '../apdoc/blocks.js';
+import type { ApRef, ApNode, ApWhenNode, ApRunNode, ApDirectiveNode } from '../apdoc/types.js';
+import { KIND_STRATEGIES, type AgentBlock, type TeamBlock, type StoreBlock, type VarBlock } from '../apdoc/blocks.js';
 import { mdEnv, renderPreamble, renderEntry, renderMd } from '../../adapters/md/index.js';
 import type { MdEnv } from '../../adapters/md/toolkit.js';
 import { FORMULAS, fill, type QuizQuestion } from '../formulas.js';
-import { DISTILLED_DIR, FLOWS_DIR, flowScriptStem, projectRootOf } from './paths.js';
+import { DISTILLED_DIR, FLOWS_DIR, flowScriptStem, projectRootOf, projectStoreDir } from './paths.js';
+import { type ApxVerb } from './verbs.js';
+import { openTable, runTable, upsertBy } from './tabeli.js';
+import { openSessionVars, type SessionVars } from './sessionVars.js';
+import { refName } from '../../adapters/md/phrases.js';
 import { CREDIT } from '../credits.js';
 import { validateRecord, slotSpecsOf, formatIssues } from '../shapeSchema.js';
+import { BLOCK_ID_RE } from '../apdoc/ids.js';
+import { constantOf, varRefRe } from '../vars.js';
 
 /** Build provenance sealed next to the document. */
 export interface ApxBuild {
@@ -43,6 +48,8 @@ const HELP: [string, string][] = [
   ['scope', 'everything needed to start: who you are, team, policies, workflows, stores, answer shape'],
   ['ls [kind= tag= name~ about~] [count]', 'every block grouped by kind, with its id — filtered'],
   ['get <id> [json]', 'one block: its text, then what it uses and what uses it'],
+  ['get <variable>', 'a variable: its scope, who stores it, who reads it, then its value in this session'],
+  ['set <variable> -|<value>', 'store a variable for this session — the value on stdin with -; a typed one as JSON of its template'],
   ['refs <id>', 'only the links of a block: what it uses, what uses it'],
   ['find <text>', 'the blocks containing the text, with the matching lines'],
   ['md', 'the whole prompt at once'],
@@ -54,6 +61,9 @@ const HELP: [string, string][] = [
 ];
 
 const FILTER_RE = /^(kind|tag|name|about)(=|~)(.+)$/;
+
+/** A session id as it may name a folder: no separator, never `.` or `..`. */
+const SESSION_ID_RE = /^(?!\.+$)[A-Za-z0-9._-]+$/;
 
 /** How long a distilled script may run before the agent works it out itself. */
 const RUN_TIMEOUT_MS = 30_000;
@@ -90,6 +100,21 @@ export class ApxEngine {
   private readonly env: MdEnv;
   private readonly root: AgentBlock;
   private readonly byId = new Map<string, ApBlock>();
+  /** Every verb, by name — the table APX_VERBS lists. */
+  private readonly verbs: Record<ApxVerb, (args: string[]) => number> = {
+    start: args => this.start(args),
+    scope: () => this.scope(),
+    ls: args => this.ls(args),
+    get: args => this.get(args),
+    set: args => this.set(args),
+    refs: args => this.refs(args),
+    find: args => this.find(args),
+    md: () => this.print(renderMd(this.doc)),
+    flow: args => this.flow(args),
+    run: args => this.runScript(args),
+    version: () => this.version(),
+    help: () => this.help(),
+  };
 
   constructor(
     private readonly doc: ApDocument,
@@ -108,19 +133,8 @@ export class ApxEngine {
   /** Dispatch one invocation: a verb, or a store name and a tabeli verb. No verb = start. */
   run(argv: string[]): number {
     const [verb = 'start', ...args] = argv;
-    switch (verb) {
-      case 'start': return this.start(args);
-      case 'scope': return this.scope();
-      case 'ls': return this.ls(args);
-      case 'get': return this.get(args);
-      case 'refs': return this.refs(args);
-      case 'find': return this.find(args);
-      case 'md': return this.print(renderMd(this.doc));
-      case 'flow': return this.flow(args);
-      case 'run': return this.runScript(args);
-      case 'version': return this.version();
-      case 'help': case '-h': case '--help': return this.help();
-    }
+    if (verb === '-h' || verb === '--help') return this.help();
+    if (Object.hasOwn(this.verbs, verb)) return this.verbs[verb as ApxVerb](args);
     const store = this.stores().find(s => s.name === verb);
     if (store) return this.storeVerb(store, args);
     return this.fail(2, `unknown verb '${verb}' — the verbs: ${this.cmd} help`);
@@ -193,7 +207,8 @@ export class ApxEngine {
     this.doc.byKind('policy').forEach(add);
     if (this.root.lensIn) add(this.doc.resolve(this.root.lensIn.ref));
     if (this.root.lensOut) add(this.doc.resolve(this.root.lensOut.ref));
-    return this.doc.all().filter(b => b !== this.root && (always.has(b) || this.text(b).length <= this.budget.block));
+    // A variable is runtime state, served by `get <name>` — never opened.
+    return this.doc.all().filter(b => b !== this.root && b.kind !== 'var' && (always.has(b) || this.text(b).length <= this.budget.block));
   }
 
   private scope(): number {
@@ -234,6 +249,11 @@ export class ApxEngine {
     const stores = this.stores();
     if (stores.length === 0) this.out('  (no stores declared)');
     for (const s of stores) this.out(`  ${this.label(s.block)}  — use: ${this.cmd} ${s.name} <verb> …`);
+    const variables = this.doc.byKind('var');
+    if (variables.length > 0) {
+      this.out(`variables:  — read: ${this.cmd} get <name>, store: ${this.cmd} set <name> -`);
+      for (const v of variables) this.out(`  ${v.name}  — ${v.about}`);
+    }
     const marks = this.doc.distillMarks().filter(d => d.mark.force >= 0);
     if (marks.length > 0) {
       this.out('distilled:');
@@ -268,6 +288,7 @@ export class ApxEngine {
   }
 
   private get(args: string[]): number {
+    if (args[0] && !BLOCK_ID_RE.test(args[0])) return this.getVariable(args[0]);
     const block = this.blockArg('get', args);
     if (!block) return this.lastCode;
     if (args[1] === 'json') return this.print(JSON.stringify(block.toJSON(), null, 1));
@@ -331,8 +352,8 @@ export class ApxEngine {
     if (!script) return this.fail(1, `no script for ${id} yet — work it out yourself, then write ${DISTILLED_DIR}/${id}.<ext> as its instruction says`);
     const input = arg ?? (process.stdin.isTTY ? '' : readFileSync(0, 'utf-8'));
     if (mark.input) {
-      const issues = this.contractIssues(input, mark.input);
-      if (issues) return this.fail(2, `the input is not shaped as \`${mark.input.ref.target.split('/').pop()}\`: ${issues}`);
+      const issues = this.contractIssues(input, mark.input.ref);
+      if (issues) return this.fail(2, `the input is not shaped as \`${refName(mark.input.ref)}\`: ${issues}`);
     }
     // Its own process group, so a timeout stops whatever the script started too.
     const run = spawnSync(script, [], { input, encoding: 'utf-8', timeout: RUN_TIMEOUT_MS, detached: true } as SpawnSyncOptionsWithStringEncoding);
@@ -346,16 +367,16 @@ export class ApxEngine {
       const why = stderrCause(run.stderr ?? '');
       return this.fail(1, `${id} did not answer (exit ${run.status})${why ? `: ${why}` : ''} — work it out yourself`);
     }
-    const issues = this.contractIssues(run.stdout, mark.shape);
-    if (issues) return this.fail(1, `${id} answered outside \`${mark.shape.ref.target.split('/').pop()}\`: ${issues} — work it out yourself`);
+    const issues = this.contractIssues(run.stdout, mark.shape.ref);
+    if (issues) return this.fail(1, `${id} answered outside \`${refName(mark.shape.ref)}\`: ${issues} — work it out yourself`);
     return this.print(run.stdout.trimEnd());
   }
 
   /** What is wrong with a JSON text against a contract template — or null when it fits. */
-  private contractIssues(json: string, shape: ApShape): string | null {
+  private contractIssues(json: string, template: ApRef): string | null {
     let value: unknown;
     try { value = JSON.parse(json); } catch { return 'not valid JSON'; }
-    const slots = this.doc.slotsOf(shape.ref);
+    const slots = this.doc.slotsOf(template);
     if (!slots) return null;
     const issues = validateRecord(value, slots, this.doc.slotResolver());
     return issues.length > 0 ? formatIssues(issues).replace(/\n/g, '; ') : null;
@@ -507,8 +528,13 @@ export class ApxEngine {
     const fellow = team?.members.find(m => m.id === id && !this.doc.resolve(m));
     this.lastCode = fellow
       ? this.fail(1, `${id} is an agent defined in its own executable — run: ${this.sibling(fellow.target.split('/').pop()!)} scope`)
-      : this.fail(1, `no block with id '${id}' — list them: ${this.cmd} ls`);
+      : this.notFound(id);
     return null;
+  }
+
+  /** Neither a block nor a variable answers to this name. */
+  private notFound(name: string): number {
+    return this.fail(1, `no block with id '${name}' and no variable named so — list them: ${this.cmd} ls`);
   }
 
   private out(line: string): void {
@@ -524,6 +550,95 @@ export class ApxEngine {
   private fail(code: number, message: string): number {
     this.write(`# error: ${message}`);
     return code;
+  }
+
+  // -------------------------------------------------------------- variables
+
+  /**
+   * `get <name>`: a constant's value, or a variable (private or SESSION) — its definition,
+   * who stores it and who reads it, then its value in this session (or that it
+   * is still empty). The value is printed last, as stored, byte for byte.
+   */
+  private getVariable(name: string): number {
+    const constant = constantOf(this.doc.mdSource?.vars, name);
+    if (constant !== undefined) {
+      this.out(`# constant ${name} = ${constant}  — fixed at compile time: its value is written where it is read`);
+      return 0;
+    }
+    const block = this.variable(name);
+    if (!block) return this.notFound(name);
+    const vars = this.sessionVars();
+    if (!vars) return this.lastCode;
+    let stored: string | null;
+    try { stored = vars.read(name, block.scope); } catch (e) { return this.fail(2, `reading ${name}: ${e instanceof Error ? e.message : e}`); }
+    this.print(this.text(block));
+    this.out(`# var ${name}  ${block.id}`);
+    this.links(block);
+    this.out('read by:');
+    const readers = this.doc.all().filter(b => [...JSON.stringify(b.body).matchAll(varRefRe())].some(([, read, field]) => read === name && !field));
+    if (readers.length === 0) this.out('  (nothing inside this agent)');
+    for (const reader of readers) this.out(`  ${this.label(reader)}`);
+    if (stored === null) {
+      this.out('# value: (empty — nothing stored in this session yet)');
+    } else {
+      this.out('# value:');
+      this.write(stored);
+    }
+    return 0;
+  }
+
+  /**
+   * `set <name> -|<value>`: store a variable's value for this session —
+   * the last write wins. A constant is never set; a typed variable takes only
+   * JSON its template accepts. A refused value writes nothing.
+   */
+  private set(args: string[]): number {
+    const [name, ...rest] = args;
+    if (!name || rest.length === 0) {
+      return this.fail(2, `set needs a variable and its value — ${this.cmd} set <name> <value>, or ${this.cmd} set <name> - with the value on stdin`);
+    }
+    if (constantOf(this.doc.mdSource?.vars, name) !== undefined) {
+      return this.fail(1, `\`${name}\` is a constant, fixed at compile time — only a variable is set; nothing was written`);
+    }
+    const block = this.variable(name);
+    if (!block) return this.fail(1, `no variable \`${name}\` in this agent — the variables: ${this.cmd} ls kind=var; nothing was written`);
+    const value = rest.length === 1 && rest[0] === '-' ? readFileSync(0, 'utf-8') : rest.join(' ');
+    const type = block.type ? refName(block.type) : '';
+    if (block.type) {
+      if (!this.doc.slotsOf(block.type)) return this.fail(1, `\`${name}\` is shaped as \`${type}\`, a template not compiled into this agent — nothing was written`);
+      const issues = this.contractIssues(value, block.type);
+      if (issues) return this.fail(2, `the value is not shaped as \`${type}\`: ${issues} — nothing was written`);
+    }
+    const vars = this.sessionVars();
+    if (!vars) return this.lastCode;
+    try { vars.write(name, block.scope, { value, type, by: this.root.name }); } catch (e) { return this.fail(2, `storing ${name}: ${e instanceof Error ? e.message : e}`); }
+    this.out(`# ${name} stored for this session — read it: ${this.cmd} get ${name}`);
+    return 0;
+  }
+
+  /** A variable of this agent, by name. */
+  private variable(name: string): VarBlock | null {
+    return (this.doc.byKind('var') as VarBlock[]).find(v => v.name === name) ?? null;
+  }
+
+  /**
+   * This session's variables, from the session id the harness puts in the
+   * variable its adapter names. Fails closed — no adapter naming one, no id, an
+   * id that is no folder name, or storage that cannot keep them: null after
+   * the error, nothing read or written.
+   */
+  private sessionVars(): SessionVars | null {
+    const env = this.doc.meta.sessionEnv;
+    const id = env ? process.env[env] : undefined;
+    const refused = !env
+      ? 'variables need the harness session id, and this agent was compiled without an adapter that names where it is'
+      : !id ? `variables need the harness session id, and ${env} is not set`
+        : !SESSION_ID_RE.test(id) ? `${env} holds no usable session id (letters, digits, . _ - only)` : null;
+    if (refused) {
+      this.lastCode = this.fail(2, `${refused} — nothing was read or written`);
+      return null;
+    }
+    return openSessionVars(resolve(projectRootOf(this.exe)), id!, this.root.name);
   }
 
   // ----------------------------------------------------------------- stores
@@ -552,7 +667,7 @@ export class ApxEngine {
     const projections = this.doc.mdSource?.stores ?? {};
     const root = resolve(projectRootOf(this.exe));
     return (this.doc.byKind('store') as StoreBlock[]).map(block => {
-      const location = projections[block.address]?.location ?? `stores/${this.root.name}/${block.name}.tbl`;
+      const location = projections[block.address]?.location ?? `${projectStoreDir(this.root.name)}/${block.name}.tbl`;
       return { block, name: block.name, key: block.storeKey, location, path: join(root, location) };
     });
   }
@@ -565,25 +680,22 @@ export class ApxEngine {
   private storeVerb(store: Store, args: string[]): number {
     const refused = this.writeIssues(store, args);
     if (refused) return this.fail(2, `${store.name}: ${refused} — nothing was written`);
-    if (!existsSync(store.path)) {
-      const engine = tabeli();
-      if (!engine) return this.fail(2, 'tabeli engine not found — set APX_TABELI=<path to the tabeli binary> or install the tabeli skill');
-      mkdirSync(dirname(store.path), { recursive: true });
-      const init = spawnSync(engine, ['init', store.path], { encoding: 'utf-8' });
-      if (init.status !== 0) return this.fail(2, `creating ${store.path}: ${(init.stderr || init.stdout).trim()}`);
-    }
-    if (args[0] === 'a' && store.key) {
-      const i = args.findIndex((kv, j) => j > 0 && kv.startsWith(`${store.key}=`));
-      if (i > 0) {
-        const q = spawnSync(store.path, ['q', args[i], 'limit=1'], { encoding: 'utf-8' });
-        const id = /^id=(\d+)/m.exec(q.stdout ?? '')?.[1];
-        if (id) {
-          this.out(`# ${args[i]} exists as id=${id} — updated, not duplicated`);
-          args = ['s', id, ...args.slice(1, i), ...args.slice(i + 1)];
-        }
+    const unopened = openTable(store.path);
+    if (unopened) return this.fail(2, unopened);
+    const i = args[0] === 'a' && store.key ? args.findIndex((kv, j) => j > 0 && kv.startsWith(`${store.key}=`)) : -1;
+    let run;
+    if (i > 0) {
+      let upsert;
+      try {
+        upsert = upsertBy(store.path, store.key!, args[i].slice(store.key!.length + 1), [...args.slice(1, i), ...args.slice(i + 1)]);
+      } catch (e) {
+        return this.fail(2, `${store.name}: ${e instanceof Error ? e.message : e} — nothing was written`);
       }
+      if (upsert.updated !== null) this.out(`# ${args[i]} exists as id=${upsert.updated} — updated, not duplicated`);
+      run = upsert.run;
+    } else {
+      run = runTable(store.path, args);
     }
-    const run = spawnSync(store.path, args, { encoding: 'utf-8' });
     // errors and manuals name the .tbl — say it in this executable's own words
     const table = basename(store.path);
     const text = `${run.stdout ?? ''}${run.stderr ?? ''}`
@@ -615,15 +727,6 @@ interface Store {
   key: string | null;
   location: string;
   path: string;
-}
-
-/** The tabeli engine: APX_TABELI, or the tabeli skill's own resolver. */
-function tabeli(): string | null {
-  const explicit = process.env.APX_TABELI;
-  if (explicit && existsSync(explicit)) return explicit;
-  const script = join(homedir(), '.claude', 'skills', 'tabeli', 'scripts', 'ensure-engine.sh');
-  const found = spawnSync(script, { encoding: 'utf-8' });
-  return found.status === 0 ? found.stdout.trim() || null : null;
 }
 
 function kindRank(kind: string): number {

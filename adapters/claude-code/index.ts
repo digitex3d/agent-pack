@@ -27,6 +27,9 @@ export default function claudeCodeAdapter(opts: ClaudeCodeOptions = {}): Adapter
     // Claude Code reads CLAUDE.md; `@AGENTS.md` imports the project context and
     // the orchestration agent-pack writes there.
     projectPointer: { file: 'CLAUDE.md', content: '@AGENTS.md' },
+    // Claude Code exports its session id to every command it runs: the apx keeps
+    // session variables under it.
+    sessionEnv: 'CLAUDE_CODE_SESSION_ID',
     // Every flow compiles to a Workflow tool script: Claude Code runs the steps.
     flowScript: { ext: 'js', compile: compileWorkflow },
     // CONTEXT modes compiled down to the concrete Claude Code delegation call.

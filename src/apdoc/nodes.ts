@@ -18,16 +18,16 @@
 import type {
   ApNode, ApRef, ApShape,
   ApDirectiveNode, ApRunNode, ApTextNode,
-  ApIfNode, ApUntilNode, ApWhenNode, ApStepNode, ApParallelNode, ApInNode, ApDistillNode,
+  ApIfNode, ApUntilNode, ApWhenNode, ApStepNode, ApParallelNode, ApInNode, ApDistillNode, ApVarNode,
   ApPos, ApLine,
 } from './types.js';
 import { distillLines } from '../distill.js';
 import {
-  MdEnv, renderNodes, renderDirectiveGroup, indentLines, shapeLine,
+  MdEnv, renderNodes, renderDirectiveGroup, indentLines, shapeLine, storeVarLine,
 } from '../../adapters/md/toolkit.js';
 import {
   controlHead, refName, runLine, unresolvedRun,
-  stepSignature, stepsHeader, storeScopeLine,
+  stepSignature, stepsHeader, storeScopeLine, varBlockHead,
 } from '../../adapters/md/phrases.js';
 
 /** What a node answers as a line: its primitive and the text after it. */
@@ -55,6 +55,7 @@ export class DirectiveNode extends NodeBase implements ApDirectiveNode {
   readonly type = 'directive';
   body?: ApNode[];
   shape?: ApShape;
+  into?: ApRef;
 
   constructor(
     public keyword: string,
@@ -74,18 +75,30 @@ export class DirectiveNode extends NodeBase implements ApDirectiveNode {
       ...(this.indent ? { indent: this.indent } : {}),
       ...(this.body ? { body: this.body } : {}),
       ...(this.shape ? { shape: this.shape } : {}),
+      ...(this.into ? { into: this.into } : {}),
     };
   }
 
   static fromData(n: ApDirectiveNode): DirectiveNode {
     const node = new DirectiveNode(n.keyword, n.force, n.text, n.indent, n.body ? reviveNodes(n.body) : undefined);
     if (n.shape) node.shape = n.shape;
+    if (n.into) node.into = n.into;
     node.chars = n.chars;
     return node;
   }
 
-  /** A bodied keyword head; plain directives render grouped by the sequence renderer. */
+  /**
+   * A bodied keyword head, or a line whose result fills a variable (`DO … INTO`)
+   * — a line of its own, told how to store it; plain directives render grouped
+   * by the sequence renderer.
+   */
   asMdLines(env: MdEnv, ordered: boolean): string[] {
+    if (this.into) {
+      return [
+        ...indentLines(renderDirectiveGroup(env, this.keyword, this.force, [this.text]), this.indent ?? 0),
+        ...indentLines([...(this.shape ? [shapeLine(env, this.shape)] : []), storeVarLine(env, this.into, !!this.shape)], (this.indent ?? 0) + 2),
+      ];
+    }
     return [
       ...indentLines(renderDirectiveGroup(env, this.keyword, this.force, [this.text + ':']), this.indent ?? 0),
       ...renderNodes(env, this.body ?? [], ordered),
@@ -231,6 +244,56 @@ export class UntilNode extends NodeBase implements ApUntilNode {
 
   asLine(): LineHead {
     return { primitive: 'UNTIL', text: this.condition };
+  }
+}
+
+/**
+ * `VAR <name>:` — the lines beneath fill a session variable: the head names it,
+ * the variable's type (when it has one) shapes the work, and the closing line
+ * says how to store the outcome.
+ */
+export class VarNode extends NodeBase implements ApVarNode {
+  readonly type = 'var';
+  shape?: ApShape;
+  body: ApNode[] = [];
+
+  var: ApRef;
+
+  constructor(ref: ApRef, indent?: number) {
+    super(indent);
+    this.var = ref;
+  }
+
+  static fromData(n: ApVarNode): VarNode {
+    const node = new VarNode(n.var, n.indent);
+    if (n.shape) node.shape = n.shape;
+    node.body = reviveNodes(n.body);
+    node.chars = n.chars;
+    return node;
+  }
+
+  toJSON(): ApVarNode {
+    return {
+      type: this.type, var: this.var, chars: this.chars,
+      ...(this.indent ? { indent: this.indent } : {}),
+      ...(this.shape ? { shape: this.shape } : {}),
+      body: this.body,
+    };
+  }
+
+  asMdLines(env: MdEnv, ordered: boolean): string[] {
+    // The added lines sit with the body's own: at its first node's indent.
+    const inner = (this.body.find(n => 'indent' in n) as { indent?: number } | undefined)?.indent ?? (this.indent ?? 0) + 2;
+    return [
+      ...indentLines([varBlockHead(refName(this.var))], this.indent ?? 0),
+      ...indentLines(this.shape ? [shapeLine(env, this.shape)] : [], inner),
+      ...renderNodes(env, this.body, ordered),
+      ...indentLines([storeVarLine(env, this.var, !!this.shape)], inner),
+    ];
+  }
+
+  asLine(): LineHead {
+    return { primitive: 'VAR', text: refName(this.var) };
   }
 }
 
@@ -415,6 +478,7 @@ const REVIVERS: Record<string, Reviver> = {
   step:      d => StepNode.fromData(d as ApStepNode),
   parallel:  d => ParallelNode.fromData(d as ApParallelNode),
   in:        d => InNode.fromData(d as ApInNode),
+  var:       d => VarNode.fromData(d as ApVarNode),
   distill:   d => DistillNode.fromData(d as ApDistillNode),
 };
 

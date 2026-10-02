@@ -37,6 +37,7 @@ export interface Formulas {
     'LENS-OUT': { bridge: Text };
     MANDATE: { line: Text };
     MEM: { shaped: Text };
+    VAR: { read: Text; block: Text; store: Text; storeTyped: Text; about: Text; scopes: Record<'private' | 'session', Text>; typed: Text; entry: Text };
     DISTILL: { use: Text; write: Text; shape: Text; input: Text; output: Text };
   };
   blocks: {

@@ -17,6 +17,7 @@
  */
 import type { StoreDecl, StoreType } from '../types.js';
 import type { ApSlot } from '../../apdoc/types.js';
+import { projectStoreDir, storeStateDir } from '../../apx/paths.js';
 
 /** A field placeholder written with this slot's real type, not a generic one. */
 function hint(slot: ApSlot): string {
@@ -51,9 +52,7 @@ const tabeliStore: StoreType = {
   name: 'tabeli',
 
   location(store) {
-    return store.lasts === 'project'
-      ? `stores/${store.agent}/${store.name}.tbl`
-      : `.agent-pack/apx/${store.agent}.state/${store.name}.tbl`;
+    return `${store.lasts === 'project' ? projectStoreDir(store.agent) : storeStateDir(store.agent)}/${store.name}.tbl`;
   },
 
   rejects(slot) {

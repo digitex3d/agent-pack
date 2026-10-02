@@ -28,10 +28,12 @@ import { getLifecycleAliases } from './lifecycleConfig.js';
  */
 const STATIC_KEYWORDS = [
   'PROCEDURE', 'TEMPLATE', 'EXTENDS', 'APPLIES',
-  'IMPORT', 'RETURN',
+  'IMPORT',
   'UNTIL', 'ABOUT', 'SCOPE',
   'ELSE', 'WHEN', 'OWNS', 'TAGS',
   'RUN', 'VAR', 'DO', 'IF',
+  // A variable's scope, right before VAR (`SESSION VAR plan`) — vars.ts parses it.
+  'SESSION', 'GLOBAL',
   'ROLE', 'EXPERTISE', 'MANDATE', 'LENS-OUT', 'LENS-IN',
   'FLOW', 'STEP', 'PARALLEL', 'CONTEXT', 'BY',
   // STORE body: TYPE names the backing plugin, LASTS its lifetime, KEY the

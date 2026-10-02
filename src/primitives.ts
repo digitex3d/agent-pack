@@ -5,6 +5,7 @@ import { FORMULAS, fill, refSuffix } from './formulas.js';
 import { lex, Keyword } from './lexer.js';
 import type { BundleContext } from './dispatch/types.js';
 import { resolveRunTarget } from './definition.js';
+import { applyVars } from './vars.js';
 
 /**
  * Per-primitive translation strategy.
@@ -253,7 +254,7 @@ export function stripHeaderKeyword(rawBody: string, keyword: Keyword, name: stri
 }
 
 /**
- * Single-pass body substitution covering two sub-line transformations:
+ * Body substitution covering two sub-line transformations:
  *
  *   1. `{{name}}`        → `vars[name]`        (variable interpolation)
  *   2. `AS <slug>`       → `AS \`slug\` (id)`  (shape back-reference; keeps the
@@ -266,7 +267,8 @@ export function stripHeaderKeyword(rawBody: string, keyword: Keyword, name: stri
  * intro phrasing comes from the force-level config, applied downstream by
  * applyForceLevels. This keeps slug resolution as the sole bespoke step.
  *
- * The two patterns are lexically disjoint, so they fuse into a single regex.
+ * The two patterns are lexically disjoint; the AS pass runs first, so a
+ * constant's value is never read as an AS line.
  */
 export interface SubstitutionContext {
   vars?: Record<string, string>;
@@ -275,33 +277,16 @@ export interface SubstitutionContext {
 }
 
 export function applyBodySubstitutions(text: string, ctx: SubstitutionContext): string {
-  const parts: string[] = [
-    '\\{\\{(\\w+)\\}\\}',
-    '^([ \\t]*)(!?AS!*)[ \\t]+(\\S+)[ \\t]*$',
-  ];
-  const fused = new RegExp(parts.join('|'), 'gm');
-
   const shapes = ctx.templates;
-
-  return text.replace(fused, (
-    m: string,
-    varName: string | undefined,
-    asIndent: string | undefined,
-    asKeyword: string | undefined,
-    asSlug: string | undefined,
-  ) => {
-    if (varName !== undefined) {
-      return ctx.vars?.[varName] ?? `{{${varName}}}`;
+  // AS first: a constant's value never becomes an AS line.
+  const shaped = text.replace(/^([ \t]*)(!?AS!*)[ \t]+(\S+)[ \t]*$/gm, (_m, asIndent: string, asKeyword: string, asSlug: string) => {
+    const shape = shapes.find(s => s.name === asSlug);
+    if (!shape) {
+      throw new Error(`AS: unknown shape "${asSlug}" (no TEMPLATE with this name is imported)`);
     }
-    if (asKeyword !== undefined && asSlug !== undefined) {
-      const shape = shapes.find(s => s.name === asSlug);
-      if (!shape) {
-        throw new Error(`AS: unknown shape "${asSlug}" (no TEMPLATE with this name is imported)`);
-      }
-      return `${asIndent ?? ''}${asKeyword} \`${asSlug}\`${refSuffix(shape.refId)}`;
-    }
-    return m;
+    return `${asIndent}${asKeyword} \`${asSlug}\`${refSuffix(shape.refId)}`;
   });
+  return applyVars(shaped, ctx.vars ?? {});
 }
 
 /**

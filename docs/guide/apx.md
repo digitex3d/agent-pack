@@ -38,6 +38,8 @@ Running the apx with no verb is the same as `start`.
 | `ls [kind= tag= name~ about~] [count]` | every block, grouped by kind — id, name, tags, description |
 | `get <id>` | one block: its text, then a footer with kind, name, id, size and tags, what it uses and what uses it |
 | `get <id> json` | the block's raw structure |
+| `get <name>` | a variable: its scope, how to read and store it, who stores it, who reads it, then its value in this session — see below |
+| `set <name> -` / `set <name> <value>` | store a variable's value — see below |
 | `refs <id>` | only the links: what the block uses, what uses it |
 | `find <text>` | the blocks containing the text, each with the lines that matched |
 | `md` | the whole definition at once — the same text a harness `.md` carries |
@@ -63,7 +65,7 @@ so the agent follows ids and never guesses a block's content. A fellow team memb
 Exit code `0` is success, `1` means something does not exist (an unknown id), `2` means wrong usage (an unknown verb, a missing argument). Every error is one line starting with `# error:` that carries the command to run instead:
 
 ```
-# error: no block with id 'nope' — list them: node .agent-pack/apx/reviewer.apx ls
+# error: no block with id 'nope' and no variable named so — list them: node .agent-pack/apx/reviewer.apx ls
 ```
 
 ## Stores
@@ -77,7 +79,27 @@ node .agent-pack/apx/note-keeper.apx notes q
 
 The verbs are tabeli's (`a`dd, `q`uery, `s`et, …; run the store bare for its manual). The table is created on first use and is never touched directly: a `LASTS project` store lives in `stores/<agent>/<store>.tbl`, at the project root — yours to version or not — and a `LASTS session` store beside the apx, in `.agent-pack/apx/<agent>.state/`. A write outside the store's slots is refused before it reaches the table. When the store declares a `KEY`, adding a record whose key already exists updates it instead of duplicating it.
 
-Stores need the tabeli engine and work where tabeli runs (Linux). The apx finds it through the tabeli skill, or through the `APX_TABELI` environment variable pointing at the binary.
+Stores need the tabeli engine, v2 or newer, and work where tabeli runs (Linux). The apx finds it through the tabeli skill, or through the `APX_TABELI` environment variable pointing at the binary; it creates tables only with a v2 engine, and a table made earlier keeps working with the engine it carries.
+
+## Variables
+
+A variable (see [Language](/reference/language#variables)) is filled while the agent works and read back later — by a later step of the same agent, or, when it is a `SESSION` variable, by another agent of the project in the same session. The compiled text tells the agent when to store and how to read; the apx keeps the value:
+
+```bash
+node .agent-pack/apx/reviewer.apx set summary - < summary.txt      # the value on stdin
+node .agent-pack/apx/reviewer.apx set verdict '{"decision":"accept","reason":"two sources agree"}'
+node .agent-pack/apx/reviewer.apx get verdict
+```
+
+- `get <name>` prints the variable — its scope (private or SESSION), its type and where it is declared, how to read and store it — then who stores it (`uses:` / `used by:`) and who reads it (`read by:`), and last, after a `# value:` line, its value exactly as stored, byte for byte; or `# value: (empty — nothing stored in this session yet)`. An argument shaped like a block id (`tpl-1a2b3c4d`) is always a block; a variable may never be named so. `get` on a constant prints its value.
+- `set <name>` stores the value for this session; the last write wins. The value is the rest of the line, or stdin with `-`. Only a variable of this agent is set, never a constant. A typed variable takes only JSON its template accepts: anything else is refused with what is wrong, and nothing is written.
+- `ls kind=var` lists the variables, each with its scope, its type and where it is declared; `scope` lists them too.
+
+`get` and `set` find the variable's scope themselves. A **private** variable is the agent's own: another agent of the session, even one running the same procedure, never sees its value, and the same agent called again in the session finds it. A **SESSION** variable is one value for every agent of the project in the session — a team shares it.
+
+`get` and `set` are the only way to a variable: how the apx keeps the values is its own business, and may change. Today they sit in tabeli tables under `.agent-pack/state/<session id>/`, never touched directly.
+
+The session is the harness's: each adapter names the environment variable that holds its id (`claude-code` and `claude-code-apx`: `CLAUDE_CODE_SESSION_ID`). Without it — an adapter that names none, the variable unset, or an id that is no folder name — `get` and `set` of a variable refuse (exit `2`) and read or write nothing; every other verb works as usual.
 
 ## Flows
 

@@ -20,6 +20,8 @@ import { OwnsPrimitive } from '../../src/primitives.js';
 import type { ApMdMeta } from '../../src/apdoc/types.js';
 import { FORMULAS, fill, refSuffix, headingLine } from '../../src/formulas.js';
 import { apxCommand } from '../../src/apx/paths.js';
+import { resolveReads, constantOf } from '../../src/vars.js';
+import { varCommand } from './phrases.js';
 
 const D = FORMULAS.document;
 
@@ -43,15 +45,16 @@ export function mdEnv(
   apxOf: (agent: string | null) => string = agent => apxCommand(agent ?? doc.root()?.name ?? ''),
 ): MdEnv {
   const src = doc.mdSource ?? EMPTY_MD;
-  // Substitution: `{{var}}` → value.
-  const subRe = /\{\{(\w+)\}\}/g;
+  // Substitution: a constant's `{{name}}` → its value; a variable's → how to read it.
+  const variables = new Set(doc.byKind('var').map(b => b.name));
+  const read = (name: string): string => fill(FORMULAS.keywords.VAR.read, { name, command: varCommand(apxOf(null), 'get', name) });
   return {
     forceLevels: doc.meta.forceLevels,
     refOf: target => {
       const id = doc.block(target)?.id;
       return id ? refForm(id) : '';
     },
-    substitute: text => text.replace(subRe, (_m, varName: string) => src.vars[varName] ?? `{{${varName}}}`),
+    substitute: text => resolveReads(text, name => constantOf(src.vars, name) ?? (variables.has(name) ? read(name) : undefined)),
     apxOf,
     agent: doc.root()?.name ?? '',
   };

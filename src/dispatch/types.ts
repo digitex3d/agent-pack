@@ -47,6 +47,11 @@ export interface BundleContext {
    * bundling without an adapter — every value then renders its neutral prose.
    */
   renderings?: Record<string, Record<string, string>>;
+  /**
+   * The environment variable the active adapter's harness puts its session id
+   * in (AdapterPlugin.sessionEnv) — recorded in the document for the apx.
+   */
+  sessionEnv?: string;
   /** The command that says how to run a flow, by its id — set while a team's routing renders. */
   flowCommand?: (id: string) => string;
   importedPaths: Set<string>;

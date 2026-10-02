@@ -30,10 +30,27 @@ const AGENT_EXCLUDED: Partial<Record<Keyword, string>> = {
 };
 const AGENT_FAMILIES = familiesWithout(AGENT_EXCLUDED);
 
+/**
+ * What a `VAR <name>:` block holds, at any depth beneath its head: a procedure
+ * body's lines — DO, RUN, IF/ELSE, UNTIL, IN and the rule families. Its type
+ * sits on its head, so no AS inside; DISTILL marks a procedure; a nested VAR is
+ * the vocabulary check's own error. Not a BLOCK_CONTRACTS entry: the vocabulary
+ * check applies it to every line under the head, in every file.
+ */
+const VAR_EXCLUDED: Partial<Record<Keyword, string>> = {
+  AS: "a VAR block's type sits on its head — `VAR <name> AS <template>:`",
+  DISTILL: 'DISTILL marks a PROCEDURE, never a VAR block',
+};
+
 /** Every force-level family base, less those `excluded` names. */
 function familiesWithout(excluded: Partial<Record<Keyword, string>>): Keyword[] {
   return (getFamilyBases() as Keyword[]).filter(base => !(base in excluded));
 }
+
+export const VAR_BLOCK: BlockContract = {
+  allows: ['DO', 'RUN', 'IN', 'IF', 'ELSE', 'UNTIL', ...familiesWithout(VAR_EXCLUDED)],
+  excluded: VAR_EXCLUDED,
+};
 
 export interface BlockContract {
   /** Keywords admitted as direct children of this block. */
@@ -129,6 +146,8 @@ export const BLOCK_CONTRACTS: Record<string, BlockContract> = {
   // `requiresAll` + `unique` both name MANDATE so the contract declares the full
   // "exactly 1 MANDATE" rule in one place; `lintAgentBlocks` reads these instead
   // of hand-counting. (`AS` is the header signature, validated separately there.)
+  // `VAR` declares a session variable of the agent, or assigns one the outcome
+  // of the block beneath it (I7); where a VAR may stand is checkVocabulary's.
   // This is the single source of truth for the agent surface: `lintAgentBlocks`
   // in lint.ts reads `allows`, `requiresAll`, `unique`, and `identityKeywords`
   // directly — no second, hand-authored keyword list. `identityKeywords` names
@@ -136,7 +155,7 @@ export const BLOCK_CONTRACTS: Record<string, BlockContract> = {
   // "declare it in the role" hint; they are deliberately absent from `allows`, so
   // the two fields can never silently contradict.
   AGENT: {
-    allows: ['ABOUT', 'MANDATE', 'OWNS', 'LENS-OUT', 'LENS-IN', 'IMPORT', 'ON-INVOKE', 'WHEN', ...AGENT_FAMILIES],
+    allows: ['ABOUT', 'MANDATE', 'OWNS', 'LENS-OUT', 'LENS-IN', 'IMPORT', 'ON-INVOKE', 'WHEN', 'VAR', ...AGENT_FAMILIES],
     excluded: AGENT_EXCLUDED,
     requiresAll: ['AS', 'MANDATE'] as const,
     unique: ['AS', 'ABOUT', 'MANDATE', 'LENS-OUT', 'LENS-IN'] as const,

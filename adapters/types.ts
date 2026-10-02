@@ -102,6 +102,13 @@ export interface AdapterPlugin {
    */
   renderings?: Record<string, Record<string, string>>;
   /**
+   * Optional: the environment variable this harness puts its session id in. The
+   * apx keeps session variables per session, and finds the session there; with
+   * none declared, session variables cannot be read or written (fail closed).
+   * Example: claude-code declares `CLAUDE_CODE_SESSION_ID`.
+   */
+  sessionEnv?: string;
+  /**
    * Optional: the harness runs a flow as a script of its own, compiled from the
    * flow's steps and written to `.agent-pack/flows/`. `compile` returns null
    * for a flow the script cannot express — its steps are then carried out as
