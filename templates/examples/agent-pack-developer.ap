@@ -2,7 +2,7 @@
 
 IMPORT  ap-block-agent, ap-block-role, ap-block-step, ap-block-flow             FROM @builtin.templates
 IMPORT  ap-block-parallel, ap-block-policy, ap-block-procedure                  FROM @builtin.templates
-IMPORT  ap-rule, ap-workflow, ap-action, ap-statement                          FROM @builtin.templates
+IMPORT  ap-rule, ap-workflow, ap-action, ap-statement, ap-vars-line            FROM @builtin.templates
 
 EXPORT ROLE ap-author:
     ABOUT      an agent-pack author who writes correct .ap files by filling the right block scaffold
@@ -27,6 +27,7 @@ EXPORT ROLE ap-author:
       DO   PROCEDURE fills ap-block-procedure
       DO   FLOW fills ap-block-flow and PARALLEL fills ap-block-parallel — both compose ap-block-step for their STEPs
       DO   write each rule line with ap-rule, a WHEN behaviour with ap-workflow over an ap-action body
+      DO   write each statement with ap-statement — DO, RUN, IF, ELSE, UNTIL, their checked forms, IN, VAR
       DO   write a POLICY with ALWAYS / NEVER lines only
 
     WHEN writing a TEMPLATE block — it cannot host a scaffold of itself, so author it by hand:
@@ -38,6 +39,61 @@ EXPORT ROLE ap-author:
     WHEN binding shapes:
       DO   bind an agent's answers with LENS-OUT <template> and the requests it receives with LENS-IN <template>
       DO   bind a procedure's result or what a STEP hands over with AS <template> on its own line
+
+    WHEN a value must outlive the line that makes it — pick its VAR form:
+      DO   write `VAR <name> = <value>` for a constant — its value replaces every read at compile time
+      DO   write `VAR <name>` for a private variable — only the agent that declares it sees it
+      DO   write `VAR <name> AS <template>` for a typed variable — it keeps that template for life
+      DO   write `VAR <name>:` over an indented block — the block's final outcome becomes its value
+      DO   write `SESSION VAR <name>` for a hand-off between agents — only in a team's or the project's vars.ap
+      NEVER write GLOBAL before VAR — the word is reserved and fails the compilation
+      NEVER put a scope word before a constant — SESSION with `= <value>` fails the compilation
+      NEVER declare a name twice for one agent, nor give a private variable a SESSION variable's name
+
+    WHEN assigning a variable:
+      DO   end a DO line with uppercase INTO and the name to store that action's result
+      DO   wrap a RUN in a `VAR <name>:` block to store a procedure's result
+      DO   write `VAR <name>:` without AS to assign a variable a vars.ap already declares
+      DO   reassign with INTO inside a loop
+      NEVER write INTO after a RUN, or anywhere but the very end of a DO line
+      NEVER add AS when assigning a vars.ap variable — `VAR <name> AS <template>:` declares it again
+      NEVER declare a VAR inside an UNTIL, a VAR block, a flow STEP, a TEMPLATE, a STORE or a POLICY
+      NEVER assign into a constant — INTO takes a declared variable
+
+    WHEN reading a variable:
+      DO   write two opening braces, the variable's name, then two closing braces
+      DO   add AS and a template after the name, inside the braces, to keep only what fits that template
+      NEVER read a field with a dot after the name — field reads are not supported yet
+      NEVER give a constant a shaped read, nor a force level to the AS inside the braces
+      NEVER read a variable in a shared or builtin library block — it takes its input through LENS-IN
+      NEVER read a variable in a TEMPLATE's BODY or EXAMPLE, or in a playbook
+
+    WHEN writing a vars.ap — it holds VAR lines only, each filling ap-vars-line:
+      DO   put project-wide constants and SESSION variables in the vars.ap at the project root
+      DO   put a team's constants and its hand-off SESSION variables in the vars.ap of the team folder
+      DO   put an agent's constants and private variables in the vars.ap of its own folder
+      DO   declare a team member's private variables in its body — its folder is its team's
+      DO   override a constant at a deeper level — agent over team over project
+      NEVER declare a private VAR in a team's or the project's vars.ap, nor a SESSION VAR in an agent's
+      NEVER put a secret in a vars.ap — constants are compiled into the output; tools read the environment
+
+    WHEN a condition must be decided by a judge, not by the agent:
+      DO   write IF! or UNTIL! — the agent sees the condition, the judge decides it
+      DO   write IF!! or UNTIL!! to seal the condition away from the agent
+      DO   make the condition read at least one variable — the judge sees only the stored values
+      DO   follow IF! or IF!! with ELSE as you would follow IF
+      DO   leave the round limit of a checked UNTIL to the apx
+      DO   place a check in an agent's body, a role, a procedure, or a flow STEP whose BY names an agent
+      DO   confirm the project config sets `checks` — without it IF! reads as IF and IF!! fails
+      NEVER write a round count such as "three rounds at most" on a checked UNTIL head
+      NEVER put a checked condition at a FLOW's own level, in a playbook or in a team's routing
+      NEVER write !IF or !UNTIL — both fail the compilation
+
+    WHEN a condition does not need a judge:
+      DO   keep a plain IF or UNTIL for arithmetic, a count or a one-word decision
+      DO   reserve a check for judging stored text — a draft, a plan, a report — against a criterion
+      NEVER rely on a check to establish a fact — the judge reads stored text, not the world behind it
+      NEVER mark a fact with `*` yet — conditions decided by a script come in a later version
 
     WHEN an agent keeps data between sessions:
       DO   declare a STORE with TYPE tabeli, LASTS project or session, KEY <slot>, and SLOTS

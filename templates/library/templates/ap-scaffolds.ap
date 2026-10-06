@@ -5,8 +5,14 @@ EXPORT TEMPLATE ap-statement:
   TAGS    #agent-pack #authoring #scaffold #rule
 
   SLOTS:
-    key:  ENUM[DO RUN IF ELSE UNTIL]  "the statement keyword — DO/RUN act, IF/ELSE/UNTIL branch or loop"
-    text: TEXT  "the statement body (ELSE takes none)"
+    key:  ENUM[DO RUN IF ELSE UNTIL IF! IF!! UNTIL! UNTIL!! IN VAR]  "the statement keyword — see the rules below"
+      MUST   act with DO or RUN; branch with IF / ELSE; loop with UNTIL
+      MUST   hand a condition to the judge with IF! / UNTIL! (agent sees it) or IF!! / UNTIL!! (sealed)
+      MUST   make a checked condition read at least one variable — the judge sees only stored values
+      MUST   never write a round limit on a checked UNTIL — the apx counts the rounds
+      MUST   open `IN <store>:` to work on a store, `VAR <name>:` to assign a block's final outcome
+      MUST   put INTO <name> only at the very end of a DO line — never after RUN
+    text: TEXT  "the statement body (ELSE takes none); IN and VAR heads end with a colon"
   BODY:
     {key} {text}
   EXAMPLE:
@@ -18,7 +24,9 @@ EXPORT TEMPLATE ap-action:
 
   SLOTS:
     steps: LIST <ap-statement> >=1  "one statement per line, in execution order"
-      MUST   indent the body of an IF / ELSE / UNTIL under its head
+      MUST   indent the body of an IF / ELSE / UNTIL, checked or not, under its head
+      MUST   indent the body of an `IN <store>:` or a `VAR <name>:` head under it
+      MUST   never nest a VAR inside an UNTIL or inside another VAR block — reassign with INTO
   BODY:
     {steps}
   EXAMPLE:
@@ -67,6 +75,8 @@ EXPORT TEMPLATE ap-block-step:
       MUST   give at least one DO or RUN line — a step with neither is invalid
       MUST   write a rule with its force keyword (NEVER, MUST, SHOULD …) — never as DO never
       MUST   not use MEM or DISTILL in a step — memory belongs to an agent, a role or a procedure
+      MUST   not declare a VAR in a step — declare it in a vars.ap or in the agent's body
+      MAY    use IF! / IF!! / UNTIL! / UNTIL!! only when BY names an agent — its apx answers the check
     shape?:   TEXT MAX_WORDS 1  "input-contract template for the step (AS); omit if none"
   BODY:
     STEP {label}:
@@ -94,6 +104,7 @@ EXPORT TEMPLATE ap-block-flow:
     steps:     TEXT  "one node per line — STEP, PARALLEL, RUN, or IF/ELSE/UNTIL around them"
       MUST   order nodes as they execute; wrap concurrent steps in a PARALLEL group
       MUST   head a branch `IF <condition>:` and a loop `UNTIL <condition>:` — the condition is prose
+      MUST   not check a condition at the flow's own level — put IF! or UNTIL! inside a STEP BY an agent
       MUST   indent STEP, PARALLEL, RUN or a nested IF/ELSE/UNTIL under an IF, ELSE or UNTIL head
       MUST   place a bare ELSE right after an IF in the same body
       MAY    nest IF/ELSE/UNTIL at any depth — a step under them still counts as the flow's step
@@ -243,3 +254,20 @@ EXPORT TEMPLATE ap-block-procedure:
         IF     the bug has no reproduction steps
           DO   move the card to Needs Clarification
         AS     bug-card
+
+EXPORT TEMPLATE ap-vars-line:
+  ABOUT   one line of a vars.ap — a constant, a SESSION hand-off variable or a private variable
+  TAGS    #agent-pack #authoring #scaffold #rule
+
+  SLOTS:
+    scope?: ENUM[SESSION]  "SESSION for a variable every agent of the session shares; omit otherwise"
+      MUST   write SESSION only in a team's or the project's vars.ap — never in an agent's
+      MUST   omit the scope on a constant and on a private variable — GLOBAL is reserved, an error
+    name:   TEXT MAX_WORDS 1  "the variable name, declared once per agent"
+    tail?:  TEXT MAX_WORDS 6  "`= <value>` for a constant, `AS <template>` for a typed variable; omit if untyped"
+      MUST   write a private variable only in an agent's own vars.ap; a constant at any of the three levels
+      MUST   never put a secret in a constant — it is compiled into the agent's output
+  BODY:
+    {scope} VAR {name} {tail}
+  EXAMPLE:
+    SESSION VAR plan AS implementation-plan
