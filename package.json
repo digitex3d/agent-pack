@@ -1,6 +1,6 @@
 {
   "name": "agent-pack",
-  "version": "0.27.0",
+  "version": "0.27.1",
   "description": "A programming language to orchestrate agents across every harness.",
   "author": "Giuseppe Federico <giuseppefeder@gmail.com>",
   "license": "Apache-2.0",

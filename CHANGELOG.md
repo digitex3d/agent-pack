@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.1] - 2026-10-06
+
+### Changed
+- **The `agent-pack-developer` example writes the 0.27 syntax.** It now covers every form of `VAR` (constant, private, typed, the `VAR x:` block, `SESSION VAR` in a team's or the project's `vars.ap`, `GLOBAL` reserved), `DO … INTO x` (never after `RUN` — a procedure's result goes through `VAR x:`), reads of a variable whole or shaped `AS` a template, what each `vars.ap` level holds, the checked conditions `IF!`, `IF!!`, `UNTIL!`, `UNTIL!!` (where they are allowed, the `checks` prerequisite) and when a plain `IF` is the right choice.
+- **The builtin scaffolds know the new forms.** `ap-statement` takes `IF!`, `IF!!`, `UNTIL!`, `UNTIL!!`, `IN` and `VAR`; `ap-action`, `ap-block-step` and `ap-block-flow` carry their placement rules (no `VAR` in a step or under an `UNTIL`, no checked condition at a flow's own level, a checked condition in a step only with an agent `BY`). New scaffold `ap-vars-line` for a `vars.ap` line. Existing scaffolds keep their names and slots.
+
 ## [0.27.0] - 2026-10-06
 
 ### Added
@@ -289,7 +295,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - `.claude/agents/manifest.yml` removed from tracking (now managed at runtime).
 
-[Unreleased]: https://github.com/digitex3d/agent-pack/compare/v0.27.0...HEAD
+[Unreleased]: https://github.com/digitex3d/agent-pack/compare/v0.27.1...HEAD
+[0.27.1]: https://github.com/digitex3d/agent-pack/compare/v0.27.0...v0.27.1
 [0.27.0]: https://github.com/digitex3d/agent-pack/compare/v0.26.0...v0.27.0
 [0.26.0]: https://github.com/digitex3d/agent-pack/compare/v0.25.1...v0.26.0
 [0.25.1]: https://github.com/digitex3d/agent-pack/compare/v0.25.0...v0.25.1
