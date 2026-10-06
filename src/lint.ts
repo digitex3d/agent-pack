@@ -14,8 +14,9 @@ import { kindFromDir, unitNameFromPath } from './ingest.js';
 import { BLOCK_TYPES, blockTypeOf, EXPORT_MODIFIER } from './blockTypes.js';
 import { parseTypeSpec } from './shapeSchema.js';
 import { STORE_LIFETIMES } from './storeTypes/types.js';
-import { stripTrailingColon } from './bundlers/renderTree.js';
-import { parseVarLine, isVarKeyword, splitInto, takesInto, varRefRe, NO_PLAYBOOK_VARIABLES } from './vars.js';
+import { stripTrailingColon, buildTree, type Node as TreeNode } from './bundlers/renderTree.js';
+import { condCheckOf, type CheckKind, type CheckSite } from './check.js';
+import { parseVarLine, isVarKeyword, splitInto, takesInto, readsOf, NO_PLAYBOOK_VARIABLES } from './vars.js';
 import { VARS_FILE, isVarsFile, parseVarsAp } from './varsAp.js';
 
 export interface LintError {
@@ -1222,7 +1223,7 @@ export function checkVocabulary(file: string, body: string): LintError[] {
       if (t.indent > region) {
         const typeError = regionKey === 'SLOTS' && 'raw' in t ? slotTypeError(t.raw) : null;
         if (typeError) err(t.line, typeError);
-        if (regionKey !== 'SLOTS' && 'raw' in t && varRefRe().test(t.raw)) {
+        if (regionKey !== 'SLOTS' && 'raw' in t && readsOf(t.raw).length > 0) {
           err(t.line, `a template's ${regionKey} is literal text — no \`{{…}}\` is read there`);
         }
         continue;
@@ -1231,8 +1232,9 @@ export function checkVocabulary(file: string, body: string): LintError[] {
     }
     while (stack.length && stack[stack.length - 1].indent >= t.indent) stack.pop();
     const parent = stack[stack.length - 1];
-    for (const [read, name, field] of ('raw' in t ? t.raw : '').matchAll(varRefRe())) {
+    for (const { read, name, field, as, template } of readsOf('raw' in t ? t.raw : '')) {
       if (field) err(t.line, `\`${read}\`: reading a field of a variable is not supported yet — read \`{{${name}}}\``);
+      if (as && as !== 'AS') err(t.line, `\`${read}\`: the AS of a read is a shape and takes no force level — write \`{{${name} AS ${template}}}\``);
     }
 
     let key = '';
@@ -1242,6 +1244,8 @@ export function checkVocabulary(file: string, body: string): LintError[] {
       if (!blockTypeOf(key)) err(t.line, unknownKeyword(key));
     } else if (t.kind === 'keyword') {
       key = t.keyword as string;
+      // `!IF` / `!UNTIL` mean nothing: the `!`s after the keyword say who decides the condition.
+      if ((t.level ?? 0) < 0) err(t.line, `\`!${key}\` is not allowed — write ${key}, ${key}! (a judge decides) or ${key}!! (a sealed gate): "${quoteRaw(t)}"`);
       const base = forceLevelBaseOf(key);
       if (base && getIntroByKeyword(key) === null) err(t.line, unknownLevel(key, base));
       const prim = enumPrimitiveFor(key);
@@ -1354,4 +1358,38 @@ export function formatErrors(errors: LintError[]): string {
     const code = e.code ? `[${e.code}] ` : '';
     return `${tag}  ${e.file}:${e.line}${col}  ${code}${e.message}`;
   }).join('\n');
+}
+
+/**
+ * The checked heads (`IF!`, `IF!!`, …) of a source no document builder walks —
+ * a playbook, the procedures it runs, a team's flows.ap as AGENTS.md renders it
+ * — judged by `condCheckOf`, where each stands. Without `agentOf` (a playbook)
+ * no executable is anywhere. With it (a team's flows.ap, BY lines already
+ * resolved to agents): a step's head is its BY agent's, a head between a
+ * flow's steps is the flow's, and one in the team's routing has none.
+ */
+export function checkedHeadIssues(
+  file: string, source: string, checks: { rounds: number } | null | undefined, agentOf?: (by: string) => string | null,
+): LintError[] {
+  const issues: LintError[] = [];
+  const keyOf = (n: TreeNode): string => (n.token.kind === 'keyword' ? n.token.keyword as string : n.token.kind === 'blockOpener' ? n.token.key : '');
+  const visit = (nodes: TreeNode[], site: CheckSite): void => {
+    for (const n of nodes) {
+      const t = n.token;
+      const key = keyOf(n);
+      if (t.kind === 'keyword' && (key === 'IF' || key === 'UNTIL')) {
+        const { issue } = condCheckOf(key as CheckKind, t.level ?? 0, stripTrailingColon(t.rest), site, checks);
+        if (issue) issues.push({ file, line: t.line, ...issue });
+      }
+      let inner = site;
+      if (agentOf && key === 'FLOW') inner = { at: 'flow' };
+      if (agentOf && key === 'STEP') {
+        const by = n.children.find(c => keyOf(c) === 'BY');
+        inner = { at: 'step', agent: by && by.token.kind === 'keyword' ? agentOf(stripTrailingColon(by.token.rest).trim()) : null };
+      }
+      visit(n.children, inner);
+    }
+  };
+  visit(buildTree(lex(source)), { at: 'none' });
+  return issues;
 }

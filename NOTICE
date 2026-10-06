@@ -16,6 +16,10 @@ This repository contains:
      under the Creative Commons Attribution 4.0 International license
      (CC-BY-4.0). See LICENSE-docs.
 
+  4. tabeli (tabeli/), the table engine shipped with agent-pack,
+     authored by Giuseppe Federico, licensed under the MIT license.
+     See tabeli/LICENSE.
+
 Anyone redistributing or adapting these works must respect the
 respective licenses.
 

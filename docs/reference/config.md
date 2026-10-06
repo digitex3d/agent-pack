@@ -27,6 +27,10 @@ export default {
 | `judge.offline` | `'warn'` | a line with no saved verdict when the judge cannot be reached: `'warn'` (a "not judged yet" warning) or `'error'` |
 | `judge.lock` | `agent-pack.judge.lock` | the judge lock, from the project root — the judge, its pinned model, your decisions; commit it |
 | `judge.concurrency` | `8` | requests in flight at most |
+| `checks` | absent | the judge of [checked conditions](/reference/language#checked-conditions) while the agent works — see below; absent, `IF!` reads as `IF` (a warning) and `IF!!` fails |
+| `checks.adapter` | `'jev'` | the judge — a built-in name (`'jev'`) or a judge object `{ type: 'judge', name, ask }` |
+| `checks.threshold` | `0.7` | a condition answered at or above this probability is open; below, closed |
+| `checks.rounds` | `3` | how many closed answers in a row a checked `UNTIL` takes before it stops |
 
 ## Judge
 
@@ -112,3 +116,18 @@ VAR draft                                  # private to one agent — the agent'
 A constant at a deeper level overrides the same one above it: agent over team over project. Every agent also has the constant `name`, its own name. How variables are assigned and read, and what their scopes mean, is in [Language → Variables](/reference/language#variables).
 
 Never put secrets in `vars.ap`: constants are compiled into the agent's output. Tools read secrets from the environment.
+
+## Checks
+
+The `checks` key names the judge of [checked conditions](/reference/language#checked-conditions) — `IF!`, `IF!!`, `UNTIL!`, `UNTIL!!` — which the apx asks while the agent works (`apx check <cnd-id>`). It is apart from `judge`, which checks the `.ap` code at compile time: either may be on without the other.
+
+```js
+export default {
+  adapters: ['claude-code'],
+  checks: { adapter: 'jev', threshold: 0.7, rounds: 3 },
+};
+```
+
+`bundle all` records in every `.apx` what a check needs at run time: the judge's name, the threshold, the round limit, and — when the judge lock (`judge.lock`, or `agent-pack.judge.lock`) pins a model for that same judge — that model, so a project that pins its judge checks its conditions with the same model. Without a pinned model, the judge's own default answers, and every check records the model that did. The apx loads a built-in judge from itself; a judge object given in the config works at compile time, but the apx cannot load it, and its checks stay closed. The key is never recorded: the judge reads it when it is asked — `jev` from `TYPESAFE_API_KEY`, else `~/.config/typesafe/key`.
+
+**What leaves your machine:** with `checks.adapter: 'jev'`, each check sends its question and the state — the values of the variables the condition reads — to TypeSafe AI's API (`api.typesafe.ai`). A state larger than the judge reads (for `jev`, 96 000 characters) is not sent: the condition stays closed.

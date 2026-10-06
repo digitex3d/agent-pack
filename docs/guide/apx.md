@@ -45,6 +45,7 @@ Running the apx with no verb is the same as `start`.
 | `md` | the whole definition at once — the same text a harness `.md` carries |
 | `flow <flw-id>` | how to run a flow — see below |
 | `run <dst-id> [json]` | run a distilled script — see below |
+| `check <cnd-id>` | a checked condition put to the judge: `open` or `closed` — see below |
 | `version` | agent and id, build date, agent-pack version, content hash, block count |
 | `help` | the verbs |
 
@@ -73,13 +74,13 @@ Exit code `0` is success, `1` means something does not exist (an unknown id), `2
 An agent that declares a `STORE` reads and writes it through its apx:
 
 ```bash
-node .agent-pack/apx/note-keeper.apx notes a topic=tabeli note='engine lives in the skill dir'
+node .agent-pack/apx/note-keeper.apx notes a topic=tabeli note='engine ships with agent-pack'
 node .agent-pack/apx/note-keeper.apx notes q
 ```
 
 The verbs are tabeli's (`a`dd, `q`uery, `s`et, …; run the store bare for its manual). The table is created on first use and is never touched directly: a `LASTS project` store lives in `stores/<agent>/<store>.tbl`, at the project root — yours to version or not — and a `LASTS session` store beside the apx, in `.agent-pack/apx/<agent>.state/`. A write outside the store's slots is refused before it reaches the table. When the store declares a `KEY`, adding a record whose key already exists updates it instead of duplicating it.
 
-Stores need the tabeli engine, v2 or newer, and work where tabeli runs (Linux). The apx finds it through the tabeli skill, or through the `APX_TABELI` environment variable pointing at the binary; it creates tables only with a v2 engine, and a table made earlier keeps working with the engine it carries.
+Stores are backed by tabeli, which ships with agent-pack (`tabeli/`, MIT) and works on Linux. `npm run build` compiles its engine with tabeli's own Makefile, so building agent-pack needs `make` and a C compiler (gcc or clang); `bundle all` records the engine's path in every `.apx`, which is how the apx finds it — an apx written before is rewritten by `agent-pack bundle all`. The apx creates tables only with a tabeli v2 engine, and a table made earlier keeps working with the engine it carries.
 
 ## Variables
 
@@ -119,6 +120,30 @@ run this flow with the Workflow tool: Workflow({ scriptPath: "…/.agent-pack/fl
 The script runs each `STEP` as its agent (`BY`), a `PARALLEL` group at the same time, passes upstream results by the step's `CONTEXT` mode, and enforces a step's input shape (`AS`) as the JSON Schema of the answer of the step before it. The Workflow tool still runs only when the user asks for the flow, a workflow or ultracode; otherwise the steps are carried out as written.
 
 Without a script — another adapter, a step run by a team, anything but steps at the flow's top level, or a script built for an earlier version of the flow (the `<hash>` is the flow's content hash) — `flow` prints the flow's steps, to carry out in order.
+
+## Checked conditions
+
+A checked condition (`IF!`, `IF!!`, `UNTIL!`, `UNTIL!!` — see [Language](/reference/language#checked-conditions)) compiles into the command that decides it:
+
+```bash
+node .agent-pack/apx/shipper.apx check cnd-95dbba72
+open
+the gate opened (p=0.91)
+```
+
+```bash
+node .agent-pack/apx/shipper.apx check cnd-95dbba72
+closed
+the gate stayed closed — p=0.42, below 0.7
+```
+
+The first line is `open` or `closed`, for a machine; the second, why. The exit code says the same: `0` open, `1` closed, `2` a usage or configuration error (no id, an id this agent has not, no `checks` configured, no session id) — still with `closed` on the first line.
+
+- The apx reads the variables the condition reads from this session's memory, builds the state (`### <name>` and the value as stored, each), and asks the judge the question the compiler built — the agent passes nothing.
+- At or above the threshold the answer is `open`; below it, and whenever in doubt — a variable empty, a state too large for the judge, a judge that cannot be reached — `closed`.
+- For a sealed condition (`!!`), no answer says what it checks: only *the gate opened* or *the gate stayed closed*, and why (`p=0.42`, a variable it reads is empty, …). `get <cnd-id>` shows the question of an `IF!` and refuses that of an `IF!!`; `scope` lists the checks.
+- A checked `UNTIL` counts the closed answers in a row for this agent and condition: `round 2 of 3`, then `round limit reached (3 of 3): stop and report that the gate stayed closed`. An open answer starts the count again.
+- Every check is recorded in the session, beside its variables: the id, the agent, the level, the round, a sha256 fingerprint of the state (not the state), the model, the probability, the threshold and the outcome.
 
 ## Distilled scripts
 

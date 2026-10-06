@@ -13,10 +13,10 @@
  * The judge writes the lock only to pin the model from its first answer; after
  * that only humans edit it. A decision wins over any machine verdict.
  */
-import { createHash } from 'crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname } from 'path';
 import type { JudgeCheck } from './types.js';
+import { sha256Hex } from '../apdoc/ids.js';
 
 /** A human decision on one check of one line text. */
 export interface Decision {
@@ -33,7 +33,7 @@ interface LockData {
 
 /** The key of one check on one line text. */
 export function verdictKey(check: JudgeCheck, text: string): string {
-  return createHash('sha256').update(`${check.id}\n${check.statement}\n${text}`).digest('hex').slice(0, 16);
+  return sha256Hex(`${check.id}\n${check.statement}\n${text}`).slice(0, 16);
 }
 
 /** Whether `p` is a probability. */

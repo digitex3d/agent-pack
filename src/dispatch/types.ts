@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
+import type { ChecksConfig } from '../judge/types.js';
 import { LintError, LintOptions } from '../lint.js';
 import type { Definition } from '../definition.js';
 import type { ExportedBlockBody } from '../services/text.js';
@@ -52,6 +53,11 @@ export interface BundleContext {
    * in (AdapterPlugin.sessionEnv) — recorded in the document for the apx.
    */
   sessionEnv?: string;
+  /**
+   * The judge of checked conditions (`checks` config key) — null/absent: none,
+   * so `IF!` falls back to `IF` and `IF!!` fails. Its round limit words the prompt.
+   */
+  checks?: ChecksConfig | null;
   /** The command that says how to run a flow, by its id — set while a team's routing renders. */
   flowCommand?: (id: string) => string;
   importedPaths: Set<string>;

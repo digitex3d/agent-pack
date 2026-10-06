@@ -29,6 +29,7 @@ import type { Definition } from '../definition.js';
 import { lex, Token } from '../lexer.js';
 import { buildTree, isStructural, splitArgs, stripTrailingColon, rawOf, restOf, Node as WalkNode } from '../bundlers/renderTree.js';
 import { distillId } from '../distill.js';
+import { condCheckOf, checkedKeyword, checkedVars, questionOf, type ApCheckSpec, type CheckKind, type CheckLevel, type CheckSite } from '../check.js';
 import { sequencePrimitiveFor } from '../sequencePrimitives.js';
 import { parseTypeSpec, jsonExample, templateClosure } from '../shapeSchema.js';
 import { refName } from '../../adapters/md/phrases.js';
@@ -36,6 +37,7 @@ import { extractPrimitive, stripPrimitives, exportedBlockBodies } from '../servi
 import { strategyFor } from '../definition.js';
 import { stripHeaderKeyword } from '../primitives.js';
 import { buildNamespace } from '../namespace.js';
+import { buildRoleIndex, resolveRole, type RoleIndex } from '../roleIndex.js';
 import { align, positionOf, type SourceSpan } from '../sources.js';
 import { apxCommand } from '../apx/paths.js';
 import type { StoreBlock } from './blocks.js';
@@ -127,6 +129,8 @@ export class DocumentBuilder implements BlockCx {
   private agents = new Map<string, IndexedBlock>();
 
   private team: TeamScan | null = null;
+  /** The team's roles, each bound to the member that takes it — `BY <role>` names that member, as in AGENTS.md. */
+  private roles: RoleIndex | null = null;
   /** The source file being built — where an unresolved name is reported. */
   private sourcePath = '';
   /** The span of the block being built — where its nodes were written (null: no positions). */
@@ -143,6 +147,10 @@ export class DocumentBuilder implements BlockCx {
   private varWrites: { name: string; node: VarNode | DirectiveNode; path: string }[] = [];
   /** What is wrong with the variables: a compile error each, reported by the caller. */
   readonly varErrors: { path: string; name: string; line: number | null; message: string }[] = [];
+  /** The checked conditions this agent's apx answers for, in walk order — their questions are built at finish. */
+  private checkSites: { id: string; kind: CheckKind; level: CheckLevel; condition: string; inStep: boolean; path: string; line: number | null }[] = [];
+  /** What is wrong with the checked conditions: a compile error each — or a warning — reported by the caller. */
+  readonly checkIssues: { path: string; name: string; line: number | null; message: string; severity?: 'warning' }[] = [];
 
   /** The reference index a kind's strategy names — lookup, never a branch. */
   private refIndex(ref: RefClass): Map<string, IndexedBlock> {
@@ -224,7 +232,7 @@ export class DocumentBuilder implements BlockCx {
           const by = args.get('BY');
           const step = this.at(new StepNode(
             stripColon(restOf(item.token)),
-            by ? this.ref(this.agents.get(stripColon(by)), stripColon(by), 'agent') : null,
+            by ? this.byRef(stripColon(by)) : null,
             args.get('CONTEXT') ?? null,
           ), item.token);
           sink.push(step);
@@ -256,6 +264,7 @@ export class DocumentBuilder implements BlockCx {
 
       if (kw === 'IF') {
         const node = this.at(new IfNode(stripTrailingColon(t.rest), t.indent), t);
+        this.checked('IF', node, t, host, steps);
         sink.push(node);
         this.visit(n.children, node.then, host, steps);
         i++;
@@ -270,6 +279,7 @@ export class DocumentBuilder implements BlockCx {
       }
       if (kw === 'UNTIL') {
         const node = this.at(new UntilNode(stripTrailingColon(t.rest), t.indent), t);
+        this.checked('UNTIL', node, t, host, steps);
         sink.push(node);
         this.visit(n.children, node.body, host, steps);
         i++;
@@ -307,6 +317,54 @@ export class DocumentBuilder implements BlockCx {
       }
       i++;
     }
+  }
+
+  /**
+   * An `IF!`/`IF!!`/`UNTIL!`/`UNTIL!!` head: the agent whose apx answers for it —
+   * this agent, or the BY agent of the flow step it sits in — its id, its round
+   * limit on an UNTIL, and, sealed, its condition taken out of the node (only
+   * the apx's `meta.checks` keeps it). Where it stands is the builder's to say;
+   * what follows from it — the id, a warning, an error — is `condCheckOf`'s.
+   */
+  private checked(kind: CheckKind, node: IfNode | UntilNode, t: Token & { kind: 'keyword' }, host: ApBlock | null, steps: ApStepNode[]): void {
+    const step = steps[steps.length - 1];
+    const by = step?.by;
+    const site: CheckSite = step ? { at: 'step', agent: by && by.kind === 'agent' && by.resolved !== false ? refName(by) : null }
+      : host?.kind === 'flow' ? { at: 'flow' } : { at: 'agent', agent: this.ctx!.agentName };
+    const { check, issue } = condCheckOf(kind, t.level ?? 0, node.condition, site, this.ctx?.checks);
+    const at = { path: this.sourcePath, name: node.condition, line: this.fileLine(t) };
+    if (issue) this.checkIssues.push({ ...at, ...issue });
+    if (!check) return;
+    node.check = check;
+    if (check.agent === this.ctx!.agentName) this.checkSites.push({ ...at, id: check.id, kind, level: check.level, condition: node.condition, inStep: !!step });
+    if (check.level === 2) node.condition = '';
+  }
+
+  /**
+   * The checked conditions this agent answers for, into `meta.checks`: each
+   * reads at least one variable the agent sees — the judge decides on the
+   * state they hold — and its question is built now, from the source: a
+   * constant's value written in, a shaped read's template fields as guidance.
+   */
+  private checkSpecs(doc: ApDocument, constants: Record<string, string>): void {
+    const visible = new Set(doc.byKind('var').map(b => b.name));
+    const isConstant = (name: string) => constantOf(constants, name) !== undefined;
+    const fields = (template: string) => doc.templateNamed(template)?.slots
+      ?.map(slot => ({ name: slot.name, ...(slot.description ? { description: slot.description } : {}) })) ?? null;
+    const checks: Record<string, ApCheckSpec> = {};
+    for (const site of this.checkSites) {
+      const issue = (message: string) => { this.checkIssues.push({ path: site.path, name: site.condition, line: site.line, message }); };
+      const head = checkedKeyword(site.kind, site.level);
+      const vars = checkedVars(site.condition, isConstant);
+      const unseen = vars.filter(v => !visible.has(v));
+      // A step's reads are checked here: a flow file's reads are no other check's.
+      if (site.inStep) for (const v of unseen) issue(`${head}: \`{{${v}}}\` is no variable the step's agent sees — declare it in its vars.ap, or as a SESSION VAR in its team's`);
+      if (unseen.length === 0 && vars.length === 0) {
+        issue(`${head}: a checked condition reads at least one variable — \`{{name}}\`: the judge decides on the state the variables hold, never on the agent's word`);
+      }
+      checks[site.id] = { kind: site.kind, level: site.level, question: questionOf(site.condition, name => constantOf(constants, name), fields), vars };
+    }
+    if (Object.keys(checks).length > 0) doc.meta.checks = checks;
   }
 
   /** A leaf run: group consecutive same-keyword lines, emit typed nodes. */
@@ -489,6 +547,12 @@ export class DocumentBuilder implements BlockCx {
     return this.ref(this.templates.get(name), name, 'template', report);
   }
 
+  /** A step's BY: a role names the member bound to it (as AGENTS.md resolves it), else a member by name. */
+  private byRef(name: string): ApRef {
+    const agent = (this.roles && resolveRole(this.roles, name)?.name) ?? name;
+    return this.ref(this.agents.get(agent), agent, 'agent');
+  }
+
   agentRef(name: string): ApRef {
     return this.ref(this.agents.get(name), name, 'agent');
   }
@@ -589,9 +653,13 @@ export class DocumentBuilder implements BlockCx {
     this.agents.set(ctx.agentName, { kind: 'agent', name: ctx.agentName, namespace: AgentBlock.NAMESPACE });
 
     if (this.team) {
-      for (const member of readTeamMembers(this.team.root)) {
+      const members = readTeamMembers(this.team.root);
+      for (const member of members) {
         this.agents.set(member.name, { kind: 'agent', name: member.name, namespace: AgentBlock.NAMESPACE });
       }
+      // The same role index the orchestration resolves `BY <role>` with: the team's inline blocks and its members' bindings.
+      this.roles = buildRoleIndex({ blocks: this.team.topBlocks, anchor: 'directory' },
+        { bindings: members.filter(m => m.role).map(m => ({ name: m.name, role: m.role! })), anchor: 'directory' });
       this.indexImportLines(this.team.flowsSource);
       for (const f of this.team.flows) {
         this.runnables.set(f.name, { kind: 'flow', name: f.name, namespace: TeamBlock.flowsNamespace(this.team.name) });
@@ -841,6 +909,7 @@ export class DocumentBuilder implements BlockCx {
         provenanceMap[block.address] = provenance;
       }
     }
+    this.checkSpecs(doc, opts.vars);
     doc.seal();
     const md = this.buildMdMeta(doc, opts, provenanceMap);
     doc.attachMdSource(md);

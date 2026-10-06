@@ -3,7 +3,7 @@
 ## Requirements
 
 - Node 20 or newer.
-- For `STORE`s only: tabeli, on Linux (see [The apx](./apx.md#stores)).
+- `make` and a C compiler (gcc or clang): the build compiles tabeli, the engine behind `STORE`s and variables, which works on Linux (see [The apx](./apx.md#stores)).
 
 ## Install
 

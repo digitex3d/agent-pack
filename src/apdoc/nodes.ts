@@ -22,6 +22,7 @@ import type {
   ApPos, ApLine,
 } from './types.js';
 import { distillLines } from '../distill.js';
+import { checkHead, type ApCondCheck, type CheckKind } from '../check.js';
 import {
   MdEnv, renderNodes, renderDirectiveGroup, indentLines, shapeLine, storeVarLine,
 } from '../../adapters/md/toolkit.js';
@@ -169,10 +170,20 @@ export class TextNode extends NodeBase implements ApTextNode {
   }
 }
 
+/**
+ * The head line of an IF/UNTIL: `If <condition>` — or, checked, the condition
+ * (unless sealed) and the command of the apx whose answer decides it.
+ */
+function conditionHead(kind: CheckKind, n: { condition: string; check?: ApCondCheck }, env: MdEnv): string {
+  if (!n.check) return `${controlHead(kind)} ${env.substitute(n.condition)}`;
+  return checkHead(kind, n.check, env.substitute(n.condition), env.apxOf(n.check.agent));
+}
+
 export class IfNode extends NodeBase implements ApIfNode {
   readonly type = 'if';
   then: ApNode[] = [];
   else: ApNode[] = [];
+  check?: ApCondCheck;
 
   constructor(public condition: string, indent?: number) {
     super(indent);
@@ -180,6 +191,7 @@ export class IfNode extends NodeBase implements ApIfNode {
 
   static fromData(n: ApIfNode): IfNode {
     const node = new IfNode(n.condition, n.indent);
+    if (n.check) node.check = n.check;
     node.then = reviveNodes(n.then);
     node.else = reviveNodes(n.else);
     node.chars = n.chars;
@@ -188,7 +200,9 @@ export class IfNode extends NodeBase implements ApIfNode {
 
   toJSON(): ApIfNode {
     return {
-      type: this.type, condition: this.condition, chars: this.chars,
+      type: this.type, condition: this.condition,
+      ...(this.check ? { check: this.check } : {}),
+      chars: this.chars,
       ...(this.indent ? { indent: this.indent } : {}),
       then: this.then, else: this.else,
     };
@@ -196,7 +210,7 @@ export class IfNode extends NodeBase implements ApIfNode {
 
   asMdLines(env: MdEnv, ordered: boolean): string[] {
     const out = [
-      ...indentLines([`${controlHead('IF')} ${env.substitute(this.condition)}:`], this.indent ?? 0),
+      ...indentLines([`${conditionHead('IF', this, env)}:`], this.indent ?? 0),
       ...renderNodes(env, this.then, ordered),
     ];
     if (this.else.length > 0) {
@@ -214,6 +228,7 @@ export class IfNode extends NodeBase implements ApIfNode {
 export class UntilNode extends NodeBase implements ApUntilNode {
   readonly type = 'until';
   body: ApNode[] = [];
+  check?: ApCondCheck;
 
   constructor(public condition: string, indent?: number) {
     super(indent);
@@ -221,6 +236,7 @@ export class UntilNode extends NodeBase implements ApUntilNode {
 
   static fromData(n: ApUntilNode): UntilNode {
     const node = new UntilNode(n.condition, n.indent);
+    if (n.check) node.check = n.check;
     node.body = reviveNodes(n.body);
     node.chars = n.chars;
     return node;
@@ -228,16 +244,17 @@ export class UntilNode extends NodeBase implements ApUntilNode {
 
   toJSON(): ApUntilNode {
     return {
-      type: this.type, condition: this.condition, chars: this.chars,
+      type: this.type, condition: this.condition,
+      ...(this.check ? { check: this.check } : {}),
+      chars: this.chars,
       ...(this.indent ? { indent: this.indent } : {}),
       body: this.body,
     };
   }
 
   asMdLines(env: MdEnv, ordered: boolean): string[] {
-    const head = `${controlHead('UNTIL')} ${env.substitute(this.condition)}`;
     return [
-      ...indentLines([`${head}:`], this.indent ?? 0),
+      ...indentLines([`${conditionHead('UNTIL', this, env)}:`], this.indent ?? 0),
       ...renderNodes(env, this.body, ordered),
     ];
   }

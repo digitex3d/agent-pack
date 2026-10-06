@@ -23,6 +23,11 @@ export interface Formulas {
     IF: { head: Text };
     ELSE: { head: Text };
     UNTIL: { head: Text };
+    /** A checked condition (src/check.ts): its head per keyword and level, the judge's question and state. */
+    CHECK: {
+      run: Text; IF: Record<'1' | '2', Text>; UNTIL: Record<'1' | '2', Text>; nextRound: Text; limit: Text;
+      question: Text; shapedRead: Text; field: Text; fieldSeparator: Text; state: Text; stateSeparator: Text;
+    };
     WHEN: { head: Text };
     PARALLEL: { head: Text };
     IN: { head: Text; store: Text; unresolved: Text };
@@ -37,7 +42,7 @@ export interface Formulas {
     'LENS-OUT': { bridge: Text };
     MANDATE: { line: Text };
     MEM: { shaped: Text };
-    VAR: { read: Text; block: Text; store: Text; storeTyped: Text; about: Text; scopes: Record<'private' | 'session', Text>; typed: Text; entry: Text };
+    VAR: { read: Text; readShaped: Text; block: Text; store: Text; storeTyped: Text; about: Text; scopes: Record<'private' | 'session', Text>; typed: Text; entry: Text };
     DISTILL: { use: Text; write: Text; shape: Text; input: Text; output: Text };
   };
   blocks: {

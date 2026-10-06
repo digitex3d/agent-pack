@@ -10,7 +10,7 @@ import { processImports, resolveTargetWith } from '../dispatch/imports.js';
 import { resolveBundleDefaults, resolveTeamShared } from '../bundleDefaults.js';
 import { resolveTeamMembership } from '../services/teamMembership.js';
 import { allAgentFiles, allUserAgentFiles, readAgentFile, standaloneDir, agentNameOf, teamRootForAgentFile, TEAM_FLOWS_FILE } from '../services/teamMetadata.js';
-import { formatErrors, LintError, checkVocabulary, lineOfName } from '../lint.js';
+import { formatErrors, LintError, checkVocabulary, lineOfName, checkedHeadIssues } from '../lint.js';
 import { extractInlineDefinitions } from '../dispatch/inlineBlocks.js';
 import { renderTree } from '../bundlers/renderTree.js';
 import { renderEnumLegend } from '../enumPrimitives.js';
@@ -28,8 +28,9 @@ import type { ApDocument } from '../apdoc/document.js';
 import type { StoreBlock } from '../apdoc/blocks.js';
 import { SourceRegistry } from '../sources.js';
 import { judgeDocument, type JudgeRun } from '../judge/phase.js';
+import type { ChecksConfig } from '../judge/types.js';
 import { parseVarsAp, varsFilesFor, scopeLevelError, VARS_FILE, type VarsFile, type PlacedVariable } from '../varsAp.js';
-import { varRefRe, constantOf, NO_PLAYBOOK_VARIABLES } from '../vars.js';
+import { readsOf, constantOf, NO_PLAYBOOK_VARIABLES } from '../vars.js';
 import { APX_VERBS } from '../apx/verbs.js';
 
 
@@ -56,6 +57,8 @@ export interface BundleOptions {
   sources?: SourceRegistry;
   /** The command's judge run — the judge phase runs when present. */
   judge?: JudgeRun | null;
+  /** The judge of checked conditions (`checks` config key) — absent: none. */
+  checks?: ChecksConfig | null;
 }
 
 /**
@@ -139,18 +142,20 @@ function buildBundleOpts(
     varsFiles: overrides.varsFiles,
     adapter: overrides.adapter,
     judge: overrides.judge,
+    checks: config.checks ?? null,
   };
 }
 
 /** A name that resolves to no block fails the compilation (D30): what is missing, and how to bring it in. */
 function unresolvedErrors(unresolved: { path: string; name: string; kind: string }[]): LintError[] {
-  return unresolved.map(u => ({
-    file: u.path,
-    line: lineOfName(u.path, u.name),
-    message: u.kind === 'agent'
-      ? `unknown agent \`${u.name}\` — BY names a member of this team`
-      : `unknown ${u.kind} \`${u.name}\` — define it, or IMPORT it FROM @<lib>.${u.kind}s`,
-  }));
+  return unresolved.map(u => ({ file: u.path, line: lineOfName(u.path, u.name), message: unresolvedMessage(u.kind, u.name) }));
+}
+
+/** What a name that resolves to no block of its kind is told. */
+function unresolvedMessage(kind: string, name: string): string {
+  return kind === 'agent'
+    ? `unknown agent \`${name}\` — BY names a member of this team`
+    : `unknown ${kind} \`${name}\` — define it, or IMPORT it FROM @<lib>.${kind}s`;
 }
 
 // Shared bundle pipeline helpers used by both agent bundle and playbook bundle.
@@ -166,6 +171,8 @@ export interface MakeContextOpts {
   sessionEnv?: string;
   /** The compilation's source registry — a fresh one when absent. */
   sources?: SourceRegistry;
+  /** The judge of checked conditions — absent: none. */
+  checks?: ChecksConfig | null;
 }
 
 export function makeBundleContext(opts: MakeContextOpts): BundleContext {
@@ -185,6 +192,7 @@ export function makeBundleContext(opts: MakeContextOpts): BundleContext {
     lintOptions: opts.lintOptions,
     renderings: opts.renderings,
     sessionEnv: opts.sessionEnv,
+    checks: opts.checks ?? null,
     importedPaths: new Set<string>(),
     sources: opts.sources ?? new SourceRegistry(),
   };
@@ -277,8 +285,13 @@ function variableReadErrors(
     const refused = sessionRead(file);
     ctx.sources.read(file).split(/\r?\n/).forEach((line, i) => {
       if (line.startsWith('#')) return;
-      for (const [read, name, field] of line.matchAll(varRefRe())) {
-        if (field || constantOf(constants, name) !== undefined) continue;   // a field read is the vocabulary check's
+      for (const { read, name, field, template } of readsOf(line)) {
+        const err = (message: string) => errors.push({ file, line: i + 1, message });
+        if (field) continue;   // a field read is the vocabulary check's
+        // A shaped read takes the shape of a template the agent has, from a variable — never a constant.
+        if (template && constantOf(constants, name) !== undefined) err(`\`${read}\`: a constant has no shape to take — write the part you need`);
+        else if (template && !ctx.templates.some(tpl => tpl.name === template)) err(`\`${read}\`: ${unresolvedMessage('template', template)}`);
+        if (constantOf(constants, name) !== undefined) continue;
         if (!variables.has(name)) {
           if (unknown) errors.push({ file, line: i + 1, message: `unknown variable \`${read}\` — declare it in ${VARS_FILE}: \`VAR ${name} = …\` for a constant, \`VAR ${name}\` for a variable` });
         } else if (refused) {
@@ -327,11 +340,27 @@ export function lintSource(path: string, ctx: BundleContext): void {
   if (existsSync(path)) ctx.lintErrors.push(...checkVocabulary(path, ctx.sources.read(path)));
 }
 
+/**
+ * A compilation with no executable — a playbook, a standalone file — checks
+ * no condition: the checked heads of its source and of the procedures it runs
+ * are reported where they stand (an `IF!` warns, an `IF!!` fails).
+ */
+function noExecutableChecks(sourcePath: string, ctx: BundleContext): void {
+  for (const file of new Set([sourcePath, ...ctx.procedures.map(p => p.path)])) {
+    if (existsSync(file)) ctx.lintErrors.push(...checkedHeadIssues(file, ctx.sources.read(file), ctx.checks));
+  }
+}
+
 /** Lint check shared by every bundle entry point. Throws on errors, logs warnings. */
 export function reportLintIssues(ctx: BundleContext, label: string): void {
-  const warnings = ctx.lintErrors.filter(e => e.severity === 'warning');
+  reportIssues(ctx.lintErrors, label);
+}
+
+/** Log the warnings among `issues`, then throw on its errors. */
+function reportIssues(issues: LintError[], label: string): void {
+  const warnings = issues.filter(e => e.severity === 'warning');
   if (warnings.length > 0) console.error(formatErrors(warnings));
-  failOnErrors(ctx.lintErrors.filter(e => e.severity !== 'warning'), label);
+  failOnErrors(issues.filter(e => e.severity !== 'warning'), label);
 }
 
 function failOnErrors(errors: LintError[], label: string): void {
@@ -486,6 +515,7 @@ export async function buildPlaybookBundle(
   // entry-point body last.
   body = `${emitCollectedSections(ctx)}# Steps for ${name}\n\n${tidyBlankLines(body)}\n`;
   body = injectNeutralIfUnclaimed(body, WhenPrimitive, whens, opts.adapter?.name ?? '');
+  noExecutableChecks(absolute, ctx);
 
   reportLintIssues(ctx, 'Playbook bundle');
 
@@ -532,6 +562,7 @@ export async function bundleStandaloneToString(
 
   let body = await resolveInlineBlocks(header.stripped, ctx, absolute);
   body = `${emitCollectedSections(ctx)}${tidyBlankLines(body)}\n`;
+  noExecutableChecks(absolute, ctx);
 
   reportLintIssues(ctx, `Standalone bundle (${basename(absolute)})`);
 
@@ -561,6 +592,7 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     renderings: opts.adapter?.renderings,
     sessionEnv: opts.adapter?.sessionEnv,
     sources: opts.sources,
+    checks: opts.checks,
   });
   // The document builder — walks the resolved sources directly (no events)
   // and assembles the ApDocument in `finish()` below.
@@ -638,10 +670,13 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     ownsInBody,
   });
   const declared = new Set(structure.byKind('var').map(b => b.name));
-  failOnErrors([
+  const located = (e: { path: string; name: string; line: number | null; message: string; severity?: 'warning' }): LintError =>
+    ({ file: e.path, line: e.line ?? lineOfName(e.path, e.name), message: e.message, ...(e.severity ? { severity: e.severity } : {}) });
+  reportIssues([
     ...unresolvedErrors(builder.unresolved),
     ...storeErrors(structure, ctx, agentFilePath),
-    ...builder.varErrors.map(e => ({ file: e.path, line: e.line ?? lineOfName(e.path, e.name), message: e.message })),
+    ...builder.varErrors.map(located),
+    ...builder.checkIssues.map(located),
     ...variableReadErrors(ctx, agentFilePath, variables.constants, declared, libraryReadRule(ctx, agentFilePath)),
   ], 'Bundle');
   // The judge phase: a well-formed document's lines checked by the judge.

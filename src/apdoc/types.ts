@@ -13,6 +13,7 @@
  * pipeline (see recorder.ts) — never by re-parsing the rendered markdown.
  */
 import type { ApBlock } from './block.js';
+import type { ApCondCheck, ApCheckSpec } from '../check.js';
 
 /**
  * A pointer to another block. `id` is the stable identity of the target
@@ -90,7 +91,10 @@ export interface ApIfNode {
   pos?: ApPos;
   /** Source indentation (spaces) within the block body; absent = 0. */
   indent?: number;
+  /** The condition as written — '' when it is sealed (`IF!!`): only the apx's `meta.checks` holds it. */
   condition: string;
+  /** `IF!` / `IF!!`: who answers for the condition, and how (src/check.ts). Absent on a plain IF. */
+  check?: ApCondCheck;
   chars: number;
   then: ApNode[];
   else: ApNode[];
@@ -120,7 +124,10 @@ export interface ApUntilNode {
   pos?: ApPos;
   /** Source indentation (spaces) within the block body; absent = 0. */
   indent?: number;
+  /** The condition as written — '' when it is sealed (`UNTIL!!`). */
   condition: string;
+  /** `UNTIL!` / `UNTIL!!`: who answers for the condition, and its round limit. Absent on a plain UNTIL. */
+  check?: ApCondCheck;
   chars: number;
   body: ApNode[];
 }
@@ -371,6 +378,12 @@ export interface ApDocumentMeta {
    * adapter named one: session variables cannot be read or written.
    */
   sessionEnv?: string;
+  /**
+   * The checked conditions this agent's apx answers for (`apx check <cnd-id>`):
+   * the judge's question and the variables it reads, by condition id. Kept
+   * here, outside every block, so no view of a block shows a sealed one.
+   */
+  checks?: Record<string, ApCheckSpec>;
   /** Md-projection metadata — present when the document renders prose. */
   md?: ApMdMeta;
 }

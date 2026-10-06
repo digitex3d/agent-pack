@@ -30,4 +30,4 @@ const self = process.argv[1];
 const payload = parsePayload(readFileSync(self, 'utf-8'));
 const exe = relative(process.cwd(), self) || self;
 const engine = new ApxEngine(ApDocument.fromJson(payload.document), payload.build, exe, line => process.stdout.write(`${line}\n`));
-process.exitCode = engine.run(process.argv.slice(2));
+void Promise.resolve(engine.run(process.argv.slice(2))).then(code => { process.exitCode = code; });

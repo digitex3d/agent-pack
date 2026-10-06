@@ -275,6 +275,7 @@ Agents run a script through their apx — `node .agent-pack/apx/<agent>.apx run 
 | `WHEN <condition>:` | a workflow: the indented lines apply when the condition holds |
 | `IF <condition>` … `ELSE` | a branch; the indented lines are its body. An `ELSE` must come right after an `IF` in the same body |
 | `UNTIL <condition>` | repeat the indented lines until the condition holds |
+| `IF!` / `IF!!`, `UNTIL!` / `UNTIL!!` | the same, with the condition decided by a judge — see [Checked conditions](#checked-conditions) |
 | `RUN <procedure or flow>` | carry out that procedure or flow |
 | `IN <store>:` | the indented lines work on that store |
 | `VAR <name>:` | the indented lines work out a [variable](#variables): its value is their final outcome |
@@ -289,6 +290,54 @@ Lifecycle shorthands expand to a `WHEN`:
 | `ON-TASK-COMPLETED` | WHEN the agent is about to declare the task complete |
 | `ON-ERROR` | WHEN a step or tool call fails unexpectedly |
 | `ON-DELEGATE` | WHEN the agent is about to delegate work to another agent |
+
+## Checked conditions
+
+The `!`s after `IF` or `UNTIL` say how little the agent is trusted with the condition:
+
+| Write | The agent | Who decides |
+|---|---|---|
+| `IF <condition>` | sees the condition | the agent |
+| `IF! <condition>` | sees the condition | a judge — when they disagree, the judge wins |
+| `IF!! <condition>` | never sees it: the condition is **sealed** — in no prompt, in no view of the apx | a judge; the agent hears only *open* or *closed* |
+
+`UNTIL!` and `UNTIL!!` are the same as a loop head: repeat the lines beneath until the judge opens the gate, at most `rounds` rounds (3 by default); at the limit the agent stops and reports that the gate stayed closed. A gate needs no keyword of its own: it is an `UNTIL` the judge decides, and a branch is an `IF` the judge decides. `ELSE` follows `IF!` and `IF!!` as it follows `IF`. `!IF` is an error.
+
+```
+VAR report
+WHEN asked to ship:
+    DO  run the tests INTO report
+    IF!! {{report}} shows every test passing:
+        DO  tag the release
+    ELSE
+        DO  tell the user what failed
+```
+
+compiles into
+
+```
+If `node .agent-pack/apx/shipper.apx check cnd-95dbba72` answers open:
+    Do tag the release
+Else:
+    Do tell the user what failed
+```
+
+**The judge decides on variables.** A checked condition reads at least one variable — `{{x}}`, private or `SESSION`, one the agent sees — or the compilation fails: the judge decides on what the variables hold, never on the agent's word. When the apx checks the condition, it builds the state from the session's memory: each variable the condition reads, in the order it first appears, as `### <name>` followed by its value exactly as stored (a typed one, its JSON text), a blank line between two. The agent cannot retouch it at check time. `{{x AS t}}` sends the whole value of `x`, and adds the fields of `t` (names and descriptions) to the question as guidance. A field read, `{{x.slot}}`, is an error, as anywhere. A constant `{{c}}` is written into the question at compile time.
+
+**The question comes from the source.** The compiler builds it — `In the state, <condition>?`, each variable read by its name — and keeps it in the apx; the agent never writes it. Each checked condition has a stable id, `cnd-<8 hex>`, made from the agent that answers for it and the condition's text: editing the text makes a new condition.
+
+**Closed when in doubt.** The judge answers with a probability. At or above the threshold (0.7 by default) the condition is *open*; below it — or when a variable it reads is empty, when the state is too large for the judge, or when the judge cannot be reached or gives no probability — it is *closed*, and nothing is sent when nothing can be decided. Every check is recorded in the session: the condition's id, the agent, the level, the round, a fingerprint of the state (never the state), the judge's model and probability, the threshold and the outcome. The agent's own opinion is never asked.
+
+**Where a check is possible:** in an agent's body, in a procedure or role an agent runs, and in a flow step whose `BY` is an agent — wherever an apx can answer for it. Anywhere else — a playbook, a team's routing — there is no executable: `IF!` and `UNTIL!` read as `IF` and `UNTIL`, decided by the agent, with a warning naming the line, and `IF!!` and `UNTIL!!` fail the compilation, since they could never be sealed there.
+
+**In a flow step**, a checked `IF!` or `IF!!` is checked by the step's `BY` agent, through its own apx: the condition is compiled into that agent's apx, and `AGENTS.md`, `apx flow` and the Workflow script name its command. The variables it reads are the ones that agent sees — its own, or its team's `SESSION` ones. `BY` must name an agent — or the role a member takes, which names that member, as everywhere in a flow: a team is resolved by routing, and no one apx answers for the check. A checked condition at a flow's own level — between its steps, run by whoever drives the flow — is not supported yet.
+
+**Configuration.** The judge of checked conditions is the [`checks`](/reference/config#checks) key, apart from the compile-time `judge`. Without it, `IF!` and `UNTIL!` compile as `IF` and `UNTIL` — decided by the agent — with a warning naming the line; `IF!!` and `UNTIL!!` fail the compilation.
+
+What a check is, and is not:
+
+- A sealed condition protects against an agent that follows its instructions, not against one that reads files by hand: the question is in the apx file, as the compiled document is.
+- A judge checks the text the variables hold, not the facts behind it: "the tests pass" is judged on the report the agent stored. A condition about facts is a program's to decide — the `*` marker, later.
 
 ## Shapes
 
@@ -374,7 +423,15 @@ A variable has one type for its whole life. `VAR report AS task-report` declares
 
 ### Reading
 
-`{{name}}` reads a variable, in any line. A constant's read is its value; a variable's read compiles into the command that prints its value (`node .agent-pack/apx/<agent>.apx get <name>`). Reading a field of a typed variable (`{{report.status}}`) is not supported yet. A template's `BODY` and `EXAMPLE` are literal text: no `{{…}}` there. A comment line is never read. A block of a shared or builtin library reads no variable — a library block takes its input through `LENS-IN`; constants it may read.
+`{{name}}` reads a variable, in any line. A constant's read is its value; a variable's read compiles into the command that prints its value (`node .agent-pack/apx/<agent>.apx get <name>`). Reading a field of a typed variable (`{{report.status}}`) is not supported yet.
+
+A read can take a shape: `{{name AS template}}` reads the variable and keeps only what fits the template, shaped as it:
+
+```
+DO  compare {{report AS dividend-table}} with last year's
+```
+
+The agent does the extracting, when it reads: it runs the same `get` and takes from the value what the template asks for — nothing is stored, the variable keeps its value. When the variable is already typed with that template, the shaped read is a plain read. The name is a variable, never a constant (a constant has no shape to take — write the part you need); the template is one the agent has, like any `AS` template; `AS` takes no force level (`{{report AS! dividend-table}}` is an error). A shaped read stands wherever a read does — a `DO` line, an `IF` or `UNTIL` condition — under the same rules. A template's `BODY` and `EXAMPLE` are literal text: no `{{…}}` there. A comment line is never read. A block of a shared or builtin library reads no variable — a library block takes its input through `LENS-IN`; constants it may read.
 
 ### Examples
 

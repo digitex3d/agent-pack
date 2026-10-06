@@ -6,8 +6,7 @@ import claudeCodeAdapter from '../adapters/claude-code/index.js';
 import claudeCodeApxAdapter from '../adapters/claude-code-apx/index.js';
 import cursorAdapter from '../adapters/cursor/index.js';
 import junieAdapter from '../adapters/junie/index.js';
-import jevJudge from '../adapters/jev/index.js';
-import type { JudgePlugin } from './judge/types.js';
+import { fromBuiltins } from './judge/builtins.js';
 
 /**
  * The adapters shipped with agent-pack, by name: a config names them
@@ -21,26 +20,11 @@ const BUILTIN_ADAPTERS: Record<string, () => AdapterPlugin> = {
   junie: () => junieAdapter(),
 };
 
-/** The judges shipped with agent-pack, by name (`judge: { adapter: 'jev' }`). */
-const BUILTIN_JUDGES: Record<string, () => JudgePlugin> = {
-  jev: () => jevJudge(),
-};
-
-/** A config entry as a plugin of one kind: a built-in by name, or a plugin object as is. */
-function fromBuiltins<T>(kind: string, builtins: Record<string, () => T>): (entry: T | string) => T {
-  return entry => {
-    if (typeof entry !== 'string') return entry;
-    const make = builtins[entry];
-    if (!make) throw new Error(`Unknown ${kind} "${entry}" — built-in ${kind}s: ${Object.keys(builtins).join(', ')}`);
-    return make();
-  };
-}
-
 /** A config entry as an adapter: a built-in by name, or an adapter object as is. */
 export const resolveAdapter = fromBuiltins('adapter', BUILTIN_ADAPTERS);
 
-/** A config entry as a judge: a built-in by name, or a judge object as is. */
-export const resolveJudge = fromBuiltins('judge', BUILTIN_JUDGES);
+/** A config entry as a judge — the judges' own table (judge/builtins.ts), shared with the apx. */
+export { resolveJudge } from './judge/builtins.js';
 
 export class AdapterRegistry {
   private adapters: AdapterPlugin[];

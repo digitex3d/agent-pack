@@ -340,4 +340,7 @@ await import('./forceInAgent.test.mjs');
 // --- variables: constants, session variables (VAR x:, DO … INTO x, {{x}}), their types, the apx get/set ---
 await import('./variables.test.mjs');
 
+// --- IF!/IF!!/UNTIL!!: checked conditions, the question, the apx asking a (fake) judge ---
+await import('./check.test.mjs');
+
 console.log('All tests passed.');

@@ -151,7 +151,7 @@ The full reference is [docs/reference/language.md](./docs/reference/language.md)
 ## Requirements
 
 - Node 20 or newer.
-- `STORE`s are backed by tabeli and work where tabeli runs (Linux); point `APX_TABELI` at the tabeli binary if it is not installed as a skill.
+- `make` and a C compiler (gcc or clang): `npm run build` compiles tabeli (`tabeli/`), the engine behind `STORE`s and variables, which works on Linux.
 
 ## Documentation
 
@@ -174,6 +174,7 @@ agent-pack was created by **Giuseppe Federico**.
 - Code: [Apache 2.0](./LICENSE) — keep the [NOTICE](./NOTICE) with any redistribution.
 - Specification: [CC BY-ND 4.0](./LICENSE-spec) — one canonical version.
 - Documentation: [CC BY 4.0](./LICENSE-docs).
+- tabeli (`tabeli/`, the table engine shipped with agent-pack): [MIT](./tabeli/LICENSE).
 - The name: [TRADEMARKS.md](./TRADEMARKS.md). Governance: [GOVERNANCE.md](./GOVERNANCE.md). Citing: [CITATION.cff](./CITATION.cff).
 
 Required attribution for works based on agent-pack: *"Based on the Agent Pack paradigm by Giuseppe Federico (2026)."*

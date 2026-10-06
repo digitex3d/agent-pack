@@ -109,7 +109,7 @@ items on the left more.
 ## 3. Primitives
 
 The shared vocabulary of the paradigm. Each primitive has a stable
-identifier (`D1`–`D38`) for external citation as `Agent Pack §D<n>`.
+identifier (`D1`–`D39`) for external citation as `Agent Pack §D<n>`.
 These terms have precise meaning and are not interchangeable.
 
 - **D1 — agent** — an executable unit defined by a mission (what it
@@ -308,7 +308,7 @@ These terms have precise meaning and are not interchangeable.
   common heading in the compiled definition, under a filter in the
   executable — and link blocks that share them.
 
-- **D32 — variable** — a named value, read whole as `{{name}}`. A
+- **D32 — variable** — a named value, read as `{{name}}`. A
   constant, `VAR <name> = <value>`, is declared in `vars.ap` at the
   project, team or agent level and substituted at compile time; when the
   same name is declared at several levels, the agent's overrides the
@@ -347,9 +347,10 @@ These terms have precise meaning and are not interchangeable.
   `ELSE` and `UNTIL`, nested at any depth. A step under them is the
   flow's own: a flow whose only step sits under an `UNTIL` still has its
   step, while a lone `RUN` is not a step. The condition is prose, judged
-  by whoever runs the flow; the language adds no syntax for it and sets
-  no bound on an `UNTIL` — a bound, when wanted, is written in the
-  condition. (Added in 1.1.)
+  by whoever runs the flow unless it is checked (D39); the language adds
+  no syntax for it and sets no bound on an unchecked `UNTIL` — a bound,
+  when wanted, is written in the condition. (Added in 1.1; amended in
+  1.2.)
 
 - **D38 — session variable** — a variable (D32) whose value is set while
   a session runs, its scope written as a word before `VAR`, as `EXPORT`
@@ -369,17 +370,44 @@ These terms have precise meaning and are not interchangeable.
   otherwise declares a private one; `VAR <name> AS <template>:` always
   declares. The block holds, beneath, any lines of a procedure body
   (D16) — `DO`, `RUN`, `IF` / `ELSE`, `UNTIL` — but no further `VAR`; its
-  value is the block's final outcome, a procedure's result included. A variable
-  declared `AS <template>` keeps that type for life: it gives the line or
-  block that fills it its shape (D35), and a value of another template
-  fails the compilation; an untyped variable takes the type of its first
-  typed assignment. The executable (D20) keeps the values in a builtin
-  session store (D18), keyed by name — private values per session and
-  agent, `SESSION` values per session, shared by every agent; the last
-  write wins. The session id comes from the harness adapter (D8); without
-  it the executable refuses. A block of a shared or builtin library (D30)
-  never reads a session variable (P4): it takes its input through
-  `LENS-IN` (D6). (Added in 1.2.)
+  value is the block's final outcome, a procedure's result included. A
+  variable declared `AS <template>` keeps that type for life: it gives the
+  line or block that fills it its shape (D35), and a value of another
+  template fails the compilation; an untyped variable takes the type of
+  its first typed assignment. `{{name}}` reads the value whole; `{{name
+  AS <template>}}`, with no force level, reads it shaped as that
+  template — the plain read when the variable already has that type,
+  otherwise the agent takes from the value only what fits the template,
+  and nothing is stored. A constant takes no shape: `{{name AS
+  <template>}}` on a constant fails the compilation. The executable
+  (D20) keeps the values in a builtin session store (D18), keyed by name
+  — private values per session and agent, `SESSION` values per session,
+  shared by every agent; the last write wins. The session id comes from
+  the harness adapter (D8); without it the executable refuses. A block of
+  a shared or builtin library (D30) never reads a session variable (P4):
+  it takes its input through `LENS-IN` (D6). (Added in 1.2.)
+
+- **D39 — checked condition** — an `IF` or `UNTIL` (D27) whose head
+  carries the marks of the force levels (D11) hands its condition to an
+  outside judge, a model that answers with a probability. Unmarked, the
+  agent decides. With `!`, the agent sees the condition and the judge
+  decides, winning when they disagree. With `!!`, the condition is
+  sealed — never in the agent's prompt nor in any view of the executable
+  (D20); the judge decides and the agent hears only open or closed.
+  `!IF` and `!UNTIL` fail the compilation. A checked condition reads at
+  least one session variable (D38): the judge's state is each variable
+  read, exactly as the executable stored it, and `{{name AS <template>}}`
+  sends the whole value with the template's fields as guidance in the
+  question. The question is built from the source at compile time, kept
+  in the executable and asked through `check <cnd-id>`. The judge is
+  configured under the key `checks` — its adapter, a threshold (0.7 by
+  default) and a number of rounds (3 by default); without it, a `!`
+  condition falls back to an unmarked one with a warning and a `!!`
+  condition fails the compilation. In doubt the condition is closed: a
+  probability below the threshold, an uncertain answer, an unreachable
+  judge, a state too large or an empty variable all close it, and a
+  checked `UNTIL` stops after its last round with the condition closed.
+  Every check is recorded in the session. (Added in 1.2.)
 
 ## 4. Citation
 

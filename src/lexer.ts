@@ -19,8 +19,9 @@
 // which TypeScript erases at compile time. The runtime dependency graph is
 // strictly one-directional: lexer.js → desugar.js (no back-edge).
 import { desugar } from './desugar.js';
-import { getFamilyBases, getAliasNames } from './forceLevelConfig.js';
+import { getFamilyBases, getAliasNames, splitBangs } from './forceLevelConfig.js';
 import { getLifecycleAliases } from './lifecycleConfig.js';
+import { CHECK_KINDS, MAX_CHECK_LEVEL, type CheckKind } from './check.js';
 
 /**
  * Static (non-force-level) keywords. Force-level families and their aliases
@@ -88,6 +89,21 @@ export function escapeRegex(s: string): string {
 // This ensures `MUST!!` beats `MUST!` beats `MUST` via greedy `!*`.
 
 const FORCE_BASES_ALT = FORCE_LEVEL_BASES.map(escapeRegex).join('|');
+
+// Condition heads with a level: IF / IF! / IF!! (UNTIL alike). The `!`s say how
+// little the agent is trusted with the condition — 0 it judges alone, 1 it sees
+// the condition and a judge decides, 2 the condition is sealed (src/check.ts).
+// `!IF` is lexed only so the vocabulary check rejects it by name. The heads and
+// their highest level are check.ts's.
+const CONTROL_ALT = `!?(?:${CHECK_KINDS.join('|')})!{0,${MAX_CHECK_LEVEL}}`;
+
+/** `IF!!` → `{ keyword: 'IF', level: 2 }`; `!IF` → level -1; any other word → null. */
+export function splitControl(keyword: string): { keyword: CheckKind; level: number } | null {
+  const split = splitBangs(keyword);
+  if (!split || !(CHECK_KINDS as readonly string[]).includes(split.base)) return null;
+  if (split.level < -1 || split.level > MAX_CHECK_LEVEL) return null;
+  return { keyword: split.base as CheckKind, level: split.level };
+}
 const ALIAS_ALT = ALIAS_NAMES.map(escapeRegex).join('|');
 const STATIC_ALT = [...STATIC_KEYWORDS].map(escapeRegex).join('|');
 const LIFECYCLE_ALT = LIFECYCLE_ALIASES.map(escapeRegex).join('|');
@@ -98,7 +114,7 @@ const LIFECYCLE_ALT = LIFECYCLE_ALIASES.map(escapeRegex).join('|');
 //   - alias name
 //   - lifecycle alias (ON-AGENT-PROMPTED, ON-INVOKE, …)
 //   - static keyword
-const KW_GROUP = `(?:!+(?:${FORCE_BASES_ALT})|(?:${FORCE_BASES_ALT})!*|${ALIAS_ALT}|${LIFECYCLE_ALT}|${STATIC_ALT})`;
+const KW_GROUP = `(?:${CONTROL_ALT}|!+(?:${FORCE_BASES_ALT})|(?:${FORCE_BASES_ALT})!*|${ALIAS_ALT}|${LIFECYCLE_ALT}|${STATIC_ALT})`;
 
 const KEYWORD_WITH_REST_RE = new RegExp(`^([ \\t]*)(${KW_GROUP})[ \\t]+(.+?)[ \\t]*$`);
 // Keywords that stand alone on a line: IF, ELSE, PARALLEL and the DISTILL levels.
@@ -142,7 +158,8 @@ export type Token =
   | (Position & { kind: 'blank' })
   | (Position & { kind: 'comment'; raw: string })
   | (Position & { kind: 'rawLine'; raw: string })
-  | (Position & { kind: 'keyword'; keyword: Keyword; rest: string; raw: string })
+  // `level`: the level of an IF/UNTIL head (`IF!` 1, `IF!!` 2, `!IF` -1 — splitControl); absent = 0.
+  | (Position & { kind: 'keyword'; keyword: Keyword; rest: string; raw: string; level?: number })
   | (Position & { kind: 'blockOpener'; key: string; rest: string; raw: string })
   | (Position & { kind: 'procRef'; name: string; trailing: string; raw: string })
   | (Position & { kind: 'unknown'; raw: string });
@@ -210,11 +227,13 @@ export function lexRaw(source: string): Token[] {
 
     const kw = raw.match(KEYWORD_WITH_REST_RE);
     if (kw) {
+      const control = splitControl(kw[2]);
       out.push({
         kind: 'keyword', line, col, indent,
-        keyword: kw[2] as Keyword,
+        keyword: (control?.keyword ?? kw[2]) as Keyword,
         rest: kw[3],
         raw,
+        ...(control?.level ? { level: control.level } : {}),
       });
       continue;
     }

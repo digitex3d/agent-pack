@@ -1,0 +1,7 @@
+/tabeli
+*.tbl
+.*.lock
+.*.tmp.*
+.idea/
+*.bak
+.playwright-mcp/

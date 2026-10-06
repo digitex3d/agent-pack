@@ -15,7 +15,8 @@
 import { createHash } from 'crypto';
 import type { ApBlockData } from './types.js';
 
-function sha256Hex(input: string): string {
+/** The sha256 of a text, in hex — the one hash every id, key and fingerprint is cut from. */
+export function sha256Hex(input: string): string {
   return createHash('sha256').update(input, 'utf-8').digest('hex');
 }
 
@@ -23,12 +24,21 @@ function sha256Hex(input: string): string {
 export const BLOCK_ID_RE = /^[a-z]{3}-[0-9a-f]{8}$/;
 
 /**
+ * THE short-id rule: `<prefix>-<first 8 hex of sha256(text)>`. Each caller owns
+ * only what it hashes (a block's identity, a distilled procedure, a checked
+ * condition) and its prefix.
+ */
+export function shortId(prefix: string, text: string): string {
+  return `${prefix}-${sha256Hex(text).slice(0, 8)}`;
+}
+
+/**
  * Stable id: `<prefix>-<first 8 hex of sha256("kind|namespace|name")>`.
  * Pure utility — the prefix is NOT known here: each block class declares its
  * own (see blocks.ts); `refId` there resolves it for pointer construction.
  */
 export function stableId(prefix: string, kind: string, namespace: string, name: string): string {
-  return `${prefix}-${sha256Hex(`${kind}|${namespace}|${name}`).slice(0, 8)}`;
+  return shortId(prefix, `${kind}|${namespace}|${name}`);
 }
 
 /**

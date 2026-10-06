@@ -7,12 +7,12 @@
  *   //apx:json:<payload>                       compact JSON (the default)
  *   //apx:gzip:<base64 of the gzipped payload> compressed
  *
- * The payload is `{ build, document }`: build provenance and the agent's
- * compiled document, exactly as `ApDocument.asJson()` wrote it.
+ * The payload is `{ build, document }`: build provenance (the tabeli engine
+ * and the `checks` a checked condition needs included) and the agent's compiled document, exactly as `ApDocument.asJson()` wrote it.
  */
-import { createHash } from 'crypto';
 import { gzipSync, gunzipSync } from 'zlib';
-import type { ApxBuild } from './engine.js';
+import type { ApxBuild, ApxChecks } from './engine.js';
+import { sha256Hex } from '../apdoc/ids.js';
 
 /** The oldest Node an apx runs on. */
 export const MIN_NODE_MAJOR = 20;
@@ -29,12 +29,14 @@ export interface ApxPayload {
  * The whole `.apx` file: the bundled engine, then the data line. The build
  * hash is the document's own content hash — same sources, same hash.
  */
-export function apxFile(engine: string, document: string, agentPackVersion: string, compress: boolean): string {
+export function apxFile(engine: string, document: string, agentPackVersion: string, tabeli: string, compress: boolean, checks: ApxChecks | null = null): string {
   const compact = JSON.stringify(JSON.parse(document));
   const build: ApxBuild = {
     builtAt: new Date().toISOString(),
     agentPackVersion,
-    hash: createHash('sha256').update(compact).digest('hex').slice(0, 12),
+    hash: sha256Hex(compact).slice(0, 12),
+    tabeli,
+    ...(checks ? { checks } : {}),
   };
   const payload = `{"build":${JSON.stringify(build)},"document":${compact}}`;
   const data = compress

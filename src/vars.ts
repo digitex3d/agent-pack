@@ -10,6 +10,7 @@
  *   VAR best-pizza:               declared and assigned: the outcome of the block beneath
  *   DO … INTO best-pizza          assigns, or reassigns, a declared variable
  *   {{best-pizza}}                reads one — a constant's value, or a variable's
+ *   {{report AS dividend-table}}  reads a variable, keeping only what fits a template
  *
  * Every reader of these forms — the lint, the compiler, the document builder,
  * the md renderer, the apx — asks this module; none writes its own pattern.
@@ -26,28 +27,52 @@ export const VAR_NAME_RE = new RegExp(`^${NAME}$`);
 const FIELD = '(?:\\.[\\w-]+)*';
 
 /**
- * `{{name}}`, or `{{name.field}}` — a read. Group 1 is the name, group 2 the
- * field path (with its leading dot) when there is one.
+ * `{{name}}`, `{{name.field}}`, `{{name AS template}}` — a read: the name, the
+ * field path (with its leading dot) when there is one, the AS as written (a
+ * force level is an error) and its template when it takes a shape. The one
+ * pattern of a read — with its parts captured, or without (to split on it).
  */
-const VAR_REF_SOURCE = `\\{\\{(${NAME})(${FIELD})\\}\\}`;
+function varRef(capture: boolean): RegExp {
+  const group = (p: string) => (capture ? `(${p})` : `(?:${p})`);
+  return new RegExp(`\\{\\{${group(NAME)}${group(FIELD)}(?:\\s+${group('!*AS!*')}\\s+${group(NAME)})?\\}\\}`, 'g');
+}
 
-/** A fresh global regex over every `{{…}}` read of a text. */
-export function varRefRe(): RegExp {
-  return new RegExp(VAR_REF_SOURCE, 'g');
+/** One read of a text, as written. */
+export interface VarRead {
+  /** The whole read: `{{report AS dividend-table}}`. */
+  read: string;
+  name: string;
+  /** The field path (`.status`), '' when none — not supported yet. */
+  field: string;
+  /** The AS as written (`AS`, or a wrong `AS!`), and the template it names — absent on a plain read. */
+  as?: string;
+  template?: string;
+}
+
+/** Every read of a text, in order. */
+export function readsOf(text: string): VarRead[] {
+  return [...text.matchAll(varRef(true))].map(toRead);
+}
+
+function toRead([read, name, field, as, template]: RegExpMatchArray | string[]): VarRead {
+  return { read, name, field, ...(template ? { as, template } : {}) };
 }
 
 /** The pieces of a line between its reads — the reads themselves dropped. */
 export function splitOnReads(line: string): string[] {
-  return line.split(new RegExp(`\\{\\{${NAME}${FIELD}\\}\\}`));
+  return line.split(varRef(false));
 }
 
 /**
- * Resolve every read of a text: `value(name)` gives what `{{name}}` becomes
- * — a constant's value, how to read a variable — or undefined to leave
- * it as written. A field read (`{{x.status}}`) is always left: not supported yet.
+ * Resolve every read of a text: `value(read)` gives what the read becomes — a
+ * constant's value, how to read a variable — or undefined to leave it as
+ * written. A field read (`{{x.status}}`) is always left: not supported yet.
  */
-export function resolveReads(text: string, value: (name: string) => string | undefined): string {
-  return text.replace(varRefRe(), (read, name: string, field: string) => (field ? undefined : value(name)) ?? read);
+export function resolveReads(text: string, value: (read: VarRead) => string | undefined): string {
+  return text.replace(varRef(true), (...m: string[]) => {
+    const read = toRead(m);
+    return (read.field ? undefined : value(read)) ?? read.read;
+  });
 }
 
 /** A constant's value — its own entry of `vars` only, never an inherited property — or undefined. */
@@ -57,7 +82,7 @@ export function constantOf(vars: Record<string, string> | undefined, name: strin
 
 /** `{{name}}` → its value, for every name in `vars`; any other read stays as written. */
 export function applyVars(text: string, vars: Record<string, string>): string {
-  return resolveReads(text, name => constantOf(vars, name));
+  return resolveReads(text, r => (r.template ? undefined : constantOf(vars, r.name)));
 }
 
 /** A trailing `INTO <name>` — uppercase, at the very end of the line: anywhere else it is prose. */

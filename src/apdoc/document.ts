@@ -165,11 +165,16 @@ export class ApDocument {
     return target?.kind === 'template' ? slotsOfTemplate(target as TemplateBlock) : null;
   }
 
+  /** A template of the document, by name — or null. */
+  templateNamed(name: string): TemplateBlock | null {
+    return (this.byKind('template').find(b => b.name === name) as TemplateBlock | undefined) ?? null;
+  }
+
   /** The document's templates by name — how nested `<template>` slots resolve. */
   slotResolver(): SlotResolver {
     return name => {
-      const template = this.byKind('template').find(b => b.name === name);
-      return template ? slotsOfTemplate(template as TemplateBlock) : null;
+      const template = this.templateNamed(name);
+      return template ? slotsOfTemplate(template) : null;
     };
   }
 

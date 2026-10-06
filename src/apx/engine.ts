@@ -10,7 +10,8 @@
  * that prints that block — ` [node <exe> get tpl-…]`.
  *
  * Exit codes: 0 ok, 1 something does not exist, 2 wrong usage. Every error is
- * one `# error:` line carrying the command that fixes it.
+ * one `# error:` line carrying the command that fixes it. `check` answers on its
+ * first line, `open` (exit 0) or `closed` (exit 1, or 2 on a usage or config error).
  */
 import { existsSync, readdirSync, readFileSync } from 'fs';
 import { dirname, join, basename, resolve } from 'path';
@@ -25,18 +26,38 @@ import { FORMULAS, fill, type QuizQuestion } from '../formulas.js';
 import { DISTILLED_DIR, FLOWS_DIR, flowScriptStem, projectRootOf, projectStoreDir } from './paths.js';
 import { type ApxVerb } from './verbs.js';
 import { openTable, runTable, upsertBy } from './tabeli.js';
-import { openSessionVars, type SessionVars } from './sessionVars.js';
+import { openSessionVars, type SessionVars, type CheckRecord } from './sessionVars.js';
+import { checkedKeyword, stateOf, type ApCheckSpec } from '../check.js';
+import { resolveJudge } from '../judge/builtins.js';
+import type { JudgePlugin } from '../judge/types.js';
 import { refName } from '../../adapters/md/phrases.js';
 import { CREDIT } from '../credits.js';
 import { validateRecord, slotSpecsOf, formatIssues } from '../shapeSchema.js';
-import { BLOCK_ID_RE } from '../apdoc/ids.js';
-import { constantOf, varRefRe } from '../vars.js';
+import { BLOCK_ID_RE, sha256Hex } from '../apdoc/ids.js';
+import { constantOf, readsOf } from '../vars.js';
 
 /** Build provenance sealed next to the document. */
 export interface ApxBuild {
   builtAt: string;
   agentPackVersion: string;
   hash: string;
+  /** The tabeli engine of the agent-pack that wrote the apx — absent in an apx written before it shipped one. */
+  tabeli?: string;
+  /** What `check` needs at run time, from the `checks` config key — absent: no judge was configured. */
+  checks?: ApxChecks;
+}
+
+/**
+ * The `checks` config as an apx records it: the judge by name (a built-in one,
+ * loaded from the engine itself — judge/builtins.ts), the threshold, the round
+ * limit, and the model the judge lock pins for that judge, when it pins one.
+ * The judge's key is never recorded: the judge reads it at run time.
+ */
+export interface ApxChecks {
+  adapter: string;
+  threshold: number;
+  rounds: number;
+  model?: string;
 }
 
 /** Kinds in reading order: who you are, your team, then the md chapter order. */
@@ -55,6 +76,7 @@ const HELP: [string, string][] = [
   ['md', 'the whole prompt at once'],
   ['flow <flw-id>', 'how to run a flow: by the harness, from its compiled script — or its steps, to carry out in order'],
   ['run <dst-id> [json]', 'run a distilled script: input as JSON (argument or stdin), its JSON output back'],
+  ['check <cnd-id>', 'a checked condition (IF!, IF!!, UNTIL!, UNTIL!!), put to the judge on this session\'s variables: open or closed'],
   ['version', 'agent, build date, agent-pack version, hash, block count'],
   ['<store> <verb> …', 'read or write a store (tabeli verbs: q a s …)'],
   ['help', 'this list'],
@@ -101,7 +123,7 @@ export class ApxEngine {
   private readonly root: AgentBlock;
   private readonly byId = new Map<string, ApBlock>();
   /** Every verb, by name — the table APX_VERBS lists. */
-  private readonly verbs: Record<ApxVerb, (args: string[]) => number> = {
+  private readonly verbs: Record<ApxVerb, (args: string[]) => number | Promise<number>> = {
     start: args => this.start(args),
     scope: () => this.scope(),
     ls: args => this.ls(args),
@@ -112,6 +134,7 @@ export class ApxEngine {
     md: () => this.print(renderMd(this.doc)),
     flow: args => this.flow(args),
     run: args => this.runScript(args),
+    check: args => this.check(args),
     version: () => this.version(),
     help: () => this.help(),
   };
@@ -123,6 +146,8 @@ export class ApxEngine {
     private readonly exe: string,
     private readonly write: (line: string) => void,
     private readonly budget: ApxBudget = APX_BUDGET,
+    /** The judge a check asks, by the name the apx records — a built-in one. */
+    private readonly judgeNamed: (name: string) => JudgePlugin = name => resolveJudge(name),
   ) {
     this.cmd = `node ${exe}`;
     this.env = mdEnv(doc, id => ` [${this.cmd} get ${id}]`, agent => (!agent || agent === doc.root()?.name ? this.cmd : this.sibling(agent)));
@@ -130,8 +155,8 @@ export class ApxEngine {
     for (const block of doc.all()) this.byId.set(block.id, block);
   }
 
-  /** Dispatch one invocation: a verb, or a store name and a tabeli verb. No verb = start. */
-  run(argv: string[]): number {
+  /** Dispatch one invocation: a verb, or a store name and a tabeli verb. No verb = start. `check` answers asynchronously. */
+  run(argv: string[]): number | Promise<number> {
     const [verb = 'start', ...args] = argv;
     if (verb === '-h' || verb === '--help') return this.help();
     if (Object.hasOwn(this.verbs, verb)) return this.verbs[verb as ApxVerb](args);
@@ -262,6 +287,11 @@ export class ApxEngine {
         this.out(`  ${mark.id}  ${block.kind} ${block.name}  (${state})  — ${this.cmd} run ${mark.id} '<json>'`);
       }
     }
+    const checks = Object.entries(this.doc.meta.checks ?? {});
+    if (checks.length > 0) {
+      this.out(`checks:  — a judge decides each: ${this.cmd} check <id>`);
+      for (const [id, c] of checks) this.out(`  ${id}  ${checkedKeyword(c.kind, c.level)}${c.level === 2 ? '  (sealed)' : `  — the question: ${this.cmd} get ${id}`}`);
+    }
     if (root.lensIn) this.out(`requests arrive as: ${this.refLabel(root.lensIn.ref)}`);
     if (root.lensOut) this.out(`answer as: ${this.refLabel(root.lensOut.ref)}  — your own rules apply in addition to the shape`);
     const counts = this.groups(this.doc.all()).map(([kind, blocks]) => `${blocks.length} ${kind}`);
@@ -289,6 +319,8 @@ export class ApxEngine {
 
   private get(args: string[]): number {
     if (args[0] && !BLOCK_ID_RE.test(args[0])) return this.getVariable(args[0]);
+    const check = args[0] ? this.doc.meta.checks?.[args[0]] : undefined;
+    if (check) return this.getCheck(args[0], check);
     const block = this.blockArg('get', args);
     if (!block) return this.lastCode;
     if (args[1] === 'json') return this.print(JSON.stringify(block.toJSON(), null, 1));
@@ -370,6 +402,97 @@ export class ApxEngine {
     const issues = this.contractIssues(run.stdout, mark.shape.ref);
     if (issues) return this.fail(1, `${id} answered outside \`${refName(mark.shape.ref)}\`: ${issues} — work it out yourself`);
     return this.print(run.stdout.trimEnd());
+  }
+
+  /**
+   * `check <cnd-id>` — a checked condition put to the judge: the state is built
+   * from this session's variables, exactly as stored (`### <name>` and the
+   * value, each variable the condition reads); the question is the compiler's.
+   * Open at or above the threshold; closed below it, and closed when in doubt —
+   * an empty variable, a state too large, a judge that cannot answer. A checked
+   * UNTIL counts its closed answers in a row: at the round limit, the agent is
+   * told to stop. Every check is recorded in the session. A sealed condition's
+   * answer never says what it checks.
+   */
+  private async check(args: string[]): Promise<number> {
+    const answer = (outcome: 'open' | 'closed', ...lines: string[]): void => { this.out(outcome); lines.forEach(l => this.out(l)); };
+    const refused = (message: string): number => { answer('closed', `# error: ${message}`); return 2; };
+    const [id] = args;
+    if (!id) return refused(`check needs a condition id — the line that asks for the check names it: ${this.cmd} check cnd-…`);
+    const spec = this.doc.meta.checks?.[id];
+    if (!spec) return refused(`no checked condition with id '${id}' in this agent — its checks: ${this.cmd} scope`);
+    const config = this.build.checks;
+    if (!config) return refused(`this apx records no judge for its checks — add checks: { adapter: 'jev' } to agent-pack.config.mjs, then run agent-pack bundle all`);
+    const session = this.openSession();
+    if (typeof session === 'string') return refused(`${session} — the gate stays closed`);
+    let judge: JudgePlugin;
+    try { judge = this.judgeNamed(config.adapter); } catch (e) { return refused(`the judge \`${config.adapter}\` cannot be loaded by the apx (${e instanceof Error ? e.message : e})`); }
+    try {
+      const verdict = await this.verdict(spec, id, session, judge, config.model);
+      const prior = spec.kind === 'UNTIL' ? session.checks(id) : [];
+      // This answer's round: one more than the closed answers in a row since the last open one.
+      const round = prior.length - prior.map(r => r.outcome).lastIndexOf('open');
+      session.record({ ...verdict.record, cnd: id, level: spec.level, round, threshold: config.threshold, at: new Date().toISOString() });
+      if (verdict.open) { answer('open', verdict.why); return 0; }
+      const rounds = spec.kind !== 'UNTIL' ? []
+        : [fill(round >= config.rounds ? FORMULAS.keywords.CHECK.limit : FORMULAS.keywords.CHECK.nextRound, { round, rounds: config.rounds })];
+      answer('closed', verdict.why, ...rounds);
+      return 1;
+    } catch (e) {
+      return refused(`the check could not be run or recorded: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+
+  /**
+   * The judge's verdict on one checked condition — what the agent is told, and
+   * what the session records of it. Closed when in doubt; a sealed condition's
+   * reason never quotes what it checks.
+   */
+  private async verdict(spec: ApCheckSpec, id: string, session: SessionVars, judge: JudgePlugin, model: string | undefined):
+    Promise<{ open: boolean; why: string; record: Pick<CheckRecord, 'fingerprint' | 'model' | 'p' | 'outcome'> }> {
+    const sealed = spec.level === 2;
+    const threshold = this.build.checks!.threshold;
+    const closed = (plain: string, gate: string, record: Partial<CheckRecord> = {}) =>
+      ({ open: false, why: sealed ? `the gate stayed closed — ${gate}` : plain, record: { fingerprint: '', model: '', p: '', ...record, outcome: 'closed' as const } });
+    const values: { name: string; value: string }[] = [];
+    for (const name of spec.vars) {
+      const block = this.variable(name);
+      const value = block ? session.read(name, block.scope) : null;
+      if (value === null || value.trim() === '') return closed(`\`${name}\` is empty — nothing is stored in it in this session: the condition cannot hold`, 'a variable it reads is empty');
+      values.push({ name, value });
+    }
+    const state = stateOf(values);
+    const fingerprint = sha256Hex(state);
+    const limit = judge.maxStateChars;
+    if (limit !== undefined && state.length > limit) {
+      return closed(`the state is too large for the judge (${state.length} characters, at most ${limit}) — it was not sent`, 'its state is too large for the judge', { fingerprint });
+    }
+    let answered: { model: string; answers: Record<string, number> };
+    try {
+      answered = await judge.ask(state, [{ id, question: spec.question }], model);
+    } catch (e) {
+      const why = (e instanceof Error ? e.message : String(e)).split(spec.question).join('…');
+      return closed(`the judge could not answer (${why})`, `the judge could not answer (${why})`, { fingerprint });
+    }
+    const p = answered.answers[id];
+    if (typeof p !== 'number' || !(p >= 0 && p <= 1)) return closed('the judge gave no probability', 'the judge gave no probability', { fingerprint, model: answered.model });
+    const record = { fingerprint, model: answered.model, p: String(p) };
+    if (p >= threshold) {
+      return { open: true, why: sealed ? `the gate opened (p=${p})` : `the judge answered p=${p}, at or above ${threshold} — the condition holds`, record: { ...record, outcome: 'open' } };
+    }
+    return closed(`the judge answered p=${p}, below ${threshold} — the condition does not hold`, `p=${p}, below ${threshold}`, record);
+  }
+
+  /** `get <cnd-id>`: a checked condition — its question, unless it is sealed. */
+  private getCheck(id: string, spec: ApCheckSpec): number {
+    this.out(`# check ${id}  ${checkedKeyword(spec.kind, spec.level)}  — a judge decides it: ${this.cmd} check ${id}`);
+    if (spec.level === 2) {
+      this.out('# sealed — what it checks is the judge\'s alone, and is not shown');
+      return 0;
+    }
+    this.out(`question: ${spec.question}`);
+    this.out(`state: ${spec.vars.join(', ')}  — each variable as stored in this session`);
+    return 0;
   }
 
   /** What is wrong with a JSON text against a contract template — or null when it fits. */
@@ -575,7 +698,7 @@ export class ApxEngine {
     this.out(`# var ${name}  ${block.id}`);
     this.links(block);
     this.out('read by:');
-    const readers = this.doc.all().filter(b => [...JSON.stringify(b.body).matchAll(varRefRe())].some(([, read, field]) => read === name && !field));
+    const readers = this.doc.all().filter(b => readsOf(JSON.stringify(b.body)).some(r => r.name === name && !r.field));
     if (readers.length === 0) this.out('  (nothing inside this agent)');
     for (const reader of readers) this.out(`  ${this.label(reader)}`);
     if (stored === null) {
@@ -628,17 +751,21 @@ export class ApxEngine {
    * the error, nothing read or written.
    */
   private sessionVars(): SessionVars | null {
+    const session = this.openSession();
+    if (typeof session !== 'string') return session;
+    this.lastCode = this.fail(2, `${session} — nothing was read or written`);
+    return null;
+  }
+
+  /** This session's variables — or why there are none. */
+  private openSession(): SessionVars | string {
     const env = this.doc.meta.sessionEnv;
     const id = env ? process.env[env] : undefined;
     const refused = !env
       ? 'variables need the harness session id, and this agent was compiled without an adapter that names where it is'
       : !id ? `variables need the harness session id, and ${env} is not set`
         : !SESSION_ID_RE.test(id) ? `${env} holds no usable session id (letters, digits, . _ - only)` : null;
-    if (refused) {
-      this.lastCode = this.fail(2, `${refused} — nothing was read or written`);
-      return null;
-    }
-    return openSessionVars(resolve(projectRootOf(this.exe)), id!, this.root.name);
+    return refused ?? openSessionVars(resolve(projectRootOf(this.exe)), id!, this.root.name, this.build.tabeli);
   }
 
   // ----------------------------------------------------------------- stores
@@ -680,7 +807,7 @@ export class ApxEngine {
   private storeVerb(store: Store, args: string[]): number {
     const refused = this.writeIssues(store, args);
     if (refused) return this.fail(2, `${store.name}: ${refused} — nothing was written`);
-    const unopened = openTable(store.path);
+    const unopened = openTable(store.path, this.build.tabeli);
     if (unopened) return this.fail(2, unopened);
     const i = args[0] === 'a' && store.key ? args.findIndex((kv, j) => j > 0 && kv.startsWith(`${store.key}=`)) : -1;
     let run;

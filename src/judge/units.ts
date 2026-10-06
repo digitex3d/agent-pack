@@ -20,10 +20,10 @@
  * change asks every line again. A diagnostic
  * has the shape of a LintError without its file — the unit names the source.
  */
-import { createHash } from 'crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync, unlinkSync, writeFileSync } from 'fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'path';
 import { isProbability } from './lock.js';
+import { sha256Hex } from '../apdoc/ids.js';
 
 /** A judge diagnostic at a line of the source — a LintError less its `file`. */
 export interface UnitDiagnostic {
@@ -51,7 +51,7 @@ export interface Unit {
 
 /** `sha256:<hex>` of a text. */
 export function sha256(text: string): string {
-  return `sha256:${createHash('sha256').update(text).digest('hex')}`;
+  return `sha256:${sha256Hex(text)}`;
 }
 
 /** The units of a project: every unit file read once, when the run opens. */
@@ -89,7 +89,7 @@ export class UnitStore {
       if (rel !== null && (!best || rel.length < best.rel.length)) best = { alias, rel };
     }
     if (best) return `${best.alias}/${best.rel}`;
-    return `${createHash('sha256').update(dirname(file)).digest('hex').slice(0, 12)}/${basename(file)}`;
+    return `${sha256Hex(dirname(file)).slice(0, 12)}/${basename(file)}`;
   }
 
   /** The unit file of a source. */

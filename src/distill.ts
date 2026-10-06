@@ -21,7 +21,7 @@
  *
  * This module is the one place that names a script and words the instruction.
  */
-import { createHash } from 'crypto';
+import { shortId } from './apdoc/ids.js';
 import { existsSync, readdirSync } from 'fs';
 import { resolve } from 'path';
 import { FORMULAS, fill } from './formulas.js';
@@ -40,8 +40,7 @@ export function distillId(source: string, contracts: readonly string[] = []): st
     .map(l => l.trim().replace(/[ \t]+/g, ' '))
     .filter(Boolean)
     .join('\n');
-  const hash = createHash('sha256').update([source, ...contracts].map(words).join('\n\u0000\n'), 'utf-8').digest('hex');
-  return `dst-${hash.slice(0, 8)}`;
+  return shortId('dst', [source, ...contracts].map(words).join('\n\u0000\n'));
 }
 
 /** Where a construct's script lives, extension left to the agent. */

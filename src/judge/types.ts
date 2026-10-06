@@ -11,6 +11,12 @@ import type { TemplateBlock } from '../apdoc/blocks.js';
 /** One check of a rule — a template's slot rule as a neutral statement. */
 export type JudgeCheck = ApCheck;
 
+/** A question asked as is — a checked condition's (`IF!`), built at compile time. */
+export interface JudgeQuestion {
+  id: string;
+  question: string;
+}
+
 /** A rule: a TEMPLATE tagged `#judge`, applied to every line of its layout's primitive. */
 export interface JudgeRule {
   /** The template's address (`<namespace>/<name>`) — unique, even when two libraries share a name. */
@@ -23,13 +29,16 @@ export interface JudgeRule {
 
 /**
  * A judge: answers, for one line of text (`state`), the probability (0..1) that
- * each check holds. `model` pins the model version once known; the answer names
+ * each check holds — a rule's statement in the judge's own wording, or a
+ * question asked as is. `model` pins the model version once known; the answer names
  * the model that answered. Errors never carry a credential.
  */
 export interface JudgePlugin {
   type: 'judge';
   name: string;
-  ask(state: string, checks: JudgeCheck[], model?: string): Promise<{ model: string; answers: Record<string, number> }>;
+  ask(state: string, checks: (JudgeCheck | JudgeQuestion)[], model?: string): Promise<{ model: string; answers: Record<string, number> }>;
+  /** The largest state, in characters, the judge reads — a larger one is never sent. Absent: no limit. */
+  maxStateChars?: number;
 }
 
 /**
@@ -60,4 +69,18 @@ export interface JudgeConfig {
   lock: string;
   /** Requests in flight at most. */
   concurrency: number;
+}
+
+/**
+ * The resolved `checks` config key — the judge of checked conditions (`IF!`,
+ * `IF!!`, `UNTIL!`, `UNTIL!!`) while the agent works, apart from the
+ * compile-time `judge`. Absent (null): `IF!` falls back to `IF` with a
+ * warning, `IF!!` fails the compilation.
+ */
+export interface ChecksConfig {
+  adapter: JudgePlugin;
+  /** A condition answered at or above this probability is open; below, closed. */
+  threshold: number;
+  /** How many closed answers in a row a checked UNTIL takes before it stops. */
+  rounds: number;
 }

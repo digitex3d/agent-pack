@@ -1,6 +1,6 @@
 {
   "name": "agent-pack",
-  "version": "0.26.0",
+  "version": "0.27.0",
   "description": "A programming language to orchestrate agents across every harness.",
   "author": "Giuseppe Federico <giuseppefeder@gmail.com>",
   "license": "Apache-2.0",
@@ -54,12 +54,17 @@
     "LICENSE-docs",
     "LICENSE-spec",
     "NOTICE",
-    "TRADEMARKS.md"
+    "TRADEMARKS.md",
+    "tabeli/tabeli.c",
+    "tabeli/Makefile",
+    "tabeli/LICENSE"
   ],
   "scripts": {
     "ap": "node dist/index.js",
-    "build": "tsc && mkdir -p dist/src/config && cp src/config/*.json dist/src/config/ && npm run build:apx",
-    "test": "npm run build && node test/test.mjs",
+    "build": "npm run build:tabeli && tsc && mkdir -p dist/src/config && cp src/config/*.json dist/src/config/ && npm run build:apx",
+    "build:tabeli": "make --no-print-directory -C tabeli",
+    "test": "npm run build && node test/test.mjs && make --no-print-directory -C tabeli test",
+    "install": "npm run build:tabeli",
     "prepare": "npm run build",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",

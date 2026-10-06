@@ -3,7 +3,7 @@
 import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 import { homedir } from 'os';
-import { JudgeError, type JudgeCheck, type JudgePlugin } from '../../src/judge/types.js';
+import { JudgeError, type JudgeCheck, type JudgeQuestion, type JudgePlugin } from '../../src/judge/types.js';
 
 /**
  * Jev (TypeSafe AI) as the judge — the only place that knows Jev.
@@ -32,6 +32,12 @@ const MODEL_DEFAULT = 'jev-latest';
 const TIMEOUT_MS = 30_000;
 /** The wait before the one retry of a 429 or 5xx. */
 const RETRY_DELAY_MS = 1_000;
+/**
+ * The largest state Jev is sent, in characters: Jev reads about 32k tokens; at
+ * roughly four characters a token, 96 000 characters (~24k tokens) leaves room
+ * for the questions and the model's own framing.
+ */
+export const JEV_MAX_STATE_CHARS = 96_000;
 
 /** The API key, or null — read at each request, never kept beyond it. */
 function readKey(): string | null {
@@ -46,9 +52,9 @@ function scrub(text: string, key: string): string {
   return text.split(key).join('***');
 }
 
-/** The question one check becomes. */
-function questionOf(check: JudgeCheck): { type: 'noul'; instructions: string } {
-  return { type: 'noul', instructions: `Does the line satisfy this rule: "${check.statement}"?` };
+/** The question one check becomes — a question as is, a rule's statement in Jev's wording. */
+function questionOf(check: JudgeCheck | JudgeQuestion): { type: 'noul'; instructions: string } {
+  return { type: 'noul', instructions: 'question' in check ? check.question : `Does the line satisfy this rule: "${check.statement}"?` };
 }
 
 export default function jevJudge(opts: JevOptions = {}): JudgePlugin {
@@ -56,6 +62,7 @@ export default function jevJudge(opts: JevOptions = {}): JudgePlugin {
   return {
     type: 'judge',
     name: 'jev',
+    maxStateChars: JEV_MAX_STATE_CHARS,
     async ask(state, checks, model) {
       const key = readKey();
       if (!key) throw new JudgeError('offline', 'jev: no API key — set TYPESAFE_API_KEY or write it to ~/.config/typesafe/key');

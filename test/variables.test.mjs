@@ -10,7 +10,7 @@
 import { strict as assert } from 'assert';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, chmodSync } from 'fs';
 import { join, dirname } from 'path';
-import { tmpdir, homedir } from 'os';
+import { tmpdir } from 'os';
 import { spawnSync } from 'child_process';
 
 const { bundleAgentObject } = await import('../dist/src/compiler/index.js');
@@ -20,6 +20,7 @@ const { ApDocument } = await import('../dist/src/apdoc/document.js');
 const { ApxEngine } = await import('../dist/src/apx/engine.js');
 const { apxFiles } = await import('../dist/src/apx/write.js');
 const { apxPath } = await import('../dist/src/apx/paths.js');
+const { TABELI_ENGINE } = await import('../dist/src/config.js');
 const { default: claudeCode } = await import('../dist/adapters/claude-code/index.js');
 
 const tmp = mkdtempSync(join(tmpdir(), 'ap-vars-'));
@@ -230,6 +231,28 @@ try {
     assert.ok((await buildPlaybookBundle(playbook, config)).body.includes('{{lang}}'), 'a constant in a playbook stays as today');
   }
 
+  // --- shaped reads: `{{x AS template}}` — the agent keeps only what fits the template ---
+  {
+    const tpl = (structure, name) => structure.all().find(b => b.kind === 'template' && b.name === name).id;
+    // an untyped variable: read it, then keep only what fits the template
+    const untyped = await compile(['    VAR found', '    DO  compare {{found AS note}} with last year\'s', '    IF {{found AS note}} is empty', '        DO  stop']);
+    const shaped = `\`found\` (read its value: \`node .agent-pack/apx/a.apx get found\`), keeping only what fits **note** (${tpl(untyped.structure, 'note')}) and shaped as it`;
+    assert.ok(untyped.body.includes(`Do compare ${shaped} with last year's`), untyped.body);
+    assert.ok(untyped.body.includes(`If ${shaped} is empty:`), 'in a condition too');
+    // a variable already typed with that template: a plain read
+    const same = await compile(['    VAR found AS note', '    DO  compare {{found AS note}} with {{found}}']);
+    assert.ok(same.body.includes('Do compare `found` (read its value: `node .agent-pack/apx/a.apx get found`) with `found` (read its value: `node .agent-pack/apx/a.apx get found`)'), same.body);
+    await fails(['    DO  compare {{lang AS note}}'], /a\.ap:4  `\{\{lang AS note\}\}`: a constant has no shape to take — write the part you need/, { vars: { lang: 'English' } });
+    await fails(['    VAR found', '    DO  compare {{found AS missing}}'], /a\.ap:5  `\{\{found AS missing\}\}`: unknown template `missing` — define it, or IMPORT it/);
+    await fails(['    VAR found', '    DO  compare {{found AS! note}}'], /a\.ap:5  `\{\{found AS! note\}\}`: the AS of a read is a shape and takes no force level/);
+    await fails(['    DO  compare {{nothing AS note}}'], /unknown variable `\{\{nothing AS note\}\}`/);
+    const inBody = checkVocabulary('t.ap', ['TEMPLATE t:', '    ABOUT  t', '    SLOTS:', '        a: TEXT "a"', '    BODY:', '        {a} for {{who AS note}}'].join('\n'));
+    assert.deepEqual(inBody.map(e => e.line), [6], 'never in a template\'s text');
+    write(join(shared, 'procedures', 'reader.ap'), ['EXPORT PROCEDURE reader:', '    ABOUT  reads ambient state', '    DO  use {{seen AS note}}', '']);
+    await fails(['    VAR seen', '    WHEN asked:', '        RUN  reader'], /reader\.ap:3  `\{\{seen AS note\}\}`: a block of a shared library reads no variable/,
+      { libraries: { '@main': lib, '@shared': shared }, extra: ['IMPORT reader FROM @shared.procedures', ''] });
+  }
+
   // --- 8. RETURN is gone from the language ---
   await fails(['    RETURN  the answer'], /a\.ap:4  unknown keyword `RETURN`/);
 
@@ -240,21 +263,20 @@ try {
   console.log('variables: compile tests passed.');
 
   // --- 10–14. the apx keeps variables per session: SESSION ones shared by the project's agents, private ones each agent's own ---
-  const ensure = spawnSync(join(homedir(), '.claude/skills/tabeli/scripts/ensure-engine.sh'), { encoding: 'utf-8' });
-  if (ensure.status !== 0 && !process.env.APX_TABELI) {
-    console.log('variables: apx tests skipped (tabeli engine not available).');
-  } else {
+  {
     const project = join(tmp, 'apx-project');
     const teamVars = write(join(tmp, 'team-vars', 'vars.ap'), ['SESSION VAR answer', 'SESSION VAR verdict AS verdict', 'VAR board = Product']);
     const varsFiles = [{ path: teamVars, level: 'team' }];
     const docOf = async name => ApDocument.fromJson((await compile(['    VAR mine', '    DO  read {{answer}} on {{board}}, with {{mine}}', '    DO  decide INTO verdict'], { name, varsFiles })).structure.asJson());
     const docs = { a: await docOf('a'), b: await docOf('b') };
-    const BUILD = { builtAt: '', agentPackVersion: '', hash: '' };
-    const apx = (agent, ...args) => {
+    const BUILD = { builtAt: '', agentPackVersion: '', hash: '', tabeli: TABELI_ENGINE };
+    /** One run of `agent`'s engine; `build` names the tabeli it creates tables with. */
+    const apxBuilt = (build, agent, ...args) => {
       const lines = [];
-      const code = new ApxEngine(docs[agent], BUILD, join(project, apxPath(agent)), l => lines.push(l)).run(args);
+      const code = new ApxEngine(docs[agent], build, join(project, apxPath(agent)), l => lines.push(l)).run(args);
       return { out: lines.join('\n'), code };
     };
+    const apx = (agent, ...args) => apxBuilt(BUILD, agent, ...args);
     const valueOf = out => out.slice(out.indexOf('# value:\n') + '# value:\n'.length);
     const prior = process.env[SESSION];
     try {
@@ -346,22 +368,18 @@ try {
         'exit 1', '',
       ]);
       chmodSync(fake, 0o755);
-      const priorTabeli = process.env.APX_TABELI;
-      process.env.APX_TABELI = fake;
       process.env[SESSION] = 'session-old';
-      try {
-        r = apx('a', 'set', 'answer', 'x');
-        assert.equal(r.code, 2);
-        assert.match(r.out, /variables: tabeli v2 or newer is needed, and .*fake-tabeli is v1/, 'the engine that would create the table is checked');
-        // a table already there, made by a v1 engine, is checked too: it runs its own engine
-        process.env.APX_TABELI = priorTabeli ?? ensure.stdout.trim();
-        const old = join(project, '.agent-pack', 'state', 'session-old', 'session.tbl');
-        write(old, ['#!/bin/sh', 'echo "# tabeli v1 - fake"', '']);
-        chmodSync(old, 0o755);
-        assert.match(apx('a', 'get', 'answer').out, /variables: tabeli v2 or newer is needed, and .*session\.tbl is v1/);
-      } finally {
-        if (priorTabeli === undefined) delete process.env.APX_TABELI; else process.env.APX_TABELI = priorTabeli;
-      }
+      r = apxBuilt({ ...BUILD, tabeli: fake }, 'a', 'set', 'answer', 'x');
+      assert.equal(r.code, 2);
+      assert.match(r.out, /variables: tabeli v2 or newer is needed, and .*fake-tabeli is v1 — build agent-pack/, 'the engine that would create the table is checked');
+      // a table already there, made by a v1 engine, is checked too: it runs its own engine
+      const old = join(project, '.agent-pack', 'state', 'session-old', 'session.tbl');
+      write(old, ['#!/bin/sh', 'echo "# tabeli v1 - fake"', '']);
+      chmodSync(old, 0o755);
+      assert.match(apx('a', 'get', 'answer').out, /variables: tabeli v2 or newer is needed, and .*session\.tbl is v1 — upgrade it: .*tabeli upgrade /);
+      // an apx written before agent-pack shipped its engine records none
+      process.env[SESSION] = 'session-none';
+      assert.match(apxBuilt({ ...BUILD, tabeli: undefined }, 'a', 'set', 'answer', 'x').out, /variables: this apx records no tabeli engine — build agent-pack/);
     } finally {
       if (prior === undefined) delete process.env[SESSION]; else process.env[SESSION] = prior;
     }

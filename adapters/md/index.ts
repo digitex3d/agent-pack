@@ -12,7 +12,7 @@
  * class (`asMdBody`, `AgentBlock.asMdIdentity`). The core compiler consumes
  * this backend for the neutral body; harness adapters build on that body.
  */
-import type { AgentBlock } from '../../src/apdoc/blocks.js';
+import type { AgentBlock, VarBlock } from '../../src/apdoc/blocks.js';
 import type { ApBlock } from '../../src/apdoc/block.js';
 import { ApDocument } from '../../src/apdoc/document.js';
 import { renderNodes, MdEnv } from './toolkit.js';
@@ -20,8 +20,8 @@ import { OwnsPrimitive } from '../../src/primitives.js';
 import type { ApMdMeta } from '../../src/apdoc/types.js';
 import { FORMULAS, fill, refSuffix, headingLine } from '../../src/formulas.js';
 import { apxCommand } from '../../src/apx/paths.js';
-import { resolveReads, constantOf } from '../../src/vars.js';
-import { varCommand } from './phrases.js';
+import { resolveReads, constantOf, type VarRead } from '../../src/vars.js';
+import { varCommand, refName, shapeRefPhrase } from './phrases.js';
 
 const D = FORMULAS.document;
 
@@ -45,16 +45,26 @@ export function mdEnv(
   apxOf: (agent: string | null) => string = agent => apxCommand(agent ?? doc.root()?.name ?? ''),
 ): MdEnv {
   const src = doc.mdSource ?? EMPTY_MD;
-  // Substitution: a constant's `{{name}}` → its value; a variable's → how to read it.
-  const variables = new Set(doc.byKind('var').map(b => b.name));
-  const read = (name: string): string => fill(FORMULAS.keywords.VAR.read, { name, command: varCommand(apxOf(null), 'get', name) });
+  const V = FORMULAS.keywords.VAR;
+  const variables = new Map((doc.byKind('var') as VarBlock[]).map(b => [b.name, b]));
+  const refOf = (target: string): string => {
+    const id = doc.block(target)?.id;
+    return id ? refForm(id) : '';
+  };
+  // A variable's read → how to read it; shaped by a template it is not typed with → keep only what fits it.
+  const read = ({ name, template }: VarRead): string | undefined => {
+    const variable = variables.get(name);
+    if (!variable) return undefined;
+    const plain = fill(V.read, { name, command: varCommand(apxOf(null), 'get', name) });
+    const shape = template ? doc.templateNamed(template) : null;
+    if (!template || !shape || (variable.type && refName(variable.type) === template)) return plain;
+    return fill(V.readShaped, { read: plain, template: shapeRefPhrase(template, refOf(shape.address)) });
+  };
   return {
     forceLevels: doc.meta.forceLevels,
-    refOf: target => {
-      const id = doc.block(target)?.id;
-      return id ? refForm(id) : '';
-    },
-    substitute: text => resolveReads(text, name => constantOf(src.vars, name) ?? (variables.has(name) ? read(name) : undefined)),
+    refOf,
+    // Substitution: a constant's `{{name}}` → its value; a variable's → how to read it.
+    substitute: text => resolveReads(text, r => (r.template ? undefined : constantOf(src.vars, r.name)) ?? read(r)),
     apxOf,
     agent: doc.root()?.name ?? '',
   };

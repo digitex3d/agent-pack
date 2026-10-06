@@ -5,7 +5,7 @@ import { Config } from '../config.js';
 import { AdapterCtx, AdapterPlugin, Bundle, EmittedFile, Emitter, emitterFor, neutralEmitter } from '../../adapters/types.js';
 import { detectAndBuild } from './detect.js';
 import { BuildAgentOptions } from './agent.js';
-import { apxFiles } from '../apx/write.js';
+import { apxFiles, apxChecks } from '../apx/write.js';
 import { FLOWS_DIR, flowScriptFile } from '../apx/paths.js';
 
 /**
@@ -32,7 +32,7 @@ export async function bundleAndEmit(
     const document = bundle.structure.asJson();
     files.push({ path: resolve(config.outputDir, `${bundle.name}.ap.json`), content: document });
     // Every agent gets its apx, whatever the adapter writes into its harness.
-    if (bundle.kind === 'agent') files.push(...apxFiles(bundle.name, document, ctx.projectRoot, config.bundle.apxCompress === true));
+    if (bundle.kind === 'agent') files.push(...apxFiles(bundle.name, document, ctx.projectRoot, config.bundle.apxCompress === true, apxChecks(config, ctx.projectRoot)));
     // The flows the agent's team runs, as the harness's own scripts.
     const runner = adapter?.flowScript;
     for (const flow of runner ? bundle.structure.byKind('flow') : []) {

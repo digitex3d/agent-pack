@@ -121,27 +121,32 @@ export function getCanonicalKeywords(): string[] {
  * base without enumerating every `!`-declension.
  */
 export function forceLevelBaseOf(keyword: string): string | null {
-  const m = keyword.match(/^(!*)([A-Z][A-Z0-9]*)(!*)$/);
+  return parseForceLevel(keyword)?.family ?? null;
+}
+
+/**
+ * THE declension grammar, family-blind: `<!*>BASE<!*>` → the base and its
+ * signed level (−n for a `!` prefix, +n for a suffix); null when the word has
+ * both or is no such form. The force levels (below) and the levels of a
+ * condition head (`IF!`, `UNTIL!!` — lexer.splitControl) both build on it.
+ */
+export function splitBangs(word: string): { base: string; level: number } | null {
+  const m = word.match(/^(!*)([A-Z][A-Z0-9]*)(!*)$/);
   if (!m) return null;
   const [, prefix, base, suffix] = m;
   if (prefix.length > 0 && suffix.length > 0) return null;
-  return RAW.families.some(f => f.name === base) ? base : null;
+  return { base, level: prefix.length > 0 ? -prefix.length : suffix.length };
 }
 
 /**
  * Parse a canonical force-level keyword (`MUST!!`, `!ALWAYS`, …) into its
- * family + numeric level, or null when it is not a force-level form. THE
- * single source of the declension grammar — `getIntroByKeyword` and the
- * DocumentBuilder both build on it.
+ * family + numeric level, or null when it is not a force-level form —
+ * `getIntroByKeyword` and the DocumentBuilder both build on it.
  */
 export function parseForceLevel(canonical: string): { family: string; level: number } | null {
-  // Parse: <!*><base><!*> — but only one of prefix/suffix is allowed
-  const m = canonical.match(/^(!*)([A-Z][A-Z0-9]*)(!*)$/);
-  if (!m) return null;
-  const [, prefix, base, suffix] = m;
-  if (prefix.length > 0 && suffix.length > 0) return null;
-  if (!RAW.families.some(f => f.name === base)) return null;
-  return { family: base, level: prefix.length > 0 ? -prefix.length : suffix.length };
+  const split = splitBangs(canonical);
+  if (!split || !RAW.families.some(f => f.name === split.base)) return null;
+  return { family: split.base, level: split.level };
 }
 
 /**

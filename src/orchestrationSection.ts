@@ -13,6 +13,7 @@ import {
   reportLintIssues,
   lintSource,
 } from './compiler/index.js';
+import { checkedHeadIssues } from './lint.js';
 import { Config } from './config.js';
 import { AGENTS_MD } from './projectContext.js';
 import { apxCommand } from './apx/paths.js';
@@ -99,6 +100,8 @@ function makeOrchestrationContext(opts: OrchestrationSectionOptions): BundleCont
     libraryRoots,
     libraries: opts.libraries ?? {},
     renderings: opts.renderings,
+    // A checked condition in a step names its BY agent's check — only when a judge is configured.
+    checks: opts.config?.checks ?? null,
   });
 }
 
@@ -185,6 +188,8 @@ async function collectTeams(teamsRoot: string, ctx: BundleContext): Promise<Team
       agentNames,
       (msg, line) => ctx.lintErrors.push({ file: flowsAp, line, message: msg }),
     );
+    // Its checked heads as AGENTS.md renders them: a step's is its BY agent's, the routing's no one's.
+    ctx.lintErrors.push(...checkedHeadIssues(flowsAp, raw, ctx.checks, by => (agentNames.has(by) ? by : null)));
     // `LENS-IN <agent> <template>` — the member's default input shape, declared
     // team-side and rendered into the members list for orchestrator discovery.
     const { metadata: lensMeta, stripped: noLensIn } = partitionMetadata(raw, ['LENS-IN']);
