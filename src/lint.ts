@@ -561,6 +561,8 @@ const PROCEDURE_SPEC: LintSpec = {
     ['PROCEDURE', headerHandler('PROCEDURE')],
     ['IF',        ifElseHandler],
     ['ELSE',      ifElseHandler],
+    // The procedure's input contract — the shape of what it takes, when it has one.
+    ['LENS-IN',   accept],
     ...PROCEDURE_FLOW_KEYWORDS.map(kw => [kw, accept] as const),
     // DISTILL stands alone on its line; its place and its text are checkVocabulary's.
     ['DISTILL', passthrough],
@@ -597,6 +599,11 @@ const ROLE_SPEC: LintSpec = {
     ['EXTENDS',   counts('extendsCount')],
     ['WHEN',      triggerHandler('WHEN', s => { s.hasRule = true; })],
     ...ROLE_RULE_KEYWORDS.map(kw => [kw, compose(accept, flags('hasRule'))] as const),
+    // IF/ELSE heads take the shared branch check: a bare `ELSE` has no rest, so
+    // the generic rule-line handler above would reject it. Listed after the
+    // spread, they override its entries.
+    ['IF',        compose(ifElseHandler, flags('hasRule'))],
+    ['ELSE',      ifElseHandler],
     ...agentOnlyEntries,
     ...flowOnlyEntries,
   ]),

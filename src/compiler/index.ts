@@ -214,7 +214,12 @@ export async function resolveInlineBlocks(
   ctx: BundleContext,
   sourcePath: string,
 ): Promise<string> {
-  return extractInlineDefinitions(await expandImports(stripped, ctx, sourcePath), ctx, sourcePath);
+  const known = ctx.roles.length;
+  const body = extractInlineDefinitions(await expandImports(stripped, ctx, sourcePath), ctx, sourcePath);
+  // An inline role's rules carry the IMPORTs of the library roles it EXTENDS:
+  // resolve them like the agent's own, so no IMPORT line is left as text.
+  for (const role of ctx.roles.slice(known)) role.body = await processImports(role.body, ctx);
+  return body;
 }
 
 /**

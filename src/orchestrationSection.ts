@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { refSuffix, introOf } from './formulas.js';
+import { refSuffix, introOf, FORMULAS, fill } from './formulas.js';
 import { readFileSync, readdirSync, existsSync, statSync } from 'fs';
 import { resolve } from 'path';
 import { ensureMdBlock, MdBlockResult } from './services/mdBlock.js';
@@ -17,6 +17,9 @@ import { checkedHeadIssues } from './lint.js';
 import { Config } from './config.js';
 import { AGENTS_MD } from './projectContext.js';
 import { apxCommand } from './apx/paths.js';
+import { resolveReads, constantOf } from './vars.js';
+import { parseVarsAp, varsFilesFor } from './varsAp.js';
+import { varCommand } from '../adapters/md/phrases.js';
 import { BundleContext } from './dispatch/index.js';
 import { parseBlocks } from './parseBlocks.js';
 import { buildRoleIndex, resolveRole, RoleIndex } from './roleIndex.js';
@@ -118,6 +121,8 @@ interface TeamRaw {
   members: AgentInfo[];
   /** Routing body (WHEN/RUN) with FLOW definitions already stripped into the shared ctx. */
   routingRaw: string;
+  /** The team's `flows.ap` — where its flows, and their vars.ap, come from. */
+  flowsAp: string;
 }
 
 /** A team's `flows.ap`, read and parsed exactly once. */
@@ -160,6 +165,40 @@ function readTeamFiles(teamsRoot: string): TeamFile[] {
  * Builds the role→agent RoleIndex from the already-parsed blocks of the same
  * files, so `BY <role>` resolves with one walk/read/parse per file.
  */
+/**
+ * A team's `{{…}}` reads as AGENTS.md renders them — the same vars.ap files its
+ * members compile with (the project's, the team's): a constant's read is its
+ * value, a variable's how to read it with a member's apx (a SESSION variable
+ * reads the same from every member). Any other read stays as written. Applied
+ * to the rendered text: a checked head's id is the condition as written.
+ */
+function teamReads(flowsAp: string, projectRoot: string, member: string | undefined, ctx: BundleContext): (text: string) => string {
+  const constants: Record<string, string> = {};
+  const variables = new Set<string>();
+  for (const f of varsFilesFor(flowsAp, projectRoot)) {
+    const parsed = parseVarsAp(ctx.sources.read(f.path), f.path);
+    Object.assign(constants, parsed.constants);
+    for (const v of parsed.variables) variables.add(v.name);
+  }
+  const V = FORMULAS.keywords.VAR;
+  return text => resolveReads(text, r => {
+    if (r.template) return undefined;
+    const value = constantOf(constants, r.name);
+    if (value !== undefined) return value;
+    return member && variables.has(r.name) ? fill(V.read, { name: r.name, command: varCommand(apxCommand(member), 'get', r.name) }) : undefined;
+  });
+}
+
+/** The rendered Flows chapter, each flow's section with the reads of the team that declares it. */
+function renderFlowReads(chapters: string, ctx: BundleContext, readsOf: Map<string, (text: string) => string>): string {
+  return chapters.split(/^(?=## )/m).map(section => {
+    const name = /^## `([^`]+)`/.exec(section)?.[1];
+    const path = name ? ctx.flows.find(f => f.name === name)?.path : undefined;
+    const reads = path ? readsOf.get(path) : undefined;
+    return reads ? reads(section) : section;
+  }).join('');
+}
+
 async function collectTeams(teamsRoot: string, ctx: BundleContext): Promise<TeamRaw[]> {
   const files = readTeamFiles(teamsRoot);
 
@@ -213,6 +252,7 @@ async function collectTeams(teamsRoot: string, ctx: BundleContext): Promise<Team
       about: readTeamPurpose(teamDir),
       members,
       routingRaw: await resolveInlineBlocks(stripped, ctx, flowsAp),
+      flowsAp,
     });
   }
   return out;
@@ -342,6 +382,7 @@ export async function buildOrchestrationContent(opts: OrchestrationSectionOption
   // with `BY <role>` resolved against the RoleIndex built from the same
   // single walk/read/parse of each team's flows.ap).
   const teamRaws = await collectTeams(teamsDir, ctx);
+  const readsOf = new Map(teamRaws.map(t => [t.flowsAp, teamReads(t.flowsAp, opts.cwd, t.members[0]?.name, ctx)]));
 
   reportLintIssues(ctx, 'Orchestration section');
 
@@ -349,7 +390,7 @@ export async function buildOrchestrationContent(opts: OrchestrationSectionOption
   // stamping each flow id so RUN references can resolve to `(id)`. Post-process
   // the emitted chapters (as the agent pipeline does) so STEP/BY/DO/CONTEXT in
   // flow bodies and force-levels in the chapter intros render to prose.
-  const chapters = postProcessBody(emitCollectedSections(ctx), ctx).trim();
+  const chapters = renderFlowReads(postProcessBody(emitCollectedSections(ctx), ctx).trim(), ctx, readsOf);
 
   // Phase 3: post-process each team's routing against the now-stamped ctx, so
   // `RUN <flow>` renders as `Run the flow \`<name>\` (id)` — with the command
@@ -358,7 +399,7 @@ export async function buildOrchestrationContent(opts: OrchestrationSectionOption
   const teams: TeamInfo[] = teamRaws.map(t => {
     const member = t.members[0]?.name;
     ctx.flowCommand = member ? id => apxCommand(member, 'flow', id) : undefined;
-    const routingBody = postProcessBody(t.routingRaw, ctx).trim().replace(/\n{3,}/g, '\n\n');
+    const routingBody = readsOf.get(t.flowsAp)!(postProcessBody(t.routingRaw, ctx)).trim().replace(/\n{3,}/g, '\n\n');
     ctx.flowCommand = undefined;
     return { name: t.name, about: t.about, members: t.members, routingBody };
   });

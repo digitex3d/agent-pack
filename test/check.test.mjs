@@ -288,7 +288,7 @@ try {
     assert.equal(leadDoc.meta.checks, undefined, 'and only there');
     const one = await views(leadDoc, 'lead');
     const head = `says clean — run \`node .agent-pack/apx/builder.apx check ${id}\`: its answer decides, not your own judgement:`;
-    assert.ok(one.md.includes(`   If {{report}} ${head}`), `AGENTS.md:\n${one.md}`);
+    assert.ok(one.md.includes(`   If \`report\` (read its value: \`node .agent-pack/apx/builder.apx get report\`) ${head}`), `AGENTS.md:\n${one.md}`);
     assert.ok(one.apxFlow.includes(`check ${id}\`: its answer decides`) && one.apxFlow.includes('builder.apx check'), one.apxFlow);
     assert.ok(one.script.includes(`builder.apx check ${id}`), one.script);
 

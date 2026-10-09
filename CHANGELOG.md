@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **A role's `IMPORT`s are resolved.** The templates, policies and procedures a library role imports — at the top of its file or in its body, and those of the roles it `EXTENDS`, also from an inline role — now enter the agent like the agent's own imports. Before, they were missing from the agent and their `IMPORT` lines were left as text in its identity.
+- **`LENS-IN` in a procedure's own file.** A library procedure may declare its input contract, as one written in an agent file already could.
+- **A bare `ELSE` in a role's own file.** The `IF`/`ELSE` under a library role's `WHEN` passes the lint, as in procedures and playbooks.
+- **`AGENTS.md` renders a team's reads.** In a team's flows and routing, a constant's `{{name}}` is its value and a variable's says how to read it with a member's apx, from the project's and the team's `vars.ap` — as `apx flow` and the Workflow script already did. A checked head keeps its id.
+
 ## [0.27.1] - 2026-10-06
 
 ### Changed

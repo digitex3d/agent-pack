@@ -343,4 +343,7 @@ await import('./variables.test.mjs');
 // --- IF!/IF!!/UNTIL!!: checked conditions, the question, the apx asking a (fake) judge ---
 await import('./check.test.mjs');
 
+// --- library files compile like inline blocks: procedure LENS-IN, role ELSE and IMPORTs; team flows render vars.ap reads ---
+await import('./libraryUnits.test.mjs');
+
 console.log('All tests passed.');
