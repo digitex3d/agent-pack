@@ -1,0 +1,18 @@
+# write-program
+
+EXPORT PROCEDURE write-program:
+  ABOUT   write the program of a contract the first time `apx run` says there is none
+  TAGS    #program #compute
+  MUST    read the contract with `apx get <exe-id>` and the block it carries out before writing a line
+  MUST    write the script and its tests yourself, in the same pass
+  NEVER   hardcode a value that arrives as input — read it from the JSON on stdin
+  NEVER   leave a decision the block did not state untested
+  IF      `apx run` says a previous version exists
+    DO    copy its folder into the new one, then evolve it — version + 1, previous set to its dst-id
+    DO    delete the old folder
+  DO      write the manifest, the script and its tests in the folder and the formats `apx run` gave
+  DO      make the script executable
+  DO      turn every REQUIRE line into a refusal case that expects exit 1
+  DO      turn every ENSURE line into cases whose expected output proves the guarantee
+  DO      add a case whose why starts with `CHOICE:` for every decision the block left open
+  DO      run `apx run <exe-id>` again

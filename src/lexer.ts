@@ -22,6 +22,8 @@ import { desugar } from './desugar.js';
 import { getFamilyBases, getAliasNames, splitBangs } from './forceLevelConfig.js';
 import { getLifecycleAliases } from './lifecycleConfig.js';
 import { CHECK_KINDS, MAX_CHECK_LEVEL, type CheckKind } from './check.js';
+import { splitExecutorMark } from './executor.js';
+import { ACTION_VERBS } from './actionVerbs.js';
 
 /**
  * Static (non-force-level) keywords. Force-level families and their aliases
@@ -32,7 +34,8 @@ const STATIC_KEYWORDS = [
   'IMPORT',
   'UNTIL', 'ABOUT', 'SCOPE',
   'ELSE', 'WHEN', 'OWNS', 'TAGS',
-  'RUN', 'VAR', 'DO', 'IF',
+  'RUN', 'VAR', 'IF',
+  ...ACTION_VERBS,
   // A variable's scope, right before VAR (`SESSION VAR plan`) — vars.ts parses it.
   'SESSION', 'GLOBAL',
   'ROLE', 'EXPERTISE', 'MANDATE', 'LENS-OUT', 'LENS-IN',
@@ -95,14 +98,20 @@ const FORCE_BASES_ALT = FORCE_LEVEL_BASES.map(escapeRegex).join('|');
 // the condition and a judge decides, 2 the condition is sealed (src/check.ts).
 // `!IF` is lexed only so the vocabulary check rejects it by name. The heads and
 // their highest level are check.ts's.
-const CONTROL_ALT = `!?(?:${CHECK_KINDS.join('|')})!{0,${MAX_CHECK_LEVEL}}`;
+// A head may also carry its executor's stars (`IF*` a delegate, `IF**` a program decides),
+// before or after the `!`s — a star with a `!` is the vocabulary check's error.
+const CONTROL_ALT = `!?(?:${CHECK_KINDS.join('|')})(?:!{1,${MAX_CHECK_LEVEL}}\\*{1,2}|\\*{1,2}!{0,${MAX_CHECK_LEVEL}}|!{0,${MAX_CHECK_LEVEL}})`;
 
-/** `IF!!` → `{ keyword: 'IF', level: 2 }`; `!IF` → level -1; any other word → null. */
-export function splitControl(keyword: string): { keyword: CheckKind; level: number } | null {
-  const split = splitBangs(keyword);
+/**
+ * `IF!!` → `{ keyword: 'IF', level: 2 }`; `!IF` → level -1; `IF**` → executor 2;
+ * any other word → null.
+ */
+export function splitControl(keyword: string): { keyword: CheckKind; level: number; executor?: number } | null {
+  const stars = keyword.match(/\*+/)?.[0].length ?? 0;
+  const split = splitBangs(keyword.replace(/\*+/, ''));
   if (!split || !(CHECK_KINDS as readonly string[]).includes(split.base)) return null;
-  if (split.level < -1 || split.level > MAX_CHECK_LEVEL) return null;
-  return { keyword: split.base as CheckKind, level: split.level };
+  if (split.level < -1 || split.level > MAX_CHECK_LEVEL || stars > 2) return null;
+  return { keyword: split.base as CheckKind, level: split.level, ...(stars ? { executor: stars } : {}) };
 }
 const ALIAS_ALT = ALIAS_NAMES.map(escapeRegex).join('|');
 const STATIC_ALT = [...STATIC_KEYWORDS].map(escapeRegex).join('|');
@@ -114,7 +123,7 @@ const LIFECYCLE_ALT = LIFECYCLE_ALIASES.map(escapeRegex).join('|');
 //   - alias name
 //   - lifecycle alias (ON-AGENT-PROMPTED, ON-INVOKE, …)
 //   - static keyword
-const KW_GROUP = `(?:${CONTROL_ALT}|!+(?:${FORCE_BASES_ALT})|(?:${FORCE_BASES_ALT})!*|${ALIAS_ALT}|${LIFECYCLE_ALT}|${STATIC_ALT})`;
+const KW_GROUP = `(?:${CONTROL_ALT}|PROCEDURE\\*{1,2}|!+(?:${FORCE_BASES_ALT})|(?:${FORCE_BASES_ALT})!*|${ALIAS_ALT}|${LIFECYCLE_ALT}|${STATIC_ALT})`;
 
 const KEYWORD_WITH_REST_RE = new RegExp(`^([ \\t]*)(${KW_GROUP})[ \\t]+(.+?)[ \\t]*$`);
 // Keywords that stand alone on a line: IF, ELSE, PARALLEL and the DISTILL levels.
@@ -159,7 +168,8 @@ export type Token =
   | (Position & { kind: 'comment'; raw: string })
   | (Position & { kind: 'rawLine'; raw: string })
   // `level`: the level of an IF/UNTIL head (`IF!` 1, `IF!!` 2, `!IF` -1 — splitControl); absent = 0.
-  | (Position & { kind: 'keyword'; keyword: Keyword; rest: string; raw: string; level?: number })
+  // `executor`: the stars of an IF/UNTIL head (`IF*` 1 a delegate, `IF**` 2 a program); absent = the agent.
+  | (Position & { kind: 'keyword'; keyword: Keyword; rest: string; raw: string; level?: number; executor?: number })
   | (Position & { kind: 'blockOpener'; key: string; rest: string; raw: string })
   | (Position & { kind: 'procRef'; name: string; trailing: string; raw: string })
   | (Position & { kind: 'unknown'; raw: string });
@@ -167,6 +177,12 @@ export type Token =
 function indentOf(line: string): number {
   const m = line.match(/^[ \t]*/);
   return m ? m[0].length : 0;
+}
+
+/** `PROCEDURE**` → its word and stars; any other keyword → null. */
+function procedureMark(keyword: string): { word: string; executor: number } | null {
+  const mark = splitExecutorMark(keyword);
+  return mark.executor && mark.word === 'PROCEDURE' ? mark : null;
 }
 
 /**
@@ -227,13 +243,17 @@ export function lexRaw(source: string): Token[] {
 
     const kw = raw.match(KEYWORD_WITH_REST_RE);
     if (kw) {
-      const control = splitControl(kw[2]);
+      // A PROCEDURE head may carry its executor's stars (`PROCEDURE** name:`) — src/executor.ts.
+      const mark = procedureMark(kw[2]);
+      const control = mark ? null : splitControl(kw[2]);
       out.push({
         kind: 'keyword', line, col, indent,
-        keyword: (control?.keyword ?? kw[2]) as Keyword,
+        keyword: (mark?.word ?? control?.keyword ?? kw[2]) as Keyword,
+        ...(mark ? { executor: mark.executor } : {}),
         rest: kw[3],
         raw,
         ...(control?.level ? { level: control.level } : {}),
+        ...(control?.executor ? { executor: control.executor } : {}),
       });
       continue;
     }

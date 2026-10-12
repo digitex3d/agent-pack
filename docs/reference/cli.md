@@ -31,7 +31,7 @@ agent-pack bundle <name|path>    [--adapter <name>] [--out <dir>] [--apx-compres
 - each agent's apx, `.agent-pack/apx/<agent>.apx`, and its compiled document, `.agent-pack/compiled/<agent>.ap.json`;
 - `AGENTS.md` — the project context from `PROJECT.ap` (when present) and the orchestration of every standalone agent and team — plus each adapter's pointer to it (`CLAUDE.md` for Claude Code).
 
-AGENTS.md and CLAUDE.md are written as managed blocks: whatever you write outside them is kept. Scripts in `distilled/` that no `DISTILL` procedure owns any more — because it was edited or removed — are listed, never deleted.
+AGENTS.md and CLAUDE.md are written as managed blocks: whatever you write outside them is kept. Program folders in `distilled/` that no piece owns any more — because it was edited or removed — are listed, never deleted (see [Programs](/reference/language#programs)). The default delegate, `quick`, is built with the agents when one of them hands it work (`ASK` without `BY`) and the project has no agent of that name.
 
 **`bundle <name|path>`** compiles one agent by name, or a playbook by the path of its `.playbook.ap` file.
 
@@ -55,4 +55,4 @@ Lists the agents agent-pack can find, grouped by domain: the project's own, the 
 
 ## The apx
 
-Each compiled agent has its own executable, `.agent-pack/apx/<agent>.apx`, run by Node alone. Its verbs — `start`, `ls`, `get`, `flow`, `run`, the stores — are in [The apx](/guide/apx).
+Each compiled agent has its own executable, `.agent-pack/apx/<agent>.apx`, run by Node alone. Its verbs — `start`, `ls`, `get`, `set`, `flow`, `check`, `input`, `answer`, `run`, the stores — are in [The apx](/guide/apx).

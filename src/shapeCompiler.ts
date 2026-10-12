@@ -61,7 +61,16 @@ export interface Slot {
    * rule text. Additive — consumed by the DocumentBuilder (TemplateBlock
    * structures them as typed directives), ignored by every renderer.
    */
-  rawRules?: { keyword: string; text: string }[];
+  rawRules?: { keyword: string; text: string; criteria?: RuleCriteria }[];
+}
+
+/**
+ * What a judge's yes and no mean for one slot rule — the `YES …` / `NO …` lines
+ * written under it. Read by the judge only, never rendered.
+ */
+export interface RuleCriteria {
+  yes?: string;
+  no?: string;
 }
 
 export interface ParsedTemplate {
@@ -154,9 +163,12 @@ function ruleIntro(token: string): string | null {
  * Parse the SLOTS region. Two lexically disjoint line classes:
  *   - `lowercase-name[?]: TYPE …`  → a new slot declaration
  *   - `FORCE-LEVEL <rule>`         → a rule of the PRECEDING slot
+ *   - `YES <meaning>` / `NO <meaning>` → what a judge's answer means for the
+ *                                     PRECEDING rule (its criteria)
  * Attachment is by ORDER + keyword class — indentation is style, not
  * semantics, so reformatting can never re-scope a rule. A rule with no slot
- * above it is a structural error and throws (loud, like an unknown AS slug).
+ * above it, or a YES/NO with no rule above it, is a structural error and
+ * throws (loud, like an unknown AS slug).
  */
 function parseSlots(lines: string[]): Slot[] {
   const out: Slot[] = [];
@@ -167,6 +179,13 @@ function parseSlots(lines: string[]): Slot[] {
     if (m) {
       const { typePart, desc } = splitDesc(m[3].trim());
       out.push({ name: m[1], optional: m[2] === '?', typePhrase: typeToPhrase(typePart), rawType: typePart, description: desc, rules: [], rawRules: [] });
+      continue;
+    }
+    const cm = t.match(/^(YES|NO)\s+(.+)$/);
+    if (cm) {
+      const rule = out[out.length - 1]?.rawRules?.at(-1);
+      if (!rule) throw new Error(`"${t}" has no slot rule above it — YES and NO say what a judge's answer means for the rule above`);
+      (rule.criteria ??= {})[cm[1] === 'YES' ? 'yes' : 'no'] = cm[2].trim();
       continue;
     }
     const rm = t.match(/^(!?[A-Z][A-Z0-9-]*!*)\s+(.+)$/);

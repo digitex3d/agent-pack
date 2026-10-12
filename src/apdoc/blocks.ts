@@ -18,7 +18,8 @@ import { ApBlock, ApBlockInit } from './block.js';
 import { stableId } from './ids.js';
 import { buildNamespace } from '../namespace.js';
 import { FORMULAS, fill } from '../formulas.js';
-import { MdEnv, slotTypePhrase, forceIntro, renderNodes, shapeLine } from '../../adapters/md/toolkit.js';
+import { executorKey, headerExecutorOf } from '../executor.js';
+import { MdEnv, slotTypePhrase, forceIntro, renderNodes, shapeLine, executorHow } from '../../adapters/md/toolkit.js';
 import {
   templateScaffoldIntro, scalarTemplateLine, FIELDS_LABEL, OPTIONAL_MARK,
   EXAMPLE_OPEN, EXAMPLE_CLOSE, lensInLine, lensBridgeLine, refName,
@@ -99,28 +100,75 @@ export class RuleBlock extends ApBlock {
   }
 
   static fromDefinition(def: Definition, cx: BlockCx): RuleBlock {
-    return RuleBlock.fromBody(def.kind, cx.defInit(def), cx.walkableBody(def), cx);
+    const block = new RuleBlock(def.kind, cx.defInit(def));
+    // The head's mark — carried by the definition, or on the header line a legacy
+    // module keeps in its body — is known before the walk: the conditions read it.
+    const executor = def.executor ?? headerExecutorOf(def.body, def.name);
+    if (executor) block.executor = executor;
+    cx.walk(cx.walkableBody(def), block.body, block);
+    return block;
   }
 
   static fromData(data: ApBlockData): RuleBlock {
     const block = restore(new RuleBlock(data.kind, initOf(data)), data);
     block.shape = (data.args['shape'] as ApShape | undefined) ?? null;
     block.lensIn = (data.args['lensIn'] as ApShape | undefined) ?? null;
+    block.executor = (data.args['executor'] as number | undefined) ?? null;
+    const exe = data.args['exe'] as string | undefined;
+    if (exe) block.exe = exe;
+    const sections = data.args as { require?: ApNode[]; ensure?: ApNode[] };
+    if (sections.require) block.require = reviveNodes(sections.require);
+    if (sections.ensure) block.ensure = reviveNodes(sections.ensure);
     return block;
+  }
+
+  /**
+   * A COMPUTE block: its rules on top, when its program refuses (REQUIRE), what
+   * it computes — its result's shape first (RETURN AS) — and what it guarantees
+   * (ENSURE). RETURN starts at `shapePos`.
+   */
+  private computeMd(env: MdEnv): string {
+    const C = FORMULAS.keywords.COMPUTE;
+    const at = this.shapePos ?? 0;
+    // A section's rules are conditions on the input or the result, never orders: `MUST x be y` → `It requires that x be y`.
+    const asConditions = (that: string): MdEnv => ({
+      ...env,
+      forceLevels: Object.fromEntries(Object.entries(env.forceLevels).map(([family, levels]) =>
+        [family, Object.fromEntries(Object.keys(levels).map(l => [l, Number(l) < 0 ? C.rule.never : that]))])),
+    });
+    const section = (head: string, nodes: ApNode[] | null, that: string) =>
+      (nodes?.length ? [head, ...renderNodes(asConditions(that), nodes, false)] : []);
+    return [
+      ...renderNodes(env, this.body.slice(0, at)),
+      ...section(C.require, this.require, C.rule.require),
+      C.return,
+      ...(this.shape ? [shapeLine(env, this.shape)] : []),
+      ...renderNodes(env, this.body.slice(at)),
+      ...section(C.ensure, this.ensure, C.rule.ensure),
+    ].join('\n');
   }
 
   protected override argsJson(): Record<string, unknown> {
     return {
       ...(this.lensIn ? { lensIn: this.lensIn } : {}),
       ...(this.shape ? { shape: this.shape } : {}),
+      ...(this.executor ? { executor: this.executor } : {}),
+      ...(this.exe ? { exe: this.exe } : {}),
+      ...(this.require ? { require: this.require } : {}),
+      ...(this.ensure ? { ensure: this.ensure } : {}),
     };
   }
 
-  /** A procedure's input contract opens its body; the rest is the shared rendering. */
+  /**
+   * Who carries a procedure out, then its input contract, open its body; the
+   * rest is the shared rendering. A COMPUTE block says when its program refuses,
+   * what it computes and what it guarantees.
+   */
   override asMdBody(env: MdEnv): string {
-    const body = super.asMdBody(env);
-    if (!this.lensIn) return body;
-    return `${fill(FORMULAS.keywords['LENS-IN'].input, { name: refName(this.lensIn.ref), ref: env.refOf(this.lensIn.ref.target) })}\n${body}`;
+    let body = this.require || this.ensure ? this.computeMd(env) : super.asMdBody(env);
+    if (this.lensIn) body = `${fill(FORMULAS.keywords['LENS-IN'].input, { name: refName(this.lensIn.ref), ref: env.refOf(this.lensIn.ref.target) })}\n${body}`;
+    if (this.executor) body = `${fill(FORMULAS.keywords.EXECUTOR.procedure[executorKey(this.executor)], { how: executorHow(env, this.exe, this.executor) })}\n${body}`;
+    return body;
   }
 }
 
@@ -300,19 +348,23 @@ export class TemplateBlock extends ApBlock {
   fill(body: string, cx: BlockCx): void {
     const parsed = parseTemplate(body);
     if (parsed && parsed.slots.length > 0) {
-      this.slots = parsed.slots.map((s): ApSlot => ({
-        name: s.name,
-        optional: s.optional,
-        type: cx.slotType(s.rawType),
-        ...(s.description ? { description: s.description } : {}),
-        rules: (s.rawRules ?? []).map(r => {
-          const { base, force } = cx.parseForce(r.keyword);
-          const rule = new DirectiveNode(base, force, r.text);
-          rule.chars = r.text.length;
-          return rule;
-        }),
-        chars: (s.description?.length ?? 0) + (s.rawRules ?? []).reduce((n, r) => n + r.text.length, 0),
-      }));
+      this.slots = parsed.slots.map((s): ApSlot => {
+        const criteria = (s.rawRules ?? []).map(r => r.criteria ?? null);
+        return {
+          name: s.name,
+          optional: s.optional,
+          type: cx.slotType(s.rawType),
+          ...(s.description ? { description: s.description } : {}),
+          rules: (s.rawRules ?? []).map(r => {
+            const { base, force } = cx.parseForce(r.keyword);
+            const rule = new DirectiveNode(base, force, r.text);
+            rule.chars = r.text.length;
+            return rule;
+          }),
+          ...(criteria.some(Boolean) ? { criteria } : {}),
+          chars: (s.description?.length ?? 0) + (s.rawRules ?? []).reduce((n, r) => n + r.text.length, 0),
+        };
+      });
       this.layout = parsed.bodyLayout;
       this.example = parsed.example;
     } else if (parsed?.scalar) {
@@ -343,6 +395,7 @@ export class TemplateBlock extends ApBlock {
       id: `${this.name}.${slot.name}.${i + 1}`,
       statement: rule.text,
       force: { keyword: rule.keyword, level: rule.force },
+      ...(slot.criteria?.[i] ? { criteria: slot.criteria[i]! } : {}),
     })));
   }
 
@@ -372,9 +425,6 @@ export class TemplateBlock extends ApBlock {
       return super.asMdBody(env);
     }
     if (this.example) out.push('', EXAMPLE_OPEN, this.example, EXAMPLE_CLOSE);
-    // A structured template renders its own layout, not its body — except a DISTILL mark.
-    const marks = this.body.filter(n => n.type === 'distill');
-    if (marks.length > 0) out.push('', ...renderNodes(env, marks));
     return out.join('\n');
   }
 }

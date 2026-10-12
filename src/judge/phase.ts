@@ -16,17 +16,19 @@
  * a file several agents use is judged once, a line text asked once, the
  * warnings collected and printed once at the end, the units written once.
  */
-import { join } from 'path';
-import { librariesAliasMap, type Config } from '../config.js';
+import { join, sep } from 'path';
+import { writtenKeyword } from '../forceLevelConfig.js';
+import { BUILTIN_AGENTS_DIR, BUILTIN_LIBRARY_ROOT, librariesAliasMap, type Config } from '../config.js';
 import type { ApDocument } from '../apdoc/document.js';
 import type { ApLine } from '../apdoc/types.js';
 import type { SourceRegistry } from '../sources.js';
 import { resolveLibraryOutputDir } from '../libraryIndex.js';
 import { formatErrors, type LintError } from '../lint.js';
-import { loadJudgeRules, severityOf } from './rules.js';
+import { judgeState, loadJudgeRules, severityOf } from './rules.js';
+import { AGENT, DELEGATE, PROGRAM, executorOf, scriptRuleLines } from '../executor.js';
 import { JudgeLock, verdictKey } from './lock.js';
 import { sha256, UnitStore, type Unit, type UnitDiagnostic } from './units.js';
-import { JudgeError, type JudgeCheck, type JudgeConfig, type JudgeRule } from './types.js';
+import { JudgeError, isDirect, type JudgeCheck, type JudgeConfig, type JudgeRule } from './types.js';
 
 /** One check's verdict on one line text: the one that counts, and the judge's own when known. */
 interface CheckVerdict {
@@ -104,7 +106,11 @@ export class JudgeRun {
       model: this.lock.model,
       threshold: this.options.threshold,
       decisions: Object.entries(this.lock.decisions).sort(([a], [b]) => a < b ? -1 : 1),
-      rules: this.rules.map(r => ({ id: r.id, checks: r.checks.map(c => ({ id: c.id, statement: c.statement, force: c.force })) })),
+      rules: this.rules.map(r => ({
+        id: r.id,
+        checks: r.checks.map(c => ({ id: c.id, statement: c.statement, force: c.force, criteria: c.criteria })),
+        ...(r.examples.length ? { examples: r.examples, role: r.role } : {}),
+      })),
     }));
   }
 
@@ -139,7 +145,8 @@ export class JudgeRun {
   }
 
   private async judgeText(rule: JudgeRule, text: string): Promise<CheckVerdict[] | NotJudged> {
-    const keys = rule.checks.map(c => verdictKey(c, text));
+    const state = judgeState(rule, text);
+    const keys = rule.checks.map(c => verdictKey(c, state));
     const known = keys.map(k => ({ decision: this.lock.decision(k)?.p, machine: this.units.verdict(k) }));
     if (known.every(v => v.decision !== undefined || v.machine !== undefined)) {
       this.stats.cached++;
@@ -152,7 +159,7 @@ export class JudgeRun {
     };
     let answer: Awaited<ReturnType<typeof judge.ask>> | null;
     try {
-      answer = await this.limit(() => this.offlineReason ? Promise.resolve(null) : judge.ask(text, rule.checks, this.lock.model ?? undefined));
+      answer = await this.limit(() => this.offlineReason ? Promise.resolve(null) : judge.ask(state, rule.checks, this.lock.model ?? undefined));
       for (const check of rule.checks) {
         const p = answer?.answers[check.id];
         if (answer && (typeof p !== 'number' || !(p >= 0 && p <= 1))) throw new JudgeError('line', `${judge.name} gave no probability for ${check.id}`);
@@ -209,6 +216,28 @@ function diagnostic(line: ApLine, check: JudgeCheck, severity: 'error' | 'warnin
   };
 }
 
+/** A source shipped with agent-pack — its builtin library and agents: judged in agent-pack's own build, never in a project's. */
+function shipped(file: string | null): boolean {
+  return !!file && [BUILTIN_LIBRARY_ROOT, BUILTIN_AGENTS_DIR].some(root => file.startsWith(root + sep));
+}
+
+/**
+ * Whether a scoped rule judges a line: #agent only what the agent carries out itself;
+ * #executed / #program only what a delegate or a program carries out — never a RUN,
+ * never a rule on top of a COMPUTE block (how its script is written).
+ */
+function inScope(scope: NonNullable<JudgeRule['scope']>, line: ApLine): boolean {
+  if (scope === 'agent') return executorOf(line) === AGENT;
+  if (line.primitive === 'RUN' || (line.line !== null && scriptRuleLines(line.block).has(line.line))) return false;
+  return executorOf(line) >= (scope === 'program' ? PROGRAM : DELEGATE);
+}
+
+/** How a negative rule reads in a message: `never …`, or `should not …` for an advice. */
+function negation(check: JudgeCheck): string {
+  if (!isDirect(check)) return '';
+  return check.force.keyword === 'SHOULD' ? 'should not ' : 'never ';
+}
+
 /** One rule applied to one line of a document. */
 interface Judged {
   rule: JudgeRule;
@@ -225,8 +254,9 @@ export async function judgeDocument(doc: ApDocument, run: JudgeRun, sources: Sou
   const report = (d: LintError): void => { if (d.severity === 'error') errors.push(d); else run.warn(d); };
   const byFile = new Map<string | null, Judged[]>();
   for (const rule of run.rules) {
-    for (const line of doc.lines(rule.primitive)) {
-      if (line.text.trim() === '') continue;
+    for (const line of doc.lines(rule.primitive ?? undefined)) {
+      if (line.text.trim() === '' || shipped(line.file)) continue;
+      if (rule.scope && !inScope(rule.scope, line)) continue;
       const judged = byFile.get(line.file) ?? [];
       judged.push({ rule, line });
       byFile.set(line.file, judged);
@@ -235,7 +265,7 @@ export async function judgeDocument(doc: ApDocument, run: JudgeRun, sources: Sou
   const rules = run.rulesHash();
   for (const [file, judged] of byFile) {
     const unit = file ? run.file(file, sources) : null;
-    const keys = new Set(judged.flatMap(({ rule, line }) => rule.checks.map(c => verdictKey(c, line.text))));
+    const keys = new Set(judged.flatMap(({ rule, line }) => rule.checks.map(c => verdictKey(c, judgeState(rule, line.text)))));
     for (const key of keys) run.usedKeys.add(key);
     const prior = unit?.prior;
     if (unit && prior && prior.hash === unit.hash && prior.rules === rules && prior.model === run.lock.model
@@ -266,7 +296,7 @@ export async function judgeDocument(doc: ApDocument, run: JudgeRun, sources: Sou
         if (machine !== undefined) unit?.verdicts.set(key, machine);
         if (p >= run.options.threshold) continue;
         const d: UnitDiagnostic = {
-          ...diagnostic(line, check, severityOf(check)!, `${rule.primitive} line breaks the rule "${check.statement}" (p=${p.toFixed(2)})`),
+          ...diagnostic(line, check, severityOf(check)!, `${writtenKeyword(line.primitive, line.force ?? 0)} line breaks the rule "${negation(check)}${check.statement}" (p=${p.toFixed(2)})`),
           data: { p, key },
         };
         unit?.diagnostics.set(diagnosticId(d), d);
@@ -322,7 +352,8 @@ export function finishJudgeRun(run: JudgeRun, opts: { prune: boolean }): void {
   const warnings = run.warnings;
   if (warnings.length > 0) console.error(formatErrors(warnings));
   if (run.offlineReason) console.error(`[agent-pack] judge ${run.options.adapter.name} unavailable: ${run.offlineReason}`);
-  const primitives = [...new Set(run.rules.map(r => r.primitive))].join('/');
+  // A #executed / #program rule names no keyword: its lines are counted, not named.
+  const primitives = [...new Set(run.rules.map(r => r.primitive).filter(p => p !== null))].join('/');
   const { lines, pairs, cached, asked, notJudged } = run.stats;
   const files = [...run.files.values()];
   const rejudged = files.filter(f => f.rejudged).length;

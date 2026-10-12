@@ -5,13 +5,16 @@ EXPORT TEMPLATE ap-statement:
   TAGS    #agent-pack #authoring #scaffold #rule
 
   SLOTS:
-    key:  ENUM[DO RUN IF ELSE UNTIL IF! IF!! UNTIL! UNTIL!! IN VAR]  "the statement keyword — see the rules below"
-      MUST   act with DO or RUN; branch with IF / ELSE; loop with UNTIL
+    key:  ENUM[DO ASK COMPUTE RUN IF ELSE UNTIL IF! IF!! UNTIL! UNTIL!! IF* IF** UNTIL* UNTIL** IN VAR]  "the keyword"
+      MUST   act with DO (the agent), ASK (a delegate), COMPUTE (a program) or RUN; branch with IF / ELSE
+      MUST   loop with UNTIL; a line may raise its executor (agent, delegate, program), never lower it
       MUST   hand a condition to the judge with IF! / UNTIL! (agent sees it) or IF!! / UNTIL!! (sealed)
       MUST   make a checked condition read at least one variable — the judge sees only stored values
-      MUST   never write a round limit on a checked UNTIL — the apx counts the rounds
+      MUST   hand a condition to a delegate with IF* / UNTIL*, to a program with IF** / UNTIL**
+      MUST   never put a `!` and a star on one condition — a condition has one judge
+      MUST   never write a round limit on a checked or starred UNTIL — the apx counts the rounds
       MUST   open `IN <store>:` to work on a store, `VAR <name>:` to assign a block's final outcome
-      MUST   put INTO <name> only at the very end of a DO line — never after RUN
+      MUST   put INTO <name> at the end of a DO, ASK, COMPUTE or RUN line — on an ASK only `BY <agent>` follows
     text: TEXT  "the statement body (ELSE takes none); IN and VAR heads end with a colon"
   BODY:
     {key} {text}
@@ -74,7 +77,7 @@ EXPORT TEMPLATE ap-block-step:
     actions:  TEXT  "one DO, RUN or force-level line per action; IF/ELSE branches hold the same lines"
       MUST   give at least one DO or RUN line — a step with neither is invalid
       MUST   write a rule with its force keyword (NEVER, MUST, SHOULD …) — never as DO never
-      MUST   not use MEM or DISTILL in a step — memory belongs to an agent, a role or a procedure
+      MUST   not use MEM in a step — memory belongs to an agent, a role or a procedure
       MUST   not declare a VAR in a step — declare it in a vars.ap or in the agent's body
       MAY    use IF! / IF!! / UNTIL! / UNTIL!! only when BY names an agent — its apx answers the check
     shape?:   TEXT MAX_WORDS 1  "input-contract template for the step (AS); omit if none"
@@ -236,6 +239,7 @@ EXPORT TEMPLATE ap-block-procedure:
   SLOTS:
     importable?:    ENUM[EXPORT]  "prefix EXPORT to import the procedure cross-file; omit for local"
     procedure-name: TEXT MAX_WORDS 1  "kebab-case procedure name, referenced by RUN"
+      MAY    mark the head PROCEDURE* for a delegate or PROCEDURE** for a program — its lines inherit the mark
     about:          TEXT MAX_WORDS 15  "one-line description of what the procedure does"
     tags?:          TEXT MAX_WORDS 6  "space-separated #tags (TAGS); omit if none"
     body:           <ap-action>  "the steps the procedure runs"

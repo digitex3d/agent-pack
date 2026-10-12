@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
 import type { Keyword } from './lexer.js';
+import { ACTION_VERBS } from './actionVerbs.js';
 import { getFamilyBases } from './forceLevelConfig.js';
 
 /**
  * The force-level families (MUST, ALWAYS/NEVER, SHOULD, MAY, …) a step admits,
- * by base: the list roles and playbooks admit, less DISTILL — a procedure's
- * mark, never a step's line — and less MEM — a step's BY agent may have no
+ * by base: the list roles and playbooks admit, less MEM — a step's BY agent may have no
  * memory in its harness. Listing a base admits every declared declension
  * (`MUST!`, `!ALWAYS`, …) — the validator normalises a child to its family
  * base. `AS` is among them as the step's shape signature, so a branch, which
  * holds only conditional lines, leaves it out.
  */
 const STEP_EXCLUDED: Partial<Record<Keyword, string>> = {
-  DISTILL: 'DISTILL marks a PROCEDURE, never a step',
   MEM: "a step's BY agent may have no memory in its harness; MEM goes in an agent, a role or a procedure",
 };
 const STEP_FAMILIES = familiesWithout(STEP_EXCLUDED);
@@ -21,25 +20,21 @@ const BRANCH_FAMILIES = STEP_FAMILIES.filter(base => base !== 'AS');
 
 /**
  * The force-level families an agent's top level admits, by base: every one —
- * MEM included, an agent being where memory is written — less DISTILL, a
- * procedure's mark. `AS` is among them as the agent's header signature (its
+ * MEM included, an agent being where memory is written. `AS` is among them as the agent's header signature (its
  * role binding); a bare `AS` body line stays rejected by `lintAgentBlocks`.
  */
-const AGENT_EXCLUDED: Partial<Record<Keyword, string>> = {
-  DISTILL: 'DISTILL marks a PROCEDURE, never an agent',
-};
+const AGENT_EXCLUDED: Partial<Record<Keyword, string>> = {};
 const AGENT_FAMILIES = familiesWithout(AGENT_EXCLUDED);
 
 /**
  * What a `VAR <name>:` block holds, at any depth beneath its head: a procedure
  * body's lines — DO, RUN, IF/ELSE, UNTIL, IN and the rule families. Its type
- * sits on its head, so no AS inside; DISTILL marks a procedure; a nested VAR is
+ * sits on its head, so no AS inside; a nested VAR is
  * the vocabulary check's own error. Not a BLOCK_CONTRACTS entry: the vocabulary
  * check applies it to every line under the head, in every file.
  */
 const VAR_EXCLUDED: Partial<Record<Keyword, string>> = {
   AS: "a VAR block's type sits on its head — `VAR <name> AS <template>:`",
-  DISTILL: 'DISTILL marks a PROCEDURE, never a VAR block',
 };
 
 /** Every force-level family base, less those `excluded` names. */
@@ -48,7 +43,7 @@ function familiesWithout(excluded: Partial<Record<Keyword, string>>): Keyword[] 
 }
 
 export const VAR_BLOCK: BlockContract = {
-  allows: ['DO', 'RUN', 'IN', 'IF', 'ELSE', 'UNTIL', ...familiesWithout(VAR_EXCLUDED)],
+  allows: [...ACTION_VERBS, 'RUN', 'IN', 'IF', 'ELSE', 'UNTIL', ...familiesWithout(VAR_EXCLUDED)],
   excluded: VAR_EXCLUDED,
 };
 
@@ -106,17 +101,17 @@ export const BLOCK_CONTRACTS: Record<string, BlockContract> = {
     // The force families come in by base, `AS` among them: every declension
     // (AS, AS!, AS!!, !AS) is admitted — `AS` declares the step's shape.
     // `BY` binds the step to its executor (agent or team); at most one.
-    // `MEM` and `DISTILL` are left out — `excluded` says why.
+    // `MEM` is left out — `excluded` says why.
     // A force-level line (`NEVER …`, `MUST! …`) is a rule of the step, never its
     // action: it does not count toward `requiresAnyOf`.
     // `IF <condition>` (and its `ELSE`) puts some of the step's DO/RUN and rule
     // lines under a condition; the signature lines (BY, CONTEXT, AS) stay
     // unconditional.
-    allows: ['DO', 'RUN', 'CONTEXT', 'BY', ...STEP_FAMILIES],
-    branches: { keywords: ['IF', 'ELSE'], allows: ['DO', 'RUN', ...BRANCH_FAMILIES] },
+    allows: [...ACTION_VERBS, 'RUN', 'CONTEXT', 'BY', ...STEP_FAMILIES],
+    branches: { keywords: ['IF', 'ELSE'], allows: [...ACTION_VERBS, 'RUN', ...BRANCH_FAMILIES] },
     excluded: STEP_EXCLUDED,
     unique: ['CONTEXT', 'BY'] as const,
-    requiresAnyOf: ['DO', 'RUN'] as const,
+    requiresAnyOf: [...ACTION_VERBS, 'RUN'] as const,
   },
   PARALLEL: {
     allows: ['STEP'] as const,
@@ -138,7 +133,7 @@ export const BLOCK_CONTRACTS: Record<string, BlockContract> = {
   // *signature* argument on the header line (the role binding) — NOT the same
   // `AS` as a STEP child (which declares a response shape). An AGENT block binds
   // a reusable ROLE by name and carries its OWN behavioural rules
-  // (force-level lines of every family but DISTILL — `excluded` says why — + WHEN workflows); EXPERTISE stays exclusive to the ROLE,
+  // (force-level lines of every family + WHEN workflows); EXPERTISE stays exclusive to the ROLE,
   // so it is deliberately absent from `allows` and the lint emits a HARD error
   // pointing back to the role. `LENS-IN` is admitted as the agent's own default
   // input shape — the team-side `LENS-IN <agent> <template>` override in flows.ap

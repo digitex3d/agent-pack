@@ -9,7 +9,9 @@ import { BundleContext, RoleEntry } from '../dispatch/index.js';
 import { processImports, resolveTargetWith } from '../dispatch/imports.js';
 import { resolveBundleDefaults, resolveTeamShared } from '../bundleDefaults.js';
 import { resolveTeamMembership } from '../services/teamMembership.js';
-import { allAgentFiles, allUserAgentFiles, readAgentFile, standaloneDir, agentNameOf, teamRootForAgentFile, TEAM_FLOWS_FILE } from '../services/teamMetadata.js';
+import { allAgentFiles, allUserAgentFiles, findAgentFiles, readAgentFile, standaloneDir, agentNameOf, teamRootForAgentFile, TEAM_FLOWS_FILE } from '../services/teamMetadata.js';
+import { askTargetErrors, executorErrors, usesPrograms, WRITE_PROGRAM, type AgentIndexEntry } from '../executor.js';
+import { BUILTIN_AGENTS_DIR, resolveDelegateConfig, type DelegateConfig } from '../config.js';
 import { formatErrors, LintError, checkVocabulary, lineOfName, checkedHeadIssues } from '../lint.js';
 import { extractInlineDefinitions } from '../dispatch/inlineBlocks.js';
 import { renderTree } from '../bundlers/renderTree.js';
@@ -59,6 +61,23 @@ export interface BundleOptions {
   judge?: JudgeRun | null;
   /** The judge of checked conditions (`checks` config key) — absent: none. */
   checks?: ChecksConfig | null;
+  /** Every agent of the project and its team — what `ASK … BY` may name. Absent: not checked. */
+  agentIndex?: AgentIndexEntry[];
+  /** The `delegate` config key: the default delegate and the agents' models. */
+  delegate?: DelegateConfig;
+}
+
+/** The agents shipped inside the package (`templates/agents/`) — found after the project's and the user's. */
+function builtinAgentFiles(): string[] {
+  return existsSync(BUILTIN_AGENTS_DIR) ? findAgentFiles(BUILTIN_AGENTS_DIR) : [];
+}
+
+/** Every agent of the project (the global ones after it) and the team it belongs to. */
+function agentIndexOf(config: Config): AgentIndexEntry[] {
+  return [...allAgentFiles(config.agentsDir, config.teamsDir), ...allUserAgentFiles(config.userRoot), ...builtinAgentFiles()].map(file => {
+    const teamRoot = teamRootForAgentFile(file);
+    return { name: agentNameOf(file), team: teamRoot ? basename(teamRoot) : null };
+  });
 }
 
 /**
@@ -73,6 +92,7 @@ export function resolveAgentFile(agentName: string, config: Config): string {
   for (const file of [
     ...allAgentFiles(config.agentsDir, config.teamsDir),
     ...allUserAgentFiles(config.userRoot),
+    ...builtinAgentFiles(),
   ]) {
     if (agentNameOf(file) === agentName) return file;
   }
@@ -143,6 +163,8 @@ function buildBundleOpts(
     adapter: overrides.adapter,
     judge: overrides.judge,
     checks: config.checks ?? null,
+    agentIndex: agentIndexOf(config),
+    ...(config.delegate ? { delegate: config.delegate } : {}),
   };
 }
 
@@ -639,6 +661,10 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
   // sibling ROLE) end up in the same ctx collections that imported files
   // target. Downstream rendering is identical.
   const agentBody = `${await resolveInlineBlocks(stripped, ctx, agentFilePath)}\n\n`;
+  // A program carries out some of this agent's work: how to write one comes with it.
+  if (usesPrograms(agentBody, ctx.procedures) && opts.libraries?.['@builtin'] && !ctx.procedures.some(p => p.name === WRITE_PROGRAM)) {
+    await expandImports(`IMPORT ${WRITE_PROGRAM} FROM @builtin.procedures`, ctx, agentFilePath);
+  }
   const variables = readVarsFiles(opts.varsFiles ?? [], opts.vars ?? {}, ctx);
 
   // Role binding: `AS <role>` resolves the bound role's display name / ABOUT /
@@ -674,6 +700,10 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     declaredVars: variables.variables,
     ownsInBody,
   });
+  // An ASK without BY goes to the default delegate; the config may set this agent's model.
+  const delegate = opts.delegate ?? resolveDelegateConfig(undefined);
+  if (Object.values(structure.meta.executors ?? {}).some(e => e.executor === 1 && !e.by)) structure.meta.delegate = delegate.default;
+  if (delegate.models[agentName]) structure.meta.model = delegate.models[agentName];
   const declared = new Set(structure.byKind('var').map(b => b.name));
   const located = (e: { path: string; name: string; line: number | null; message: string; severity?: 'warning' }): LintError =>
     ({ file: e.path, line: e.line ?? lineOfName(e.path, e.name), message: e.message, ...(e.severity ? { severity: e.severity } : {}) });
@@ -682,6 +712,8 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     ...storeErrors(structure, ctx, agentFilePath),
     ...builder.varErrors.map(located),
     ...builder.checkIssues.map(located),
+    ...(opts.agentIndex ? askTargetErrors(structure, opts.agentIndex, teamRoot ? basename(teamRoot) : null) : []),
+    ...executorErrors(structure),
     ...variableReadErrors(ctx, agentFilePath, variables.constants, declared, libraryReadRule(ctx, agentFilePath)),
   ], 'Bundle');
   // The judge phase: a well-formed document's lines checked by the judge.

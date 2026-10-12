@@ -3,7 +3,7 @@
 /**
  * Force-level lines at an AGENT's top level: the agent admits every force
  * family procedures and steps draw from — SHOULD, MAY and MEM included, in
- * every declared declension and alias — not only ALWAYS/NEVER/MUST. DISTILL is
+ * every declared declension and alias — not only ALWAYS/NEVER/MUST. DISTILL was
  * a procedure's mark and stays out, with its reason; an undeclared level stays
  * an error; the other agent rules (no identity keywords, no body `AS`) hold.
  * The lines reach the document, the md and the apx in source order.
@@ -50,15 +50,16 @@ const agentFile = join(dir, 'builder.ap');
 writeFileSync(agentFile, agentLines());
 
 try {
-  // --- lint: every family but DISTILL, in any declared declension or alias ---
+  // --- lint: every family, in any declared declension or alias ---
   assert.deepEqual(lintFile(agentFile, agentLines()), [], 'SHOULD/MAY/MEM and declensions lint clean in an agent');
   const errorsWith = (...extra) => lintFile(agentFile, agentLines(...extra)).map(e => [e.line, e.message]);
   const EXPECTED = 'ABOUT, MANDATE, OWNS, LENS-OUT, LENS-IN, IMPORT, ON-INVOKE, WHEN, VAR, MUST, ALWAYS, SHOULD, MAY, AS, MEM';
   assert.deepEqual(errorsWith('    DISTILL'), [
-    [13, 'DISTILL goes directly inside a PROCEDURE — found inside AGENT'],
-    [13, `DISTILL is not allowed inside AGENT — DISTILL marks a PROCEDURE, never an agent (expected one of: ${EXPECTED})`],
-  ], 'DISTILL is rejected in an agent, with its reason');
-  assert.deepEqual(errorsWith('    !SHOULD  x'), [[13, '`!SHOULD` is not a level of SHOULD — use SHOULD, SHOULD!']]);
+    [13, 'DISTILL was removed — mark the procedure PROCEDURE** or write a COMPUTE block: "DISTILL"'],
+    [13, `DISTILL is not allowed inside AGENT (expected one of: ${EXPECTED})`],
+  ], 'DISTILL was removed: the error says what replaces it');
+  assert.deepEqual(errorsWith('    SHOULD-NOT  x'), [], 'SHOULD-NOT is the negative level of SHOULD');
+  assert.deepEqual(errorsWith('    !!SHOULD  x'), [[13, '`!!SHOULD` is not a level of SHOULD — use !SHOULD, SHOULD, SHOULD!']]);
   assert.deepEqual(errorsWith('    MAY!  x'), [[13, '`MAY!` is not a level of MAY — use MAY']]);
   // The other agent rules hold.
   assert.deepEqual(errorsWith('    AS  other'), [[13, `AS is not allowed inside AGENT (expected one of: ${EXPECTED})`]]);

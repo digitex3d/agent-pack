@@ -44,7 +44,9 @@ Running the apx with no verb is the same as `start`.
 | `find <text>` | the blocks containing the text, each with the lines that matched |
 | `md` | the whole definition at once — the same text a harness `.md` carries |
 | `flow <flw-id>` | how to run a flow — see below |
-| `run <dst-id> [json]` | run a distilled script — see below |
+| `input <exe-id>` | what a delegate or a program receives — see below |
+| `answer <exe-id> - [--into <var>]` | store a delegate's answer, checked against its contract — see below |
+| `run <exe-id> [json] [--into <var>]` | run a program — see below |
 | `check <cnd-id>` | a checked condition put to the judge: `open` or `closed` — see below |
 | `version` | agent and id, build date, agent-pack version, content hash, block count |
 | `help` | the verbs |
@@ -63,7 +65,7 @@ so the agent follows ids and never guesses a block's content. A fellow team memb
 
 ## Errors
 
-Exit code `0` is success, `1` means something does not exist (an unknown id), `2` means wrong usage (an unknown verb, a missing argument). Every error is one line starting with `# error:` that carries the command to run instead:
+Exit code `0` is success, `1` means something does not exist (an unknown id), `2` means wrong usage (an unknown verb, a missing argument). `check`, `answer` and `run` use a few more — see [Checked conditions](#checked-conditions) and [Delegates and programs](#delegates-and-programs). Every error is one line starting with `# error:` that carries the command to run instead:
 
 ```
 # error: no block with id 'nope' and no variable named so — list them: node .agent-pack/apx/reviewer.apx ls
@@ -145,23 +147,46 @@ The first line is `open` or `closed`, for a machine; the second, why. The exit c
 - A checked `UNTIL` counts the closed answers in a row for this agent and condition: `round 2 of 3`, then `round limit reached (3 of 3): stop and report that the gate stayed closed`. An open answer starts the count again.
 - Every check is recorded in the session, beside its variables: the id, the agent, the level, the round, a sha256 fingerprint of the state (not the state), the model, the probability, the threshold and the outcome.
 
-## Distilled scripts
+## Delegates and programs
 
-A procedure marked `DISTILL` (see [Language](/reference/language#distillation)) carries an id like `dst-174db08e`. The agent runs its script through the apx:
+A line an agent hands to a delegate (`ASK`, `IF*`, `UNTIL*`, `PROCEDURE*`) or to a program (`COMPUTE`, `IF**`, `UNTIL**`, `PROCEDURE**` — see [Language](/reference/language#executors)) has a contract with an id like `exe-3f9a1c07`. The compiled line names the commands; `get <exe-id>` shows the contract, `scope` lists them all.
+
+**A delegate** — the agent hands it the input, and stores the answer it gets back:
 
 ```bash
-node .agent-pack/apx/accountant.apx run dst-174db08e '{"supplier":"Acme","lines":[{"amount":100,"vat-rate":22}]}'
-{"net":100,"vat":22,"gross":122}
+node .agent-pack/apx/clerk.apx input exe-3f9a1c07
+{"pdf_text": "INVOICE 2026-114 …"}
+node .agent-pack/apx/clerk.apx answer exe-3f9a1c07 - < answer.json
+# stored as `lines` for this session — read it: node .agent-pack/apx/clerk.apx get lines
 ```
 
-The input goes to the script as JSON on stdin — as the argument, or piped in. The apx:
+- `input <exe-id>` prints the JSON the piece receives — one key per variable it reads, with its value in this session (parsed when it is JSON), one per constant — and nothing else. An empty variable stops it (exit `1`).
+- `answer <exe-id> -` reads the delegate's answer on stdin (or the rest of the line) and checks it against the contract: a line with `INTO x` takes a value of `x`'s type and stores it in `x`; a procedure takes its `AS` template; a condition takes `{"holds": true}` or `{"holds": false}` and prints it. An answer that breaks the contract is refused (exit `6`): nothing is stored, and the agent hands the piece over again with the same input.
 
-- runs only the ids of this agent's distilled procedures;
-- checks the input against the procedure's `LENS-IN` template (exit `2` when it does not fit);
-- finds the script by name in `distilled/` and runs it, for at most 30 seconds;
-- checks the output against the procedure's `AS` template.
+**A program** — the apx runs it itself:
 
-When there is no script yet, the script fails (its error is shown), times out, or answers outside the template, `run` exits `1` and says so: the agent works it out by reasoning, and writes the script if its level asks for it. `scope` lists every distilled procedure and whether its script exists.
+```bash
+node .agent-pack/apx/clerk.apx run exe-8c21d4e0
+{"holds": false}
+```
+
+`run <exe-id> [in-json]` finds the program in `distilled/<dst-id>/` (see [Programs](/reference/language#programs)), runs its tests first when the program is new or changed, then runs it on the piece's input — the JSON `input` prints, plus `in` for a procedure that takes a `LENS-IN` (passed as the argument). Its answer is checked against the contract like a delegate's. The exit code tells the agent what to do:
+
+| Exit | |
+|---|---|
+| `0` | the answer — printed, or stored in its `INTO` variable |
+| `10` | no program yet: the message says where to write it and how (`write-program`), and where its previous version is |
+| `3` | the program refused its input: stop the procedure and report it — never carry the piece out yourself |
+| `4` | the program timed out (`timeout_ms` in its manifest): carry this one run out yourself, and say so |
+| `6` | the program is broken: it fails one of its own tests, cannot start, answers outside its contract, or its folder lacks `tests.json` or `timeout_ms` |
+| `7` | an `UNTIL*` / `UNTIL**` reached its round limit: stop the loop and report that the condition never held (also from `answer`) |
+| `1` / `2` | the piece cannot run yet (an empty variable, a delegate's contract) / wrong usage |
+
+**`--into <var>`** stores a procedure's result in a variable of the agent — what `RUN p INTO x` compiles to when a delegate or a program carries `p` out: `run <exe-id> --into x`, `answer <exe-id> - --into x`. It takes only a procedure's contract; a line stores in its own `INTO`.
+
+**Rounds.** For an `UNTIL*` or `UNTIL**`, each `holds: false` is a round: the apx adds `round 2 of 3 — do the next round, then ask again`, and at the limit (`checks.rounds`, 3 by default) `round limit reached (3 of 3): stop and report that the condition never held`, with exit `7` — so a command chained after it with `&&` never starts another round. A `holds: true` starts the count again.
+
+Every delegate's answer and every program run is recorded in the session, in `.agent-pack/state/<session id>/executors.tbl`: the contract id, the executor, who carried it out (the delegate's name, or `program`), a sha256 fingerprint of the input (not the input), the outcome (`answered`, `ran`, `refused`, `timeout`, `broken`), the condition's answer, and the time.
 
 ## Compression
 

@@ -121,7 +121,7 @@ FLOW no-action
 
   const errors = lintFlow('no-action.flow.ap', noAction);
   assert.ok(
-    errors.some(e => /STEP block requires at least one of: DO, RUN/.test(e.message)),
+    errors.some(e => /STEP block requires at least one of: DO, ASK, COMPUTE, RUN/.test(e.message)),
     `step without DO/RUN produces contract error, got: ${JSON.stringify(errors)}`,
   );
 

@@ -3,7 +3,7 @@
 import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 import { homedir } from 'os';
-import { JudgeError, type JudgeCheck, type JudgeQuestion, type JudgePlugin } from '../../src/judge/types.js';
+import { JudgeError, isDirect, type JudgeCheck, type JudgeQuestion, type JudgePlugin } from '../../src/judge/types.js';
 
 /**
  * Jev (TypeSafe AI) as the judge — the only place that knows Jev.
@@ -52,9 +52,17 @@ function scrub(text: string, key: string): string {
   return text.split(key).join('***');
 }
 
-/** The question one check becomes — a question as is, a rule's statement in Jev's wording. */
-function questionOf(check: JudgeCheck | JudgeQuestion): { type: 'noul'; instructions: string } {
-  return { type: 'noul', instructions: 'question' in check ? check.question : `Does the line satisfy this rule: "${check.statement}"?` };
+/**
+ * The question one check becomes — a question as is; a negative rule (`NEVER x`)
+ * asked directly about the state's `line` ("Does `line` x?"), with what yes and
+ * no mean when the rule says it; any other rule's statement in Jev's wording.
+ */
+function questionOf(check: JudgeCheck | JudgeQuestion): { type: 'noul'; instructions: string; criteria?: Record<string, string> } {
+  if ('question' in check) return { type: 'noul', instructions: check.question };
+  if (!isDirect(check)) return { type: 'noul', instructions: `Does the line satisfy this rule: "${check.statement}"?` };
+  const { yes, no } = check.criteria ?? {};
+  const criteria = { ...(yes ? { true: yes } : {}), ...(no ? { false: no } : {}) };
+  return { type: 'noul', instructions: `Does \`line\` ${check.statement}?`, ...(yes || no ? { criteria } : {}) };
 }
 
 export default function jevJudge(opts: JevOptions = {}): JudgePlugin {
@@ -101,7 +109,8 @@ export default function jevJudge(opts: JevOptions = {}): JudgePlugin {
       checks.forEach((c, i) => {
         const p = body.answers?.[`q${i + 1}`]?.noul;
         if (typeof p !== 'number' || p < 0 || p > 1) throw new JudgeError('line', `jev: the answer has no probability for question q${i + 1} (${c.id})`);
-        answers[c.id] = p;
+        // A direct question answers whether the line breaks the rule: the check holds on a no.
+        answers[c.id] = isDirect(c) ? 1 - p : p;
       });
       return { model: typeof body.model === 'string' ? body.model : model ?? opts.model ?? MODEL_DEFAULT, answers };
     },

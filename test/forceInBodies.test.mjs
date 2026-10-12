@@ -80,10 +80,11 @@ try {
     '    ELSE', '        MUST!!  tag it', '        MAY  announce it', ''].join('\n');
   assert.deepEqual(lintFile(procFile, procBody), [], 'a procedure file lints clean with force lines');
   assert.deepEqual(lintFile(agentFile, agentBody.join('\n') + '\n'), [], 'an inline procedure lints clean');
-  // DISTILL alone, directly in the PROCEDURE of a procedure file, with its AS result.
+  // DISTILL (D22) was removed: each of its levels is an error that names what replaces it.
   for (const level of ['DISTILL', 'DISTILL!!', '!DISTILL']) {
     assert.deepEqual(lintFile(procFile, ['# release', '', 'EXPORT PROCEDURE release:', '    ABOUT  cut a release', '    DO  bump the version',
-      '    AS  plan', `    ${level}`, ''].join('\n')), [], `${level} in a procedure file lints clean`);
+      '    AS  plan', `    ${level}`, ''].join('\n')).map(e => e.message),
+      [`DISTILL was removed — mark the procedure PROCEDURE** or write a COMPUTE block: "${level}"`], `${level} is an error`);
   }
   // An undeclared level stays an error (ALWAYS has no level 1).
   assert.deepEqual(lintFile(procFile, procBody.replace('NEVER  push', 'ALWAYS!  push')).map(e => e.message),
@@ -95,12 +96,12 @@ try {
   const lintShip = (...lines) => lintFlow(flowFile, ['# ship', '', 'ABOUT  ship it', '', 'FLOW ship', ...lines, ''].join('\n'));
   assert.deepEqual(lintShip(...FLOW.slice(1)), [], 'a flow file lints clean');
   assert.deepEqual(lintShip('    STEP s:', '        NEVER  guess', '        IF a:', '            MUST  check').map(e => [e.line, e.message]),
-    [[6, 'STEP block requires at least one of: DO, RUN']], 'force lines alone are no action');
-  // AS is the step's unconditional signature; DISTILL is a procedure's mark.
+    [[6, 'STEP block requires at least one of: DO, ASK, COMPUTE, RUN']], 'force lines alone are no action');
+  // AS is the step's unconditional signature; the removed DISTILL is no word of a step.
   assert.deepEqual(lintShip('    STEP s:', '        DO  x', '        IF a:', '            AS  plan', '            DO  y').map(e => e.message),
-    ['AS is not allowed inside IF (expected one of: DO, RUN, MUST, ALWAYS, SHOULD, MAY)']);
+    ['AS is not allowed inside IF (expected one of: DO, ASK, COMPUTE, RUN, MUST, ALWAYS, SHOULD, MAY)']);
   assert.deepEqual(lintShip('    STEP s:', '        DO  x', '        DISTILL').map(e => e.message),
-    ['DISTILL is not allowed inside STEP — DISTILL marks a PROCEDURE, never a step (expected one of: DO, RUN, CONTEXT, BY, MUST, ALWAYS, SHOULD, MAY, AS, IF, ELSE)']);
+    ['DISTILL is not allowed inside STEP (expected one of: DO, ASK, COMPUTE, RUN, CONTEXT, BY, MUST, ALWAYS, SHOULD, MAY, AS, IF, ELSE)']);
 
   // --- the document: force lines are directive nodes with their force, in source order ---
   const { structure } = await bundleAgentObject({

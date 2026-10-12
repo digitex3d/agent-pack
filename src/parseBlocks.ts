@@ -20,6 +20,7 @@
 
 import { lex, Token } from './lexer.js';
 import { blockTypeOf, EXPORT_MODIFIER } from './blockTypes.js';
+import { computeHead, splitExecutorMark } from './executor.js';
 
 export interface Line {
   type: 'line';
@@ -59,6 +60,10 @@ export interface Block {
    * appears in `key`; only the inner KIND does.
    */
   exported: boolean;
+  /** The executor mark of a `PROCEDURE*` / `PROCEDURE**` head (src/executor.ts); absent = the agent. */
+  executor?: number;
+  /** A `COMPUTE <name>:` block — read as a PROCEDURE** whose body holds REQUIRE / RETURN AS / ENSURE. */
+  computed?: boolean;
 }
 
 export type Node = Block | Line;
@@ -88,12 +93,12 @@ export interface ParseResult {
  * path: PROCEDURE, TEMPLATE, STEP, WHEN, IF, FLOW). Returns the normalised
  * `{ key, rest }` pair, or null when the token is not a block-opener.
  */
-function asBlockOpener(t: Token): { key: string; rest: string } | null {
+function asBlockOpener(t: Token): { key: string; rest: string; executor?: number } | null {
   if (t.kind === 'blockOpener') return { key: t.key, rest: t.rest };
   if (t.kind === 'keyword') {
     const trimmed = t.rest.trimEnd();
     if (trimmed.endsWith(':')) {
-      return { key: String(t.keyword), rest: trimmed.slice(0, -1).trim() };
+      return { key: String(t.keyword), rest: trimmed.slice(0, -1).trim(), ...(t.executor ? { executor: t.executor } : {}) };
     }
   }
   return null;
@@ -125,7 +130,7 @@ function splitNameAndRest(rest: string): { name: string | null; rest: string } {
  * carries a parser diagnostic message for a malformed EXPORT header.
  */
 type ExportResolution =
-  | { ok: true; inner: { key: string; rest: string } }
+  | { ok: true; inner: { key: string; rest: string; executor?: number } }
   | { ok: false; error: string };
 
 /**
@@ -148,7 +153,8 @@ function resolveExportModifier(rest: string): ExportResolution {
   }
   const m = trimmed.match(/^(\S+)(?:\s+(.*))?$/);
   // `trimmed` is non-empty, so the leading-token match always succeeds.
-  const kind = m![1].replace(/:$/, '');
+  // `EXPORT PROCEDURE** name:` — the stars are the head's executor mark (src/executor.ts).
+  const { word: kind, executor } = splitExecutorMark(m![1].replace(/:$/, ''));
   const tail = (m![2] ?? '').trim();
 
   const innerType = blockTypeOf(kind);
@@ -162,7 +168,7 @@ function resolveExportModifier(rest: string): ExportResolution {
   if (tail === '') {
     return { ok: false, error: `EXPORT ${kind} requires a name` };
   }
-  return { ok: true, inner: { key: kind, rest: tail } };
+  return { ok: true, inner: { key: kind, rest: tail, ...(executor ? { executor } : {}) } };
 }
 
 export function parseBlocks(source: string): ParseResult {
@@ -257,6 +263,9 @@ export function parseBlocks(source: string): ParseResult {
       }
 
       const { name, rest } = splitNameAndRest(opener.rest);
+      // `COMPUTE <name>:` is a procedure a program carries out — src/executor.ts.
+      const compute = computeHead(opener.key);
+      if (compute) opener = { ...opener, key: compute.key, executor: compute.executor };
       const block: Block = {
         type: 'block',
         key: opener.key,
@@ -266,6 +275,8 @@ export function parseBlocks(source: string): ParseResult {
         startLine: t.line,
         indent: t.indent,
         exported,
+        ...(opener.executor ? { executor: opener.executor } : {}),
+        ...(compute ? { computed: true } : {}),
       };
       // Registered primitives must declare a name. Control-flow keys (WHEN,
       // IF, ELSE) are not registered and bypass this check — their lack of

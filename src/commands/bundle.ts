@@ -6,7 +6,7 @@ import { loadConfig, Config, libraryRoots as libraryRootsOf, librariesAliasMap, 
 import { AdapterRegistry } from '../adapter-registry.js';
 import { AdapterCtx, AdapterPlugin, EmittedFile } from '../../adapters/types.js';
 import { bundleAndEmit } from '../bundlers/run.js';
-import { orphanScripts } from '../distill.js';
+import { orphanPrograms } from '../executor.js';
 import { emitProjectContext, ensureProjectPointers, AGENTS_MD, PROJECT_SOURCE } from '../projectContext.js';
 import { ensureOrchestrationSection } from '../orchestrationSection.js';
 import { discoverAgentsByWalk } from '../agentDiscovery.js';
@@ -135,7 +135,7 @@ export async function bundleAllOnce(
     console.error(`[agent-pack] judge: ${err instanceof Error ? err.message : err}`);
     return false;
   }
-  const distillIds = new Set<string>();
+  const programIds = new Set<string>();
   /** path → the adapter that wrote it and what: each file is written and listed once. */
   const written = new Map<string, { adapter: string; content: string }>();
   // The agent's own artifacts (.apx, compiled document) are one per agent: the
@@ -143,11 +143,16 @@ export async function bundleAllOnce(
   // claim is a configuration error.
   const shared = resolve(ctx.projectRoot, '.agent-pack') + sep;
 
-  for (const agent of agents) {
+  // The default delegate joins the build when some agent hands it work and the project has none of that name.
+  const queue = [...agents];
+  for (let k = 0; k < queue.length; k++) {
+    const agent = queue[k];
     for (const adapter of adapters) {
       try {
         const { bundle, files } = await bundleAndEmit(agent.name, config, adapter, ctx, { judge });
-        for (const { mark } of bundle.structure?.distillMarks() ?? []) distillIds.add(mark.id);
+        for (const spec of Object.values(bundle.structure?.meta.executors ?? {})) if (spec.program) programIds.add(spec.program);
+        const delegate = bundle.structure?.meta.delegate;
+        if (delegate && !queue.some(a => a.name === delegate)) queue.push({ name: delegate });
         for (const f of files) {
           const prior = written.get(f.path);
           if (prior?.content === f.content || (prior && f.path.startsWith(shared))) continue;
@@ -197,18 +202,18 @@ export async function bundleAllOnce(
     totalErrors++;
   }
 
-  // Scripts left behind by an edited or removed DISTILL construct — reported,
-  // never deleted; only after a clean build, when every live mark is known.
+  // Programs left behind by an edited or removed piece — reported, never
+  // deleted; only after a clean build, when every live contract is known.
   if (totalErrors === 0) {
-    for (const orphan of orphanScripts(ctx.projectRoot, distillIds)) {
-      console.error(`[agent-pack] ${orphan} matches no DISTILL construct any more (edited or removed) — review it, then delete it`);
+    for (const orphan of orphanPrograms(ctx.projectRoot, programIds)) {
+      console.error(`[agent-pack] ${orphan} is the program of no piece any more (edited or removed) — review it, then delete it`);
     }
   }
 
   if (judge) finishJudgeRun(judge, { prune: totalErrors === 0 });
 
   const suffix = totalErrors > 0 ? ` (${totalErrors} error(s))` : '';
-  console.error(`[agent-pack] bundled ${agents.length} agent(s) × ${adapters.length} adapter(s) → ${written.size} file(s)${suffix}`);
+  console.error(`[agent-pack] bundled ${queue.length} agent(s) × ${adapters.length} adapter(s) → ${written.size} file(s)${suffix}`);
   return totalErrors === 0;
 }
 

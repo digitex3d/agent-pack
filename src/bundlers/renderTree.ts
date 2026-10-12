@@ -31,6 +31,9 @@ import { forceLevelBaseOf } from '../forceLevelConfig.js';
 import { FORMULAS, fill } from '../formulas.js';
 import { checkHead, condCheckOf, type CheckKind } from '../check.js';
 import { apxCommand } from '../apx/paths.js';
+import { executorHead } from '../../adapters/md/phrases.js';
+import { directiveText } from '../../adapters/md/toolkit.js';
+import { splitBy } from '../vars.js';
 
 const CONTROL_HEADS: Record<string, string> = { IF: 'If', ELSE: 'Else', UNTIL: 'Until' };
 
@@ -42,8 +45,10 @@ const CONTROL_HEADS: Record<string, string> = { IF: 'If', ELSE: 'Else', UNTIL: '
  * executable checks it: it reads as the plain head — the source scan
  * (`checkedHeadIssues`) has warned, or failed the build of an `IF!!`.
  */
-function renderControlHead(kw: string, rawRest: string, level: number, by: string | undefined, ctx: BundleContext | undefined): string {
+function renderControlHead(kw: string, rawRest: string, level: number, by: string | undefined, ctx: BundleContext | undefined, executor = 0): string {
   const condition = stripTrailingColon(rawRest);
+  // `IF*` / `IF**`: a delegate or a program decides — the same head the document renders.
+  if (executor) return executorHead(`${CONTROL_HEADS[kw]} ${condition}`, executor);
   if (kw === 'IF' || kw === 'UNTIL') {
     const { check } = condCheckOf(kw as CheckKind, level, condition, by ? { at: 'step', agent: by } : { at: 'none' }, ctx?.checks);
     if (check) return checkHead(kw as CheckKind, check, check.level === 2 ? '' : condition, apxCommand(check.agent));
@@ -152,9 +157,16 @@ function minIndent(lines: string[]): number {
 
 /** Render a maximal run of leaf nodes through the existing flat primitive passes. */
 function renderLeafRun(nodes: Node[], ctx?: BundleContext): string[] {
-  const text = nodes.map(n => rawOf(n.token)).join('\n');
+  const text = nodes.map(n => askLine(n.token) ?? rawOf(n.token)).join('\n');
   const rendered = applyEnumPrimitives(applyForceLevels(text, ctx), ctx);
   return rendered.split('\n');
+}
+
+/** An `ASK … BY <agent>` line as rendered — the agent named the way the document names it; null for any other line. */
+function askLine(t: Token): string | null {
+  if (t.kind !== 'keyword' || t.keyword !== 'ASK') return null;
+  const by = splitBy(t.rest);
+  return by ? `${' '.repeat(t.indent)}ASK ${directiveText({ text: by.text, by: by.name })}` : null;
 }
 
 export function isStructural(t: Token, hasChildren: boolean): boolean {
@@ -232,7 +244,7 @@ function renderNodes(nodes: Node[], ctx: BundleContext | undefined, ordered: boo
 
     // Control head (IF/ELSE/UNTIL): render head, recurse body at its own indent.
     if (CONTROL_HEADS[kw]) {
-      out.push(`${' '.repeat(S)}${renderControlHead(kw, t.rest, t.level ?? 0, by, ctx)}:`);
+      out.push(`${' '.repeat(S)}${renderControlHead(kw, t.rest, t.level ?? 0, by, ctx, t.executor ?? 0)}:`);
       out.push(...renderNodes(n.children, ctx, ordered, by));
       i++;
       continue;

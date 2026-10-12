@@ -14,6 +14,8 @@
  */
 import type { ApBlock } from './block.js';
 import type { ApCondCheck, ApCheckSpec } from '../check.js';
+import type { RuleCriteria } from '../shapeCompiler.js';
+import type { ApExecutorSpec } from '../executor.js';
 
 /**
  * A pointer to another block. `id` is the stable identity of the target
@@ -60,6 +62,10 @@ export interface ApDirectiveNode {
   shape?: ApShape;
   /** `DO … INTO <name>`: the session variable the step's result is stored in. */
   into?: ApRef;
+  /** `ASK … BY <agent>`: the agent or team the line is handed to; absent = the default delegate. */
+  by?: string;
+  /** An ASK / COMPUTE line's contract id (`exe-…`, `meta.executors`) — src/executor.ts. */
+  exe?: string;
 }
 
 /** `RUN <name>` — invocation of a runnable (procedure/flow), always a Ref. */
@@ -70,6 +76,10 @@ export interface ApRunNode {
   /** Source indentation (spaces) within the block body; absent = 0. */
   indent?: number;
   ref: ApRef;
+  /** `RUN p INTO x` — the variable the procedure's result fills. */
+  into?: ApRef;
+  /** The type of that variable: the template its result is shaped as. */
+  shape?: ApShape;
   chars: number;
 }
 
@@ -95,6 +105,10 @@ export interface ApIfNode {
   condition: string;
   /** `IF!` / `IF!!`: who answers for the condition, and how (src/check.ts). Absent on a plain IF. */
   check?: ApCondCheck;
+  /** `IF*` / `IF**`: the condition is decided by a delegate (1) or a program (2) — src/executor.ts. */
+  executor?: number;
+  /** Its contract id (`exe-…`), when it has one of its own. */
+  exe?: string;
   chars: number;
   then: ApNode[];
   else: ApNode[];
@@ -128,6 +142,10 @@ export interface ApUntilNode {
   condition: string;
   /** `UNTIL!` / `UNTIL!!`: who answers for the condition, and its round limit. Absent on a plain UNTIL. */
   check?: ApCondCheck;
+  /** `UNTIL*` / `UNTIL**`: the condition is decided by a delegate (1) or a program (2). */
+  executor?: number;
+  /** Its contract id (`exe-…`), when it has one of its own. */
+  exe?: string;
   chars: number;
   body: ApNode[];
 }
@@ -181,23 +199,6 @@ export interface ApParallelNode {
   steps: ApStepNode[];
 }
 
-/**
- * A procedure's `DISTILL` mark, closing its body: the script id, its level, and
- * the procedure's contract — output (`AS`) and optional input (`LENS-IN`) —
- * with an example JSON value of each, generated from their templates.
- */
-export interface ApDistillNode {
-  type: 'distill';
-  /** Where the node was written — provenance, never serialized. */
-  pos?: ApPos;
-  force: number;
-  id: string;
-  shape: ApShape;
-  input?: ApShape;
-  outputExample: string;
-  inputExample?: string;
-  chars: number;
-}
 
 /**
  * A source position: the 1-based line, the column of its first character (the
@@ -225,6 +226,8 @@ export interface ApSource {
  */
 export interface ApLine {
   primitive: string;
+  /** A starred condition's own executor (`IF*` 1, `IF**` 2) — src/executor.ts. */
+  executor?: number;
   force: number | null;
   text: string;
   file: string | null;
@@ -236,7 +239,6 @@ export interface ApLine {
 }
 
 export type ApNode =
-  | ApDistillNode
   | ApInNode
   | ApDirectiveNode
   | ApRunNode
@@ -267,6 +269,8 @@ export interface ApCheck {
   id: string;
   statement: string;
   force: { keyword: string; level: number | null };
+  /** What a judge's yes and no mean for this rule — its `YES` / `NO` lines. */
+  criteria?: RuleCriteria;
 }
 
 export interface ApSlot {
@@ -275,6 +279,8 @@ export interface ApSlot {
   type: ApSlotType;
   description?: string;
   rules: ApDirectiveNode[];
+  /** Per rule, in order, its `YES` / `NO` criteria or null — present only when one rule has some. */
+  criteria?: (RuleCriteria | null)[];
   chars: number;
 }
 
@@ -384,6 +390,15 @@ export interface ApDocumentMeta {
    * here, outside every block, so no view of a block shows a sealed one.
    */
   checks?: Record<string, ApCheckSpec>;
+  /**
+   * What a delegate or a program carries out for this agent, by id (`exe-…`):
+   * its input and its output — src/executor.ts.
+   */
+  executors?: Record<string, ApExecutorSpec>;
+  /** The agent an ASK without BY is handed to — set when this agent has one (src/executor.ts). */
+  delegate?: string;
+  /** The model this agent runs on, from the `delegate.models` config key — absent: the harness decides. */
+  model?: string;
   /** Md-projection metadata — present when the document renders prose. */
   md?: ApMdMeta;
 }

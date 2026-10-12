@@ -2,21 +2,23 @@
 // Copyright (c) 2026 Giuseppe Federico
 import { existsSync, readFileSync } from 'fs';
 import { lex, Token, Keyword, KEYWORDS } from './lexer.js';
+import { ACTION_VERBS } from './actionVerbs.js';
 import { desugar } from './desugar.js';
 import { TAG_RE } from './services/tags.js';
 import { getFamilyBases, getIntroByKeyword, forceLevelBaseOf, forceLevelFamilies, toCanonicalKeyword } from './forceLevelConfig.js';
 import { enumPrimitiveFor } from './primitives.js';
 import { BLOCK_CONTRACTS, BlockContract, VAR_BLOCK } from './blockContracts.js';
-import { parseBlocks, type Block } from './parseBlocks.js';
+import { parseBlocks, type Block, type Node } from './parseBlocks.js';
 import { isExportFile } from './services/text.js';
 import { parseAgentSignature } from './definitionArgs.js';
 import { kindFromDir, unitNameFromPath } from './ingest.js';
 import { BLOCK_TYPES, blockTypeOf, EXPORT_MODIFIER } from './blockTypes.js';
+import { COMPUTE_SECTIONS, executorMark, returnShape, splitExecutorMark } from './executor.js';
 import { parseTypeSpec } from './shapeSchema.js';
 import { STORE_LIFETIMES } from './storeTypes/types.js';
 import { stripTrailingColon, buildTree, type Node as TreeNode } from './bundlers/renderTree.js';
 import { condCheckOf, type CheckKind, type CheckSite } from './check.js';
-import { parseVarLine, isVarKeyword, splitInto, takesInto, readsOf, NO_PLAYBOOK_VARIABLES } from './vars.js';
+import { parseVarLine, isVarKeyword, splitBy, splitInto, takesInto, readsOf, NO_PLAYBOOK_VARIABLES } from './vars.js';
 import { VARS_FILE, isVarsFile, parseVarsAp } from './varsAp.js';
 
 export interface LintError {
@@ -517,7 +519,7 @@ const POLICY_SPEC: LintSpec = {
 
 // Force-level family bases (post-desugar), plus DO. handlerFor() expands each
 // base to all its declensions at lookup time — no enumeration needed here.
-const PLAYBOOK_ACTION_KEYWORDS: Keyword[] = ['DO', ...getFamilyBases()];
+const PLAYBOOK_ACTION_KEYWORDS: Keyword[] = [...ACTION_VERBS, ...getFamilyBases()];
 const PLAYBOOK_FLOW_KEYWORDS: Keyword[] = ['UNTIL', 'RUN', 'IMPORT'];
 
 const PLAYBOOK_SPEC: LintSpec = {
@@ -549,7 +551,7 @@ const PLAYBOOK_SPEC: LintSpec = {
 // Force-level family bases — the list roles and playbooks admit — plus the
 // action/flow keywords. handlerFor expands each base to all its declensions:
 // `AS <shape>` declares the procedure's output, `NEVER …`/`MUST! …` are its rules.
-const PROCEDURE_FLOW_KEYWORDS: Keyword[] = ['IMPORT', 'DO', 'VAR', 'UNTIL', 'RUN', ...getFamilyBases()];
+const PROCEDURE_FLOW_KEYWORDS: Keyword[] = ['IMPORT', ...ACTION_VERBS, 'VAR', 'UNTIL', 'RUN', ...getFamilyBases()];
 
 const PROCEDURE_SPEC: LintSpec = {
   topLevelOnly: true,
@@ -564,8 +566,8 @@ const PROCEDURE_SPEC: LintSpec = {
     // The procedure's input contract — the shape of what it takes, when it has one.
     ['LENS-IN',   accept],
     ...PROCEDURE_FLOW_KEYWORDS.map(kw => [kw, accept] as const),
-    // DISTILL stands alone on its line; its place and its text are checkVocabulary's.
-    ['DISTILL', passthrough],
+    // The removed DISTILL, in any of its old levels: its one error is checkVocabulary's.
+    ...['DISTILL', 'DISTILL!', 'DISTILL!!', '!DISTILL'].map(kw => [kw, passthrough] as const),
     ...agentOnlyEntries,
     ...roleIdentityEntries,
     ...flowOnlyEntries,
@@ -578,7 +580,7 @@ const PROCEDURE_SPEC: LintSpec = {
 // Force-level family bases + action/flow keywords. handlerFor expands each
 // base to all declensions at lookup time.
 const ROLE_RULE_KEYWORDS: Keyword[] = [
-  'DO', ...getFamilyBases(),
+  ...ACTION_VERBS, ...getFamilyBases(),
   'IF', 'ELSE', 'UNTIL', 'VAR', 'RUN', 'IMPORT',
 ];
 
@@ -1092,7 +1094,8 @@ const VERBATIM_REGIONS = new Set(['SLOTS', 'BODY', 'EXAMPLE']);
 /** A line that opens with a keyword-like word: `STPE`, `ON-AGENT-PROMPT`, `MEM!!!`. */
 const KEYWORD_LIKE_RE = /^\s*(!*[A-Z][A-Z0-9-]+!*)(?=[\s:]|$)/;
 
-/** The old DISTILL form: a suffix on a rule line or a procedure header. */
+/** The removed DISTILL (D22): a line of its own, or the older suffix on a rule line or a procedure header. */
+const DISTILL_RE = /^!?DISTILL!{0,2}$/;
 const DISTILL_SUFFIX_RE = /\s!?DISTILL!{0,2}:?$/;
 
 /** Edits between two words — a swap of two neighbours counts as one (STPE → STEP). */
@@ -1195,14 +1198,12 @@ function varLineErrors(t: Extract<Token, { kind: 'keyword' }>, ancestors: string
   return errors;
 }
 
-/** What is wrong with a line's trailing `INTO <name>`: only a DO line takes one, and never in a playbook. */
+/** What is wrong with a line's trailing `INTO <name>`: only an action line takes one, and never in a playbook. */
 function intoError(t: Extract<Token, { kind: 'keyword' }>, owner: string): string | null {
   const into = splitInto(t.rest);
   if (!into || isVarKeyword(t.keyword as string)) return null;
   if (takesInto(t.keyword)) return owner === 'PLAYBOOK' ? NO_PLAYBOOK_VARIABLES : null;
-  return t.keyword === 'RUN'
-    ? `\`RUN ${into.text} INTO ${into.name}\`: RUN takes no INTO — write \`VAR ${into.name}:\` with \`RUN ${into.text}\` beneath`
-    : `INTO ends only a DO line — \`${t.raw.trim().split(/\s/)[0]}\` takes none`;
+  return `INTO ends only a DO, ASK, COMPUTE or RUN line — \`${t.raw.trim().split(/\s/)[0]}\` takes none`;
 }
 
 /**
@@ -1219,8 +1220,6 @@ export function checkVocabulary(file: string, body: string): LintError[] {
   const varsFile = isVarsFile(file);
   /** Enclosing lines, innermost last — a line's parent is the nearest shallower one. */
   const stack: { indent: number; key: string; line: number }[] = [];
-  const distills = new Map<number, number[]>();   // procedure line → DISTILL lines
-  const results = new Set<number>();                // procedure lines with an AS
   let region = -1;
   let regionKey = '';
 
@@ -1247,12 +1246,29 @@ export function checkVocabulary(file: string, body: string): LintError[] {
     let key = '';
     if (t.kind === 'blockOpener') {
       key = t.key === EXPORT_MODIFIER ? t.rest.split(/\s+/)[0] : t.key;
+      // `EXPORT PROCEDURE** name:` — the stars are the head's executor mark; only a PROCEDURE takes one.
+      const mark = splitExecutorMark(key);
+      if (mark.executor) {
+        key = mark.word;
+        if (key !== 'PROCEDURE') err(t.line, `\`${key}${executorMark(mark.executor)}\`: only a PROCEDURE head takes an executor mark — a delegate (*) or a program (**) carries its body out`);
+      }
       if (VERBATIM_REGIONS.has(key)) { region = t.indent; regionKey = key; continue; }
-      if (!blockTypeOf(key)) err(t.line, unknownKeyword(key));
+      if ((COMPUTE_SECTIONS as readonly string[]).includes(key)) {
+        if (parent?.key !== 'COMPUTE') err(t.line, `${key} is a section of a COMPUTE block — found inside ${parent?.key || 'the file top'}`);
+      } else if (!blockTypeOf(key)) err(t.line, unknownKeyword(key));
     } else if (t.kind === 'keyword') {
       key = t.keyword as string;
       // `!IF` / `!UNTIL` mean nothing: the `!`s after the keyword say who decides the condition.
       if ((t.level ?? 0) < 0) err(t.line, `\`!${key}\` is not allowed — write ${key}, ${key}! (a judge decides) or ${key}!! (a sealed gate): "${quoteRaw(t)}"`);
+      // The stars say who carries the condition out, the `!`s who judges it: a condition has one judge.
+      if (t.executor && (t.level ?? 0) > 0) {
+        err(t.line, `\`${t.raw.trim().split(/\s/)[0]}\` is not allowed — a condition has one judge: write ${key}! / ${key}!! (a judge decides) or ${key}* / ${key}** (a delegate or a program decides): "${quoteRaw(t)}"`);
+      }
+      if (key === 'COMPUTE' && splitBy(t.rest)) err(t.line, 'BY ends only an ASK line — COMPUTE is carried out by a program');
+      // An ASK whose `BY <agent>` comes before its `INTO <name>` — BY must end the line.
+      const askInto = key === 'ASK' ? splitInto(t.rest) : null;
+      const early = askInto ? splitBy(askInto.text) : null;
+      if (early) err(t.line, `BY ${early.name} must end the ASK line — write \`ASK … INTO <name> BY ${early.name}\``);
       const base = forceLevelBaseOf(key);
       if (base && getIntroByKeyword(key) === null) err(t.line, unknownLevel(key, base));
       const prim = enumPrimitiveFor(key);
@@ -1263,18 +1279,10 @@ export function checkVocabulary(file: string, body: string): LintError[] {
       if (key === 'LASTS' && !(STORE_LIFETIMES as readonly string[]).includes(value)) {
         err(t.line, `LASTS: unknown value \`${value}\`${didYouMean(value, STORE_LIFETIMES)} (allowed: ${STORE_LIFETIMES.join(', ')})`);
       }
-      if (DISTILL_SUFFIX_RE.test(t.rest.trim())) {
-        err(t.line, 'DISTILL is no longer a suffix — write it alone on its own line inside the PROCEDURE');
+      // DISTILL (D22) was removed: a program carries out a PROCEDURE** or a COMPUTE block.
+      if (DISTILL_RE.test(key) || DISTILL_SUFFIX_RE.test(t.rest.trim())) {
+        err(t.line, `DISTILL was removed — mark the procedure PROCEDURE** or write a COMPUTE block: "${quoteRaw(t)}"`);
       }
-      if (base === 'DISTILL') {
-        if (t.rest.trim()) err(t.line, `${key} takes no text — write it alone on its line`);
-        if (parent?.key !== 'PROCEDURE') {
-          err(t.line, `${key} goes directly inside a PROCEDURE${parent ? ` — found inside ${parent.key}` : ''}`);
-        } else {
-          distills.set(parent.line, [...(distills.get(parent.line) ?? []), t.line]);
-        }
-      }
-      if (base === 'AS' && parent?.key === 'PROCEDURE') results.add(parent.line);
       if (!isVarKeyword(key) && stack.some(a => a.key === 'VAR') && !isAllowedChild(VAR_BLOCK, key as Keyword)) {
         err(t.line, notAllowed(key as Keyword, 'VAR', VAR_BLOCK));
       }
@@ -1295,10 +1303,74 @@ export function checkVocabulary(file: string, body: string): LintError[] {
     stack.push({ indent: t.indent, key, line: t.line });
   }
 
-  for (const [procedure, lines] of distills) {
-    if (lines.length > 1) err(lines[1], `a PROCEDURE takes one DISTILL line — found ${lines.length} (lines ${lines.join(', ')})`);
-    if (!results.has(procedure)) err(procedure, 'a PROCEDURE with DISTILL needs its result contract — add AS <template>');
-  }
+  errors.push(...computeBlockErrors(file, body));
+  return errors;
+}
+
+/**
+ * A COMPUTE block's shape (src/executor.ts): ABOUT and rules on top, then
+ * REQUIRE:, RETURN AS <template>: and ENSURE:, once each, in this order, none
+ * empty. REQUIRE and ENSURE hold rules and IF only; RETURN holds what a program
+ * can carry out — DO, COMPUTE, IF, UNTIL and rules — never ASK, RUN, MEM or VAR.
+ */
+function computeBlockErrors(file: string, body: string): LintError[] {
+  const errors: LintError[] = [];
+  const err = (line: number, message: string) => errors.push({ file, line, message });
+  const isRule = (keyword: string) => forceLevelBaseOf(keyword) !== null && forceLevelBaseOf(keyword) !== 'AS' && forceLevelBaseOf(keyword) !== 'MEM';
+  const RETURN_LINES = new Set(['DO', 'COMPUTE']);
+  const RETURN_BLOCKS = new Set(['IF', 'ELSE', 'UNTIL']);
+  const check = (nodes: Node[], section: string, name: string): void => {
+    for (const c of nodes) {
+      const kw = c.type === 'line' ? c.keyword : c.key;
+      const allowed = section === 'RETURN'
+        ? isRule(kw) || kw === 'ELSE' || (c.type === 'line' ? RETURN_LINES.has(kw) : RETURN_BLOCKS.has(kw))
+        : isRule(kw) || kw === 'ELSE' || (c.type === 'block' && kw === 'IF');
+      const line = c.type === 'line' ? c.line : c.startLine;
+      if (!allowed) {
+        err(line, section === 'RETURN'
+          ? `${kw} is not allowed in RETURN of COMPUTE \`${name}\` — a program carries it out: DO, COMPUTE, IF, UNTIL and rules only`
+          : `${kw} is not allowed in ${section} of COMPUTE \`${name}\` — it holds only rules (MUST, NEVER, …) and IF`);
+        continue;
+      }
+      if (c.type === 'block') check(c.children, section, name);
+    }
+  };
+  const visit = (blocks: Node[]): void => {
+    for (const b of blocks) {
+      if (b.type !== 'block') continue;
+      if (!b.computed) { visit(b.children); continue; }
+      const name = b.name ?? '';
+      const seen: string[] = [];
+      for (const c of b.children) {
+        if (c.type === 'line') {
+          if (c.keyword !== 'ABOUT' && c.keyword !== 'TAGS' && !isRule(c.keyword)) {
+            err(c.line, `${c.keyword} is not allowed on top of COMPUTE \`${name}\` — ABOUT and rules on how the script is written, then REQUIRE:, RETURN AS <template>: and ENSURE:`);
+          }
+          continue;
+        }
+        if (!(COMPUTE_SECTIONS as readonly string[]).includes(c.key)) {
+          err(c.startLine, `${c.key} is not allowed on top of COMPUTE \`${name}\` — its sections are REQUIRE:, RETURN AS <template>: and ENSURE:`);
+          continue;
+        }
+        const expected = COMPUTE_SECTIONS[seen.length];
+        if (seen.includes(c.key) || c.key !== expected) {
+          err(c.startLine, `${c.key} in COMPUTE \`${name}\` is out of order or repeated — REQUIRE:, RETURN AS <template>:, ENSURE:, once each`);
+        }
+        seen.push(c.key);
+        if (c.key === 'RETURN') {
+          const head = `${c.name ?? ''} ${c.rest}`.trim();   // the parser splits `AS <template>` into name and rest
+          if (/^AS!+\s/.test(head)) err(c.startLine, 'RETURN AS takes no force level — the program\'s result is always checked against its template');
+          else if (!returnShape(head)) err(c.startLine, `RETURN in COMPUTE \`${name}\` needs its result shape — write \`RETURN AS <template>:\``);
+        }
+        if (c.children.length === 0) err(c.startLine, `${c.key} in COMPUTE \`${name}\` holds no line — write at least one`);
+        check(c.children, c.key, name);
+      }
+      for (const section of COMPUTE_SECTIONS) {
+        if (!seen.includes(section)) err(b.startLine, `COMPUTE \`${name}\` needs its ${section} section — REQUIRE:, RETURN AS <template>: and ENSURE:, in this order`);
+      }
+    }
+  };
+  visit(parseBlocks(body).blocks);
   return errors;
 }
 

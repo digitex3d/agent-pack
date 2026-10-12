@@ -66,6 +66,8 @@ export interface IngestedFile {
   body: string;
   /** TAGS declared by the source file (empty when none). */
   tags: string[];
+  /** The executor mark of a `PROCEDURE*` / `PROCEDURE**` head — src/executor.ts. */
+  executor?: number;
 }
 
 export interface IngestOptions {
@@ -358,6 +360,7 @@ export function ingestExportBlock(
     ...fileFacets(path, libraryRoot, libraries),
     body,
     tags,
+    ...(block.executor ? { executor: block.executor } : {}),
   };
 }
 

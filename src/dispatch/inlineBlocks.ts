@@ -20,6 +20,7 @@
 
 import { lex } from '../lexer.js';
 import { EXPORT_MODIFIER } from '../blockTypes.js';
+import { computeHead, splitExecutorMark } from '../executor.js';
 import { STRATEGIES, type DefinitionStrategy, type Definition } from '../definition.js';
 import type { BundleContext } from './types.js';
 import { liftRoleIdentity } from '../services/text.js';
@@ -34,6 +35,8 @@ interface InlineHeader {
   indent: number;
   /** Block name. */
   name: string;
+  /** The executor mark of a `PROCEDURE*` / `PROCEDURE**` head — src/executor.ts. */
+  executor?: number;
   /** Strategy resolved from the header keyword. */
   strat: DefinitionStrategy;
 }
@@ -57,6 +60,7 @@ function findInlineHeaders(rawBody: string): InlineHeader[] {
     if (!('indent' in t) || t.indent !== 0) continue;
     let key: string | null = null;
     let rest = '';
+    let executor = t.kind === 'keyword' ? t.executor ?? 0 : 0;
     if (t.kind === 'blockOpener') {
       key = t.key;
       rest = t.rest;
@@ -81,15 +85,20 @@ function findInlineHeaders(rawBody: string): InlineHeader[] {
     if (key === EXPORT_MODIFIER) {
       const space = rest.indexOf(' ');
       if (space === -1) continue;
-      key = rest.slice(0, space);
+      ({ word: key, executor } = splitExecutorMark(rest.slice(0, space)));
       rest = rest.slice(space + 1).trim();
     }
 
+    // `COMPUTE <name>:` is a procedure a program carries out — src/executor.ts. Without
+    // its colon, `COMPUTE …` is a line a program carries out, never a block.
+    const compute = key !== null ? computeHead(key) : null;
+    if (compute && t.kind === 'keyword' && !t.rest.trimEnd().endsWith(':')) continue;
+    if (compute) ({ key, executor } = compute);
     const strat = STRATEGIES.find(s => s.headerKeyword === key);
     if (!strat) continue;
     const name = rest.split(/\s+/)[0] ?? '';
     if (!name) continue;
-    headers.push({ startLine: t.line, indent: 0, name, strat });
+    headers.push({ startLine: t.line, indent: 0, name, strat, ...(executor ? { executor } : {}) });
   }
   return headers;
 }
@@ -139,6 +148,7 @@ function collectInlineDefinition(
   sourcePath: string,
   line: number,
   ctx: BundleContext,
+  executor?: number,
 ): boolean {
   const collection = strat.getEntries(ctx);
   const existing = collection.find(e => e.name === name);
@@ -162,6 +172,7 @@ function collectInlineDefinition(
     tags: lifted.tags,
     breadcrumb: [],
     breadcrumbSegments: [],
+    ...(executor ? { executor } : {}),
   };
   // An inline `ROLE <role>:` carries its identity (EXPERTISE) in-body, and its
   // display name is the de-slugified block name. Lift it onto the entry — same
@@ -206,7 +217,7 @@ export function extractInlineDefinitions(
     // lines[] is 0-indexed; startLine/endLine are 1-based.
     const bodyLines = lines.slice(h.startLine, endLine - 1);
     const body = dedent(bodyLines);
-    collectInlineDefinition(h.strat, h.name, body, sourcePath, h.startLine, ctx);
+    collectInlineDefinition(h.strat, h.name, body, sourcePath, h.startLine, ctx, h.executor);
     for (let l = h.startLine; l < endLine; l++) linesToRemove.add(l);
   }
 

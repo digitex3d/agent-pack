@@ -23,6 +23,11 @@ export function sha256Hex(input: string): string {
 /** The shape of every stable id: a three-letter prefix and eight hex digits (`tpl-1a2b3c4d`). */
 export const BLOCK_ID_RE = /^[a-z]{3}-[0-9a-f]{8}$/;
 
+/** A block's name from its address (`@main.templates/verdict` → `verdict`). */
+export function addressName(target: string): string {
+  return target.split('/').pop() ?? target;
+}
+
 /**
  * THE short-id rule: `<prefix>-<first 8 hex of sha256(text)>`. Each caller owns
  * only what it hashes (a block's identity, a distilled procedure, a checked

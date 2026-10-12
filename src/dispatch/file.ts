@@ -41,6 +41,7 @@ type Collected = {
   tags: string[];
   breadcrumb: string[];
   breadcrumbSegments: BreadcrumbSegment[];
+  executor?: number;
 };
 
 /** Resolve the body's own IMPORT directives. Dynamic import breaks the cycle with imports.js. */
@@ -140,6 +141,7 @@ async function collectUnit(
       tags: mergedTags,
       breadcrumb: unit.breadcrumb,
       breadcrumbSegments: unit.breadcrumbSegments,
+      ...(unit.executor ? { executor: unit.executor } : {}),
     });
     return '';
   };

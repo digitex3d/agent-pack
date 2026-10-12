@@ -1,0 +1,21 @@
+# judge-executed-inputs
+
+EXPORT TEMPLATE judge-executed-inputs:
+  ABOUT   judge rule for every line a delegate or a program carries out — it receives only the inputs the line reads
+  TAGS    #judge #executed
+  SLOTS:
+    line: TEXT  "a line carried out by a delegate or a program, which receives only `inputs`"
+      NEVER  rely on any information that is neither one of `inputs` nor written out literally in `line`
+        YES  `line` needs a fact that is not one of `inputs` and is not written in it — for example a document, a file, a rate of the day, something the user said, a setting, or a table it does not give
+        NO   every fact `line` needs is one of `inputs`, is written in it, or is general knowledge — a definition, a standard method, a well-known rule — not data about this case
+  BODY:
+    {line}
+  EXAMPLE:
+    the total differs from the document total → relies on outside information: the document total is not an input
+    totals differ from document_total by more than 0.01 → nothing outside: totals and document_total are inputs
+    convert amount at today's exchange rate → relies on outside information: today's rate
+    usd = price × usd_rate → nothing outside: price and usd_rate are inputs
+    apply the discount the user mentioned to cart → relies on outside information: what the user said
+    retries reach max_retries → nothing outside: both are inputs
+    convert temperature from Fahrenheit to Kelvin → nothing outside: the formula is general knowledge
+    sort names by the order the manager prefers → relies on outside information: the manager's preference

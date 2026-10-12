@@ -7,7 +7,7 @@
  * `shapeCompiler` renders SLOTS as guidance prose for the model;
  * this module compiles the same parsed slots into a machine-checkable schema
  * and validates a concrete value against it. It is shape-agnostic by design:
- * the apx validates a distilled script's output with it, against the contract
+ * the apx validates a program's output with it, against the contract
  * template of the compiled document (`specOfSlotType`).
  *
  * Type coverage mirrors shapeCompiler's grammar:
@@ -22,6 +22,7 @@
  */
 import { parseTemplate, type ParsedTemplate } from './shapeCompiler.js';
 import type { ApSlotType } from './apdoc/types.js';
+import { addressName } from './apdoc/ids.js';
 
 export type SlotTypeSpec =
   | { kind: 'text'; minWords?: number; maxWords?: number; regex?: RegExp }
@@ -187,8 +188,8 @@ export function specOfSlotType(t: ApSlotType): SlotTypeSpec {
     case 'text': return { kind: 'text', minWords: t.minWords, maxWords: t.maxWords, regex: t.regex !== undefined ? new RegExp(t.regex) : undefined };
     case 'number': return { kind: 'number', min: t.min, max: t.max };
     case 'enum': return { kind: 'enum', values: t.values };
-    case 'shape': return { kind: 'shape', ref: t.ref.target.split('/').pop() ?? t.ref.target };
-    case 'list': return { kind: 'list', ref: t.ref.target.split('/').pop() ?? t.ref.target, min: t.min, max: t.max };
+    case 'shape': return { kind: 'shape', ref: addressName(t.ref.target) };
+    case 'list': return { kind: 'list', ref: addressName(t.ref.target), min: t.min, max: t.max };
     case 'any': return { kind: 'any', raw: t.raw };
   }
 }
@@ -273,12 +274,6 @@ export function formatIssues(issues: SchemaIssue[]): string {
   return issues.map(i => `${i.field}: ${i.message}`).join('\n');
 }
 
-/**
- * An example JSON value of a template — every slot, typed from the same
- * grammar the validator checks (text, the first enum value, the lower bound of
- * a number, a nested template, a one-item list). What a distilled script reads
- * and writes, shown before it is written. Templates by name, from their source.
- */
 /** The bodies of a template and of every template its slots reach, each once, depth first. */
 export function templateClosure(name: string, templates: readonly { name: string; body: string }[], seen = new Set<string>()): string[] {
   const template = templates.find(t => t.name === name);
@@ -292,20 +287,25 @@ export function templateClosure(name: string, templates: readonly { name: string
   return [template.body, ...nested];
 }
 
-export function jsonExample(name: string, templates: readonly { name: string; body: string }[], seen: ReadonlySet<string> = new Set()): unknown {
-  const template = templates.find(t => t.name === name);
-  const parsed = template && !seen.has(name) ? parseTemplate(template.body) : null;
-  if (!parsed) return {};
-  const inner = new Set([...seen, name]);
+/**
+ * An example JSON value of a template — every slot, typed from the same
+ * grammar the validator checks (text, the first enum value, the lower bound of
+ * a number, a nested template, a one-item list): the shape a delegate answers in.
+ */
+export function jsonExample(slots: readonly SlotSpec[], resolve: SlotResolver, seen: ReadonlySet<string> = new Set()): unknown {
+  const nested = (ref: string): unknown => {
+    const inner = seen.has(ref) ? null : resolve(ref);
+    return inner ? jsonExample(inner, resolve, new Set([...seen, ref])) : {};
+  };
   const value = (spec: SlotTypeSpec): unknown => {
     switch (spec.kind) {
       case 'text': return '…';
       case 'number': return spec.min ?? 0;
       case 'enum': return spec.values[0] ?? '';
-      case 'shape': return jsonExample(spec.ref, templates, inner);
-      case 'list': return [jsonExample(spec.ref, templates, inner)];
+      case 'shape': return nested(spec.ref);
+      case 'list': return [nested(spec.ref)];
       case 'any': return null;
     }
   };
-  return Object.fromEntries(parsed.slots.map(s => [s.name, value(parseTypeSpec(s.rawType))]));
+  return Object.fromEntries(slots.map(s => [s.name, value(s.spec)]));
 }

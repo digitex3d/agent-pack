@@ -7,9 +7,25 @@
  */
 import type { ApCheck } from '../apdoc/types.js';
 import type { TemplateBlock } from '../apdoc/blocks.js';
+import type { JUDGE_SCOPES } from '../services/tags.js';
 
 /** One check of a rule — a template's slot rule as a neutral statement. */
 export type JudgeCheck = ApCheck;
+
+/**
+ * A check written as a negative rule (`NEVER …`, `SHOULD-NOT …`): the judge is asked directly
+ * whether the line does it — a yes breaks the rule. Every other check is asked
+ * whether the line satisfies it.
+ */
+export function isDirect(check: JudgeCheck | JudgeQuestion): boolean {
+  return !('question' in check) && (check.force.level ?? 0) < 0;
+}
+
+/** One reference example of a rule — an `EXAMPLE` line `<line> → <verdict>`. */
+export interface JudgeExample {
+  line: string;
+  verdict: string;
+}
 
 /** A question asked as is — a checked condition's (`IF!`), built at compile time. */
 export interface JudgeQuestion {
@@ -21,10 +37,22 @@ export interface JudgeQuestion {
 export interface JudgeRule {
   /** The template's address (`<namespace>/<name>`) — unique, even when two libraries share a name. */
   id: string;
-  /** The keyword of the lines it judges — the first word of the layout (`DO {action}` → `DO`). */
-  primitive: string;
+  /**
+   * The keyword of the lines it judges — the first word of the layout (`DO {action}` → `DO`);
+   * null when the layout names none (`{line}`): every line of its scope.
+   */
+  primitive: string | null;
+  /**
+   * `#executed`: only the lines a delegate or a program carries out; `#program`: only a
+   * program's; `#agent`: only the agent's own (src/executor.ts). Absent: every line of its primitive.
+   */
+  scope?: (typeof JUDGE_SCOPES)[number];
   template: TemplateBlock;
   checks: JudgeCheck[];
+  /** What a judged line is, for the judge — the description of the template's slot. */
+  role?: string;
+  /** The template's EXAMPLE lines written `<line> → <verdict>`, sent with every line it judges. */
+  examples: JudgeExample[];
 }
 
 /**

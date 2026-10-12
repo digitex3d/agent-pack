@@ -11,6 +11,8 @@
 import FORMULAS_JSON from './config/formulas.json' with { type: 'json' };
 
 type Text = string;
+/** What a loop's round lines say after `then` and `report that` — a checked UNTIL's, a starred one's. */
+type RoundWords = { again: Text; end: Text };
 
 /** One entry-quiz question on a block kind: multiple choice, `right` is the letter. */
 export interface QuizQuestion { ask: Text; options: Text[]; right: string }
@@ -25,7 +27,7 @@ export interface Formulas {
     UNTIL: { head: Text };
     /** A checked condition (src/check.ts): its head per keyword and level, the judge's question and state. */
     CHECK: {
-      run: Text; IF: Record<'1' | '2', Text>; UNTIL: Record<'1' | '2', Text>; nextRound: Text; limit: Text;
+      run: Text; IF: Record<'1' | '2', Text>; UNTIL: Record<'1' | '2', Text>; nextRound: Text; limit: Text; loop: RoundWords;
       question: Text; shapedRead: Text; field: Text; fieldSeparator: Text; state: Text; stateSeparator: Text;
     };
     WHEN: { head: Text };
@@ -35,6 +37,9 @@ export interface Formulas {
     STEP: { head: Text; list: Text; signature: Text; args: { keyword: string; formula: Text }[] };
     RUN: { line: Text; flow: Text; unresolved: Text; bare: Text; sequence: Text; name: Text };
     DO: { intro: Text };
+    ASK: { intro: Text; by: Text };
+    COMPUTE: { intro: Text; require: Text; return: Text; ensure: Text; rule: { require: Text; ensure: Text; never: Text } };
+    EXECUTOR: Record<'1' | '2', Text> & { procedure: Record<'1' | '2', Text>; ask: Text; run: Text; who: Record<'1' | '2', Text>; answer: { holds: Text; shaped: Text; text: Text }; rounds: Text; loop: RoundWords; into: Record<'1' | '2', Text> };
     BY: { intro: Text; inline: Text };
     AS: { fallback: Text; line: Text; agent: Text };
     OWNS: { fence: Text[]; glob: Text };
@@ -43,7 +48,6 @@ export interface Formulas {
     MANDATE: { line: Text };
     MEM: { shaped: Text };
     VAR: { read: Text; readShaped: Text; block: Text; store: Text; storeTyped: Text; about: Text; scopes: Record<'private' | 'session', Text>; typed: Text; entry: Text };
-    DISTILL: { use: Text; write: Text; shape: Text; input: Text; output: Text };
   };
   blocks: {
     agent: { identity: Text; role: Text; roleAbout: Text; roleExpertise: Text; roleAboutExpertise: Text; expertise: Text } & KindGuide;

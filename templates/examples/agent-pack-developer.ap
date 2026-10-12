@@ -27,7 +27,7 @@ EXPORT ROLE ap-author:
       DO   PROCEDURE fills ap-block-procedure
       DO   FLOW fills ap-block-flow and PARALLEL fills ap-block-parallel — both compose ap-block-step for their STEPs
       DO   write each rule line with ap-rule, a WHEN behaviour with ap-workflow over an ap-action body
-      DO   write each statement with ap-statement — DO, RUN, IF, ELSE, UNTIL, their checked forms, IN, VAR
+      DO   write each statement with ap-statement — DO, ASK, COMPUTE, RUN, IF, ELSE, UNTIL, their marked forms, IN, VAR
       DO   write a POLICY with ALWAYS / NEVER lines only
 
     WHEN writing a TEMPLATE block — it cannot host a scaffold of itself, so author it by hand:
@@ -51,11 +51,11 @@ EXPORT ROLE ap-author:
       NEVER declare a name twice for one agent, nor give a private variable a SESSION variable's name
 
     WHEN assigning a variable:
-      DO   end a DO line with uppercase INTO and the name to store that action's result
-      DO   wrap a RUN in a `VAR <name>:` block to store a procedure's result
+      DO   end a DO, ASK, COMPUTE or RUN line with uppercase INTO and the name to store that line's result
+      DO   write `RUN <procedure> INTO <name>`, or wrap a lone RUN in a `VAR <name>:` block — both are the same
       DO   write `VAR <name>:` without AS to assign a variable a vars.ap already declares
       DO   reassign with INTO inside a loop
-      NEVER write INTO after a RUN, or anywhere but the very end of a DO line
+      NEVER write INTO anywhere but the very end of the line — on an ASK, only BY may follow it
       NEVER add AS when assigning a vars.ap variable — `VAR <name> AS <template>:` declares it again
       NEVER declare a VAR inside an UNTIL, a VAR block, a flow STEP, a TEMPLATE, a STORE or a POLICY
       NEVER assign into a constant — INTO takes a declared variable
@@ -88,12 +88,20 @@ EXPORT ROLE ap-author:
       NEVER write a round count such as "three rounds at most" on a checked UNTIL head
       NEVER put a checked condition at a FLOW's own level, in a playbook or in a team's routing
       NEVER write !IF or !UNTIL — both fail the compilation
+      NEVER put a `!` and a star on one condition — a condition has one judge: IF! / IF!! or IF* / IF**
 
     WHEN a condition does not need a judge:
       DO   keep a plain IF or UNTIL for arithmetic, a count or a one-word decision
       DO   reserve a check for judging stored text — a draft, a plan, a report — against a criterion
       NEVER rely on a check to establish a fact — the judge reads stored text, not the world behind it
-      NEVER mark a fact with `*` yet — conditions decided by a script come in a later version
+
+    WHEN a line or a condition is better carried out by someone other than the agent:
+      DO   write DO for the agent, ASK for a delegate, COMPUTE for a program — a line may raise, never lower
+      DO   end an ASK with `INTO <name>` and then `BY <agent>`; without BY the default delegate `quick` answers it
+      DO   write IF* or UNTIL* for a delegate, IF** or UNTIL** for a program — the star marks only the condition
+      DO   make a starred condition read at least one variable; its branch keeps the enclosing block's executor
+      DO   mark a whole procedure PROCEDURE* for a delegate or PROCEDURE** for a program — its lines inherit the mark
+      NEVER name a model in the source — the delegate and its model live in the project config
 
     WHEN an agent keeps data between sessions:
       DO   declare a STORE with TYPE tabeli, LASTS project or session, KEY <slot>, and SLOTS
@@ -105,8 +113,12 @@ EXPORT ROLE ap-author:
 
     WHEN a procedure is deterministic — the same input always gives the same output:
       DO   give it its contract — LENS-IN <template> for its input when it has one, AS <template> for its result
-      DO   add a DISTILL line inside it — DISTILL may, DISTILL! should, DISTILL!! must, !DISTILL never
-      NEVER mark DISTILL on a procedure whose result depends on judgment, taste or context
+      DO   mark it PROCEDURE** or write it as a `COMPUTE <name>:` block, run with RUN and IMPORT-able like one
+      DO   open a COMPUTE block with ABOUT and the rules on how its script is written
+      DO   follow with REQUIRE: (when it refuses), RETURN AS <template>: (the computation), ENSURE: (result checks)
+      NEVER leave one of REQUIRE:, RETURN AS and ENSURE: empty or out of that order
+      NEVER hand a program a procedure whose result depends on judgment, taste or context
+      NEVER write DISTILL — it was removed; mark the procedure PROCEDURE** or write a COMPUTE block
 
 EXPORT AGENT agent-pack-developer AS ap-author:
     ABOUT    Authors and edits agent-pack .ap files — routed to for any task that writes or changes a .ap file

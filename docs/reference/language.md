@@ -39,7 +39,7 @@ One agent per file, anywhere under `agents/`.
 | `OWNS <globs>` | the files it may write; the definition opens with a perimeter warning |
 | `LENS-IN <template>` | the shape requests to it arrive in |
 | `LENS-OUT <template>` | the shape of its answers |
-| rules and `WHEN` workflows | its own behaviour — rules at every level, `SHOULD`, `MAY` and [`MEM`](#memory) included (see [Rules](#rules)), and [Control flow](#control-flow); never `DISTILL`, which marks a procedure |
+| rules and `WHEN` workflows | its own behaviour — rules at every level, `SHOULD`, `MAY` and [`MEM`](#memory) included (see [Rules](#rules)), and [Control flow](#control-flow); `ASK` and `COMPUTE` lines hand a line to a delegate or a program (see [Executors](#executors)) |
 
 ### ROLE
 
@@ -114,7 +114,32 @@ PROCEDURE verify-claim:
     AS     finding
 ```
 
-Reusable steps, invoked with `RUN verify-claim` from an agent, a role, another procedure or a flow. Besides `DO` and `RUN`, a procedure takes [rule](#rules) lines — `MUST`, `NEVER`, `SHOULD`, … — at its top and under its `IF`/`ELSE` and `UNTIL`: write `NEVER …`, not `DO never …`. `AS <template>` is the shape of its result; `LENS-IN <template>` the shape of its input, when it has one. A procedure that always gives the same result for the same input can be [distilled](#distillation) into a script.
+Reusable steps, invoked with `RUN verify-claim` from an agent, a role, another procedure or a flow. Besides `DO` and `RUN`, a procedure takes [rule](#rules) lines — `MUST`, `NEVER`, `SHOULD`, … — at its top and under its `IF`/`ELSE` and `UNTIL`: write `NEVER …`, not `DO never …`. `AS <template>` is the shape of its result; `LENS-IN <template>` the shape of its input, when it has one. `PROCEDURE* <name>:` hands the whole procedure to a delegate, `PROCEDURE** <name>:` to a program — see [Executors](#executors).
+
+### COMPUTE
+
+```
+EXPORT COMPUTE dose:
+    ABOUT  pediatric dose by body weight
+    NEVER  read a file, the network or the clock
+    REQUIRE:
+        MUST  {{weight_kg}} be between 2 and 80, bounds included
+    RETURN AS dose-result:
+        DO    mg = {{weight_kg}} × {{mg_per_kg}}
+        DO    ml = mg / {{mg_per_ml}}
+    ENSURE:
+        MUST  ml be rounded half up to 2 decimals
+```
+
+A procedure a program carries out — a `PROCEDURE**` written as a specification. Called with `RUN dose`, imported like any procedure (it lives in `procedures/`). Rule lines on top say how the program is written; then three sections, all required, each holding at least one line, in this order:
+
+| Section | |
+|---|---|
+| `REQUIRE:` | when the program refuses its input — it stops with exit `1`, and the procedure stops with it. Only rules and `IF` |
+| `RETURN AS <template>:` | the computation, and the template its result is shaped as (no force level: the result is always checked). `DO`, `COMPUTE`, `IF`, `UNTIL` and rules — never `ASK` |
+| `ENSURE:` | the guarantees on the result — they become the program's tests. Only rules and `IF` |
+
+A section out of order, repeated, empty or missing fails the compilation; `REQUIRE`, `RETURN` and `ENSURE` stand only in a `COMPUTE` block. How the program is written and run: [Programs](#programs).
 
 ### STORE
 
@@ -162,7 +187,7 @@ FLOW complex-task:
 | `CONTEXT isolated \| summary \| full \| inherited` | how much upstream context the step's agent receives |
 | `AS <template>` | the shape of what is handed to the step's agent |
 | `DO` | what to do |
-| `MUST`, `NEVER`, `SHOULD`, … | a [rule](#rules) of the step — `NEVER skip a finding`, not `DO never skip a finding`; never `MEM` or `DISTILL` |
+| `MUST`, `NEVER`, `SHOULD`, … | a [rule](#rules) of the step — `NEVER skip a finding`, not `DO never skip a finding`; never `MEM` |
 | `IF <condition>:` / `ELSE` | the `DO`, `RUN` and rule lines indented under it apply only when the condition holds (or, under `ELSE`, when it does not); `BY`, `CONTEXT` and `AS` stay unconditional |
 | `PARALLEL` | the steps indented under it run at the same time |
 
@@ -185,7 +210,7 @@ A flow needs at least one `STEP`, directly or under its `IF`/`ELSE`/`UNTIL`. A f
 
 A step needs at least one `DO` or `RUN`, directly or under its `IF`/`ELSE`: a rule line says how to act, never what to do.
 
-A step takes no `MEM`, nor do its `IF`/`ELSE` branches: the agent its `BY` names may have no memory in its harness. `DISTILL` marks a procedure, never a step.
+A step takes no `MEM`, nor do its `IF`/`ELSE` branches: the agent its `BY` names may have no memory in its harness.
 
 ## Rules
 
@@ -196,13 +221,16 @@ A rule is a keyword and an action. The keyword says how binding it is:
 | `MAY` | You may |
 | `SHOULD` | You should |
 | `SHOULD!` | You should — strongly recommended, skipped only with explicit justification |
+| `SHOULD-NOT` | You should not |
 | `MUST` | You must |
 | `MUST!` | [HARD CONSTRAINT] You must — non-negotiable |
 | `MUST!!`, `NON-NEGOTIABLE` | [IDENTITY CONSTRAINT] before any other action, no exceptions |
 | `!MUST`, `MUST-NOT` | You must not |
 | `ALWAYS` | You must always |
 | `NEVER` | You must never |
-| `DO` | a step to carry out |
+| `DO` | a step the agent carries out |
+| `ASK` | a step a delegate carries out — see [Executors](#executors) |
+| `COMPUTE` | a step a program carries out — see [Executors](#executors) |
 
 A level is written with its keyword — `NEVER skip a finding`, `ALWAYS cite the line` — never as `DO never …` or `DO always …`.
 
@@ -230,43 +258,81 @@ An `AS <template>` line beneath `MEM` gives the memory a shape: *… the confirm
 
 The memory is the harness's own. With Claude Code, an agent that uses `MEM` gets `memory: project` in its frontmatter: Claude Code gives it a memory directory (`.claude/agent-memory/<agent>/`) and loads its `MEMORY.md` at every start.
 
-## Distillation
+## Executors
 
-`DISTILL`, a line inside a procedure, marks its reasoning as distillable into a deterministic script: the first time an agent carries the procedure out, it also writes a program that reproduces it, and from then on the program does the work — no reasoning, same result every time.
+Every line is carried out by one of three executors. The verb says which:
 
-```
-PROCEDURE compute-totals:
-    ABOUT     add up an invoice
-    LENS-IN   invoice
-    AS        totals
-    DISTILL!!
-    DO        add net, VAT and gross from the invoice lines
-```
+| Write | Carried out by |
+|---|---|
+| `DO <action>` | the agent itself |
+| `ASK <action>` | a delegate — another agent, handed the line's inputs and nothing else |
+| `COMPUTE <action>` | a program — a script: same input, same output, every time |
 
-Each line says one thing: `LENS-IN` what comes in, `AS` what goes out, `DISTILL` how it runs. The procedure's contract is the program's contract:
-
-- `AS <template>` is **required** — without a shape for the result there is nothing to check;
-- `LENS-IN <template>` is optional — the shape of the input, when the procedure has one;
-- `DISTILL` sits directly in the procedure, alone on its line, once; anywhere else it is a compile error.
-
-The level says how binding writing the script is, while none exists yet; once it exists, it is always used:
+On a block head, stars say the same:
 
 | Write | |
 |---|---|
-| `DISTILL` | the agent may write the script |
-| `DISTILL!` | it should |
-| `DISTILL!!` | it must, as soon as the work is done |
-| `!DISTILL` | never — the procedure needs judgment every time |
+| `PROCEDURE <name>:`, `IF`, `UNTIL` | the agent |
+| `PROCEDURE* <name>:` | a delegate carries out the whole procedure |
+| `PROCEDURE** <name>:` | a program carries it out ([`COMPUTE <name>:`](#compute) is one, written as a specification) |
+| `IF* <condition>`, `UNTIL* <condition>` | a delegate decides the condition |
+| `IF** <condition>`, `UNTIL** <condition>` | a program decides it |
 
-The script is the harness's work; agent-pack fixes only its interface:
+```
+VAR pdf_text
+VAR contract
+VAR lines AS invoice-lines
+VAR risks
+VAR totals
+VAR document_total
 
-- **any language**, an executable file with a `#!` line;
-- **input** as JSON on stdin, **output** as JSON on stdout, **exit 0** when it answers — anything else sends the agent back to reasoning;
-- the instruction shows an example JSON of the input and of the output, generated from the templates; the apx checks both.
+WHEN an invoice arrives:
+    ASK      read the invoice lines from {{pdf_text}} INTO lines
+    ASK      check the clauses of {{contract}} INTO risks BY legal-reviewer
+    COMPUTE  group {{lines}} by VAT rate INTO totals
+    IF** {{totals}} differ from {{document_total}} by more than 0.01:
+        DO   tell the user which rates do not add up
+```
 
-Scripts live in the project, versioned with the sources: `distilled/<id>.<ext>`. The id (`dst-` and eight hex digits) comes from the procedure's exact text and its contract templates, so editing either gives a new id: the old script is no longer used, and a new one is written the next time (a new level alone keeps the id). `agent-pack bundle all` lists the scripts no procedure owns any more, for you to review and delete. Writing its own scripts is always inside an agent's perimeter (`OWNS`).
+- **On a procedure, the mark covers the body**: its lines inherit the executor. **On an `IF` or an `UNTIL`, it covers only the condition**: the lines beneath inherit the enclosing block's executor — and an unmarked `IF` inside a `PROCEDURE**` is decided by the program too.
+- **A line may raise its executor, never lower it** — agent, then delegate, then program. Under a `PROCEDURE**`, an `ASK`, an `IF*`, or a `RUN` of anything but a `PROCEDURE**` fails the compilation: a program cannot stop for the agent; under a `PROCEDURE*`, a `RUN` takes only a `PROCEDURE*` or a `PROCEDURE**`. A [checked condition](#checked-conditions) (`IF!`) inside a starred procedure is an error: its executor decides its conditions.
+- **A condition has one judge.** `IF!`/`IF!!` are decided by a judge, `IF*`/`IF**` by a delegate or a program: `IF!*` or `UNTIL**!` is an error. A starred condition reads at least one variable — its only input.
 
-Agents run a script through their apx — `node .agent-pack/apx/<agent>.apx run <id> '<json>'` (see [The apx](/guide/apx#distilled-scripts)).
+**What a delegate or a program receives is its input, and nothing else.** One key per `{{variable}}` the piece reads, with its value in the session; one per constant, with its value; and `in`, the input of a procedure that declares a `LENS-IN`. An empty variable stops the piece before it starts. Its answer is checked against its contract: a line with `INTO x` answers a value of `x`'s type, a procedure its `AS` template, a condition `{"holds": true}` or `{"holds": false}`. Each piece gets a contract id, `exe-<8 hex>`, and the compiled line names the apx command that carries it out — `input` and `answer` for a delegate, `run` for a program (see [The apx](/guide/apx#delegates-and-programs)):
+
+```
+Ask a delegate to read the invoice lines from `pdf_text` — delegate: `quick` — hand it over its input and the shape of its answer, both from `node .agent-pack/apx/clerk.apx input exe-…`, then store its answer: `node .agent-pack/apx/clerk.apx answer exe-… -`
+If `totals` differ from `document_total` by more than 0.01 — a program decides — `node .agent-pack/apx/clerk.apx run exe-…`
+```
+
+### ASK and BY
+
+`ASK … BY <agent>` names who the line is handed to: a standalone agent, a team (its routing picks the member), or a member of the asking agent's own team. A member of another team, or a name the project does not have, fails the compilation. `BY` ends the line, after the `INTO`: `ASK … INTO risks BY legal-reviewer` (`BY … INTO …` is an error). Only `ASK` takes a `BY` — a `COMPUTE` is a program's.
+
+Without `BY`, the line goes to the **default delegate**, `quick`: a builtin agent that answers from the JSON input it is handed alone, as JSON in the shape the contract asks, saying what is missing when the input lacks it. `bundle all` builds it only when some agent hands it work and the project has no agent of that name. With Claude Code it runs on `haiku` and with no tool at all — it cannot read a file. The [`delegate`](/reference/config#delegate) key names another default and sets the model each agent runs on: the source never names a model.
+
+### Programs
+
+A program is written by the agent, the first time it is needed: `apx run` answers that there is no program yet, where to write it, and how — the builtin procedure `write-program`, imported by every agent a program works for. It lives at the project root, versioned with the sources:
+
+```
+distilled/dst-1a2b3c4d/
+    manifest.json   {"version": 1, "lineage": "…", "timeout_ms": 2000}
+    script.py       a #! line, JSON in on stdin, JSON out on stdout, exit 1 with the reason on stderr to refuse
+    tests.json      [{"why": "…", "input": {…}, "output": {…}}, {"why": "…", "input": {…}, "exit": 1}]
+```
+
+- **Any language**: `script.<ext>`, executable, with a `#!` line.
+- **`tests.json`** holds the program's cases: an input and the output it must answer, or `"exit": 1` when it must refuse. Every `REQUIRE` line gives a refusal case, every `ENSURE` line cases that prove the guarantee, and each decision the block left open a case whose `why` starts with `CHOICE:` — so the choice is written down, for a reader to confirm.
+- **A new or changed program runs its tests first**; the apx records the hash of the script and the tests (`tested` in the manifest) and runs them again only when either changes.
+- **The folder** (`dst-` and eight hex digits) is a hash of what the piece carries out and of its contract's templates: editing either gives a new folder. The new version starts from the previous one — the manifests share a `lineage` (the procedure's address); the new one sets `version` + 1 and `previous`. `bundle all` lists the folders no piece owns any more, for you to review and delete; it never deletes them.
+- Writing its programs is always inside an agent's perimeter (`OWNS` gains `distilled/**`).
+
+A refusal (exit `1`) stops the procedure: the agent never carries the piece out itself. A program that does not answer in `timeout_ms` hands that one run to the agent, which says so.
+
+### Rounds
+
+An `UNTIL*` or `UNTIL**` asks its condition after each round, at most `rounds` times — the [`checks`](/reference/config#checks) key's `rounds`, 3 by default, as for `UNTIL!`. The apx says `round 2 of 3` after each closed answer, and at the limit — exit `7` — to stop and report that the condition never held.
 
 ## Control flow
 
@@ -276,10 +342,12 @@ Agents run a script through their apx — `node .agent-pack/apx/<agent>.apx run 
 | `IF <condition>` … `ELSE` | a branch; the indented lines are its body. An `ELSE` must come right after an `IF` in the same body |
 | `UNTIL <condition>` | repeat the indented lines until the condition holds |
 | `IF!` / `IF!!`, `UNTIL!` / `UNTIL!!` | the same, with the condition decided by a judge — see [Checked conditions](#checked-conditions) |
+| `IF*` / `IF**`, `UNTIL*` / `UNTIL**` | the same, with the condition decided by a delegate or a program — see [Executors](#executors) |
 | `RUN <procedure or flow>` | carry out that procedure or flow |
+| `RUN <procedure> INTO <name>` | carry it out, and store its result in a variable |
 | `IN <store>:` | the indented lines work on that store |
 | `VAR <name>:` | the indented lines work out a [variable](#variables): its value is their final outcome |
-| `DO <action> INTO <name>` | do it, and store its result in a variable |
+| `DO <action> INTO <name>` | do it, and store its result in a variable — `ASK` and `COMPUTE` take `INTO` too |
 
 Lifecycle shorthands expand to a `WHEN`:
 
@@ -337,7 +405,7 @@ Else:
 What a check is, and is not:
 
 - A sealed condition protects against an agent that follows its instructions, not against one that reads files by hand: the question is in the apx file, as the compiled document is.
-- A judge checks the text the variables hold, not the facts behind it: "the tests pass" is judged on the report the agent stored. A condition about facts is a program's to decide — the `*` marker, later.
+- A judge checks the text the variables hold, not the facts behind it: "the tests pass" is judged on the report the agent stored. A condition about facts is a program's to decide: write it `IF**` — see [Executors](#executors).
 
 ## Shapes
 
@@ -365,7 +433,7 @@ A variable is a named value. A **constant** is fixed when the agent is compiled;
 | `VAR report AS task-report` | a variable with a type: a template |
 | `VAR draft:` + an indented block | declared and assigned: its value is the final outcome of the block |
 | `VAR report AS task-report:` + an indented block | the same, typed |
-| `DO <action> INTO draft` | assigns, or reassigns, a declared variable |
+| `DO <action> INTO draft` | assigns, or reassigns, a declared variable — so do `ASK`, `COMPUTE` and `RUN … INTO draft` |
 | `{{draft}}` | reads it |
 
 A variable is stored, and read back, only through the agent's [apx](/guide/apx#variables), which keeps the exact text stored — a later reader gets it verbatim, never a summary.
@@ -408,14 +476,14 @@ VAR claim:
 
 **`VAR x:` assigns a variable a `vars.ap` declares.** In a body, `VAR x:` normally declares a private `x` and assigns it. When `x` is already declared in a `vars.ap` the agent reads — a `SESSION` variable of its team, a private one of its own file — `VAR x:` only assigns it: it declares nothing. This is how a procedure's result goes into a shared variable (`VAR plan:` with `RUN make-plan` beneath). It takes no `AS` there: the type is the declaration's — `VAR plan AS x:` would declare `plan` again, an error.
 
-A single step registers its result with a trailing `INTO <name>`, on a `DO` line only — uppercase, at the very end of the line; anywhere else, `into` is plain text:
+A single step registers its result with a trailing `INTO <name>`, on a `DO`, `ASK`, `COMPUTE` or `RUN` line only — uppercase, at the very end of the line (before an `ASK`'s `BY`); anywhere else, `into` is plain text:
 
 ```
 VAR summary
 DO  sum up the findings in one paragraph INTO summary
 ```
 
-`RUN verify-claim INTO claim` is an error: write `VAR claim:` with `RUN verify-claim` beneath. `VAR x = …` never opens a block, even when its value ends with `:`; `VAR x` followed by indented lines is missing its `:`. The target of an `INTO` must be a declared variable — never a constant.
+`RUN verify-claim INTO claim` stores the procedure's result in `claim`, like `VAR claim:` with `RUN verify-claim` beneath; when a delegate or a program carries the procedure out, the apx stores it (`run … --into claim`). `VAR x = …` never opens a block, even when its value ends with `:`; `VAR x` followed by indented lines is missing its `:`. The target of an `INTO` must be a declared variable — never a constant.
 
 ### Types
 

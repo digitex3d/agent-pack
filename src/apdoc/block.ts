@@ -48,11 +48,14 @@ export abstract class ApBlock {
   shape: ApShape | null = null;
   /** A `LENS-IN <template>` binding: the shape of what comes in (an agent's requests, a procedure's input). */
   lensIn: ApShape | null = null;
-  /**
-   * A procedure's `DISTILL` level, captured during the body walk — the builder
-   * turns it into the block's distill node. Never serialized.
-   */
-  distill: number | null = null;
+  /** A `PROCEDURE*` / `PROCEDURE**` head: a delegate (1) or a program (2) carries the body out — src/executor.ts. */
+  executor: number | null = null;
+  /** A starred procedure's contract id (`exe-…`, `meta.executors`). */
+  exe?: string;
+  /** A COMPUTE block's `REQUIRE:` section — when its program refuses the input; null on any other block. */
+  require: ApNode[] | null = null;
+  /** A COMPUTE block's `ENSURE:` section — the guarantees on its result, which become tests. */
+  ensure: ApNode[] | null = null;
   /**
    * Node index where the AS line sat in the source body — presentation
    * metadata for the md projection, never serialized.

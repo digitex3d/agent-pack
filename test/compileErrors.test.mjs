@@ -42,7 +42,7 @@ try {
   // --- words, levels, values ---
   await assert.rejects(compile(['    ON-AGENT-PROMPT:', '        DO  greet']), /a\.ap:4  unknown keyword `ON-AGENT-PROMPT` — did you mean `ON-AGENT-PROMPTED`\?/);
   await assert.rejects(compile(['    MEM!!!  the plan']), /a\.ap:4  `MEM!!!` is not a level of MEM — use !MEM, MEM, MEM!, MEM!!/);
-  await assert.rejects(compile(['    SHOULD!!  be brief']), /`SHOULD!!` is not a level of SHOULD — use SHOULD, SHOULD!/);
+  await assert.rejects(compile(['    SHOULD!!  be brief']), /`SHOULD!!` is not a level of SHOULD — use !SHOULD, SHOULD, SHOULD!/);
   const flow = checkVocabulary('flows.ap', ['FLOW f:', '    STPE one:', '        BY a', '    STEP two:', '        BY a', '        CONTEXT isolatd'].join('\n'));
   assert.ok(flow.some(e => e.line === 2 && /unknown keyword `STPE` — did you mean `STEP`\?/.test(e.message)), JSON.stringify(flow));
   assert.ok(flow.some(e => e.line === 6 && /CONTEXT: unknown value `isolatd`/.test(e.message)), JSON.stringify(flow));

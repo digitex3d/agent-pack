@@ -16,6 +16,7 @@
  * the md renderer, the apx — asks this module; none writes its own pattern.
  */
 import { BLOCK_ID_RE } from './apdoc/ids.js';
+import { ACTION_VERBS } from './actionVerbs.js';
 
 /** A variable name: letters, digits, `_` and `-`, like every other name of the language. */
 const NAME = '[A-Za-z_][\\w-]*';
@@ -91,9 +92,18 @@ const INTO_RE = new RegExp(`^(.*?)\\s+INTO\\s+(${NAME})\\s*$`);
 /** Why a playbook takes no session variable: it compiles into a skill, which has no apx yet. */
 export const NO_PLAYBOOK_VARIABLES = 'playbooks have no executable yet — session variables are not available';
 
-/** Only a DO line assigns with a trailing INTO: the one keyword that takes it. */
+/** An action line assigns with a trailing INTO — DO, ASK, COMPUTE (src/executor.ts) — and RUN: its procedure's result. */
 export function takesInto(keyword: string): boolean {
-  return keyword === 'DO';
+  return (ACTION_VERBS as readonly string[]).includes(keyword) || keyword === 'RUN';
+}
+
+/** A trailing `BY <name>` — uppercase, at the very end of the line: anywhere else it is prose. */
+const BY_RE = new RegExp(`^(.*?)\\s+BY\\s+(${NAME})\\s*$`);
+
+/** A line's text and the agent it names, when it ends with `BY <name>` — else null. */
+export function splitBy(text: string): { text: string; name: string } | null {
+  const m = BY_RE.exec(text);
+  return m ? { text: m[1].trim(), name: m[2] } : null;
 }
 
 /** A line's text and the variable it assigns, when it ends with `INTO <name>` — else null. */

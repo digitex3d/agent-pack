@@ -13,7 +13,7 @@
  * one `# error:` line carrying the command that fixes it. `check` answers on its
  * first line, `open` (exit 0) or `closed` (exit 1, or 2 on a usage or config error).
  */
-import { existsSync, readdirSync, readFileSync } from 'fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join, basename, resolve } from 'path';
 import { spawnSync, type SpawnSyncOptionsWithStringEncoding } from 'child_process';
 import type { ApDocument } from '../apdoc/document.js';
@@ -26,15 +26,22 @@ import { FORMULAS, fill, type QuizQuestion } from '../formulas.js';
 import { DISTILLED_DIR, FLOWS_DIR, flowScriptStem, projectRootOf, projectStoreDir } from './paths.js';
 import { type ApxVerb } from './verbs.js';
 import { openTable, runTable, upsertBy } from './tabeli.js';
-import { openSessionVars, type SessionVars, type CheckRecord } from './sessionVars.js';
-import { checkedKeyword, stateOf, type ApCheckSpec } from '../check.js';
+import { openSessionVars, type SessionVars, type CheckRecord, type ExecutorRecord } from './sessionVars.js';
+import { checkedKeyword, roundLine, roundOf, stateOf, type ApCheckSpec } from '../check.js';
+import { PROGRAM, WRITE_PROGRAM, executorKey, programDir, programFolders, type ApExecutorSpec } from '../executor.js';
 import { resolveJudge } from '../judge/builtins.js';
 import type { JudgePlugin } from '../judge/types.js';
 import { refName } from '../../adapters/md/phrases.js';
 import { CREDIT } from '../credits.js';
-import { validateRecord, slotSpecsOf, formatIssues } from '../shapeSchema.js';
-import { BLOCK_ID_RE, sha256Hex } from '../apdoc/ids.js';
+import { validateRecord, slotSpecsOf, formatIssues, jsonExample } from '../shapeSchema.js';
+import { BLOCK_ID_RE, addressName, sha256Hex } from '../apdoc/ids.js';
 import { constantOf, readsOf } from '../vars.js';
+
+/** The exit of an UNTIL*'s answer at its round limit: the loop ends (src/check.ts roundLine). */
+const ROUND_LIMIT = 7;
+
+/** What an empty variable is told — the caller says what follows from it. */
+const emptyVariable = (name: string): string => `\`${name}\` is empty — nothing is stored in it in this session`;
 
 /** Build provenance sealed next to the document. */
 export interface ApxBuild {
@@ -75,7 +82,9 @@ const HELP: [string, string][] = [
   ['find <text>', 'the blocks containing the text, with the matching lines'],
   ['md', 'the whole prompt at once'],
   ['flow <flw-id>', 'how to run a flow: by the harness, from its compiled script — or its steps, to carry out in order'],
-  ['run <dst-id> [json]', 'run a distilled script: input as JSON (argument or stdin), its JSON output back'],
+  ['input <exe-id>', 'what a delegate or a program receives: the JSON of the variables and constants it reads'],
+  ['answer <exe-id> - [--into <var>]', "store a delegate's answer (on stdin): checked against its contract, kept in its INTO variable"],
+  ['run <exe-id> [in-json] [--into <var>]', 'run a program: its tests when it is new, then the program on its input — its answer back, or kept in <var>'],
   ['check <cnd-id>', 'a checked condition (IF!, IF!!, UNTIL!, UNTIL!!), put to the judge on this session\'s variables: open or closed'],
   ['version', 'agent, build date, agent-pack version, hash, block count'],
   ['<store> <verb> …', 'read or write a store (tabeli verbs: q a s …)'],
@@ -87,8 +96,25 @@ const FILTER_RE = /^(kind|tag|name|about)(=|~)(.+)$/;
 /** A session id as it may name a folder: no separator, never `.` or `..`. */
 const SESSION_ID_RE = /^(?!\.+$)[A-Za-z0-9._-]+$/;
 
-/** How long a distilled script may run before the agent works it out itself. */
-const RUN_TIMEOUT_MS = 30_000;
+/** A program's manifest (`distilled/<dst-id>/manifest.json`) — written by the agent, `tested` by the apx. */
+interface ProgramManifest {
+  version: number;
+  previous?: string;
+  lineage?: string;
+  timeout_ms: number;
+  /** A hash of the script and its tests the last time all its tests passed. */
+  tested?: string;
+}
+
+/** One case of a program's `tests.json`: an input and its expected output, or the refusal it must give. */
+type ProgramTest = { why: string; input: unknown } & ({ output: unknown } | { exit: number });
+
+/** Two JSON texts or values that mean the same value, key order aside. */
+function sameJson(text: string, expected: unknown): boolean {
+  const canon = (v: unknown): unknown => Array.isArray(v) ? v.map(canon)
+    : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v as object).sort(([a], [b]) => a < b ? -1 : 1).map(([k, x]) => [k, canon(x)])) : v;
+  try { return JSON.stringify(canon(JSON.parse(text))) === JSON.stringify(canon(expected)); } catch { return false; }
+}
 
 /** Why a script failed, from its stderr: the last lines that say something — stack frames, carets and runtime banners left out. */
 function stderrCause(stderr: string): string {
@@ -133,7 +159,9 @@ export class ApxEngine {
     find: args => this.find(args),
     md: () => this.print(renderMd(this.doc)),
     flow: args => this.flow(args),
-    run: args => this.runScript(args),
+    run: args => this.runProgram(args),
+    input: args => this.input(args),
+    answer: args => this.answer(args),
     check: args => this.check(args),
     version: () => this.version(),
     help: () => this.help(),
@@ -279,18 +307,18 @@ export class ApxEngine {
       this.out(`variables:  — read: ${this.cmd} get <name>, store: ${this.cmd} set <name> -`);
       for (const v of variables) this.out(`  ${v.name}  — ${v.about}`);
     }
-    const marks = this.doc.distillMarks().filter(d => d.mark.force >= 0);
-    if (marks.length > 0) {
-      this.out('distilled:');
-      for (const { mark, block } of marks) {
-        const state = this.script(mark.id) ? 'script ready' : 'no script yet';
-        this.out(`  ${mark.id}  ${block.kind} ${block.name}  (${state})  — ${this.cmd} run ${mark.id} '<json>'`);
-      }
-    }
     const checks = Object.entries(this.doc.meta.checks ?? {});
     if (checks.length > 0) {
       this.out(`checks:  — a judge decides each: ${this.cmd} check <id>`);
       for (const [id, c] of checks) this.out(`  ${id}  ${checkedKeyword(c.kind, c.level)}${c.level === 2 ? '  (sealed)' : `  — the question: ${this.cmd} get ${id}`}`);
+    }
+    const executors = Object.entries(this.doc.meta.executors ?? {});
+    if (executors.length > 0) {
+      this.out(`executors:  — a delegate or a program carries each out; its contract: ${this.cmd} get <id>`);
+      for (const [id, e] of executors) {
+        const state = e.program ? (this.programFiles(e.program) ? '  (program ready)' : '  (no program yet)') : '';
+        this.out(`  ${id}  ${FORMULAS.keywords.EXECUTOR.who[executorKey(e.executor)]}${e.by ? ` \`${e.by}\`` : ''}  ${e.site}: ${e.text}${state}`);
+      }
     }
     if (root.lensIn) this.out(`requests arrive as: ${this.refLabel(root.lensIn.ref)}`);
     if (root.lensOut) this.out(`answer as: ${this.refLabel(root.lensOut.ref)}  — your own rules apply in addition to the shape`);
@@ -321,6 +349,8 @@ export class ApxEngine {
     if (args[0] && !BLOCK_ID_RE.test(args[0])) return this.getVariable(args[0]);
     const check = args[0] ? this.doc.meta.checks?.[args[0]] : undefined;
     if (check) return this.getCheck(args[0], check);
+    const executor = args[0] ? this.doc.meta.executors?.[args[0]] : undefined;
+    if (executor) return this.getExecutor(args[0], executor);
     const block = this.blockArg('get', args);
     if (!block) return this.lastCode;
     if (args[1] === 'json') return this.print(JSON.stringify(block.toJSON(), null, 1));
@@ -369,39 +399,256 @@ export class ApxEngine {
     return this.print(this.text(block));
   }
 
+  /** A contract of this agent by id, or null after telling where its contracts are. */
+  private executorArg(verb: string, id: string | undefined): ApExecutorSpec | null {
+    const spec = id ? this.doc.meta.executors?.[id] : undefined;
+    if (!spec) this.lastCode = this.fail(2, `${verb} needs a contract id of this agent (exe-…) — the line that asks for it names it; all of them: ${this.cmd} scope`);
+    return spec ?? null;
+  }
+
   /**
-   * `run <dst-id> [json]` — the bridge to a distilled script: the input as JSON
-   * on its stdin, its JSON output back, checked against the contract template
-   * when the mark has one. Any failure is exit 1 with the way on: reason.
+   * What a contract receives: one key per variable it reads — its value as this
+   * session stores it, parsed when it is JSON — and per constant, with its
+   * value. An empty variable fails: the piece cannot be carried out yet.
    */
-  private runScript(args: string[]): number {
-    const [id, arg] = args;
-    if (!id) return this.fail(2, `run needs a script id — the distilled procedures: ${this.cmd} scope`);
-    const mark = this.doc.distillMarks().find(d => d.mark.id === id)?.mark;
-    if (!mark) return this.fail(1, `no distilled procedure with id '${id}' in this agent — the distilled ones: ${this.cmd} scope`);
-    if (mark.force < 0) return this.fail(1, `${id} is never distilled — work it out yourself`);
-    const script = this.script(id);
-    if (!script) return this.fail(1, `no script for ${id} yet — work it out yourself, then write ${DISTILLED_DIR}/${id}.<ext> as its instruction says`);
-    const input = arg ?? (process.stdin.isTTY ? '' : readFileSync(0, 'utf-8'));
-    if (mark.input) {
-      const issues = this.contractIssues(input, mark.input.ref);
-      if (issues) return this.fail(2, `the input is not shaped as \`${refName(mark.input.ref)}\`: ${issues}`);
+  private inputJson(spec: ApExecutorSpec, extra: Record<string, unknown> = {}): Record<string, unknown> | null {
+    const input: Record<string, unknown> = {};
+    const parsed = (text: string): unknown => { try { return JSON.parse(text); } catch { return text; } };
+    for (const [name, value] of Object.entries(spec.input.constants)) input[name] = parsed(value);
+    if (spec.input.vars.length > 0) {
+      const vars = this.sessionVars();
+      if (!vars) return null;
+      const read = this.readVariables(vars, spec.input.vars);
+      if ('empty' in read) {
+        this.lastCode = this.fail(1, `${emptyVariable(read.empty)}: fill it before this piece is carried out`);
+        return null;
+      }
+      for (const { name, value } of read.values) input[name] = parsed(value);
     }
-    // Its own process group, so a timeout stops whatever the script started too.
-    const run = spawnSync(script, [], { input, encoding: 'utf-8', timeout: RUN_TIMEOUT_MS, detached: true } as SpawnSyncOptionsWithStringEncoding);
+    return { ...input, ...extra };
+  }
+
+  /**
+   * A procedure's contract with the variable its call site fills (`RUN p INTO x`,
+   * `--into x`): the result is stored in it, as an INTO line's. The arguments
+   * without the option; null after telling what is wrong.
+   */
+  private intoArg(spec: ApExecutorSpec, id: string, args: string[]): { spec: ApExecutorSpec; args: string[] } | null {
+    const at = args.indexOf('--into');
+    if (at < 0) return { spec, args };
+    const name = args[at + 1];
+    const rest = [...args.slice(0, at), ...args.slice(at + 2)];
+    if (spec.site !== 'procedure') { this.lastCode = this.fail(2, `--into stores a procedure's result — ${id} is a ${spec.site}${spec.output.into ? `, stored in \`${spec.output.into}\` already` : ''}`); return null; }
+    if (!name || !this.variable(name)) { this.lastCode = this.fail(2, `--into needs a variable of this agent${name ? ` — \`${name}\` is none` : ''}: ${this.cmd} scope`); return null; }
+    return { spec: { ...spec, output: { ...spec.output, into: name } }, args: rest };
+  }
+
+  /**
+   * `input <exe-id>` — what a delegate is handed: the JSON it receives, and
+   * nothing else, then the shape its answer takes — `{"holds": …}` for a
+   * condition, `AS <template>` with an example, or plain text.
+   */
+  private input(args: string[]): number {
+    const spec = this.executorArg('input', args[0]);
+    if (!spec) return this.lastCode;
+    const input = this.inputJson(spec);
+    if (!input) return this.lastCode;
+    this.out(JSON.stringify(input, null, 1));
+    const A = FORMULAS.keywords.EXECUTOR.answer;
+    const shape = this.answerShape(spec);
+    if (spec.output.holds) return this.print(A.holds);
+    if (!shape) return this.print(A.text);
+    const slots = this.doc.slotsOf(shape);
+    this.out(fill(A.shaped, { name: refName(shape) }));
+    return this.print(JSON.stringify(slots ? jsonExample(slots, this.doc.slotResolver()) : {}));
+  }
+
+  /** The template a contract's answer is shaped as: its INTO variable's type, or its procedure's AS — null when none. */
+  private answerShape(spec: ApExecutorSpec): ApRef | null {
+    if (spec.output.into) return this.variable(spec.output.into)?.type ?? null;
+    const template = spec.output.template ? this.doc.byKind('template').find(b => b.name === spec.output.template) : undefined;
+    return template ? ({ id: template.id, target: template.address, kind: 'template' } as ApRef) : null;
+  }
+
+  /**
+   * A contract's answer: checked against its output — `{"holds": …}` for a
+   * condition, its INTO variable's template (then stored in it), its procedure's
+   * AS template — and recorded in the session. Null when it breaks the contract.
+   */
+  private deliver(id: string, spec: ApExecutorSpec, text: string, outcome: ExecutorRecord['outcome'], fingerprint: string): string | null {
+    // Only a condition or a shaped answer is JSON; any other answer is text — stored as is, or only recorded.
+    const shape = this.answerShape(spec);
+    let value: unknown;
+    if (spec.output.holds || shape) {
+      try { value = JSON.parse(text); } catch { return 'the answer is not JSON'; }
+    }
+    if (spec.output.holds) {
+      if (typeof value !== 'object' || value === null || typeof (value as { holds?: unknown }).holds !== 'boolean') return 'a condition answers {"holds": true | false}';
+    } else if (spec.output.into) {
+      const block = this.variable(spec.output.into);
+      if (!block) return `no variable \`${spec.output.into}\` in this agent`;
+      const failed = this.storeVariable(block, text.trim());
+      if (failed) return failed.reason;
+    } else if (shape) {
+      const issues = this.contractIssues(text, shape);
+      if (issues) return `not shaped as \`${refName(shape)}\`: ${issues}`;
+    }
+    this.recordExecution(id, spec, fingerprint, outcome, spec.output.holds ? (value as { holds: boolean }).holds : undefined);
+    return null;
+  }
+
+  /** One delegation or program run, in the session's record — who carried it out, on what input, how it ended. */
+  private recordExecution(id: string, spec: ApExecutorSpec, fingerprint: string, outcome: ExecutorRecord['outcome'], holds?: boolean): void {
+    const session = this.openSession();
+    if (typeof session === 'string') return;
+    const who = spec.executor === PROGRAM ? 'program' : spec.by ?? this.doc.meta.delegate ?? 'delegate';
+    session.executed({ exe: id, executor: spec.executor, who, fingerprint, outcome, ...(holds === undefined ? {} : { holds }), at: new Date().toISOString() });
+  }
+
+  /**
+   * What a contract tells the agent once its answer is in: the condition's
+   * outcome — and, for an UNTIL's, the round its loop is at, or the limit —
+   * or where the answer went.
+   */
+  private delivered(id: string, spec: ApExecutorSpec, text: string): number {
+    if (spec.output.into) {
+      this.out(`# stored as \`${spec.output.into}\` for this session — read it: ${this.cmd} get ${spec.output.into}`);
+      return 0;
+    }
+    const code = this.print(text.trim());
+    const session = spec.rounds ? this.openSession() : null;
+    if (!session || typeof session === 'string') return code;
+    const answers = session.answers(id);
+    if (answers.at(-1) !== false) return code;
+    const round = roundOf(answers);
+    this.out(`# ${roundLine(round, spec.rounds!, FORMULAS.keywords.EXECUTOR.loop)}`);
+    // At the limit the loop ends: an exit of its own, so no command chained after it runs another round.
+    return round >= spec.rounds! ? ROUND_LIMIT : code;
+  }
+
+  /** `answer <exe-id> -` — a delegate's answer, checked against its contract, stored and recorded. */
+  private answer(argv: string[]): number {
+    const id = argv[0];
+    const found = this.executorArg('answer', id);
+    const into = found && this.intoArg(found, id, argv);
+    if (!into) return this.lastCode;
+    const { spec, args } = into;
+    const from = args[1];
+    if (spec.executor !== 1) return this.fail(1, `a program carries out ${id}, not a delegate: ${this.cmd} run ${id}`);
+    const text = from === '-' || from === undefined ? readFileSync(0, 'utf-8') : args.slice(1).join(' ');
+    const input = this.inputJson(spec);
+    if (!input) return this.lastCode;
+    const broken = this.deliver(id!, spec, text, 'answered', sha256Hex(JSON.stringify(input)));
+    if (broken) return this.fail(6, `the delegate's answer breaks the contract of ${id}: ${broken} — hand it over again, with the same input; nothing was stored`);
+    return this.delivered(id!, spec, text);
+  }
+
+  /** A program's files: its folder, its manifest and its script — or null while it has none. */
+  private programFiles(program: string): { dir: string; manifest: ProgramManifest; script: string } | null {
+    const dir = resolve(projectRootOf(this.exe), programDir(program));
+    const manifestPath = join(dir, 'manifest.json');
+    if (!existsSync(manifestPath)) return null;
+    const script = readdirSync(dir).find(f => /^script(\.|$)/.test(f));
+    if (!script) return null;
+    let manifest: ProgramManifest;
+    try { manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')); } catch { return null; }
+    return { dir, manifest, script: join(dir, script) };
+  }
+
+  /** The program folder a new version starts from: the one whose manifest names the same lineage — or null. */
+  private previousProgram(spec: ApExecutorSpec): string | null {
+    if (!spec.lineage) return null;
+    const project = resolve(projectRootOf(this.exe));
+    for (const folder of programFolders(project)) {
+      if (folder === spec.program) continue;
+      try {
+        const manifest = JSON.parse(readFileSync(join(project, programDir(folder), 'manifest.json'), 'utf-8')) as ProgramManifest;
+        if (manifest.lineage === spec.lineage) return folder;
+      } catch { /* not a program folder */ }
+    }
+    return null;
+  }
+
+  /** Run a program on one input: its stdout, or why it gave none — refused (exit ≠ 0), timed out, or could not start. */
+  private execute(script: string, input: string, timeout: number): { out: string } | { refused: string } | { timeout: true } | { error: string } {
+    // Its own process group, so a timeout stops whatever the program started too.
+    const run = spawnSync(script, [], { input, encoding: 'utf-8', timeout, detached: true } as SpawnSyncOptionsWithStringEncoding);
     const code = (run.error as NodeJS.ErrnoException | undefined)?.code;
     if (code === 'ETIMEDOUT') {
       try { process.kill(-run.pid, 'SIGKILL'); } catch { /* the group is already gone */ }
-      return this.fail(1, `${id} did not answer within ${RUN_TIMEOUT_MS / 1000} s — work it out yourself`);
+      return { timeout: true };
     }
-    if (run.error) return this.fail(1, `${script} could not start (${code}) — make it executable (chmod +x) with a #! line; meanwhile work it out yourself`);
-    if (run.status !== 0) {
-      const why = stderrCause(run.stderr ?? '');
-      return this.fail(1, `${id} did not answer (exit ${run.status})${why ? `: ${why}` : ''} — work it out yourself`);
+    if (run.error) return { error: `${script} could not start (${code}) — make it executable (chmod +x) with a #! line` };
+    if (run.status !== 0) return { refused: `exit ${run.status}${stderrCause(run.stderr ?? '') ? `: ${stderrCause(run.stderr ?? '')}` : ''}` };
+    return { out: run.stdout };
+  }
+
+  /**
+   * `run <exe-id> [in-json]` — a program carries the piece out. With no program
+   * yet, the agent is told to write it (and where the version before it is).
+   * A new or changed program runs its own tests first. Then it runs on its
+   * input: a refusal (exit ≠ 0) stops the procedure — the agent never carries
+   * the piece out itself; a timeout hands this one run to the agent.
+   */
+  private runProgram(argv: string[]): number {
+    const id = argv[0];
+    const found = this.executorArg('run', id);
+    const into = found && this.intoArg(found, id, argv);
+    if (!into) return this.lastCode;
+    const { spec } = into;
+    const inArg = into.args[1];
+    const again = `${this.cmd} run ${id}${spec.output.into && spec.site === 'procedure' ? ` --into ${spec.output.into}` : ''}`;
+    if (spec.executor !== 2 || !spec.program) return this.fail(1, `a delegate carries out ${id}, not a program: hand it over with \`${this.cmd} input ${id}\`, then \`${this.cmd} answer ${id} -\``);
+    const files = this.programFiles(spec.program);
+    if (!files) {
+      const previous = this.previousProgram(spec);
+      const writer = this.doc.byKind('procedure').find(b => b.name === WRITE_PROGRAM);
+      return this.fail(10, [
+        `no program yet for ${id} — write it now, in ${programDir(spec.program)}/ at the project root (beside .agent-pack/): manifest.json, the script, tests.json`,
+        writer ? `how: ${this.cmd} get ${writer.id}` : `its contract: ${this.cmd} get ${id}`,
+        `manifest.json: {"version": 1, "timeout_ms": <n>${spec.lineage ? `, "lineage": "${spec.lineage}"` : ''}} — the script: script.<ext>, executable, JSON in on stdin, JSON out on stdout, exit 1 with the reason on stderr to refuse`,
+        `tests.json: [{"why": "…", "input": {…}, "output": <the JSON it must answer>}, {"why": "…", "input": {…}, "exit": 1}] — a "why" starting with CHOICE: for each decision the block left open`,
+        ...(previous ? [`its previous version is ${programDir(previous)}/ — start from it: version + 1, "previous": "${previous}", then delete that folder`] : []),
+        `then run it again: ${again}`,
+      ].join('\n'));
     }
-    const issues = this.contractIssues(run.stdout, mark.shape.ref);
-    if (issues) return this.fail(1, `${id} answered outside \`${refName(mark.shape.ref)}\`: ${issues} — work it out yourself`);
-    return this.print(run.stdout.trimEnd());
+    const { dir, manifest, script } = files;
+    if (!(manifest.timeout_ms > 0)) return this.fail(6, `${programDir(spec.program)}/manifest.json sets no timeout_ms — set one`);
+    // A new or changed program proves itself on its own tests first.
+    const testsPath = join(dir, 'tests.json');
+    const proof = sha256Hex(readFileSync(script, 'utf-8') + (existsSync(testsPath) ? readFileSync(testsPath, 'utf-8') : ''));
+    if (manifest.tested !== proof) {
+      let tests: ProgramTest[];
+      try { tests = JSON.parse(readFileSync(testsPath, 'utf-8')); } catch { return this.fail(6, `${programDir(spec.program)}/tests.json is missing or not JSON — a program comes with its tests`); }
+      if (!Array.isArray(tests) || tests.length === 0) return this.fail(6, `${programDir(spec.program)}/tests.json holds no case — a program comes with its tests`);
+      for (const test of tests) {
+        const ran = this.execute(script, JSON.stringify(test.input), manifest.timeout_ms);
+        // Too slow is no wrong answer: the timeout or the speed is to fix, not the logic.
+        if ('timeout' in ran) return this.fail(6, `the program of ${id} did not answer its test "${test.why}" within ${manifest.timeout_ms} ms — raise timeout_ms in ${programDir(spec.program)}/manifest.json, or make the program faster`);
+        const failed = 'exit' in test
+          ? ('refused' in ran ? null : `it should refuse (exit ${test.exit})`)
+          : 'out' in ran ? (sameJson(ran.out, test.output) ? null : `it answered ${ran.out.trim()}`) : `it gave no answer (${'refused' in ran ? ran.refused : 'timeout' in ran ? 'timeout' : ran.error})`;
+        if (failed) return this.fail(6, `the program of ${id} fails its own test "${test.why}": ${failed} — fix the program or the test, then run again`);
+      }
+      writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ ...manifest, tested: proof }, null, 2) + '\n');
+    }
+    let extra: Record<string, unknown> = {};
+    if (spec.input.in) {
+      if (!inArg) return this.fail(2, `${id} takes its input shaped as \`${spec.input.in}\`: ${this.cmd} run ${id} '<json>'`);
+      try { extra = { in: JSON.parse(inArg) }; } catch { return this.fail(2, `the input of ${id} is not JSON`); }
+    }
+    const input = this.inputJson(spec, extra);
+    if (!input) return this.lastCode;
+    const json = JSON.stringify(input);
+    const fingerprint = sha256Hex(json);
+    const record = (outcome: ExecutorRecord['outcome']) => this.recordExecution(id!, spec, fingerprint, outcome);
+    const ran = this.execute(script, json, manifest.timeout_ms);
+    if ('timeout' in ran) { record('timeout'); return this.fail(4, `the program of ${id} did not answer within ${manifest.timeout_ms} ms — carry this one out yourself, and say so`); }
+    if ('error' in ran) return this.fail(6, ran.error);
+    if ('refused' in ran) { record('refused'); return this.fail(3, `the program of ${id} refused its input (${ran.refused}) — stop the procedure and report it; never carry this piece out yourself`); }
+    const broken = this.deliver(id!, spec, ran.out, 'ran', fingerprint);
+    if (broken) { record('broken'); return this.fail(6, `the program of ${id} answered outside its contract: ${broken} — fix the program, then run again`); }
+    return this.delivered(id!, spec, ran.out);
   }
 
   /**
@@ -430,12 +677,12 @@ export class ApxEngine {
     try {
       const verdict = await this.verdict(spec, id, session, judge, config.model);
       const prior = spec.kind === 'UNTIL' ? session.checks(id) : [];
-      // This answer's round: one more than the closed answers in a row since the last open one.
-      const round = prior.length - prior.map(r => r.outcome).lastIndexOf('open');
+      // This answer's round, counted as closed: it is recorded before the verdict is known.
+      const round = roundOf([...prior.map(r => r.outcome === 'open'), false]);
       session.record({ ...verdict.record, cnd: id, level: spec.level, round, threshold: config.threshold, at: new Date().toISOString() });
       if (verdict.open) { answer('open', verdict.why); return 0; }
       const rounds = spec.kind !== 'UNTIL' ? []
-        : [fill(round >= config.rounds ? FORMULAS.keywords.CHECK.limit : FORMULAS.keywords.CHECK.nextRound, { round, rounds: config.rounds })];
+        : [roundLine(round, config.rounds, FORMULAS.keywords.CHECK.loop)];
       answer('closed', verdict.why, ...rounds);
       return 1;
     } catch (e) {
@@ -454,14 +701,9 @@ export class ApxEngine {
     const threshold = this.build.checks!.threshold;
     const closed = (plain: string, gate: string, record: Partial<CheckRecord> = {}) =>
       ({ open: false, why: sealed ? `the gate stayed closed — ${gate}` : plain, record: { fingerprint: '', model: '', p: '', ...record, outcome: 'closed' as const } });
-    const values: { name: string; value: string }[] = [];
-    for (const name of spec.vars) {
-      const block = this.variable(name);
-      const value = block ? session.read(name, block.scope) : null;
-      if (value === null || value.trim() === '') return closed(`\`${name}\` is empty — nothing is stored in it in this session: the condition cannot hold`, 'a variable it reads is empty');
-      values.push({ name, value });
-    }
-    const state = stateOf(values);
+    const read = this.readVariables(session, spec.vars);
+    if ('empty' in read) return closed(`${emptyVariable(read.empty)}: the condition cannot hold`, 'a variable it reads is empty');
+    const state = stateOf(read.values);
     const fingerprint = sha256Hex(state);
     const limit = judge.maxStateChars;
     if (limit !== undefined && state.length > limit) {
@@ -481,6 +723,19 @@ export class ApxEngine {
       return { open: true, why: sealed ? `the gate opened (p=${p})` : `the judge answered p=${p}, at or above ${threshold} — the condition holds`, record: { ...record, outcome: 'open' } };
     }
     return closed(`the judge answered p=${p}, below ${threshold} — the condition does not hold`, `p=${p}, below ${threshold}`, record);
+  }
+
+  /** A delegate's or a program's contract: what it carries out, what it receives, what it answers. */
+  private getExecutor(id: string, spec: ApExecutorSpec): number {
+    this.out(`# ${spec.site} ${id}  — ${FORMULAS.keywords.EXECUTOR.who[executorKey(spec.executor)]}${spec.by ? ` \`${spec.by}\`` : ''} carries it out, never you`);
+    this.out(`${spec.site}: ${spec.text}`);
+    const keys = [...spec.input.vars.map(v => `${v} (as stored in this session)`), ...Object.entries(spec.input.constants).map(([k, v]) => `${k} = ${v}`), ...(spec.input.in ? [`in (shaped as ${spec.input.in})`] : [])];
+    this.out(`input: ${keys.length ? keys.join(', ') : 'nothing'}  — one key each, nothing else`);
+    const out = spec.output.holds ? '{"holds": true | false}'
+      : spec.output.into ? `the value of \`${spec.output.into}\`${spec.output.template ? `, shaped as ${spec.output.template}` : ''}`
+      : spec.output.template ? `shaped as ${spec.output.template}` : 'its result';
+    this.out(`output: ${out}`);
+    return 0;
   }
 
   /** `get <cnd-id>`: a checked condition — its question, unless it is sealed. */
@@ -583,7 +838,7 @@ export class ApxEngine {
   private refLabel(ref: ApRef): string {
     const block = this.doc.resolve(ref);
     if (block) return this.label(block);
-    const name = ref.target.split('/').pop() ?? ref.target;
+    const name = refName(ref);
     if (ref.kind === 'agent') return `agent ${name}  [${this.sibling(name)} scope]`;
     return `${ref.kind} ${name}  (missing from the compiled sources)`;
   }
@@ -612,11 +867,6 @@ export class ApxEngine {
   private flowScript(flow: ApBlock): string | null {
     const stem = flowScriptStem(flow.id, flow.contentHash);
     return this.findIn(FLOWS_DIR, f => f.startsWith(`${stem}.`));
-  }
-
-  /** The script of a distilled construct, found by name beside the project's sources — or null. */
-  private script(id: string): string | null {
-    return this.findIn(DISTILLED_DIR, f => f === id || f.startsWith(`${id}.`));
   }
 
   /** The first file of a project folder that matches — its path, or null. */
@@ -650,7 +900,7 @@ export class ApxEngine {
     const team = this.doc.byKind('team')[0] as TeamBlock | undefined;
     const fellow = team?.members.find(m => m.id === id && !this.doc.resolve(m));
     this.lastCode = fellow
-      ? this.fail(1, `${id} is an agent defined in its own executable — run: ${this.sibling(fellow.target.split('/').pop()!)} scope`)
+      ? this.fail(1, `${id} is an agent defined in its own executable — run: ${this.sibling(addressName(fellow.target))} scope`)
       : this.notFound(id);
     return null;
   }
@@ -726,17 +976,40 @@ export class ApxEngine {
     const block = this.variable(name);
     if (!block) return this.fail(1, `no variable \`${name}\` in this agent — the variables: ${this.cmd} ls kind=var; nothing was written`);
     const value = rest.length === 1 && rest[0] === '-' ? readFileSync(0, 'utf-8') : rest.join(' ');
-    const type = block.type ? refName(block.type) : '';
-    if (block.type) {
-      if (!this.doc.slotsOf(block.type)) return this.fail(1, `\`${name}\` is shaped as \`${type}\`, a template not compiled into this agent — nothing was written`);
-      const issues = this.contractIssues(value, block.type);
-      if (issues) return this.fail(2, `the value is not shaped as \`${type}\`: ${issues} — nothing was written`);
-    }
-    const vars = this.sessionVars();
-    if (!vars) return this.lastCode;
-    try { vars.write(name, block.scope, { value, type, by: this.root.name }); } catch (e) { return this.fail(2, `storing ${name}: ${e instanceof Error ? e.message : e}`); }
+    const failed = this.storeVariable(block, value);
+    if (failed) return this.fail(failed.code, `${failed.reason} — nothing was written`);
     this.out(`# ${name} stored for this session — read it: ${this.cmd} get ${name}`);
     return 0;
+  }
+
+  /**
+   * The one write of a variable: a typed one takes only JSON its template
+   * (compiled into this agent) accepts. Null once stored; else why not, and the
+   * exit code to fail with — `set`, and an answer or a run stored `INTO` it.
+   */
+  private storeVariable(block: VarBlock, value: string): { code: number; reason: string } | null {
+    const type = block.type ? refName(block.type) : '';
+    if (block.type) {
+      if (!this.doc.slotsOf(block.type)) return { code: 1, reason: `\`${block.name}\` is shaped as \`${type}\`, a template not compiled into this agent` };
+      const issues = this.contractIssues(value, block.type);
+      if (issues) return { code: 2, reason: `the value is not shaped as \`${type}\`: ${issues}` };
+    }
+    const session = this.openSession();
+    if (typeof session === 'string') return { code: 2, reason: session };
+    try { session.write(block.name, block.scope, { value, type, by: this.root.name }); } catch (e) { return { code: 2, reason: `storing ${block.name}: ${e instanceof Error ? e.message : e}` }; }
+    return null;
+  }
+
+  /** The values this session stores for `names`, in order — or the first one that is empty. */
+  private readVariables(session: SessionVars, names: string[]): { values: { name: string; value: string }[] } | { empty: string } {
+    const values: { name: string; value: string }[] = [];
+    for (const name of names) {
+      const block = this.variable(name);
+      const value = block ? session.read(name, block.scope) : null;
+      if (value === null || value.trim() === '') return { empty: name };
+      values.push({ name, value });
+    }
+    return { values };
   }
 
   /** A variable of this agent, by name. */

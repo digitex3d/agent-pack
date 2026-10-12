@@ -8,6 +8,8 @@
  */
 import { FORMULAS, fill, qualified } from '../../src/formulas.js';
 import type { ApRef } from '../../src/apdoc/types.js';
+import { executorKey } from '../../src/executor.js';
+import { addressName } from '../../src/apdoc/ids.js';
 
 const K = FORMULAS.keywords;
 const T = FORMULAS.blocks.template;
@@ -17,6 +19,16 @@ const TY = FORMULAS.types;
 /** Head label of a control keyword (`If`, `Else`, `Until`, `In parallel`). */
 export function controlHead(keyword: string): string {
   return (K as Record<string, { head?: string }>)[keyword]?.head ?? keyword;
+}
+
+/** A condition head whose condition a delegate (1) or a program (2) decides — `IF*`, `UNTIL**`. */
+export function executorHead(head: string, executor: number): string {
+  return fill(FORMULAS.keywords.EXECUTOR[executorKey(executor)], { head });
+}
+
+/** An UNTIL* / UNTIL** loop's limit, after its head: ask again after each round, at most `rounds`. */
+export function executorRounds(rounds: number): string {
+  return fill(K.EXECUTOR.rounds, { rounds });
 }
 
 /** The STEP list header (`Steps:`). */
@@ -34,7 +46,7 @@ export function stepSignature(args: ReadonlyMap<string, string>): string {
 
 /** The short name a Ref renders with. */
 export function refName(ref: ApRef): string {
-  return ref.target.split('/').pop() ?? ref.target;
+  return addressName(ref.target);
 }
 
 /** A resolved RUN line. */

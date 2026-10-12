@@ -19,7 +19,7 @@ import { fileURLToPath } from 'url';
 
 const { loadConfig } = await import('../dist/src/config.js');
 const { formatErrors } = await import('../dist/src/lint.js');
-const { loadJudgeRules } = await import('../dist/src/judge/rules.js');
+const { loadJudgeRules, judgeState, severityOf } = await import('../dist/src/judge/rules.js');
 const { openJudgeRun, finishJudgeRun } = await import('../dist/src/judge/phase.js');
 const { bundleAgentObject } = await import('../dist/src/compiler/index.js');
 const { bundleAllOnce } = await import('../dist/src/commands/bundle.js');
@@ -100,15 +100,58 @@ try {
     ], 'asChecks(): the slot rules verbatim, id <template>.<slot>.<n>');
     assert.deepEqual(byId['one-action'].template.asChecks(), byId['one-action'].checks);
 
-    for (const [keyword, word] of [['ALWAYS', 'ALWAYS'], ['MUST-NOT', 'a negative rule'], ['MAY', 'MAY'], ['NEVER', 'a negative rule']]) {
+    for (const [keyword, word] of [['ALWAYS', 'ALWAYS'], ['MAY', 'MAY']]) {
       const bad = join(root, `bad-${keyword}`);
       write(join(bad, 'templates', 'bad.ap'), [
         'EXPORT TEMPLATE bad-rule:', '    ABOUT  a bad rule', '    TAGS   #judge', '    SLOTS:',
         '        action: TEXT  "the action"', `            ${keyword}  be short`, '    BODY:', '        DO {action}', '',
       ]);
       assert.throws(() => loadJudgeRules({ libraryRoot: bad, sharedLibraries: [], userRoot: '' }),
-        new RegExp(`bad-rule.*${word}.*MUST or SHOULD`), `${keyword} on a #judge rule is a load error`);
+        new RegExp(`bad-rule.*${word}.*MUST, SHOULD, NEVER, MUST-NOT or SHOULD-NOT`), `${keyword} on a #judge rule is a load error`);
     }
+
+    // A negative rule is asked directly: YES/NO say what the answers mean, EXAMPLE lines `<line> → <verdict>`
+    // are reference examples, and such a rule reads a JSON state.
+    const direct = join(root, 'direct-lib');
+    write(join(direct, 'templates', 'no-guess.ap'), [
+      'EXPORT TEMPLATE no-guess:', '    ABOUT  test rule — nothing left to guess', '    TAGS   #judge', '    SLOTS:',
+      '        action: TEXT  "a step of a calculation"',
+      '            NEVER  leave the programmer a detail to guess',
+      '                YES  a detail the result depends on is left open',
+      '                NO   every detail is written in the line or is one of its inputs',
+      '            MUST-NOT  name a file',
+      '            SHOULD-NOT  name a colour',
+      '    BODY:', '        DO {action}',
+      '    EXAMPLE:',
+      '        the total is rounded → must guess: rounding mode and decimals',
+      '        total is rounded half up to 2 decimals → nothing to guess',
+      '',
+    ]);
+    const noGuess = loadJudgeRules({ libraryRoot: direct, sharedLibraries: [], userRoot: '' }).find(r => r.template.name === 'no-guess');
+    assert.deepEqual(noGuess.checks, [
+      { id: 'no-guess.action.1', statement: 'leave the programmer a detail to guess', force: { keyword: 'ALWAYS', level: -1 },
+        criteria: { yes: 'a detail the result depends on is left open', no: 'every detail is written in the line or is one of its inputs' } },
+      { id: 'no-guess.action.2', statement: 'name a file', force: { keyword: 'MUST', level: -1 } },
+      { id: 'no-guess.action.3', statement: 'name a colour', force: { keyword: 'SHOULD', level: -1 } },
+    ], 'NEVER, MUST-NOT and SHOULD-NOT are checks; YES/NO lines are the criteria of the rule above');
+    assert.deepEqual(noGuess.checks.map(severityOf), ['error', 'error', 'warning'], 'SHOULD-NOT only warns');
+    assert.equal(noGuess.role, 'a step of a calculation', 'the role is the slot description');
+    assert.deepEqual(noGuess.examples, [
+      { line: 'the total is rounded', verdict: 'must guess: rounding mode and decimals' },
+      { line: 'total is rounded half up to 2 decimals', verdict: 'nothing to guess' },
+    ]);
+    assert.deepEqual(JSON.parse(judgeState(noGuess, 'mg = {{weight_kg}} × {{mg_per_kg}}, at most {{weight_kg}}')), {
+      role: 'a step of a calculation', line: 'mg = weight_kg × mg_per_kg, at most weight_kg', inputs: ['weight_kg', 'mg_per_kg'],
+      reference_examples: noGuess.examples,
+    }, 'a direct rule reads a JSON state: role, the line with plain names, its inputs once each, the examples');
+    assert.equal(judgeState(byId['one-action'], 'read {{x}}'), 'read {{x}}', 'any other rule reads the line as it is');
+
+    const orphan = join(root, 'orphan-lib');
+    write(join(orphan, 'templates', 'orphan.ap'), [
+      'EXPORT TEMPLATE orphan:', '    ABOUT  YES with no rule', '    TAGS   #judge', '    SLOTS:',
+      '        action: TEXT  "the action"', '            YES  something', '            SHOULD  be short', '    BODY:', '        DO {action}', '',
+    ]);
+    assert.throws(() => loadJudgeRules({ libraryRoot: orphan, sharedLibraries: [], userRoot: '' }), /YES\s+something.*no slot rule above it/, 'a YES with no rule above is an error');
     const noBody = join(root, 'no-body');
     write(join(noBody, 'templates', 'nb.ap'), [
       'EXPORT TEMPLATE no-layout:', '    ABOUT  no layout', '    TAGS   #judge', '    SLOTS:',
@@ -276,7 +319,9 @@ try {
       : c.id === 'one-action.action.2' && state === 'lire la tâche' ? 0.2 : 0.95;
     return { model: model ?? 'fake-1.0', answers: Object.fromEntries(checks.map(c => [c.id, p(c)])) };
   };
-  const askedStates = () => asks.map(a => a.state);
+  // A rule that asks directly sends the line inside a JSON state: the line text is its `line`.
+  const lineOf = state => (state.startsWith('{') ? JSON.parse(state).line : state);
+  const askedStates = () => asks.map(a => lineOf(a.state));
 
   process.chdir(proj);
   const config = await loadConfig([]);
@@ -323,7 +368,7 @@ try {
     const m = /^judge: (\d+) warnings — 3 files, 0 unchanged; (\d+) DO lines, (\d+) rule×line checks: (\d+) from saved verdicts, (\d+) asked, 0 not judged \(fake-1\.0\)$/.exec(summary[0]);
     assert.ok(m, summary[0]);
     assert.equal(Number(m[1]), run.warnings.length);
-    assert.equal(Number(m[2]), new Set(asks.map(a => a.state)).size, 'lines: the distinct DO line texts, not rule×text pairs');
+    assert.equal(Number(m[2]), new Set(asks.map(a => lineOf(a.state))).size, 'lines: the distinct DO line texts, not rule×text pairs');
     assert.equal(Number(m[3]), asks.length, 'one rule×line check per request');
     assert.ok(Number(m[3]) > Number(m[2]), 'several rules per line');
     assert.equal(Number(m[4]), 0);
@@ -475,7 +520,7 @@ try {
   {
     const { verdictKey } = await import('../dist/src/judge/lock.js');
     const text = 'sign the release';
-    const keys = loadJudgeRules(config).filter(r => r.primitive === 'DO').flatMap(r => r.checks.map(c => verdictKey(c, text)));
+    const keys = loadJudgeRules(config).filter(r => r.primitive === 'DO').flatMap(r => r.checks.map(c => verdictKey(c, judgeState(r, text))));
     const lock = readLock();
     writeFileSync(lockPath, JSON.stringify({ ...lock, decisions: { ...lock.decisions, ...Object.fromEntries(keys.map(k => [k, { p: 1, by: 'human' }])) } }, null, 2) + '\n');
     write(alphaFile, alphaLines.map(l => l.replace('DO  read the task', `DO  ${text}`)));
@@ -535,6 +580,31 @@ try {
     assert.equal(again.stats.pairs, 0);
     await captured(() => finishJudgeRun(again, { prune: false }));
     rmSync(strictRule);
+    globalThis.__judgeAsk = saved;
+  }
+
+  // --- a NEVER rule: the judge reads a JSON state, and a line that breaks it fails the agent ---
+  {
+    const neverRule = write(join(proj, 'library', 'templates', 'no-file.ap'), [
+      'EXPORT TEMPLATE no-file:', '    ABOUT  test rule', '    TAGS   #judge', '    SLOTS:',
+      '        action: TEXT  "an action of the agent"', '            NEVER  name a file in a foreign language',
+      '                YES  the line is not in English', '    BODY:', '        DO {action}',
+      '    EXAMPLE:', '        read the task → fine', '',
+    ]);
+    const saved = globalThis.__judgeAsk;
+    const states = [];
+    globalThis.__judgeAsk = async (state, checks, model) => {
+      if (checks.some(c => c.id === 'no-file.action.1')) states.push(JSON.parse(state));
+      // The plugin answers whether each check holds: low for the planted line.
+      return { model: model ?? 'fake-1.0', answers: Object.fromEntries(checks.map(c => [c.id, c.id === 'no-file.action.1' && state.includes('lire') ? 0.1 : 0.95])) };
+    };
+    const run = openJudgeRun(config, proj);
+    await assert.rejects(bundleAgentObject({ ...opts('alpha'), judge: run }), /alpha\.ap:7:5  \[no-file\.action\.1\] DO line breaks the rule "never name a file in a foreign language"/);
+    await captured(() => finishJudgeRun(run, { prune: false }));
+    const planted = states.find(s => s.line === 'lire la tâche');
+    assert.deepEqual(planted, { role: 'an action of the agent', line: 'lire la tâche', inputs: [], reference_examples: [{ line: 'read the task', verdict: 'fine' }] },
+      'the state of a NEVER rule: role, line, inputs, reference examples');
+    rmSync(neverRule);
     globalThis.__judgeAsk = saved;
   }
 
@@ -709,6 +779,20 @@ try {
       assert.deepEqual(first, { model: 'jev-1.13.0', answers: { 'r.action.1': 0.8, 'r.action.2': 0.3 } }, 'answers by check id, the model the judge reports');
       await jev.ask('fetch the code', checks, 'jev-1.13.0');
       assert.equal(seen[1].body.model, 'jev-1.13.0', 'a pinned model is sent as is');
+
+      // A negative rule is asked directly about `line`, with its criteria; a yes means the rule is broken.
+      const never = { id: 'r.action.3', statement: 'leave a detail to guess', force: { keyword: 'ALWAYS', level: -1 },
+        criteria: { yes: 'something is left open', no: 'nothing is left open' } };
+      const bare = { id: 'r.action.4', statement: 'name a file', force: { keyword: 'MUST', level: -1 } };
+      reply = () => ({ json: { model: 'jev-1.13.0', answers: { q1: { noul: 0.8 }, q2: { noul: 0.1 }, q3: { noul: 0.9 } } } });
+      const mixed = await jev.ask('{"line":"x"}', [checks[0], never, bare]);
+      const [q1, q2, q3] = Object.values(seen.at(-1).body.questions);
+      assert.equal(q1.instructions, 'Does the line satisfy this rule: "name one action"?', 'a positive rule keeps its wording');
+      assert.deepEqual(q2, { type: 'noul', instructions: 'Does `line` leave a detail to guess?', criteria: { true: 'something is left open', false: 'nothing is left open' } });
+      assert.deepEqual(q3, { type: 'noul', instructions: 'Does `line` name a file?' }, 'no criteria field when the rule has none');
+      assert.equal(mixed.answers['r.action.1'], 0.8);
+      assert.ok(Math.abs(mixed.answers['r.action.3'] - 0.9) < 1e-9, 'a no (0.1) to a direct question: the rule holds at 0.9');
+      assert.ok(Math.abs(mixed.answers['r.action.4'] - 0.1) < 1e-9, 'a yes (0.9): the rule holds at 0.1');
 
       assert.ok(seen[0].init.signal instanceof AbortSignal, 'every request carries a timeout signal');
 

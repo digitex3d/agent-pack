@@ -13,6 +13,7 @@ import { FORMULAS, fill } from '../../src/formulas.js';
 import { FORCE_LEVEL_PRIMITIVES } from '../../src/primitives.js';
 import type { ApNode, ApRef, ApShape, ApSlotType } from '../../src/apdoc/types.js';
 import type { StepNode } from '../../src/apdoc/nodes.js';
+import { executorKey, verbRank } from '../../src/executor.js';
 import {
   stepsHeader, refName, runLine, unresolvedRun, SHAPE_INTRO_FALLBACK,
   rangePhrase, textTypePhrase, numberTypePhrase, enumTypePhrase,
@@ -31,6 +32,12 @@ export interface MdEnv {
   apxOf(agent: string | null): string;
   /** The document's own agent. */
   agent: string;
+  /** The agent an ASK without BY is handed to (`meta.delegate`). */
+  delegate?: string;
+  /** A procedure carried out by a delegate or a program: its contract id and executor — else undefined. */
+  exeOf?(target: string): { exe: string; executor: number } | undefined;
+  /** An UNTIL condition's contract: the rounds its loop runs at most — else undefined. */
+  roundsOf?(exe: string): number | undefined;
 }
 
 /** Bullet-group primitives by keyword (DO, BY, WHEN, LOG, …) — RUN excluded. */
@@ -66,10 +73,49 @@ function runNodeLine(env: MdEnv, ref: ApRef): string {
   return runLine(ref.kind, refName(ref), env.refOf(ref.target));
 }
 
+/**
+ * A RUN whose result fills a variable (`RUN p INTO x`, or the lone RUN of a
+ * `VAR x:`). A procedure a delegate or a program carries out: `answer` / `run`
+ * with `--into` stores the result — no `set` to tell. Else the agent stores it.
+ */
+export function runIntoLines(env: MdEnv, ref: ApRef, into: ApRef, shape: ApShape | undefined, indent: number): string[] {
+  const how = ref.resolved === false ? undefined : env.exeOf?.(ref.target);
+  const name = refName(into);
+  if (how) {
+    const how2 = FORMULAS.keywords.EXECUTOR.into[executorKey(how.executor)];
+    return indentLines([runNodeLine(env, ref) + fill(how2, { apx: env.apxOf(null), id: how.exe, name })], indent);
+  }
+  return [
+    ...indentLines([runNodeLine(env, ref)], indent),
+    ...indentLines([...(shape ? [shapeLine(env, shape)] : []), storeVarLine(env, into, !!shape)], indent + 2),
+  ];
+}
+
 export function indentLines(lines: string[], indent: number): string[] {
   if (indent === 0) return lines;
   const pad = ' '.repeat(indent);
   return lines.map(l => (l === '' ? '' : pad + l));
+}
+
+/**
+ * How the agent gets a piece carried out by its contract (`exe-…`): a delegate's —
+ * hand its input over and store its answer; a program's — run it. '' with no contract.
+ */
+export function executorHow(env: MdEnv | undefined, exe: string | undefined, executor: number): string {
+  if (!env || !exe) return '';
+  const E = FORMULAS.keywords.EXECUTOR;
+  return fill(executorKey(executor) === '2' ? E.run : E.ask, { apx: env.apxOf(null), id: exe });
+}
+
+/**
+ * A directive's text as rendered — an `ASK … BY <agent>` line names the agent it
+ * is handed to, and a line with a contract says how to have it carried out.
+ */
+export function directiveText(n: { text: string; by?: string; keyword?: string; exe?: string }, env?: MdEnv): string {
+  // An ASK without BY goes to the default delegate: the prompt names it.
+  const by = n.by ?? (n.keyword === 'ASK' && n.exe ? env?.delegate : undefined);
+  const text = by ? fill(FORMULAS.keywords.ASK.by, { text: n.text, agent: by }) : n.text;
+  return text + executorHow(env, n.exe, verbRank(n.keyword ?? '') ?? 1);
 }
 
 /** Render a run of same-keyword directives — grouped exactly like the flat pipeline. */
@@ -100,17 +146,17 @@ export function renderNodes(env: MdEnv, nodes: ApNode[], ordered = true): string
       while (i < nodes.length) {
         const c = nodes[i];
         if (c.type !== 'directive' || c.body || c.into || c.keyword !== keyword || c.force !== force || (c.indent ?? 0) !== indent) break;
-        texts.push(c.shape ? fill(FORMULAS.keywords.MEM.shaped, { text: c.text, name: refName(c.shape.ref), ref: env.refOf(c.shape.ref.target) }) : c.text);
+        texts.push(c.shape ? fill(FORMULAS.keywords.MEM.shaped, { text: c.text, name: refName(c.shape.ref), ref: env.refOf(c.shape.ref.target) }) : directiveText(c, env));
         i++;
       }
       out.push(...indentLines(renderDirectiveGroup(env, keyword, force, texts), indent));
       continue;
     }
 
-    if (n.type === 'run') {
+    if (n.type === 'run' && !n.into) {
       const lines: string[] = [];
       const indent = n.indent ?? 0;
-      while (i < nodes.length && nodes[i].type === 'run') {
+      while (i < nodes.length && nodes[i].type === 'run' && !(nodes[i] as { into?: ApRef }).into) {
         lines.push(runNodeLine(env, (nodes[i] as { ref: ApRef }).ref));
         i++;
       }

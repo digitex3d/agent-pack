@@ -396,6 +396,18 @@ export const DoPrimitive = createBulletGroupPrimitive({
   intro: FORMULAS.keywords.DO.intro,
 });
 
+/** `ASK <action>` — an action handed to a delegate (src/executor.ts); grouped like DO. */
+export const AskPrimitive = createBulletGroupPrimitive({
+  keyword: 'ASK',
+  intro: FORMULAS.keywords.ASK.intro,
+});
+
+/** `COMPUTE <action>` — an action left to a program (src/executor.ts); grouped like DO. */
+export const ComputePrimitive = createBulletGroupPrimitive({
+  keyword: 'COMPUTE',
+  intro: FORMULAS.keywords.COMPUTE.intro,
+});
+
 /**
  * `BY <executor>` — binds the enclosing STEP to the agent or team that
  * executes it, resolved by ABOUT-match at RUN-time (see flows.rule). At most
@@ -426,6 +438,8 @@ export const FORCE_LEVEL_PRIMITIVES: BulletGroupPrimitive[] = [
   WhenPrimitive,
   RunPrimitive,
   DoPrimitive,
+  AskPrimitive,
+  ComputePrimitive,
   ByPrimitive,
 ];
 

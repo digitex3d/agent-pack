@@ -26,8 +26,12 @@
     {
       "name": "SHOULD",
       "levels": {
+        "-1": "You should not",
         "0": "You should",
         "1": "You should — this is strongly recommended and should only be skipped with explicit justification."
+      },
+      "aliases": {
+        "SHOULD-NOT": -1
       }
     },
     {
@@ -52,15 +56,6 @@
         "0": "You may save to your persistent memory, to act on it directly next time:",
         "1": "You should save to your persistent memory, to act on it directly next time:",
         "2": "You must always save to your persistent memory, to act on it directly next time:"
-      }
-    },
-    {
-      "name": "DISTILL",
-      "levels": {
-        "-1": "Never distill this into a script — it needs judgment every time.",
-        "0": "When it has no script yet, once the work is done you may",
-        "1": "When it has no script yet, once the work is done you should",
-        "2": "When it has no script yet, once the work is done you must"
       }
     }
   ]

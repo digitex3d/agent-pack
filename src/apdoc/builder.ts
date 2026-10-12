@@ -28,8 +28,7 @@ import type { BundleContext } from '../dispatch/types.js';
 import type { Definition } from '../definition.js';
 import { lex, Token } from '../lexer.js';
 import { buildTree, isStructural, splitArgs, stripTrailingColon, rawOf, restOf, Node as WalkNode } from '../bundlers/renderTree.js';
-import { distillId } from '../distill.js';
-import { condCheckOf, checkedKeyword, checkedVars, questionOf, type ApCheckSpec, type CheckKind, type CheckLevel, type CheckSite } from '../check.js';
+import { DEFAULT_ROUNDS, condCheckOf, checkedKeyword, checkedVars, questionOf, type ApCheckSpec, type CheckKind, type CheckLevel, type CheckSite } from '../check.js';
 import { sequencePrimitiveFor } from '../sequencePrimitives.js';
 import { parseTypeSpec, jsonExample, templateClosure } from '../shapeSchema.js';
 import { refName } from '../../adapters/md/phrases.js';
@@ -50,7 +49,7 @@ import {
   TEAM_FLOWS_FILE,
 } from '../services/teamMetadata.js';
 import type { ApNode, ApRef, ApShape, ApSlotType, ApStepNode, ApIfNode, ApDocumentMeta, ApStoreProjection } from './types.js';
-import { parseVarLine, splitInto, takesInto, constantOf, type VarScope } from '../vars.js';
+import { parseVarLine, readsOf, splitBy, splitInto, takesInto, constantOf, type VarScope } from '../vars.js';
 import type { PlacedVariable } from '../varsAp.js';
 import { introOf } from '../formulas.js';
 import { parseForceLevel, toCanonicalKeyword, getIntroByKeyword, forceLevelFamilies } from '../forceLevelConfig.js';
@@ -72,7 +71,8 @@ import {
   TemplateBlock, TeamScan, KIND_STRATEGIES, strategyOf, kindOfFolder, refId, namespaceOf, RefClass,
 } from './blocks.js';
 import { ApDocument, BlockProvenance } from './document.js';
-import { DirectiveNode, RunNode, TextNode, IfNode, UntilNode, WhenNode, StepNode, ParallelNode, InNode, DistillNode, VarNode } from './nodes.js';
+import { COMPUTE_SECTIONS, executorMark, executorSpecs, returnShape } from '../executor.js';
+import { DirectiveNode, RunNode, TextNode, IfNode, UntilNode, WhenNode, StepNode, ParallelNode, InNode, VarNode } from './nodes.js';
 
 
 /** Bullet-group keywords (DO, BY, WHEN, LOG, …) that group like force levels. */
@@ -144,7 +144,7 @@ export class DocumentBuilder implements BlockCx {
   /** The variables declared in the bodies walked, in walk order. */
   private varSites: VarSite[] = [];
   /** Every assignment of a variable — a `VAR x:` block, a `DO … INTO x` — in walk order. */
-  private varWrites: { name: string; node: VarNode | DirectiveNode; path: string }[] = [];
+  private varWrites: { name: string; node: VarNode | DirectiveNode | RunNode; path: string }[] = [];
   /** What is wrong with the variables: a compile error each, reported by the caller. */
   readonly varErrors: { path: string; name: string; line: number | null; message: string }[] = [];
   /** The checked conditions this agent's apx answers for, in walk order — their questions are built at finish. */
@@ -213,6 +213,22 @@ export class DocumentBuilder implements BlockCx {
         continue;
       }
 
+      // A COMPUTE block's sections: REQUIRE and ENSURE land on the block, RETURN AS <template>
+      // is its result's shape and its body the computation (src/executor.ts).
+      if (t.kind === 'blockOpener' && host && (COMPUTE_SECTIONS as readonly string[]).includes(t.key)) {
+        if (t.key === 'RETURN') {
+          const as = returnShape(t.rest);
+          if (as) host.shape = { force: 0, ref: this.templateRef(as) };
+          // Where RETURN starts — the AS line renders there, and the computation after it.
+          host.shapePos = sink === host.body ? host.body.length : null;
+          this.visit(n.children, sink, host, steps);
+        } else {
+          this.visit(n.children, t.key === 'REQUIRE' ? (host.require ??= []) : (host.ensure ??= []), host, steps);
+        }
+        i++;
+        continue;
+      }
+
       if (t.kind !== 'keyword') {
         // Prose (or unknown token) with an indented body: verbatim head, children flattened.
         this.pushText(sink, t);
@@ -264,7 +280,7 @@ export class DocumentBuilder implements BlockCx {
 
       if (kw === 'IF') {
         const node = this.at(new IfNode(stripTrailingColon(t.rest), t.indent), t);
-        this.checked('IF', node, t, host, steps);
+        this.executed('IF', node, t, host) || this.checked('IF', node, t, host, steps);
         sink.push(node);
         this.visit(n.children, node.then, host, steps);
         i++;
@@ -279,7 +295,7 @@ export class DocumentBuilder implements BlockCx {
       }
       if (kw === 'UNTIL') {
         const node = this.at(new UntilNode(stripTrailingColon(t.rest), t.indent), t);
-        this.checked('UNTIL', node, t, host, steps);
+        this.executed('UNTIL', node, t, host) || this.checked('UNTIL', node, t, host, steps);
         sink.push(node);
         this.visit(n.children, node.body, host, steps);
         i++;
@@ -320,6 +336,23 @@ export class DocumentBuilder implements BlockCx {
   }
 
   /**
+   * An `IF*`/`IF**`/`UNTIL*`/`UNTIL**` head: a delegate or a program decides the
+   * condition, which reads at least one variable — its only input. A star with a
+   * `!` is the vocabulary check's error: the head is never also checked.
+   */
+  private executed(kind: CheckKind, node: IfNode | UntilNode, t: Token & { kind: 'keyword' }, host: ApBlock | null): boolean {
+    // Unmarked inside a PROCEDURE* / PROCEDURE**, the condition is its executor's too (src/executor.ts).
+    const executor = t.executor ?? ((t.level ?? 0) === 0 ? host?.executor ?? 0 : 0);
+    if (!executor) return false;
+    node.executor = executor;
+    if (readsOf(node.condition).length === 0) {
+      this.checkIssues.push({ path: this.sourcePath, name: node.condition, line: this.fileLine(t),
+        message: `${kind}${executorMark(executor)}: a condition a delegate or a program decides reads at least one variable — \`{{name}}\`: it is the only input they receive` });
+    }
+    return true;
+  }
+
+  /**
    * An `IF!`/`IF!!`/`UNTIL!`/`UNTIL!!` head: the agent whose apx answers for it —
    * this agent, or the BY agent of the flow step it sits in — its id, its round
    * limit on an UNTIL, and, sealed, its condition taken out of the node (only
@@ -327,6 +360,12 @@ export class DocumentBuilder implements BlockCx {
    * what follows from it — the id, a warning, an error — is `condCheckOf`'s.
    */
   private checked(kind: CheckKind, node: IfNode | UntilNode, t: Token & { kind: 'keyword' }, host: ApBlock | null, steps: ApStepNode[]): void {
+    // Inside a PROCEDURE* / PROCEDURE** its executor decides the conditions: a judge cannot stand there.
+    if (host?.executor && (t.level ?? 0) > 0) {
+      this.checkIssues.push({ path: this.sourcePath, name: node.condition, line: this.fileLine(t),
+        message: `${kind}${'!'.repeat(t.level!)} is not allowed under PROCEDURE${executorMark(host.executor)} \`${host.name}\` — its executor decides its conditions: write ${kind} or ${kind}${executorMark(host.executor)}` });
+      return;
+    }
     const step = steps[steps.length - 1];
     const by = step?.by;
     const site: CheckSite = step ? { at: 'step', agent: by && by.kind === 'agent' && by.resolved !== false ? refName(by) : null }
@@ -392,19 +431,19 @@ export class DocumentBuilder implements BlockCx {
       if (base === 'RUN') {
         // The Ref resolves on the builder's own symbol table.
         actions.forEach((raw, k) => {
-          const name = raw.trim();
-          sink.push(this.at(new RunNode(this.ref(this.runnables.get(name), name, 'procedure'), indent), tokens[i + k]));
+          const into = splitInto(raw.trim());
+          const name = into ? into.text : raw.trim();
+          const node = this.at(new RunNode(this.ref(this.runnables.get(name), name, 'procedure'), indent), tokens[i + k]);
+          if (into) {
+            node.into = VarBlock.ref(into.name);
+            this.varWrites.push({ name: into.name, node, path: this.sourcePath });
+          }
+          sink.push(node);
         });
       } else if (base === 'VAR') {
         for (let k = i; k < j; k++) this.variable(tokens[k] as Token & { kind: 'keyword' }, [], sink, host, steps);
       } else if (base === 'AS') {
         this.applyShape(force ?? 0, actions[0] ?? '', sink, host, steps);
-      } else if (base === 'DISTILL') {
-        // A bare level line: only a procedure can be distilled.
-        if (host?.kind !== 'procedure') {
-          throw new Error(`DISTILL belongs in a PROCEDURE${host ? ` — found in ${host.kind} \`${host.name}\`` : ''}`);
-        }
-        host.distill = force ?? 0;
       } else if (base === 'LENS-IN' && host?.kind === 'procedure') {
         // A procedure's input contract.
         host.lensIn = { force: 0, ref: this.templateRef(stripColon(actions[0] ?? '')) };
@@ -424,10 +463,16 @@ export class DocumentBuilder implements BlockCx {
     }
   }
 
-  /** A plain line — a DO ending in `INTO <name>` records the variable its result fills. */
+  /**
+   * A plain line — an action ending in `INTO <name>` records the variable its
+   * result fills; an ASK ending in `BY <agent>` names who it is handed to.
+   */
   private directive(base: string, force: number | null, text: string, indent: number): DirectiveNode {
+    const by = base === 'ASK' ? splitBy(text) : null;
+    if (by) text = by.text;
     const into = takesInto(base) ? splitInto(text) : null;
     const node = new DirectiveNode(base, force, into ? into.text : text, indent);
+    if (by) node.by = by.name;
     if (into) {
       node.into = VarBlock.ref(into.name);
       this.varWrites.push({ name: into.name, node, path: this.sourcePath });
@@ -684,30 +729,10 @@ export class DocumentBuilder implements BlockCx {
         this.sourcePath = def.path;
         const from = strategy.from;
         const block = this.fromSource(ctx.sources.span(def.path, def.kind, def.name), () => from(def, this));
-        // A procedure's `DISTILL` line: its mark closes the body, with the
-        // procedure's own contract — output AS (required), input LENS-IN.
-        if (block.distill !== null) {
-          if (!block.shape) throw new Error(`PROCEDURE \`${def.name}\`: DISTILL needs an output contract — add AS <template>`);
-          const out = this.contractSources(block.shape);
-          const inp = this.contractSources(block.lensIn);
-          block.body.push(new DistillNode(
-            block.distill,
-            distillId(def.body, [...inp, ...out]),
-            block.shape,
-            JSON.stringify(jsonExample(refName(block.shape.ref), ctx.templates)),
-            block.lensIn ? { shape: block.lensIn, example: JSON.stringify(jsonExample(refName(block.lensIn.ref), ctx.templates)) } : undefined,
-          ));
-        }
         out.push(block);
       }
     }
     return out;
-  }
-
-  /** The sources of a contract's template and of every template it nests, for a DISTILL id. */
-  contractSources(shape: ApShape | undefined | null): string[] {
-    const name = shape?.ref.target.split('/').pop();
-    return name ? templateClosure(name, this.ctx?.templates ?? []) : [];
   }
 
   /** The team block (built by its class from the scan) + its flow blocks. */
@@ -772,14 +797,14 @@ export class DocumentBuilder implements BlockCx {
       // A shared declaration nobody here fills needs no template here; one this agent fills, or declares, does.
       let type = site.type ? this.templateRef(site.type, site.inBody || writes.length > 0) : null;
       for (const w of writes) {
-        if (w.node.type !== 'var') continue;
+        if (w.node.type === 'directive') continue;
         const line = w.node.pos?.line ?? null;
-        const yielded = this.yieldOf(w.node.body, doc, (a, b) =>
+        const yielded = this.yieldOf(w.node.type === 'var' ? w.node.body : [w.node], doc, (a, b) =>
           fail(w.path, site.name, line, `\`${site.name}\`: the IF and ELSE branches yield different types — \`${refName(a)}\` and \`${refName(b)}\``));
         if (!yielded) continue;
         if (!type) type = yielded;
         else if (yielded.target !== type.target) {
-          fail(w.path, site.name, line, `\`${site.name}\` is a \`${refName(type)}\`, but this block yields a \`${refName(yielded)}\` — a variable keeps one type for its whole life`);
+          fail(w.path, site.name, line, `\`${site.name}\` is a \`${refName(type)}\`, but this ${w.node.type === 'var' ? 'block' : 'procedure'} yields a \`${refName(yielded)}\` — a variable keeps one type for its whole life`);
         }
       }
       if (type) for (const w of writes) w.node.shape = { force: 1, ref: type };
@@ -910,6 +935,9 @@ export class DocumentBuilder implements BlockCx {
       }
     }
     this.checkSpecs(doc, opts.vars);
+    const executors = executorSpecs(doc, opts.vars ?? {}, this.ctx!.agentName, name => templateClosure(name, this.ctx?.templates ?? []),
+      this.ctx?.checks?.rounds ?? DEFAULT_ROUNDS);
+    if (Object.keys(executors).length > 0) doc.meta.executors = executors;
     doc.seal();
     const md = this.buildMdMeta(doc, opts, provenanceMap);
     doc.attachMdSource(md);

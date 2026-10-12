@@ -147,8 +147,16 @@ try {
     assert.equal(structure.byKind('var').length, 0, 'mid-line and lowercase INTO stay prose');
     await fails(['    DO  sum it up INTO nowhere'], /a\.ap:4  INTO nowhere: no variable `nowhere` — declare it with `VAR nowhere`/);
     await fails(['    DO  sum it up INTO board'], /a\.ap:4  INTO board: `board` is a constant/, { vars: { board: 'x' } });
-    await fails(['    VAR x', '    RUN  judge INTO x'], /a\.ap:5  `RUN judge INTO x`: RUN takes no INTO — write `VAR x:` with `RUN judge` beneath/);
-    await fails(['    VAR x', '    MUST  keep it INTO x'], /a\.ap:5  INTO ends only a DO line — `MUST` takes none/);
+    // RUN p INTO x: the procedure's result fills x, typed by its AS — as `VAR x:` with the RUN beneath
+    {
+      const { body, structure } = await compile(['    VAR x', '    RUN  judge INTO x']);
+      assert.equal(structure.byKind('var').find(v => v.name === 'x').type?.target, '@main.templates/verdict', 'the type comes from the procedure');
+      const run = body.indexOf('Run the procedure `judge`');
+      assert.ok(run >= 0 && body.indexOf('store the result as `x`', run) > run, 'the agent runs it, then stores its result');
+    }
+    await fails(['    VAR x AS verdict', '    RUN  jot INTO x'], /`x` is a `verdict`, but this procedure yields a `note`/);
+    await fails(['    RUN  judge INTO nowhere'], /a\.ap:4  INTO nowhere: no variable `nowhere`/);
+    await fails(['    VAR x', '    MUST  keep it INTO x'], /a\.ap:5  INTO ends only a DO, ASK, COMPUTE or RUN line — `MUST` takes none/);
   }
 
   // --- 5. `VAR x:` blocks: the outcome of DO lines, a RUN, an IF/ELSE, an UNTIL ---
@@ -346,10 +354,10 @@ try {
 
       // 13. no session id: session variables fail closed, everything else works
       delete process.env[SESSION];
-      for (const args of [['get', 'answer'], ['set', 'answer', 'x']]) {
+      for (const [args, what] of [[['get', 'answer'], 'read or written'], [['set', 'answer', 'x'], 'written']]) {
         r = apx('a', ...args);
         assert.equal(r.code, 2);
-        assert.equal(r.out, `# error: variables need the harness session id, and ${SESSION} is not set — nothing was read or written`);
+        assert.equal(r.out, `# error: variables need the harness session id, and ${SESSION} is not set — nothing was ${what}`);
       }
       process.env[SESSION] = '../escape';
       assert.match(apx('a', 'get', 'answer').out, /holds no usable session id/);

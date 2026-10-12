@@ -30,11 +30,23 @@ export default {
 | `checks` | absent | the judge of [checked conditions](/reference/language#checked-conditions) while the agent works — see below; absent, `IF!` reads as `IF` (a warning) and `IF!!` fails |
 | `checks.adapter` | `'jev'` | the judge — a built-in name (`'jev'`) or a judge object `{ type: 'judge', name, ask }` |
 | `checks.threshold` | `0.7` | a condition answered at or above this probability is open; below, closed |
-| `checks.rounds` | `3` | how many closed answers in a row a checked `UNTIL` takes before it stops |
+| `checks.rounds` | `3` | how many closed answers in a row a checked `UNTIL` takes before it stops — an `UNTIL*` or `UNTIL**` too |
+| `delegate.default` | `'quick'` | the agent an `ASK` line without `BY` is handed to — see below |
+| `delegate.models` | `{}` | the model each agent runs on, by agent name — see below |
 
 ## Judge
 
-With a `judge` key, `bundle` and `bundle all` run a judge phase: a model checks that the `.ap` code is well written. A rule is a `TEMPLATE` tagged `#judge` — its `BODY` layout names the lines it applies to (`DO {action}` → every `DO` line), each slot rule is a check, `MUST` an error and `SHOULD` a warning. The builtin library ships three rules, each checking every `DO` line: `judge-do-line` (exactly one imperative verb), `judge-do-condition` (no condition inside the line — write it as an `IF` with the `DO` under it) and `judge-do-force` (no word of force inside the line — write it with its primitive: `NEVER`, `ALWAYS`, `MUST`, …).
+With a `judge` key, `bundle` and `bundle all` run a judge phase: a model checks that the `.ap` code is well written. A rule is a `TEMPLATE` tagged `#judge` — its `BODY` layout names the lines it applies to (`DO {action}` → every `DO` line), each slot rule is a check, `MUST` an error and `SHOULD` a warning. A rule may also be negative — `NEVER`, `MUST-NOT` an error, `SHOULD-NOT` a warning: the judge is asked directly whether the line does it. `YES` and `NO` lines under a slot rule say what a yes and a no mean; `EXAMPLE` lines written `<line> → <verdict>` are reference examples, sent with every line. A tag narrows a rule to the lines of one [executor](/reference/language#executors):
+
+| Tag | The rule judges |
+|---|---|
+| `#executed` | the lines a delegate or a program carries out — `ASK` lines, starred conditions, the body of a starred procedure, every section of a `COMPUTE` block; never a `RUN` |
+| `#program` | only what a program carries out |
+| `#agent` | only what the agent carries out itself |
+
+A rule tagged `#executed` or `#program` may lay out `{line}` alone: it then judges every line of its scope, whatever its keyword.
+
+The builtin library ships six rules. Three check every `DO` line: `judge-do-line` (exactly one imperative verb), `judge-do-condition` (no condition inside the line — write it as an `IF` with the `DO` under it) and `judge-do-force` (no word of force inside the line — write it with its primitive: `NEVER`, `ALWAYS`, `MUST`, …). Three check who does what: `judge-executed-inputs` (`#executed`, an error — the line relies on no information beyond its inputs and its own words: a delegate or a program receives nothing else), `judge-program-vague` (`#program`, an error — the line leaves the programmer nothing to guess: a rounding without its mode, a limit in words, a tie without a rule) and `judge-compute-suggestion` (`#agent`, a warning — a `DO` line that is a plain calculation is better a `COMPUTE`).
 
 ```javascript
 export default {
@@ -51,7 +63,19 @@ Keys are hashes of the check and the line text — neither file reveals the rule
 
 Only a judge that cannot be reached, times out, or has no key or a rejected one (401/403) goes offline for the rest of the run. Any other failure — a rate limit, a server error, a malformed answer — leaves only that line not judged, with its own reason, and the rest is still asked; Jev retries a 429 or 5xx once. A judge object marks such a failure by throwing an error with `kind: 'line'`.
 
-**What leaves your machine:** with `judge.adapter: 'jev'`, the text of every `DO` line (nothing else) is sent to TypeSafe AI's API (`api.typesafe.ai`). The key is read from `TYPESAFE_API_KEY`, else `~/.config/typesafe/key` — never from the config.
+**What leaves your machine:** with `judge.adapter: 'jev'`, the text of every line a rule judges (nothing else) is sent to TypeSafe AI's API (`api.typesafe.ai`) — with the builtin rules, every `DO` line and every line a delegate or a program carries out. A negative rule, or one with reference examples, sends the line as JSON: the line with its `{{reads}}` as plain names, the names it reads, the slot's description and the rule's examples — never a variable's value. The key is read from `TYPESAFE_API_KEY`, else `~/.config/typesafe/key` — never from the config.
+
+## Delegate
+
+The `delegate` key says who answers an `ASK` line without `BY` (see [Executors](/reference/language#executors)), and which model each agent runs on — the `.ap` source never names a model:
+
+```javascript
+export default {
+  delegate: { default: 'quick', models: { quick: 'sonnet' } },
+};
+```
+
+`default` is an agent of the project, or `quick`, the builtin delegate (the default). `models` maps an agent's name to a model of its harness; with Claude Code it becomes the agent's `model:` — `quick` runs on `haiku` unless set here, every other agent on `inherit`.
 
 ## Libraries
 

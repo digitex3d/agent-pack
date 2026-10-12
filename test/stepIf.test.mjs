@@ -69,7 +69,7 @@ try {
   const empty = lintShip('    STEP close it:', '        BY builder', '        IF the audit passed:', '    STEP next:', '        DO  go');
   assert.deepEqual(empty.map(e => [e.line, e.message]), [
     [8, 'IF/ELSE block body must be indented (Python-style): "IF the audit passed:"'],
-    [6, 'STEP block requires at least one of: DO, RUN'],
+    [6, 'STEP block requires at least one of: DO, ASK, COMPUTE, RUN'],
   ]);
   const emptyElse = lintShip('    STEP s:', '        IF a:', '            DO  x', '        ELSE', '        DO  y');
   assert.deepEqual(emptyElse.map(e => [e.line, e.message]), [[9, 'IF/ELSE block body must be indented (Python-style): "ELSE"']]);
@@ -78,18 +78,18 @@ try {
   const inside = lintShip('    STEP s:', '        IF a:', '            BY builder', '            CONTEXT full',
     '            IF b:', '                DO  x', '            RUN go', '        DO  y');
   assert.deepEqual(inside.map(e => [e.line, e.message]), [
-    [8, 'BY is not allowed inside IF (expected one of: DO, RUN, MUST, ALWAYS, SHOULD, MAY)'],
-    [9, 'CONTEXT is not allowed inside IF (expected one of: DO, RUN, MUST, ALWAYS, SHOULD, MAY)'],
-    [10, 'IF is not allowed inside IF (expected one of: DO, RUN, MUST, ALWAYS, SHOULD, MAY)'],
+    [8, 'BY is not allowed inside IF (expected one of: DO, ASK, COMPUTE, RUN, MUST, ALWAYS, SHOULD, MAY)'],
+    [9, 'CONTEXT is not allowed inside IF (expected one of: DO, ASK, COMPUTE, RUN, MUST, ALWAYS, SHOULD, MAY)'],
+    [10, 'IF is not allowed inside IF (expected one of: DO, ASK, COMPUTE, RUN, MUST, ALWAYS, SHOULD, MAY)'],
   ]);
   // A branch line that is not allowed does not count toward the step's own uniques.
   assert.deepEqual(lintShip('    STEP s:', '        BY builder', '        IF a:', '            BY other', '            DO  x')
-    .map(e => e.message), ['BY is not allowed inside IF (expected one of: DO, RUN, MUST, ALWAYS, SHOULD, MAY)']);
+    .map(e => e.message), ['BY is not allowed inside IF (expected one of: DO, ASK, COMPUTE, RUN, MUST, ALWAYS, SHOULD, MAY)']);
   // A FLOW itself admits IF/ELSE and UNTIL too — see the flow-level section below.
   assert.deepEqual(lintShip('    IF a:', '        STEP s:', '            DO  x'), [], 'IF is a line of a FLOW itself');
   // The error lists the branch keywords with the step's own.
   assert.deepEqual(lintShip('    STEP s:', '        DO  x', '        UNTIL done:', '            DO  y').map(e => e.message),
-    ['UNTIL is not allowed inside STEP (expected one of: DO, RUN, CONTEXT, BY, MUST, ALWAYS, SHOULD, MAY, AS, IF, ELSE)']);
+    ['UNTIL is not allowed inside STEP (expected one of: DO, ASK, COMPUTE, RUN, CONTEXT, BY, MUST, ALWAYS, SHOULD, MAY, AS, IF, ELSE)']);
 
   // --- lint: an ELSE with no IF before it in the same body is rejected ---
   assert.deepEqual(lintShip('    STEP s:', '        DO  x', '        ELSE', '            DO  y').map(e => [e.line, e.message]),
@@ -147,16 +147,16 @@ try {
   // --- lint: a team flows.ap takes the STEP contract like a flow file ---
   assert.deepEqual(lintFile(flowsFile, ['ABOUT  a crew', '', 'FLOW ship:', '    STEP s:', '        BY builder',
     '        NEVER skip the tests', ''].join('\n')).map(e => [e.line, e.message]),
-  [[4, 'STEP block requires at least one of: DO, RUN']], 'a team step with only BY and a rule has no action');
+  [[4, 'STEP block requires at least one of: DO, ASK, COMPUTE, RUN']], 'a team step with only BY and a rule has no action');
   assert.deepEqual(lintFile(flowsFile, ['ABOUT  a crew', '', 'FLOW ship:', '    STEP s:', '        IF a:',
     '            AS idea-verdict', '            DO  x', ''].join('\n')).map(e => [e.line, e.message]),
-  [[6, 'AS is not allowed inside IF (expected one of: DO, RUN, MUST, ALWAYS, SHOULD, MAY)']], 'AS under a step IF in a team flows.ap');
+  [[6, 'AS is not allowed inside IF (expected one of: DO, ASK, COMPUTE, RUN, MUST, ALWAYS, SHOULD, MAY)']], 'AS under a step IF in a team flows.ap');
 
   // --- lint: MEM is no line of a step, nor of its branches; it stays legal in a procedure ---
   const memWhy = "a step's BY agent may have no memory in its harness; MEM goes in an agent, a role or a procedure";
   assert.deepEqual(lintShip('    STEP s:', '        DO  x', '        MEM!  the plan', '        IF a:', '            !MEM  secrets').map(e => [e.line, e.message]), [
-    [8, `MEM! is not allowed inside STEP — ${memWhy} (expected one of: DO, RUN, CONTEXT, BY, MUST, ALWAYS, SHOULD, MAY, AS, IF, ELSE)`],
-    [10, `!MEM is not allowed inside IF — ${memWhy} (expected one of: DO, RUN, MUST, ALWAYS, SHOULD, MAY)`],
+    [8, `MEM! is not allowed inside STEP — ${memWhy} (expected one of: DO, ASK, COMPUTE, RUN, CONTEXT, BY, MUST, ALWAYS, SHOULD, MAY, AS, IF, ELSE)`],
+    [10, `!MEM is not allowed inside IF — ${memWhy} (expected one of: DO, ASK, COMPUTE, RUN, MUST, ALWAYS, SHOULD, MAY)`],
   ]);
   assert.deepEqual(lintFile(join(tmp, 'library', 'procedures', 'remember.ap'),
     ['EXPORT PROCEDURE remember:', '    ABOUT  remember the plan', '    DO  read the plan', '    MEM!  the plan', ''].join('\n')), [], 'MEM in a procedure');

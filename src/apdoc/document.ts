@@ -17,7 +17,7 @@
  * consumer ever needs `instanceof` (duck-typing survives module realms).
  */
 import { resolve as resolvePath } from 'path';
-import type { ApDocumentMeta, ApMdMeta, ApOutlineItem, ApOutlinePart, ApRef, ApDistillNode, ApNode, ApLine } from './types.js';
+import type { ApDocumentMeta, ApMdMeta, ApOutlineItem, ApOutlinePart, ApRef, ApNode, ApLine } from './types.js';
 import { walk, type LineHead } from './nodes.js';
 import { DISTILLED_DIR } from '../apx/paths.js';
 import { ApBlock } from './block.js';
@@ -112,12 +112,6 @@ export class ApDocument {
     return this.blocks.get(ref.target) ?? null;
   }
 
-  /** Every DISTILL mark of the document, with the procedure whose body it closes. */
-  distillMarks(): { mark: ApDistillNode; block: ApBlock }[] {
-    return this.nodes()
-      .filter((n): n is { node: ApDistillNode; block: ApBlock; containers: ApNode[] } => n.node.type === 'distill')
-      .map(({ node, block }) => ({ mark: node, block }));
-  }
 
   /**
    * Every node of each block's body, at any depth, with its block and the nodes
@@ -125,7 +119,8 @@ export class ApDocument {
    * routing are not body nodes.
    */
   nodes(): { node: ApNode; block: ApBlock; containers: ApNode[] }[] {
-    return this.all().flatMap(block => [...walk(block.body)].map(w => ({ ...w, block })));
+    // A COMPUTE block's REQUIRE and ENSURE sections are body nodes too: their lines are judged and listed.
+    return this.all().flatMap(block => [...walk([...(block.require ?? []), ...block.body, ...(block.ensure ?? [])])].map(w => ({ ...w, block })));
   }
 
   /**
@@ -179,14 +174,14 @@ export class ApDocument {
   }
 
   /**
-   * The agent's perimeter as it applies: its OWNS globs, plus the distilled
-   * scripts' folder when it has a procedure to distill — writing its own
-   * scripts is always allowed. Null when the agent declares no perimeter.
+   * The agent's perimeter as it applies: its OWNS globs, plus the programs'
+   * folder when a program carries out some of its work — writing its programs
+   * is always allowed. Null when the agent declares no perimeter.
    */
   owns(): string | null {
     const owns = (this.root() as AgentBlock | null)?.owns ?? null;
     if (!owns) return null;
-    return this.distillMarks().some(d => d.mark.force >= 0) ? `${owns}, ${DISTILLED_DIR}/**` : owns;
+    return Object.values(this.meta.executors ?? {}).some(e => e.program) ? `${owns}, ${DISTILLED_DIR}/**` : owns;
   }
 
   /** Every block, in insertion (production) order. */

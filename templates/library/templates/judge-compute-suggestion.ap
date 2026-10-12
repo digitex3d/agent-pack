@@ -1,0 +1,19 @@
+# judge-compute-suggestion
+
+EXPORT TEMPLATE judge-compute-suggestion:
+  ABOUT   judge rule for every DO line the agent carries out itself — a calculation is better left to a COMPUTE block
+  TAGS    #judge #agent
+  SLOTS:
+    action: TEXT  "a line the agent carries out"
+      SHOULD-NOT  describe a calculation that a deterministic program could carry out exactly, with no judgment, interpretation or writing
+        YES  counting, summing, converting, sorting, filtering, date arithmetic, formatting or checking a value against a stated rule, on values the line already has — the same input always gives the same right output
+        NO   it needs judgment, interpretation, understanding or writing of language, choosing, explaining, or talking to someone — or it reads, extracts or copies values out of a file, a document or a text
+  BODY:
+    DO {action}
+  EXAMPLE:
+    sum the totals of invoices → a calculation: a program could do it
+    write a polite reminder to the client → needs judgment and language
+    keep only the rows of table where status is open → a calculation: a program could do it
+    decide which bug to fix first → needs judgment
+    read the amounts printed on the receipt file → needs reading a document
+    read the deadline from the request file the user names → needs reading a document

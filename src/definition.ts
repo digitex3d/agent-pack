@@ -21,6 +21,8 @@ export interface Definition {
   path: string;
   /** TAGS declared by the source module (empty when none). */
   tags: string[];
+  /** The executor mark of a `PROCEDURE*` / `PROCEDURE**` head (src/executor.ts); absent = the agent. */
+  executor?: number;
   /** Breadcrumb slug chain (e.g., ["coding", "code-quality"]). Empty when the file is at the library root. */
   breadcrumb: string[];
   /** Per-segment scope metadata (slug + optional ABOUT from each index.ap). Same length and order as `breadcrumb`. */

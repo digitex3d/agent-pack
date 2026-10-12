@@ -45,6 +45,8 @@ export const BLOCK_TYPES: Record<string, BlockType> = {
   ROLE:       { key: 'ROLE'       },
   FLOW:       { key: 'FLOW'       },
   TOOL:       { key: 'TOOL'       },
+  // `COMPUTE <name>:` — a procedure a program carries out (src/executor.ts computeHead).
+  COMPUTE:    { key: 'COMPUTE'    },
   STORE:      { key: 'STORE'      },
   EXPORT:     { key: 'EXPORT', modifier: true },
 };

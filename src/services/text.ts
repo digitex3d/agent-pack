@@ -95,6 +95,8 @@ export interface ExportedBlockBody {
   name: string;
   rest: string;
   body: string;
+  /** The executor mark of its head (`EXPORT PROCEDURE** name:`) — src/executor.ts. */
+  executor?: number;
 }
 
 /**
@@ -117,7 +119,7 @@ export function exportedBlockBodies(source: string): ExportedBlockBody[] {
       const raw = lines[lineNo - 1] ?? '';
       out.push(dedent ? raw.slice(dedent) : raw);
     }
-    return { key: block.key, name: block.name!, rest: block.rest, body: out.join('\n').trimEnd() };
+    return { key: block.key, name: block.name!, rest: block.rest, body: out.join('\n').trimEnd(), ...(block.executor ? { executor: block.executor } : {}) };
   });
 }
 

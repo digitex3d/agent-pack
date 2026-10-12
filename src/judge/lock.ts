@@ -31,9 +31,13 @@ interface LockData {
   decisions: Record<string, Decision>;
 }
 
-/** The key of one check on one line text. */
-export function verdictKey(check: JudgeCheck, text: string): string {
-  return sha256Hex(`${check.id}\n${check.statement}\n${text}`).slice(0, 16);
+/**
+ * The key of one check on what the judge reads of a line (`judgeState`: the line
+ * text itself for most rules) — with the check's YES/NO criteria when it has any.
+ */
+export function verdictKey(check: JudgeCheck, state: string): string {
+  const criteria = check.criteria ? `${JSON.stringify(check.criteria)}\n` : '';
+  return sha256Hex(`${check.id}\n${check.statement}\n${criteria}${state}`).slice(0, 16);
 }
 
 /** Whether `p` is a probability. */

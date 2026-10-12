@@ -91,6 +91,17 @@ export function toCanonicalKeyword(keyword: string): string {
 }
 
 /**
+ * A level of a family as an author writes it: a negative one by its alias when it has one
+ * (`ALWAYS` at -1 → `NEVER`), else its derived keyword (`MUST!`). Not a family: the word itself.
+ */
+export function writtenKeyword(family: string, level: number): string {
+  const f = RAW.families.find(x => x.name === family);
+  if (!f) return family;
+  const alias = level < 0 ? Object.entries(f.aliases ?? {}).find(([, l]) => l === level)?.[0] : undefined;
+  return alias ?? deriveCanonical(family, level);
+}
+
+/**
  * All canonical force-level keywords for a specific family (e.g. 'ALWAYS').
  * Returns all derived forms (ALWAYS, !ALWAYS) for that family only.
  */

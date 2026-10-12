@@ -8,6 +8,7 @@ import { AdapterPlugin } from '../adapters/types.js';
 import { resolveAdapter, resolveJudge } from './adapter-registry.js';
 import type { ChecksConfig, JudgeConfig, JudgePlugin } from './judge/types.js';
 import { defaultBundleConfig } from './bundleDefaults.js';
+import { DEFAULT_ROUNDS } from './check.js';
 
 function expandHome(p: string): string {
   if (p === '~') return homedir();
@@ -31,6 +32,12 @@ export const TABELI_ENGINE = resolve(PACKAGE_ROOT, 'tabeli/tabeli');
  * project, upgraded with the package.
  */
 export const BUILTIN_LIBRARY_ROOT = resolve(PACKAGE_ROOT, 'templates/library');
+
+/**
+ * The agents shipped inside the package — the default delegate (`quick`) among
+ * them. Found after the project's and the user's, so either shadows one by name.
+ */
+export const BUILTIN_AGENTS_DIR = resolve(PACKAGE_ROOT, 'templates/agents');
 
 /** Example agents `init` can copy into a new project. */
 export const EXAMPLES_DIR = resolve(PACKAGE_ROOT, 'templates/examples');
@@ -217,6 +224,18 @@ export interface Config {
   judge?: JudgeConfig | null;
   /** The judge of checked conditions while the agent works — null (no `checks` key): none. */
   checks?: ChecksConfig | null;
+  /** Who an ASK without BY is handed to, and the models delegates run on (src/executor.ts). */
+  delegate?: DelegateConfig;
+}
+
+/**
+ * The `delegate` key: `default` is the agent an `ASK` line without `BY` is
+ * handed to (`quick`, shipped with the package, unless the project names its
+ * own); `models` sets an agent's model, by name — the source never does.
+ */
+export interface DelegateConfig {
+  default: string;
+  models: Record<string, string>;
 }
 
 /** Library roots searched by `IMPORT … FROM library.<kind>` (unqualified path).
@@ -256,7 +275,7 @@ const JUDGE_DEFAULTS = {
 const CHECKS_DEFAULTS = {
   adapter: 'jev',
   threshold: 0.7,
-  rounds: 3,
+  rounds: DEFAULT_ROUNDS,
 } as const;
 
 /** A config key's judge entry resolved — a built-in judge by name, or a judge object — and its threshold checked. */
@@ -300,7 +319,22 @@ function resolveChecksConfig(raw: unknown): ChecksConfig | null {
   return { adapter, threshold: c.threshold as number, rounds: c.rounds as number };
 }
 
-const DEFAULTS: Omit<Config, 'bundle' | 'lint' | 'adapters' | 'userRoot' | 'judge' | 'checks'> = {
+/** The delegate shipped with the package (templates/agents/quick.ap): an ASK without BY goes to it, unless `delegate.default` names another. */
+export const DEFAULT_DELEGATE = 'quick';
+
+/** The `delegate` key resolved: the default delegate and the models, both checked. Absent: the shipped delegate, no model set. */
+export function resolveDelegateConfig(raw: unknown): DelegateConfig {
+  if (raw === undefined || raw === null) return { default: DEFAULT_DELEGATE, models: {} };
+  if (!isPlainObject(raw)) throw new Error(`delegate must be an object, e.g. { default: '${DEFAULT_DELEGATE}', models: { ${DEFAULT_DELEGATE}: 'haiku' } }`);
+  const d = raw as Record<string, unknown>;
+  const name = d.default ?? DEFAULT_DELEGATE;
+  if (typeof name !== 'string' || name.trim() === '') throw new Error('delegate.default must be an agent name');
+  const models = d.models ?? {};
+  if (!isPlainObject(models) || Object.values(models).some(m => typeof m !== 'string')) throw new Error('delegate.models must map agent names to model names');
+  return { default: name, models: models as Record<string, string> };
+}
+
+const DEFAULTS: Omit<Config, 'bundle' | 'lint' | 'adapters' | 'userRoot' | 'judge' | 'checks' | 'delegate'> = {
   agentsDir: 'agents',
   teamsDir: 'agents/teams',
   outputDir: OUTPUT_DIR,
@@ -377,5 +411,6 @@ export async function loadConfig(args: string[]): Promise<Config> {
     adapters: (userConfig.adapters || []).map(resolveAdapter),
     judge: resolveJudgeConfig(userConfig.judge, projectRoot),
     checks: resolveChecksConfig(userConfig.checks),
+    delegate: resolveDelegateConfig(userConfig.delegate),
   };
 }

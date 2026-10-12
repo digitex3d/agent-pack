@@ -20,6 +20,20 @@ import { shortId } from './apdoc/ids.js';
 import { FORMULAS, fill } from './formulas.js';
 import { readsOf, resolveReads, type VarRead } from './vars.js';
 
+/** How many rounds a loop runs at most, unless `checks.rounds` says otherwise — UNTIL!, UNTIL*, UNTIL**. */
+export const DEFAULT_ROUNDS = 3;
+
+/** A loop's round: its "not yet" answers in a row, the last one included — `answers` oldest first, true = it held. */
+export function roundOf(answers: boolean[]): number {
+  return answers.length - answers.lastIndexOf(true) - 1;
+}
+
+/** What the agent is told after a "not yet" at `round`: do the next round, or — at the limit — stop. */
+export function roundLine(round: number, rounds: number, words: { again: string; end: string }): string {
+  const C = FORMULAS.keywords.CHECK;
+  return fill(round >= rounds ? C.limit : C.nextRound, { round, rounds, ...words });
+}
+
 /** The condition heads that take a level — the one list; the lexer reads it. */
 export const CHECK_KINDS = ['IF', 'UNTIL'] as const;
 export type CheckKind = typeof CHECK_KINDS[number];

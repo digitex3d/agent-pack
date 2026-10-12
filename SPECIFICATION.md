@@ -67,7 +67,8 @@ The seven non-negotiable foundations of the paradigm.
 
 - **P7 — Reasoning distills into code.** What an agent can do
   deterministically, it should reason about only once. The author marks
-  a procedure as distillable; the first time an agent carries it out, it
+  a procedure as carried out by a program (D40, D41); the first time an
+  agent carries it out, it
   also writes a program that reproduces the result exactly, and from then
   on the program does the work — no reasoning, no tokens, the same answer
   every time. The language states the contract (input, output, template);
@@ -109,7 +110,7 @@ items on the left more.
 ## 3. Primitives
 
 The shared vocabulary of the paradigm. Each primitive has a stable
-identifier (`D1`–`D39`) for external citation as `Agent Pack §D<n>`.
+identifier (`D1`–`D42`) for external citation as `Agent Pack §D<n>`.
 These terms have precise meaning and are not interchangeable.
 
 - **D1 — agent** — an executable unit defined by a mission (what it
@@ -179,15 +180,16 @@ These terms have precise meaning and are not interchangeable.
 - **D11 — force level** — the calibrated strength of a directive,
   written as a keyword and zero to two `!` (or a leading `!` for the
   negative): `MUST`, `MUST!`, `MUST!!`, `!MUST`; `ALWAYS` / `NEVER`;
-  `SHOULD`, `SHOULD!`; `MAY`. The same levels calibrate every keyword
-  family that expresses obligation — the answer shape (D35), memory
-  (D21), distillation (D22). At compile time each level expands into
+  `SHOULD`, `SHOULD!`, `SHOULD-NOT`; `MAY`. The same levels calibrate
+  every keyword family that expresses obligation — the answer shape
+  (D35), memory (D21). At compile time each level expands into
   one exact formula. Obligation is a first-class primitive of the
   language, not a documentation convention: a level is always written
   with its keyword, never as an action (`DO`) carrying a strength word —
   `NEVER skip a finding`, not `DO never skip a finding`. Every body that
   holds actions — agent, role, playbook, procedure (D16), flow step
-  (D24) — admits the levels for that reason. (Rule added in 1.1.)
+  (D24) — admits the levels for that reason. (Rule added in 1.1;
+  `SHOULD-NOT`, the negative of `SHOULD`, added in 1.2.)
 
 - **D12 — *deprecated*.** Previously defined the *dynamic rule*. Never
   implemented as specified; the ID is retained per the append-only rule
@@ -209,9 +211,10 @@ These terms have precise meaning and are not interchangeable.
   flow (D27), invoked by name with `RUN` from an agent, a role, another
   procedure or a flow step. Its contract is optional: the shape of its
   input (`LENS-IN`, D6) and of its result (`AS`, D35). Beside its
-  actions (`DO`, `RUN`), its body holds directives at any force level
-  (D11) — memory (D21) included — at its top and under its `IF`, `ELSE`
-  and `UNTIL`; `DISTILL` (D22) alone is bound to its top.
+  actions (`DO`, `ASK`, `COMPUTE`, `RUN`), its body holds directives at
+  any force level (D11) — memory (D21) included — at its top and under
+  its `IF`, `ELSE` and `UNTIL`. Its head may carry an executor mark
+  (D40). (Amended in 1.2.)
 
 - **D17 — role** — a way of thinking and acting: an identity, its
   expertise and its rules, reusable across agents. An agent binds one
@@ -236,7 +239,8 @@ These terms have precise meaning and are not interchangeable.
   it holds — each kind defines how it is used — then reads only the
   blocks its task needs, following ids; every reference it prints
   carries the command that fetches it. The apx is also the bridge to the
-  agent's stores (D18) and distilled programs (D22).
+  agent's stores (D18) and to the delegates and programs that carry out
+  its executed pieces (D42).
 
 - **D21 — memory (`MEM`)** — the directive that tells an agent to
   remember an event, to act on it directly the next time: `MEM <event>`,
@@ -245,15 +249,12 @@ These terms have precise meaning and are not interchangeable.
   remembering. It is written in an agent, a role or a procedure (D16),
   never in a flow step (D24).
 
-- **D22 — distillation (`DISTILL`)** — the line, set by the author
-  inside a procedure (D16), that marks its reasoning as able to become a
-  deterministic program (P7). The procedure's contract is the program's:
-  input `LENS-IN` (D6), output `AS` (D35), required. The first execution
-  produces the program — any language, JSON in, JSON out; every later
-  execution runs it through the executable (D20), which checks both
-  sides. The program's identity is a hash of the procedure and its
-  contract, so an edit invalidates it. Levels (D11) say how binding
-  writing the program is; an existing program is always used.
+- **D22 — *withdrawn*.** Previously defined *distillation*
+  (`DISTILL`), a line marking a procedure's reasoning as able to become
+  a program. Withdrawn in 1.2 and replaced by the program executor: a
+  `PROCEDURE**` (D40) or a `COMPUTE` block (D41), run as described in
+  D42. A source that still writes `DISTILL` fails the compilation. The
+  ID is retained per the append-only rule (§4) and not reused.
 
 - **D23 — policy** — a set of invariants: `ALWAYS` and `NEVER` rules
   that hold across every task. Every policy an agent imports applies,
@@ -267,10 +268,11 @@ These terms have precise meaning and are not interchangeable.
   `RUN` carries out another flow; `IF` / `ELSE` and `UNTIL` put steps
   under a condition or in a loop (D37). A team's routing (D7) points
   each request at one flow. A step also holds directives at any force
-  level (D11), except `DISTILL` (D22), which marks a procedure, and memory (`MEM`, D21), since the agent a step
-  names with `BY` may have no memory in its harness — memory belongs to
-  an agent, a role or a procedure. A directive is a rule of the step,
-  never its action: a step needs at least one `DO` or `RUN`.
+  level (D11), except memory (`MEM`, D21), since the agent a step names
+  with `BY` may have no memory in its harness — memory belongs to an
+  agent, a role or a procedure. A directive is a rule of the step, never
+  its action: a step needs at least one action (`DO`, `ASK`, `COMPUTE`,
+  D40) or `RUN`. (Amended in 1.2.)
 
 - **D25 — context mode** — how much upstream context a step's executor
   receives: `isolated` (only its own intent), `summary` (a synthesized
@@ -332,9 +334,9 @@ These terms have precise meaning and are not interchangeable.
   result, what a step hands its executor, the structure of a memory.
 
 - **D36 — step branch** — a flow step (D24) may hold `IF <condition>:`
-  and a bare `ELSE`; under them sit only `DO` and `RUN` lines and the
-  step's directives (D24) — no `AS`, which belongs to the signature, and,
-  as in the step itself, no `DISTILL` and no `MEM`.
+  and a bare `ELSE`; under them sit only action lines (`DO`, `ASK`,
+  `COMPUTE`, D40), `RUN` and the step's directives (D24) — no `AS`, which
+  belongs to the signature, and, as in the step itself, no `MEM`.
   The branch is transparent: its lines are the step's own, so a
   step whose every action sits under an `IF` still has its action. The
   step's signature — `BY`, `CONTEXT`, `AS` — stays unconditional, and a
@@ -363,9 +365,12 @@ These terms have precise meaning and are not interchangeable.
   sees the declaration at compile time. `GLOBAL` — every agent, every
   session, persisted — is reserved: this version refuses it at
   compilation. An agent never sees a private and a `SESSION` variable of
-  the same name. `INTO <name>` at the end of a `DO` line puts the
-  action's result into a variable of either scope, and reassigns it — in
-  a loop too — without redeclaring it. The block form `VAR <name>:`
+  the same name. `INTO <name>` at the end of a `DO`, `ASK`, `COMPUTE` or
+  `RUN` line puts the line's result into a variable of either scope, and
+  reassigns it — in a loop too — without redeclaring it; `RUN <p> INTO
+  <name>` stores procedure p's result, typed by its `AS` (or `RETURN AS`,
+  D41), and is equivalent to a `VAR <name>:` block holding that lone
+  `RUN`. The block form `VAR <name>:`
   assigns a variable already declared in a `vars.ap` the agent reads, and
   otherwise declares a private one; `VAR <name> AS <template>:` always
   declares. The block holds, beneath, any lines of a procedure body
@@ -407,7 +412,62 @@ These terms have precise meaning and are not interchangeable.
   probability below the threshold, an uncertain answer, an unreachable
   judge, a state too large or an empty variable all close it, and a
   checked `UNTIL` stops after its last round with the condition closed.
-  Every check is recorded in the session. (Added in 1.2.)
+  Every check is recorded in the session. A condition has one judge: a
+  head never carries both `!` and an executor's star (D40). (Added in
+  1.2.)
+
+- **D40 — executor** — who carries out a line: the agent, a delegate or
+  a program. A line names it by its verb — `DO` the agent, `ASK` a
+  delegate, `COMPUTE` a program; a `PROCEDURE`, `IF` or `UNTIL` head by
+  its mark — none the agent, `*` a delegate, `**` a program. On a
+  procedure the mark covers its body, whose lines inherit it; on an `IF`
+  or `UNTIL` it covers the condition alone, and the branch or loop body
+  inherits the enclosing block's executor. A line may raise its executor
+  (agent, then delegate, then program), never lower it: no `ASK` under a
+  program, no `RUN` of a procedure carried out below the enclosing mark.
+  A starred condition reads at least one variable (D38); `!` or `!!`
+  together with a star fails the compilation, since a condition has one
+  judge (D39). `ASK … [INTO <name>] [BY <agent>]` — `BY` ends the line —
+  hands the line to a standalone agent, a team, or a member of the
+  asker's own team; with no `BY` it goes to the default delegate, a
+  builtin agent that answers only from the input it is handed. The
+  project's configuration, never the source, names the default delegate
+  and the model each delegate runs on (P3). (Added in 1.2.)
+
+- **D41 — compute block** — `COMPUTE <name>:` is a procedure (D16)
+  carried out by a program (D40), called with `RUN` and importable like
+  any procedure. On top sit its `ABOUT` and the rules on how the program
+  is written; beneath, three sections, each required, non-empty and in
+  this order: `REQUIRE:`, the conditions under which the program refuses
+  its input; `RETURN AS <template>:`, the computation and the template
+  of its result, with no force level, since the result is always checked;
+  `ENSURE:`, the guarantees the result keeps, which become the program's
+  tests. `REQUIRE` and `ENSURE` hold rules and `IF` only; `RETURN` holds
+  what a program can carry out — `DO`, `COMPUTE`, `IF`, `UNTIL` and rules
+  — never `ASK`, `RUN`, `MEM` or `VAR`. (Added in 1.2.)
+
+- **D42 — executed contract** — every piece a delegate or a program
+  carries out — an `ASK` or `COMPUTE` line, a starred condition, a
+  starred procedure — has a contract in the compiled definition (D9),
+  under its own id: its input (the variables it reads, the constants with
+  their values, its `LENS-IN`, D6), its output (the `INTO` variable and
+  its template, the `AS` template, or whether a condition holds), the
+  procedure it belongs to and, for an `UNTIL`, its rounds. The
+  executable (D20) gives each piece its input, checks a delegate's answer
+  against the contract before storing it, and runs programs. A program
+  is written by the agent the first time the piece runs, following a
+  builtin procedure: any language, JSON in, JSON out, a refusal when
+  `REQUIRE` fails, and tests — one per guarantee, and one per choice the
+  block left open, named as such. A new or changed program runs its tests
+  before its first answer. The program's identity follows the block: an
+  edited block gets a new program that starts from the previous one; old
+  programs are reported, never deleted. A program that refuses stops the
+  procedure; one that times out leaves the piece to the agent, which says
+  so; one that is broken or fails its tests is reported. A starred
+  `UNTIL` asks its condition after each round, at most the rounds set
+  under `checks` (D39), and at the limit stops and reports that the
+  condition never held. Every executed piece is recorded in the session.
+  (Added in 1.2.)
 
 ## 4. Citation
 
@@ -415,7 +475,7 @@ External works referencing this specification should use the stable
 identifiers defined above. Examples:
 
 - `Agent Pack §P7` — reasoning distills into code
-- `Agent Pack §D22` — the distillation primitive (`DISTILL`)
+- `Agent Pack §D40` — the executors (`DO`, `ASK`, `COMPUTE`)
 - `Agent Pack §D20` — the executable agent (apx)
 - `Agent Pack §P4 + §D4` — explicit composition and its operator
 

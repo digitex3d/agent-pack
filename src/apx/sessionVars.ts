@@ -45,6 +45,23 @@ export interface CheckRecord {
 }
 
 /**
+ * One piece a delegate answered or a program ran, as the session records it:
+ * its contract, who carried it out, a fingerprint of its input (never the
+ * input), and how it went.
+ */
+export interface ExecutorRecord {
+  exe: string;
+  executor: number;
+  /** Who carried it out: the delegate's name, or `program`. Never `by`: tabeli keeps that word for a write's author. */
+  who: string;
+  fingerprint: string;
+  outcome: 'answered' | 'ran' | 'refused' | 'timeout' | 'broken';
+  /** A condition's answer, when one came back. */
+  holds?: boolean;
+  at: string;
+}
+
+/**
  * One agent's view of a session's variables: read one by name and scope (null
  * when never stored), write one (the last write wins). A private variable is
  * the agent's alone; a SESSION one, every agent's. Every check the agent runs
@@ -56,6 +73,10 @@ export interface SessionVars {
   write(name: string, scope: VarScope, record: VarWrite): void;
   record(check: CheckRecord): void;
   checks(cnd: string): CheckRecord[];
+  /** Record one delegation or program run (src/executor.ts). */
+  executed(record: ExecutorRecord): void;
+  /** A condition's answers in this session, oldest first — how many rounds its loop has run. */
+  answers(exe: string): boolean[];
 }
 
 /**
@@ -64,13 +85,14 @@ export interface SessionVars {
  */
 export function openSessionVars(projectRoot: string, sessionId: string, agent: string, engine: string | undefined): SessionVars {
   const dir = join(projectRoot, STATE_DIR, sessionId);
-  const files: Record<VarScope | 'checks', string> = {
+  const files: Record<VarScope | 'checks' | 'executors', string> = {
     session: join(dir, 'session.tbl'), private: join(dir, 'private', `${agent}.tbl`), checks: join(dir, 'checks.tbl'),
+    executors: join(dir, 'executors.tbl'),
   };
-  const table = (kind: VarScope | 'checks'): string => {
+  const table = (kind: VarScope | 'checks' | 'executors'): string => {
     // A table runs its own engine: it too must keep a value's bytes.
     const error = openTable(files[kind], engine) ?? tabeliVersionError(files[kind], ['help'], `upgrade it: ${engine ?? 'tabeli'} upgrade ${files[kind]}`);
-    if (error) throw new Error(`${kind === 'checks' ? 'checks' : 'variables'}: ${error}`);
+    if (error) throw new Error(`${kind === 'checks' || kind === 'executors' ? kind : 'variables'}: ${error}`);
     return files[kind];
   };
   const added = (run: { status: number | null; error?: Error; stderr: string; stdout: string }): void => {
@@ -84,5 +106,8 @@ export function openSessionVars(projectRoot: string, sessionId: string, agent: s
       cnd: r.cnd, level: Number(r.level), round: Number(r.round), fingerprint: r.fingerprint ?? '', model: r.model ?? '',
       p: r.p ?? '', threshold: Number(r.threshold), outcome: r.outcome === 'open' ? 'open' : 'closed', at: r.at ?? '',
     })),
+    executed: record => added(runTable(table('executors'), ['a', `agent=${agent}`, ...Object.entries(record).map(([k, v]) => `${k}=${v}`)])),
+    answers: exe => queryTable(table('executors'), [`exe=${exe}`, `agent=${agent}`])
+      .filter(r => r.holds === 'true' || r.holds === 'false').map(r => r.holds === 'true'),
   };
 }

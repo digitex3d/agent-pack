@@ -308,8 +308,8 @@ await import('./adapterNames.test.mjs');
 // --- MEM: remember an event, force levels, shape, Claude Code memory ---
 await import('./mem.test.mjs');
 
-// --- DISTILL: the mark, its ids, the apx bridge, orphan scripts ---
-await import('./distill.test.mjs');
+// --- programs: a COMPUTE / PROCEDURE** / IF** carried out by its program — apx run, tests, refusal, timeout, orphans ---
+await import('./programs.test.mjs');
 
 // --- EXTENDS: parent rules first; a missing parent or a cycle fails ---
 await import('./extends.test.mjs');
@@ -334,8 +334,11 @@ await import('./stepIf.test.mjs');
 // --- force-level lines in PROCEDURE, STEP and STEP IF/ELSE bodies: lint, document, md, apx, Workflow script ---
 await import('./forceInBodies.test.mjs');
 
-// --- force-level lines at an AGENT's top level: every family but DISTILL — lint, document, md, apx ---
+// --- force-level lines at an AGENT's top level: every family — lint, document, md, apx ---
 await import('./forceInAgent.test.mjs');
+
+// --- executors (I2): DO / ASK / COMPUTE lines, IF* / IF** / UNTIL* / UNTIL** heads, ASK … BY ---
+await import('./executors.test.mjs');
 
 // --- variables: constants, session variables (VAR x:, DO … INTO x, {{x}}), their types, the apx get/set ---
 await import('./variables.test.mjs');

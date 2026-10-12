@@ -61,12 +61,18 @@ export function mdEnv(
     return fill(V.readShaped, { read: plain, template: shapeRefPhrase(template, refOf(shape.address)) });
   };
   return {
+    ...(doc.meta.delegate ? { delegate: doc.meta.delegate } : {}),
     forceLevels: doc.meta.forceLevels,
     refOf,
     // Substitution: a constant's `{{name}}` → its value; a variable's → how to read it.
     substitute: text => resolveReads(text, r => (r.template ? undefined : constantOf(src.vars, r.name)) ?? read(r)),
     apxOf,
     agent: doc.root()?.name ?? '',
+    roundsOf: exe => doc.meta.executors?.[exe]?.rounds,
+    exeOf: target => {
+      const block = doc.block(target);
+      return block?.exe && block.executor ? { exe: block.exe, executor: block.executor } : undefined;
+    },
   };
 }
 

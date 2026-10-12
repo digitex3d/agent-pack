@@ -18,21 +18,20 @@
 import type {
   ApNode, ApRef, ApShape,
   ApDirectiveNode, ApRunNode, ApTextNode,
-  ApIfNode, ApUntilNode, ApWhenNode, ApStepNode, ApParallelNode, ApInNode, ApDistillNode, ApVarNode,
+  ApIfNode, ApUntilNode, ApWhenNode, ApStepNode, ApParallelNode, ApInNode, ApVarNode,
   ApPos, ApLine,
 } from './types.js';
-import { distillLines } from '../distill.js';
 import { checkHead, type ApCondCheck, type CheckKind } from '../check.js';
 import {
-  MdEnv, renderNodes, renderDirectiveGroup, indentLines, shapeLine, storeVarLine,
+  MdEnv, renderNodes, renderDirectiveGroup, directiveText, executorHow, indentLines, runIntoLines, shapeLine, storeVarLine,
 } from '../../adapters/md/toolkit.js';
 import {
-  controlHead, refName, runLine, unresolvedRun,
+  controlHead, executorHead, executorRounds, refName, runLine, unresolvedRun,
   stepSignature, stepsHeader, storeScopeLine, varBlockHead,
 } from '../../adapters/md/phrases.js';
 
 /** What a node answers as a line: its primitive and the text after it. */
-export type LineHead = Pick<ApLine, 'primitive' | 'text'>;
+export type LineHead = Pick<ApLine, 'primitive' | 'text' | 'executor'>;
 
 /** Common base: chars stamped by measure, optional source indent, source position. */
 abstract class NodeBase {
@@ -57,6 +56,8 @@ export class DirectiveNode extends NodeBase implements ApDirectiveNode {
   body?: ApNode[];
   shape?: ApShape;
   into?: ApRef;
+  by?: string;
+  exe?: string;
 
   constructor(
     public keyword: string,
@@ -77,6 +78,8 @@ export class DirectiveNode extends NodeBase implements ApDirectiveNode {
       ...(this.body ? { body: this.body } : {}),
       ...(this.shape ? { shape: this.shape } : {}),
       ...(this.into ? { into: this.into } : {}),
+      ...(this.by ? { by: this.by } : {}),
+      ...(this.exe ? { exe: this.exe } : {}),
     };
   }
 
@@ -84,6 +87,8 @@ export class DirectiveNode extends NodeBase implements ApDirectiveNode {
     const node = new DirectiveNode(n.keyword, n.force, n.text, n.indent, n.body ? reviveNodes(n.body) : undefined);
     if (n.shape) node.shape = n.shape;
     if (n.into) node.into = n.into;
+    if (n.by) node.by = n.by;
+    if (n.exe) node.exe = n.exe;
     node.chars = n.chars;
     return node;
   }
@@ -94,14 +99,16 @@ export class DirectiveNode extends NodeBase implements ApDirectiveNode {
    * by the sequence renderer.
    */
   asMdLines(env: MdEnv, ordered: boolean): string[] {
+    // A delegated or computed line: `answer` / `run` stores its result — no `set` to tell.
+    if (this.into && this.exe) return indentLines(renderDirectiveGroup(env, this.keyword, this.force, [directiveText(this, env)]), this.indent ?? 0);
     if (this.into) {
       return [
-        ...indentLines(renderDirectiveGroup(env, this.keyword, this.force, [this.text]), this.indent ?? 0),
+        ...indentLines(renderDirectiveGroup(env, this.keyword, this.force, [directiveText(this, env)]), this.indent ?? 0),
         ...indentLines([...(this.shape ? [shapeLine(env, this.shape)] : []), storeVarLine(env, this.into, !!this.shape)], (this.indent ?? 0) + 2),
       ];
     }
     return [
-      ...indentLines(renderDirectiveGroup(env, this.keyword, this.force, [this.text + ':']), this.indent ?? 0),
+      ...indentLines(renderDirectiveGroup(env, this.keyword, this.force, [directiveText(this, env) + ':']), this.indent ?? 0),
       ...renderNodes(env, this.body ?? [], ordered),
     ];
   }
@@ -113,6 +120,8 @@ export class DirectiveNode extends NodeBase implements ApDirectiveNode {
 
 export class RunNode extends NodeBase implements ApRunNode {
   readonly type = 'run';
+  into?: ApRef;
+  shape?: ApShape;
 
   constructor(public ref: ApRef, indent?: number) {
     super(indent);
@@ -120,6 +129,8 @@ export class RunNode extends NodeBase implements ApRunNode {
 
   static fromData(n: ApRunNode): RunNode {
     const node = new RunNode(n.ref, n.indent);
+    if (n.into) node.into = n.into;
+    if (n.shape) node.shape = n.shape;
     node.chars = n.chars;
     return node;
   }
@@ -128,10 +139,13 @@ export class RunNode extends NodeBase implements ApRunNode {
     return {
       type: this.type, ref: this.ref, chars: this.chars,
       ...(this.indent ? { indent: this.indent } : {}),
+      ...(this.into ? { into: this.into } : {}),
+      ...(this.shape ? { shape: this.shape } : {}),
     };
   }
 
   asMdLines(env: MdEnv): string[] {
+    if (this.into) return runIntoLines(env, this.ref, this.into, this.shape, this.indent ?? 0);
     const line = this.ref.resolved === false
       ? unresolvedRun(this.ref.target)
       : runLine(this.ref.kind, refName(this.ref), env.refOf(this.ref.target));
@@ -174,7 +188,12 @@ export class TextNode extends NodeBase implements ApTextNode {
  * The head line of an IF/UNTIL: `If <condition>` — or, checked, the condition
  * (unless sealed) and the command of the apx whose answer decides it.
  */
-function conditionHead(kind: CheckKind, n: { condition: string; check?: ApCondCheck }, env: MdEnv): string {
+function conditionHead(kind: CheckKind, n: { condition: string; check?: ApCondCheck; executor?: number; exe?: string }, env: MdEnv): string {
+  if (n.executor) {
+    const rounds = n.exe ? env.roundsOf?.(n.exe) : undefined;
+    return executorHead(`${controlHead(kind)} ${env.substitute(n.condition)}`, n.executor) + executorHow(env, n.exe, n.executor)
+      + (rounds ? executorRounds(rounds) : '');
+  }
   if (!n.check) return `${controlHead(kind)} ${env.substitute(n.condition)}`;
   return checkHead(kind, n.check, env.substitute(n.condition), env.apxOf(n.check.agent));
 }
@@ -184,6 +203,8 @@ export class IfNode extends NodeBase implements ApIfNode {
   then: ApNode[] = [];
   else: ApNode[] = [];
   check?: ApCondCheck;
+  executor?: number;
+  exe?: string;
 
   constructor(public condition: string, indent?: number) {
     super(indent);
@@ -192,6 +213,8 @@ export class IfNode extends NodeBase implements ApIfNode {
   static fromData(n: ApIfNode): IfNode {
     const node = new IfNode(n.condition, n.indent);
     if (n.check) node.check = n.check;
+    if (n.executor) node.executor = n.executor;
+    if (n.exe) node.exe = n.exe;
     node.then = reviveNodes(n.then);
     node.else = reviveNodes(n.else);
     node.chars = n.chars;
@@ -202,6 +225,8 @@ export class IfNode extends NodeBase implements ApIfNode {
     return {
       type: this.type, condition: this.condition,
       ...(this.check ? { check: this.check } : {}),
+      ...(this.executor ? { executor: this.executor } : {}),
+      ...(this.exe ? { exe: this.exe } : {}),
       chars: this.chars,
       ...(this.indent ? { indent: this.indent } : {}),
       then: this.then, else: this.else,
@@ -221,7 +246,7 @@ export class IfNode extends NodeBase implements ApIfNode {
   }
 
   asLine(): LineHead {
-    return { primitive: 'IF', text: this.condition };
+    return { primitive: 'IF', text: this.condition, ...(this.executor ? { executor: this.executor } : {}) };
   }
 }
 
@@ -229,6 +254,8 @@ export class UntilNode extends NodeBase implements ApUntilNode {
   readonly type = 'until';
   body: ApNode[] = [];
   check?: ApCondCheck;
+  executor?: number;
+  exe?: string;
 
   constructor(public condition: string, indent?: number) {
     super(indent);
@@ -237,6 +264,8 @@ export class UntilNode extends NodeBase implements ApUntilNode {
   static fromData(n: ApUntilNode): UntilNode {
     const node = new UntilNode(n.condition, n.indent);
     if (n.check) node.check = n.check;
+    if (n.executor) node.executor = n.executor;
+    if (n.exe) node.exe = n.exe;
     node.body = reviveNodes(n.body);
     node.chars = n.chars;
     return node;
@@ -246,6 +275,8 @@ export class UntilNode extends NodeBase implements ApUntilNode {
     return {
       type: this.type, condition: this.condition,
       ...(this.check ? { check: this.check } : {}),
+      ...(this.executor ? { executor: this.executor } : {}),
+      ...(this.exe ? { exe: this.exe } : {}),
       chars: this.chars,
       ...(this.indent ? { indent: this.indent } : {}),
       body: this.body,
@@ -260,7 +291,7 @@ export class UntilNode extends NodeBase implements ApUntilNode {
   }
 
   asLine(): LineHead {
-    return { primitive: 'UNTIL', text: this.condition };
+    return { primitive: 'UNTIL', text: this.condition, ...(this.executor ? { executor: this.executor } : {}) };
   }
 }
 
@@ -301,6 +332,14 @@ export class VarNode extends NodeBase implements ApVarNode {
   asMdLines(env: MdEnv, ordered: boolean): string[] {
     // The added lines sit with the body's own: at its first node's indent.
     const inner = (this.body.find(n => 'indent' in n) as { indent?: number } | undefined)?.indent ?? (this.indent ?? 0) + 2;
+    // A lone RUN of a procedure a delegate or a program carries out: `answer` / `run` stores the value itself.
+    const [only] = this.body;
+    if (this.body.length === 1 && only.type === 'run' && !only.into && only.ref.resolved !== false && env.exeOf?.(only.ref.target)) {
+      return [
+        ...indentLines([varBlockHead(refName(this.var))], this.indent ?? 0),
+        ...runIntoLines(env, only.ref, this.var, this.shape, only.indent ?? inner),
+      ];
+    }
     return [
       ...indentLines([varBlockHead(refName(this.var))], this.indent ?? 0),
       ...indentLines(this.shape ? [shapeLine(env, this.shape)] : [], inner),
@@ -496,7 +535,6 @@ const REVIVERS: Record<string, Reviver> = {
   parallel:  d => ParallelNode.fromData(d as ApParallelNode),
   in:        d => InNode.fromData(d as ApInNode),
   var:       d => VarNode.fromData(d as ApVarNode),
-  distill:   d => DistillNode.fromData(d as ApDistillNode),
 };
 
 /** Lines shifted left by their common indentation. */
@@ -506,48 +544,6 @@ function dedentLines(lines: string[]): string[] {
   return base ? lines.map(l => l.slice(Math.min(base, l.length - l.trimStart().length))) : lines;
 }
 
-/** A procedure's DISTILL mark — renders the instruction to use, or write, its script. */
-export class DistillNode extends NodeBase implements ApDistillNode {
-  readonly type = 'distill';
-  input?: ApShape;
-  inputExample?: string;
-
-  constructor(public force: number, public id: string, public shape: ApShape, public outputExample: string, input?: { shape: ApShape; example: string }) {
-    super();
-    if (input) { this.input = input.shape; this.inputExample = input.example; }
-  }
-
-  static fromData(n: ApDistillNode): DistillNode {
-    const node = new DistillNode(n.force, n.id, n.shape, n.outputExample, n.input && n.inputExample !== undefined ? { shape: n.input, example: n.inputExample } : undefined);
-    node.chars = n.chars;
-    return node;
-  }
-
-  toJSON(): ApDistillNode {
-    return {
-      type: this.type, force: this.force, id: this.id, shape: this.shape,
-      ...(this.input ? { input: this.input, inputExample: this.inputExample } : {}),
-      outputExample: this.outputExample, chars: this.chars,
-    };
-  }
-
-  asMdLines(env: MdEnv): string[] {
-    return distillLines({
-      force: this.force,
-      id: this.id,
-      intro: env.forceLevels['DISTILL']?.[String(this.force)] ?? '',
-      run: `${env.apxOf(null)} run ${this.id}`,
-      shape: { name: refName(this.shape.ref), ref: env.refOf(this.shape.ref.target) },
-      outputExample: this.outputExample,
-      ...(this.inputExample !== undefined ? { inputExample: this.inputExample } : {}),
-    });
-  }
-
-  /** The mark is the compiler's, not a line of the source. */
-  asLine(): null {
-    return null;
-  }
-}
 
 /**
  * Every node — at any depth: bodies, branches, steps — in source order

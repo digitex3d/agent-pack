@@ -123,7 +123,7 @@ const agentFile = write(join(team, 'builder.ap'), [
   'PROCEDURE tally:',                             // 19
   '    ABOUT  count the findings',                // 20
   '    AS     tally-out',                         // 21
-  '    DISTILL',                                  // 22
+  '    # a comment holds no line',                // 22
   '    DO  count every finding',                  // 23
   '',                                             // 24
   'WHEN the session ends:',                       // 25 (outside the AGENT block)
@@ -208,12 +208,6 @@ try {
   assert.equal(doc.lineAt(agentFile, 3), null, 'a blank line holds no line');
   assert.equal(doc.lineAt(join(tmp, 'elsewhere.ap'), 9), null);
 
-  // --- nodes(): every node with its position, the ones that are no line included ---
-  const mark = doc.nodes().find(n => n.node.type === 'distill');
-  assert.equal(mark.block.name, 'tally');
-  assert.equal(mark.node.pos, undefined, 'a compiler mark was written nowhere');
-  assert.ok(!doc.lines().some(l => l.block.name === 'tally' && l.primitive === 'DISTILL'), 'and is no line');
-
   // --- JSON, contentHash and chars never see the positions ---
   const json = doc.asJson();
   assert.ok(!json.includes('"pos"') && !json.includes('"endCol"') && !json.includes('"source"'), 'positions are never serialized');
@@ -227,13 +221,6 @@ try {
   assert.equal(revived.lines('DO').length, 12, 'a revived document still lists its lines…');
   assert.ok(revived.lines('DO').every(l => l.file === null && l.line === null && l.col === null && l.endCol === null), '…without positions');
   assert.equal(revived.all().every(b => b.source === null), true);
-
-  // --- distillMarks: the procedure's closing mark, same on the revived twin ---
-  const marks = doc.distillMarks();
-  assert.equal(marks.length, 1);
-  assert.equal(marks[0].block.name, 'tally');
-  assert.equal(marks[0].mark, marks[0].block.body[marks[0].block.body.length - 1], 'the mark closes the body');
-  assert.deepEqual(revived.distillMarks().map(m => [m.block.address, m.mark.id]), marks.map(m => [m.block.address, m.mark.id]));
 
   // --- walk / someNode: pre-order, containers outermost first ---
   const leaf = { type: 'directive', keyword: 'DO', force: null, text: 'deep', chars: 0 };

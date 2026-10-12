@@ -1,0 +1,19 @@
+# judge-program-vague
+
+EXPORT TEMPLATE judge-program-vague:
+  ABOUT   judge rule for every line a program carries out — it leaves the programmer nothing to guess
+  TAGS    #judge #program
+  SLOTS:
+    line: TEXT  "a line of a calculation"
+      NEVER  require the programmer to guess a detail to implement it
+        YES  At least one detail the result depends on is left open by `line`: a rounding without its mode or decimals; a limit, size or threshold given in words, or without saying whether the limit itself counts; a choice among items without a rule for ties; an operation with several standard methods without naming one; a value that is not one of `inputs` and whose origin is not stated.
+        NO   Every detail the result depends on is written in `line` or is one of `inputs`, so a programmer can implement it without guessing.
+  BODY:
+    {line}
+  EXAMPLE:
+    the total is rounded → must guess: rounding mode and decimals
+    total is rounded half up to 2 decimals → nothing to guess
+    if the file is big → must guess: "big" is not a number
+    if size_kb is above 500 → nothing to guess (size_kb is an input)
+    convert the amount using the rate → must guess: which rate
+    amount_eur = amount × eur_rate → nothing to guess (eur_rate is an input)
