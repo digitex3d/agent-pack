@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-10-12
+
 ### Added
 - **Executors (I2) — `DO` the agent, `ASK` a delegate, `COMPUTE` a program.** The verb says who carries a line out; on a block head, stars say the same: `PROCEDURE*` / `PROCEDURE**` hand the whole body to a delegate / a program, `IF*` / `UNTIL*` and `IF**` / `UNTIL**` only the condition (the lines beneath inherit the enclosing block's executor). A line may raise its executor (agent → delegate → program), never lower it: an `ASK`, an `IF*` or a `RUN` of a lesser procedure under a `PROCEDURE**` fails the build, and so does a checked condition (`IF!`) inside a starred procedure. A condition has one judge: `IF!*` / `UNTIL**!` is an error. A starred condition reads at least one variable. `ASK` and `COMPUTE` take `INTO` like `DO`.
 - **`ASK … BY <agent>` and the default delegate `quick`.** `BY` ends the line (after `INTO`) and names a standalone agent, a team, or a member of the asking agent's own team — another team's member or an unknown name fails the build; `COMPUTE` takes no `BY`. Without `BY` the line goes to `quick`, a builtin agent (`templates/agents/quick.ap`) that answers from its JSON input alone, as JSON in the contract's shape; `bundle all` builds it only when some agent hands it work and the project has no agent of that name. With Claude Code it runs on `haiku` with `tools: []`.
@@ -322,7 +324,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - `.claude/agents/manifest.yml` removed from tracking (now managed at runtime).
 
-[Unreleased]: https://github.com/digitex3d/agent-pack/compare/v0.27.1...HEAD
+[Unreleased]: https://github.com/digitex3d/agent-pack/compare/v0.28.0...HEAD
+[0.28.0]: https://github.com/digitex3d/agent-pack/compare/v0.27.1...v0.28.0
 [0.27.1]: https://github.com/digitex3d/agent-pack/compare/v0.27.0...v0.27.1
 [0.27.0]: https://github.com/digitex3d/agent-pack/compare/v0.26.0...v0.27.0
 [0.26.0]: https://github.com/digitex3d/agent-pack/compare/v0.25.1...v0.26.0

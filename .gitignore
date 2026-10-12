@@ -13,6 +13,8 @@ dossier-v1/
 
 # Local development agents of this repository — not published
 agents/
+# …but the agents shipped with the package (the default delegate `quick`) are
+!templates/agents/
 AGENTS.md
 CLAUDE.md
 PROJECT.ap
