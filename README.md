@@ -1,6 +1,6 @@
 # agent-pack
 
-**A programming language to orchestrate agents across every harness.**
+**The first language for agent harnesses.** A programming language to orchestrate agents across every harness.
 
 You write your agents, their rules, their answer formats and their teams in `.ap` files. agent-pack compiles them into what each harness reads — Claude Code, Cursor, Junie, `AGENTS.md` — and into one `.apx` per agent: a single file holding the agent's definition and the engine that serves it, read on demand instead of pasted whole into the prompt.
 
