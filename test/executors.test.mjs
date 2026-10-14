@@ -57,7 +57,14 @@ try {
   const lib = join(tmp, 'library');
   mkdirSync(lib, { recursive: true });
   const dir = join(tmp, 'agents', 'standalone');
+  /** The variables the clerk sees: a module of the library exporting each `VAR` line, imported by the agent. */
+  let varNames = [];
+  const setVars = (lines, root = lib) => {
+    varNames = lines.map(l => /^VAR\s+([^\s=]+)/.exec(l)[1]);
+    write(join(root, 'vars', 'clerk.ap'), lines.map(l => `EXPORT ${l}`));
+  };
   const agent = (...when) => [
+    `IMPORT ${varNames.join(', ')} FROM @main.vars`,
     'EXPORT AGENT clerk AS clerk-role:',
     '    ABOUT    clerk',
     '    MANDATE  handle invoices',
@@ -68,7 +75,7 @@ try {
     '    ABOUT   a clerk',
     '    ALWAYS  check twice',
   ];
-  write(join(dir, 'vars.ap'), ['VAR pdf_text', 'VAR contract', 'VAR lines', 'VAR risks', 'VAR totals', 'VAR document_total']);
+  setVars(['VAR pdf_text', 'VAR contract', 'VAR lines', 'VAR risks', 'VAR totals', 'VAR document_total']);
 
   // --- the lint: the forms are accepted where DO is; a star with a `!`, a COMPUTE with BY, a BY before INTO are errors ---
   {
@@ -103,7 +110,7 @@ try {
       'UNTIL* {{risks}} are all reviewed:',
       '    DO  review the next risk',
     ));
-    const opts = { agentName: 'clerk', agentFile: file, agentDir: dir, libraryRoot: lib, libraryRoots: [lib], libraries: { '@main': lib }, bundleConfig: { runtime: false }, varsFiles: [{ path: join(dir, 'vars.ap'), level: 'agent' }] };
+    const opts = { agentName: 'clerk', agentFile: file, agentDir: dir, libraryRoot: lib, libraryRoots: [lib], libraries: { '@main': lib }, bundleConfig: { runtime: false } };
     const { body, structure } = await bundleAgentObject(opts);
     const text = l => [l.primitive, l.text];
     assert.deepEqual(structure.lines('ASK').map(text), [['ASK', 'read the invoice lines from {{pdf_text}}'], ['ASK', 'check the clauses of {{contract}}']],
@@ -139,7 +146,7 @@ try {
     assert.deepEqual(splitExecutorMark('PROCEDURE**'), { word: 'PROCEDURE', executor: 2 });
     assert.deepEqual(splitExecutorMark('PROCEDURE'), { word: 'PROCEDURE', executor: 0 });
     write(join(lib, 'procedures', 'totals.ap'), [
-      'EXPORT PROCEDURE** vat-totals:', '    ABOUT  totals by VAT rate', '    DO  group {{lines}} by VAT rate',
+      'IMPORT lines FROM @main.vars', '', 'EXPORT PROCEDURE** vat-totals:', '    ABOUT  totals by VAT rate', '    DO  group {{lines}} by VAT rate',
       '    IF {{lines}} has an exempt line:', '        DO  add the stamp duty', '    COMPUTE  round every row to the cent',
     ]);
     assert.deepEqual(lintFile(join(lib, 'procedures', 'totals.ap'), readFileSync(join(lib, 'procedures', 'totals.ap'), 'utf-8')), [], 'an exported PROCEDURE** lints clean');
@@ -151,7 +158,7 @@ try {
       ...body,
       '', 'PROCEDURE chat:', '    DO  talk to the user',
     ]);
-    const opts = { agentName: 'clerk', agentFile: join(dir, 'clerk.ap'), agentDir: dir, libraryRoot: lib, libraryRoots: [lib], libraries: { '@main': lib }, bundleConfig: { runtime: false }, varsFiles: [{ path: join(dir, 'vars.ap'), level: 'agent' }] };
+    const opts = { agentName: 'clerk', agentFile: join(dir, 'clerk.ap'), agentDir: dir, libraryRoot: lib, libraryRoots: [lib], libraries: { '@main': lib }, bundleConfig: { runtime: false } };
     procs(['PROCEDURE* tidy:', '    DO  tidy {{lines}}', '    COMPUTE  count {{lines}} INTO totals', '    IF** {{totals}} is zero:', '        DO  stop', '    RUN  vat-totals']);
     const { body, structure } = await bundleAgentObject(opts);
     const proc = name => structure.all().find(b => b.kind === 'procedure' && b.name === name);
@@ -190,7 +197,7 @@ try {
       'EXPORT TEMPLATE dose-result:', '    ABOUT  a dose', '    SLOTS:', '        mg:  NUMBER  "mg"', '        ml:  NUMBER  "ml"', '    BODY:', '        {mg} mg, {ml} ml',
     ]);
     const DOSE = [
-      'IMPORT dose-result FROM @main.templates', '',
+      'IMPORT dose-result FROM @main.templates', 'IMPORT weight_kg, mg_per_kg, mg_per_ml FROM @main.vars',
       'EXPORT COMPUTE dose:', '    ABOUT  pediatric dose by weight', '    NEVER  read a file, the network or the clock',
       '    REQUIRE:', '        MUST  {{weight_kg}} be between 2 and 80, bounds included', '        IF {{mg_per_ml}} is given:', '            MUST  it be above 0',
       '    RETURN AS dose-result:', '        DO  mg = {{weight_kg}} × {{mg_per_kg}}', '        DO  ml = mg / {{mg_per_ml}}',
@@ -210,9 +217,9 @@ try {
     assert.deepEqual(lintFile(join(lib, 'procedures', 'p.ap'), 'EXPORT PROCEDURE p:\n    ABOUT  x\n    ENSURE:\n        MUST  be fine\n    DO  y\n').map(e => e.message),
       ['ENSURE is a section of a COMPUTE block — found inside PROCEDURE']);
 
-    write(join(dir, 'vars.ap'), ['VAR pdf_text', 'VAR contract', 'VAR lines', 'VAR risks', 'VAR totals', 'VAR document_total', 'VAR weight_kg', 'VAR mg_per_kg', 'VAR mg_per_ml', 'VAR result']);
+    setVars(['VAR pdf_text', 'VAR contract', 'VAR lines', 'VAR risks', 'VAR totals', 'VAR document_total', 'VAR weight_kg', 'VAR mg_per_kg', 'VAR mg_per_ml', 'VAR result']);
     write(join(dir, 'clerk.ap'), ['IMPORT dose FROM @main.procedures', '', ...agent('VAR result:', '    RUN  dose', 'DO  show {{result}} to the doctor')]);
-    const opts = { agentName: 'clerk', agentFile: join(dir, 'clerk.ap'), agentDir: dir, libraryRoot: lib, libraryRoots: [lib], libraries: { '@main': lib }, bundleConfig: { runtime: false }, varsFiles: [{ path: join(dir, 'vars.ap'), level: 'agent' }] };
+    const opts = { agentName: 'clerk', agentFile: join(dir, 'clerk.ap'), agentDir: dir, libraryRoot: lib, libraryRoots: [lib], libraries: { '@main': lib }, bundleConfig: { runtime: false } };
     const { body, structure } = await bundleAgentObject(opts);
     const dose = structure.all().find(b => b.name === 'dose');
     assert.equal(dose.kind, 'procedure', 'a COMPUTE block is a procedure…');
@@ -242,12 +249,12 @@ try {
       'It guarantees on its result:',
       '    It ensures that ml be rounded half up to 2 decimals',
     ], 'the md: rules on top, when it refuses, what it computes, what it guarantees');
-    write(join(dir, 'vars.ap'), ['VAR pdf_text', 'VAR contract', 'VAR lines', 'VAR risks', 'VAR totals', 'VAR document_total']);
+    setVars(['VAR pdf_text', 'VAR contract', 'VAR lines', 'VAR risks', 'VAR totals', 'VAR document_total']);
   }
 
   // --- the contracts: what each delegate or program receives and answers (meta.executors) ---
   {
-    write(join(dir, 'vars.ap'), ['VAR tolerance = 0.01', 'VAR pdf_text', 'VAR totals', 'VAR document_total', 'VAR weight_kg', 'VAR mg_per_kg', 'VAR mg_per_ml', 'VAR result AS dose-result', 'VAR flag']);
+    setVars(['VAR tolerance = 0.01', 'VAR pdf_text', 'VAR totals', 'VAR document_total', 'VAR weight_kg', 'VAR mg_per_kg', 'VAR mg_per_ml', 'VAR result AS dose-result', 'VAR flag']);
     write(join(dir, 'clerk.ap'), ['IMPORT dose FROM @main.procedures', '', ...agent(
       'ASK      read the document total from {{pdf_text}} INTO document_total',
       'COMPUTE  estimate a dose from {{weight_kg}} INTO result',
@@ -255,7 +262,7 @@ try {
       '    DO  write to the supplier',
       'VAR result:', '    RUN  dose',
     ), '', 'PROCEDURE* check:', '    DO  look at {{pdf_text}}', '    COMPUTE  count the lines of {{pdf_text}} INTO flag', '    IF* {{flag}} is odd:', '        DO  say so']);
-    const opts = { agentName: 'clerk', agentFile: join(dir, 'clerk.ap'), agentDir: dir, libraryRoot: lib, libraryRoots: [lib], libraries: { '@main': lib }, bundleConfig: { runtime: false }, varsFiles: [{ path: join(dir, 'vars.ap'), level: 'agent' }] };
+    const opts = { agentName: 'clerk', agentFile: join(dir, 'clerk.ap'), agentDir: dir, libraryRoot: lib, libraryRoots: [lib], libraries: { '@main': lib }, bundleConfig: { runtime: false } };
     const { structure } = await bundleAgentObject(opts);
     const specs = Object.values(structure.meta.executors);
     assert.ok(Object.keys(structure.meta.executors).every(id => /^exe-[0-9a-f]{8}$/.test(id)), 'ids are exe-…');
@@ -282,7 +289,7 @@ try {
     assert.equal(find('line', 'count the lines').executor, 2, 'a COMPUTE inside PROCEDURE* raises: its own contract');
     assert.ok(!find('condition', '{{flag}}'), 'IF* inside PROCEDURE* is the procedure\'s own work');
     assert.ok(!find('line', 'look at'), 'a DO is never a contract');
-    write(join(dir, 'vars.ap'), ['VAR pdf_text', 'VAR contract', 'VAR lines', 'VAR risks', 'VAR totals', 'VAR document_total']);
+    setVars(['VAR pdf_text', 'VAR contract', 'VAR lines', 'VAR risks', 'VAR totals', 'VAR document_total']);
   }
 
   // --- ASK … BY: a standalone agent or a team; a team member only from inside its own team ---
@@ -341,7 +348,7 @@ try {
     rule('t-program', '#program');
     rule('t-agent', '#agent', 'SHOULD-NOT', 'DO {line}');
     write(join(proj, 'library', 'templates', 'r.ap'), ['EXPORT TEMPLATE r:', '  ABOUT  r', '  SLOTS:', '    v:  NUMBER  "v"', '  BODY:', '    {v}']);
-    write(join(proj, 'agents', 'standalone', 'vars.ap'), ['VAR a', 'VAR b']);
+    setVars(['VAR a', 'VAR b'], join(proj, 'library'));
     write(join(proj, 'agents', 'standalone', 'clerk.ap'), [
       'IMPORT r FROM @main.templates', '',
       ...agent('DO  talk to the user', 'ASK  summarise {{a}}', 'IF** {{b}} is odd:', '    DO  say so', 'RUN  twice'), '',
@@ -358,7 +365,7 @@ try {
     try {
       const config = await loadConfig([]);
       const run = openJudgeRun(config, proj);
-      await bundleAgentObjectFromConfig('clerk', config, { judge: run, varsFiles: [{ path: join(proj, 'agents', 'standalone', 'vars.ap'), level: 'agent' }] });
+      await bundleAgentObjectFromConfig('clerk', config, { judge: run });
       await finishJudgeRun(run, { prune: false });
       assert.deepEqual(seen['t-executed'].sort(), ['b is odd', 'b be a number', 'look at a', 'summarise a', 'v = 2 × b', 'v be even'].sort(),
         '#executed: the ASK, the IF**, the PROCEDURE* body and every COMPUTE section — never the agent\'s DO, never a RUN');

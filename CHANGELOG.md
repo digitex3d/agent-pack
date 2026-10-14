@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`EXPORT VAR` — variables are exported and imported like every other block.** Any module of a library declares a variable on one top-level line: `EXPORT VAR board = Product` (a constant), `EXPORT VAR draft` (private: each agent that imports it has its own), `EXPORT SESSION VAR plan AS implementation-plan` (shared by the session's agents that import it). An agent, a team's `flows.ap` or a library module takes it with `IMPORT plan FROM @main.vars` — the same resolver as templates: the block's name is matched, not the file's. A module only declares: `EXPORT VAR x:` is an error, and so is an indented `EXPORT VAR`.
+- **A name means one thing to an agent.** A variable or a constant never shares the name of a template the agent sees — the build fails, naming both. Reading a template as a variable (`{{qa-report}}`) fails with *`qa-report` is a template, not a variable*.
+
+### Changed
+- **A variable is seen only where it is declared or imported — imports never pass on.** `{{x}}` reads a variable the body declares or the file itself imports; a variable a procedure or a role imports is that module's, not the agent's — reading it there fails, naming the file that imports it. An unknown read says to declare it in the body or `IMPORT` it from the module that exports it. A library procedure that reads a variable imports it. A team's `flows.ap` imports constants and `SESSION` variables only; an agent's file or a `flows.ap` exports none; a module exports each name once, on one line with nothing beneath. A variable's description (`ls kind=var`) names the module it was imported from (`` `@main.vars` ``).
+
+### Removed
+- **`vars.ap`** — at the project root, in a team's folder and in an agent's folder — with the cascade of constants (agent over team over project) and the rules on which scope a level may declare. Move each line into a library module with `EXPORT` in front (e.g. `agents/library/vars/<team>.ap`) and `IMPORT` it in every agent, or `flows.ap`, that uses it. A `vars.ap` left in place is no longer read.
+
 ## [0.28.0] - 2026-10-12
 
 ### Added

@@ -41,22 +41,22 @@ EXPORT ROLE ap-author:
       DO   bind a procedure's result or what a STEP hands over with AS <template> on its own line
 
     WHEN a value must outlive the line that makes it — pick its VAR form:
-      DO   write `VAR <name> = <value>` for a constant — its value replaces every read at compile time
-      DO   write `VAR <name>` for a private variable — only the agent that declares it sees it
+      DO   write `VAR <name>` in an agent's body for a private variable — only that agent sees it
       DO   write `VAR <name> AS <template>` for a typed variable — it keeps that template for life
       DO   write `VAR <name>:` over an indented block — the block's final outcome becomes its value
-      DO   write `SESSION VAR <name>` for a hand-off between agents — only in a team's or the project's vars.ap
+      DO   declare a constant or a shared variable as an EXPORT VAR line of a library module — see below
       NEVER write GLOBAL before VAR — the word is reserved and fails the compilation
-      NEVER put a scope word before a constant — SESSION with `= <value>` fails the compilation
-      NEVER declare a name twice for one agent, nor give a private variable a SESSION variable's name
+      NEVER write a constant or a SESSION VAR in an agent's body — both live in a library module
+      NEVER declare a name twice for one agent, nor give a private variable an imported variable's name
+      NEVER give a variable or a constant the name of a template the agent sees
 
     WHEN assigning a variable:
       DO   end a DO, ASK, COMPUTE or RUN line with uppercase INTO and the name to store that line's result
       DO   write `RUN <procedure> INTO <name>`, or wrap a lone RUN in a `VAR <name>:` block — both are the same
-      DO   write `VAR <name>:` without AS to assign a variable a vars.ap already declares
+      DO   write `VAR <name>:` without AS to assign an imported SESSION variable
       DO   reassign with INTO inside a loop
       NEVER write INTO anywhere but the very end of the line — on an ASK, only BY may follow it
-      NEVER add AS when assigning a vars.ap variable — `VAR <name> AS <template>:` declares it again
+      NEVER add AS when assigning an imported variable — `VAR <name> AS <template>:` declares it again
       NEVER declare a VAR inside an UNTIL, a VAR block, a flow STEP, a TEMPLATE, a STORE or a POLICY
       NEVER assign into a constant — INTO takes a declared variable
 
@@ -68,14 +68,15 @@ EXPORT ROLE ap-author:
       NEVER read a variable in a shared or builtin library block — it takes its input through LENS-IN
       NEVER read a variable in a TEMPLATE's BODY or EXAMPLE, or in a playbook
 
-    WHEN writing a vars.ap — it holds VAR lines only, each filling ap-vars-line:
-      DO   put project-wide constants and SESSION variables in the vars.ap at the project root
-      DO   put a team's constants and its hand-off SESSION variables in the vars.ap of the team folder
-      DO   put an agent's constants and private variables in the vars.ap of its own folder
-      DO   declare a team member's private variables in its body — its folder is its team's
-      DO   override a constant at a deeper level — agent over team over project
-      NEVER declare a private VAR in a team's or the project's vars.ap, nor a SESSION VAR in an agent's
-      NEVER put a secret in a vars.ap — constants are compiled into the output; tools read the environment
+    WHEN declaring variables shared across agents — one EXPORT VAR line each, filling ap-vars-line:
+      DO   write them in a library module, e.g. agents/library/vars/<team>.ap — one top-level line per variable
+      DO   write `EXPORT VAR <name> = <value>` for a constant — its value replaces every read at compile time
+      DO   write `EXPORT VAR <name>` for a private variable — each importing agent gets its own
+      DO   write `EXPORT SESSION VAR <name> [AS <template>]` for a hand-off the session's importing agents share
+      DO   IMPORT in every agent, flows.ap or module the exact variables it reads or assigns — @main.vars
+      NEVER put a scope word before a constant — SESSION with `= <value>` fails the compilation
+      NEVER open a `:` block on an EXPORT VAR line, nor indent it under another block
+      NEVER put a secret in a constant — constants are compiled into the output; tools read the environment
 
     WHEN a condition must be decided by a judge, not by the agent:
       DO   write IF! or UNTIL! — the agent sees the condition, the judge decides it

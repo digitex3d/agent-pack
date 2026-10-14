@@ -2,8 +2,7 @@
 // Copyright (c) 2026 Giuseppe Federico
 import { AgentBundle, AdapterPlugin } from '../../adapters/types.js';
 import { Config } from '../config.js';
-import { bundleAgentObjectFromConfig, resolveAgentDir, resolveAgentFile } from '../compiler/index.js';
-import { varsFilesFor } from '../varsAp.js';
+import { bundleAgentObjectFromConfig, resolveAgentDir } from '../compiler/index.js';
 import type { JudgeRun } from '../judge/phase.js';
 
 export interface BuildAgentOptions {
@@ -22,9 +21,8 @@ export async function buildAgentBundle(
     lintConfig: config.lint,
     adapter: opts.adapter,
     judge: opts.judge,
-    // The implicit `name`, then the project's, the team's and the agent's vars.ap.
+    // The implicit `name`; the constants the agent imports come on top.
     vars: { name },
-    varsFiles: varsFilesFor(resolveAgentFile(name, config), process.cwd()),
   });
   return Object.assign(new AgentBundle(), {
     name,

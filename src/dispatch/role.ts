@@ -4,7 +4,7 @@ import { existsSync } from 'fs';
 import { resolve, basename, dirname } from 'path';
 import { BundleContext, RoleEntry } from './types.js';
 import { lintFile } from '../lint.js';
-import { checkAndRegister, findInRoots, allLibraryRoots, LoadRequest } from './shared.js';
+import { checkAndRegister, findInRoots, allLibraryRoots, processImportsOf, LoadRequest } from './shared.js';
 import { parseTagsPayload } from '../services/tags.js';
 import { extractPrimitive, unwrapExportFile, liftRoleIdentity } from '../services/text.js';
 import { deslugifyRole } from '../services/role.js';
@@ -120,11 +120,6 @@ export function extendInlineRole(body: string, sourcePath: string, ctx: BundleCo
   return { body: merged.rules, tags: merged.tags };
 }
 
-/** Resolve the rules' own IMPORT directives. Dynamic import breaks the cycle with imports.js. */
-async function processImportsOf(body: string, ctx: BundleContext): Promise<string> {
-  const { processImports } = await import('./imports.js');
-  return processImports(body, ctx);
-}
 
 export async function resolveRole(imp: LoadRequest, ctx: BundleContext): Promise<string> {
   const r = checkAndRegister(imp, ctx, `role ${basename(imp.path)}`);
@@ -148,7 +143,7 @@ export async function resolveRole(imp: LoadRequest, ctx: BundleContext): Promise
   // The role's IMPORTs — its own and those of the roles it EXTENDS, lifted to
   // column 0 by the unwrap — bring their blocks into the bundle like the
   // agent's own, and leave no line behind in the rules.
-  const identity = liftRoleIdentity(await processImportsOf(resolved.rules, ctx));
+  const identity = liftRoleIdentity(await processImportsOf(resolved.rules, ctx, r.path));
 
   const entry: RoleEntry = {
     kind: 'role',

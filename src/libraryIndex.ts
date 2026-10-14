@@ -19,7 +19,7 @@ import { readdirSync, statSync, readFileSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { ingestRaw, IngestKind, kindFromDir, BLOCK_KINDS } from './ingest.js';
 import { extractPrimitives, extractAbout, exportedBlocksOf } from './services/text.js';
-import { parseBlocks, Block } from './parseBlocks.js';
+import { parseBlocks, isExportedVar, Block } from './parseBlocks.js';
 import { buildNamespace } from './namespace.js';
 import { librariesAliasMap } from './config.js';
 import type { Config } from './config.js';
@@ -153,7 +153,10 @@ function unitsForFile(
   libraries: Record<string, string>,
 ): RawUnit[] {
   const namespace = buildNamespace(filePath, roots, libraries);
-  const exported = exportedBlocksOf(parseBlocks(raw).blocks);
+  const all = exportedBlocksOf(parseBlocks(raw).blocks);
+  // An exported VAR is no unit of the catalogue: IMPORT finds it directly.
+  const exported = all.filter(b => !isExportedVar(b));
+  if (exported.length === 0 && all.length > 0) return [];
 
   if (exported.length === 0) {
     // Legacy file: one entry per file, metadata read at file-top (source line 1).

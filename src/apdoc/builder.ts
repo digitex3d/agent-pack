@@ -50,7 +50,7 @@ import {
 } from '../services/teamMetadata.js';
 import type { ApNode, ApRef, ApShape, ApSlotType, ApStepNode, ApIfNode, ApDocumentMeta, ApStoreProjection } from './types.js';
 import { parseVarLine, readsOf, splitBy, splitInto, takesInto, constantOf, type VarScope } from '../vars.js';
-import type { PlacedVariable } from '../varsAp.js';
+import type { PlacedVariable } from '../exportedVars.js';
 import { introOf } from '../formulas.js';
 import { parseForceLevel, toCanonicalKeyword, getIntroByKeyword, forceLevelFamilies } from '../forceLevelConfig.js';
 
@@ -97,7 +97,7 @@ export interface RecorderFinishOpts {
   bootstrap: string;
   /** Body substitution vars ({{name}} …) — the constants. */
   vars: Record<string, string>;
-  /** The variables declared in the agent's vars.ap files, with where (`vars.ap (team)`). */
+  /** The variables the agent imports, with where (`` `@main.vars` ``). */
   declaredVars: PlacedVariable[];
   /** Whether the OWNS fence renders in the body (adapter did not claim it). */
   ownsInBody: boolean;
@@ -108,13 +108,13 @@ interface VarSite {
   name: string;
   scope: VarScope;
   type: string | null;
-  /** A `VAR x:` block: it assigns as well — or only assigns, a variable a vars.ap declares. */
+  /** A `VAR x:` block: it assigns as well — or only assigns, a variable the agent imports. */
   block: boolean;
-  /** How `ls kind=var` says where it lives: `vars.ap (team)`, `procedure verify`. */
+  /** How `ls kind=var` says where it lives: `` `@main.vars` ``, `procedure verify`. */
   where: string;
   path: string;
   line: number | null;
-  /** Declared in a body of this agent — not shared through a vars.ap. */
+  /** Declared in a body of this agent — not imported. */
   inBody: boolean;
 }
 
@@ -397,7 +397,7 @@ export class DocumentBuilder implements BlockCx {
       const vars = checkedVars(site.condition, isConstant);
       const unseen = vars.filter(v => !visible.has(v));
       // A step's reads are checked here: a flow file's reads are no other check's.
-      if (site.inStep) for (const v of unseen) issue(`${head}: \`{{${v}}}\` is no variable the step's agent sees — declare it in its vars.ap, or as a SESSION VAR in its team's`);
+      if (site.inStep) for (const v of unseen) issue(`${head}: \`{{${v}}}\` is no variable the step's agent sees — export it as a SESSION VAR and IMPORT it in the step's agent`);
       if (unseen.length === 0 && vars.length === 0) {
         issue(`${head}: a checked condition reads at least one variable — \`{{name}}\`: the judge decides on the state the variables hold, never on the agent's word`);
       }
@@ -483,7 +483,7 @@ export class DocumentBuilder implements BlockCx {
   /**
    * A `VAR` line of a body: it declares a private variable and, with a block
    * beneath (`VAR x:`), assigns it the block's outcome — a node holding that
-   * block; a block naming a variable a vars.ap declares only assigns it. A
+   * block; a block naming a variable the agent imports only assigns it. A
    * malformed line, a constant or a scope word is the lint's to report.
    */
   private variable(t: Token & { kind: 'keyword' }, children: WalkNode[], sink: ApNode[], host: ApBlock | null, steps: ApStepNode[]): void {
@@ -759,10 +759,10 @@ export class DocumentBuilder implements BlockCx {
   // -------------------------------------------------------------- variables
 
   /**
-   * The variables — one block each — from every declaration: the vars.ap
-   * files' and the bodies'. Each name is declared once, in one scope — no
+   * The variables — one block each — from every declaration: the imported
+   * ones and the bodies'. Each name is declared once, in one scope — no
    * private variable shadows a SESSION one; a body's `VAR x:` naming a variable
-   * a vars.ap declares assigns it, never redeclares it. A variable is assigned
+   * the agent imports assigns it, never redeclares it. A variable is assigned
    * only when declared (a constant takes no value at run time), and keeps one
    * type: its declared template, or the result type of the block that yields
    * one — a `RUN` of a procedure with an `AS`. Every step that fills a typed
@@ -779,7 +779,7 @@ export class DocumentBuilder implements BlockCx {
       } else if (!first) {
         table.set(site.name, site);
       } else if (first.inBody || !site.block || site.type) {
-        // A body's plain `VAR x:` assigns what a vars.ap declares; anything else declares again.
+        // A body's plain `VAR x:` assigns what the agent imports; anything else declares again.
         fail(site.path, site.name, site.line, first.scope !== site.scope
           ? `\`${site.name}\` is already a ${first.scope === 'session' ? 'SESSION' : 'private'} variable (${first.where}) — no variable of another scope takes its name; assign it with \`VAR ${site.name}:\` or \`DO … INTO ${site.name}\``
           : `variable \`${site.name}\` is declared twice — first in ${first.where}; assign it with \`VAR ${site.name}:\` or \`DO … INTO ${site.name}\`, never redeclare it`);
@@ -789,7 +789,7 @@ export class DocumentBuilder implements BlockCx {
       if (table.has(w.name)) continue;
       fail(w.path, w.name, w.node.pos?.line ?? null, constantOf(opts.vars, w.name) !== undefined
         ? `INTO ${w.name}: \`${w.name}\` is a constant — only a variable takes a value while the agent works`
-        : `INTO ${w.name}: no variable \`${w.name}\` — declare it with \`VAR ${w.name}\`, in the agent's body or vars.ap, or \`SESSION VAR ${w.name}\` in a team's`);
+        : `INTO ${w.name}: no variable \`${w.name}\` — declare it with \`VAR ${w.name}\` in the agent's body, or IMPORT the module that exports it`);
     }
     return [...table.values()].map(site => {
       const writes = this.varWrites.filter(w => w.name === site.name);

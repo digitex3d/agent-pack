@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
 import { existsSync, readFileSync } from 'fs';
+import { basename } from 'path';
 import { lex, Token, Keyword, KEYWORDS } from './lexer.js';
 import { ACTION_VERBS } from './actionVerbs.js';
 import { desugar } from './desugar.js';
@@ -8,7 +9,8 @@ import { TAG_RE } from './services/tags.js';
 import { getFamilyBases, getIntroByKeyword, forceLevelBaseOf, forceLevelFamilies, toCanonicalKeyword } from './forceLevelConfig.js';
 import { enumPrimitiveFor } from './primitives.js';
 import { BLOCK_CONTRACTS, BlockContract, VAR_BLOCK } from './blockContracts.js';
-import { parseBlocks, type Block, type Node } from './parseBlocks.js';
+import { TEAM_FLOWS_FILE } from './services/teamMetadata.js';
+import { parseBlocks, exportedVar, readExportedVar, isExportedVar, type Block, type Node } from './parseBlocks.js';
 import { isExportFile } from './services/text.js';
 import { parseAgentSignature } from './definitionArgs.js';
 import { kindFromDir, unitNameFromPath } from './ingest.js';
@@ -19,7 +21,6 @@ import { STORE_LIFETIMES } from './storeTypes/types.js';
 import { stripTrailingColon, buildTree, type Node as TreeNode } from './bundlers/renderTree.js';
 import { condCheckOf, type CheckKind, type CheckSite } from './check.js';
 import { parseVarLine, isVarKeyword, splitBy, splitInto, takesInto, readsOf, NO_PLAYBOOK_VARIABLES } from './vars.js';
-import { VARS_FILE, isVarsFile, parseVarsAp } from './varsAp.js';
 
 export interface LintError {
   file: string;
@@ -160,7 +161,8 @@ function buildExportModel(file: string, body: string, tokens: Token[]): ExportMo
         if (child.keyword === 'ABOUT') hasAbout = true;
       }
     }
-    if (block.exported && !hasAbout) {
+    // An exported VAR is one line with no body: its declaration says what it is.
+    if (block.exported && !hasAbout && !isExportedVar(block)) {
       errors.push({ file, line: block.startLine, message: 'exported block requires ABOUT' });
     }
   }
@@ -1167,8 +1169,8 @@ const VAR_HOMES = new Set(Object.keys(BODY_KEYWORDS).filter(k => BODY_KEYWORDS[k
 /**
  * What is wrong with a `VAR` line of a body: its form, its place, and the block
  * beneath it. `ancestors` are the keys of the lines enclosing it, outermost
- * first; `deeper` says whether indented lines follow it. vars.ap is not a body:
- * its own lint (`parseVarsAp`) checks it.
+ * first; `deeper` says whether indented lines follow it. A module's `EXPORT VAR`
+ * is no body's: parseBlocks checks it.
  */
 function varLineErrors(t: Extract<Token, { kind: 'keyword' }>, ancestors: string[], deeper: boolean, file: string): string[] {
   const decl = parseVarLine(t.keyword as string, t.rest);
@@ -1184,12 +1186,12 @@ function varLineErrors(t: Extract<Token, { kind: 'keyword' }>, ancestors: string
   } else if (ancestors.includes('UNTIL')) {
     errors.push('a VAR inside UNTIL would declare its variable again on every pass — declare it before the loop and reassign it with `DO … INTO`');
   } else if (!VAR_HOMES.has(owner)) {
-    errors.push(`VAR goes in the body of one of: ${[...VAR_HOMES].join(', ')}${ancestors.length ? ` — found inside ${owner}` : ` — shared declarations go in ${VARS_FILE}`}`);
+    errors.push(`VAR goes in the body of one of: ${[...VAR_HOMES].join(', ')}${ancestors.length ? ` — found inside ${owner}` : ` — a module exports shared declarations: \`EXPORT SESSION VAR …\``}`);
   }
   if (decl.form === 'constant') {
-    errors.push(`a constant is declared in ${VARS_FILE} — a body declares private variables: \`VAR ${decl.name}\` or \`VAR ${decl.name} AS <template>\``);
+    errors.push(`a module exports a constant (\`EXPORT VAR ${decl.name} = …\`) — a body declares private variables: \`VAR ${decl.name}\` or \`VAR ${decl.name} AS <template>\``);
   } else if (decl.scope === 'session') {
-    errors.push(`a SESSION variable is declared in a team's or the project's ${VARS_FILE}, where every agent that reads it sees it — in a body, assign it with \`VAR ${decl.name}:\` or \`DO … INTO ${decl.name}\``);
+    errors.push(`a module exports a SESSION variable (\`EXPORT SESSION VAR ${decl.name}\`) for every agent that imports it — in a body, assign it with \`VAR ${decl.name}:\` or \`DO … INTO ${decl.name}\``);
   } else if (decl.block && !deeper) {
     errors.push(`\`${written}\` assigns the outcome of a block — indent that block beneath it`);
   } else if (!decl.block && deeper) {
@@ -1217,9 +1219,11 @@ export function checkVocabulary(file: string, body: string): LintError[] {
   const errors: LintError[] = [];
   const err = (line: number, message: string) => errors.push({ file, line, message });
   const tokens = lex(body);
-  const varsFile = isVarsFile(file);
   /** Enclosing lines, innermost last — a line's parent is the nearest shallower one. */
   const stack: { indent: number; key: string; line: number }[] = [];
+  /** The variables this module exports, by name — each once. */
+  const exportedVars = new Map<string, number>();
+  let exportsNoVariable: boolean | undefined;
   let region = -1;
   let regionKey = '';
 
@@ -1286,7 +1290,21 @@ export function checkVocabulary(file: string, body: string): LintError[] {
       if (!isVarKeyword(key) && stack.some(a => a.key === 'VAR') && !isAllowedChild(VAR_BLOCK, key as Keyword)) {
         err(t.line, notAllowed(key as Keyword, 'VAR', VAR_BLOCK));
       }
-      if (isVarKeyword(key) && !varsFile) {
+      const exported = exportedVar(t);
+      if (exported) {
+        const decl = readExportedVar(exported);
+        if ('error' in decl) err(t.line, decl.error);
+        else if (exportsNoVariable ??= ownsNoVariable(file, body)) {
+          err(t.line, `\`EXPORT ${exported.rest}\`: a library module exports variables — an agent's file or a team's flows.ap declares one in a body (\`VAR ${decl.name}\`), or IMPORTs it`);
+        } else {
+          const first = exportedVars.get(decl.name);
+          if (first !== undefined) err(t.line, `\`${decl.name}\` is exported twice in this module — first at line ${first}`);
+          else exportedVars.set(decl.name, t.line);
+          const next = nextSubstantive(tokens, index + 1);
+          if (next !== -1 && tokens[next].indent > t.indent) err(tokens[next].line, `\`EXPORT ${exported.rest}\` is one line — an exported variable has no body`);
+        }
+      }
+      if (isVarKeyword(key)) {
         const next = nextSubstantive(tokens, index + 1);
         const deeper = next !== -1 && tokens[next].indent > t.indent;
         for (const message of varLineErrors(t, stack.map(a => a.key), deeper, file)) err(t.line, message);
@@ -1378,6 +1396,26 @@ export function lintFile(file: string, body: string, options: LintOptions = {}):
   return [...checkVocabulary(file, body), ...lintByKind(file, body, options)];
 }
 
+/** An agent's file or a team's flows.ap: a variable exported there would be no one's — library modules export them. */
+function ownsNoVariable(file: string, body: string): boolean {
+  return basename(file) === TEAM_FLOWS_FILE || parseBlocks(body).blocks.some(b => b.key === 'AGENT');
+}
+
+/**
+ * A module's text with its top-level `EXPORT VAR` lines blanked — line numbers
+ * kept — and whether nothing else but imports, comments and blanks is left.
+ */
+function withoutExportedVars(body: string): { body: string; onlyVars: boolean } {
+  const lines = body.split(/\r?\n/);
+  const tokens = lex(body);
+  const exported = tokens.filter(t => exportedVar(t)?.indent === 0).map(t => t.line);
+  if (exported.length === 0) return { body, onlyVars: false };
+  for (const line of exported) lines[line - 1] = '';
+  const rest = tokens.filter(t => t.kind !== 'blank' && t.kind !== 'comment' && !exported.includes(t.line)
+    && !(t.kind === 'keyword' && t.keyword === 'IMPORT'));
+  return { body: lines.join('\n'), onlyVars: rest.length === 0 };
+}
+
 function lintByKind(file: string, body: string, options: LintOptions): LintError[] {
   if (LEGACY_AGENT_DIR_RE.test(file)) {
     return [{
@@ -1385,8 +1423,6 @@ function lintByKind(file: string, body: string, options: LintOptions): LintError
       message: 'retired layout: agents are flat `<name>.ap` files holding an EXPORT AGENT block, not `definitions/<name>/agent.ap`',
     }];
   }
-  // A vars.ap holds only declarations: its own parser is its lint.
-  if (isVarsFile(file)) return parseVarsAp(body, file).errors;
   // Agent and orchestration files are validated by `lintAgentBlocks`. They are
   // recognised by content, ahead of the dir switch, because they carry FLOW/ROLE
   // blocks that are NOT the file's kind and may sit under a build-output
@@ -1396,6 +1432,12 @@ function lintByKind(file: string, body: string, options: LintOptions): LintError
   if (isAgentOrOrchestration(file, body)) {
     return [...lintAgentBlocks(file, body), ...validateBlockContracts(desugar(lex(body)), file)];
   }
+
+  // A module's exported variables are its kind lint's no business: they are
+  // the vocabulary check's. A module that only exports variables has no kind.
+  const declarations = withoutExportedVars(body);
+  if (declarations.onlyVars) return [];
+  body = declarations.body;
 
   // Otherwise the lint dispatch is dir-authoritative: the kind-folder a file
   // lives under names the linter, never a suffix and never a block. A loose

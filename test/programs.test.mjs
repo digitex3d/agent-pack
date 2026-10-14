@@ -44,9 +44,9 @@ try {
   write(join(root, 'library', 'templates', 'dose-result.ap'), [
     'EXPORT TEMPLATE dose-result:', '    ABOUT  a dose', '    SLOTS:', '        mg:  NUMBER  "mg"', '    BODY:', '        {mg} mg',
   ]);
-  write(join(root, 'agents', 'standalone', 'vars.ap'), ['VAR tolerance = 1', 'VAR totals', 'VAR document_total', 'VAR weight_kg', 'VAR dose AS dose-result', 'VAR summary']);
+  write(join(root, 'library', 'vars', 'clerk.ap'), ['EXPORT VAR tolerance = 1', 'EXPORT VAR totals', 'EXPORT VAR document_total', 'EXPORT VAR weight_kg', 'EXPORT VAR dose AS dose-result', 'EXPORT VAR summary']);
   const AGENT = [
-    'IMPORT dose-result FROM @main.templates', '',
+    'IMPORT dose-result FROM @main.templates', 'IMPORT tolerance, totals, document_total, weight_kg, dose, summary FROM @main.vars',
     'EXPORT AGENT clerk AS clerk-role:', '    ABOUT    clerk', '    MANDATE  check invoices',
     '    WHEN an invoice arrives:',
     '        ASK  summarise the invoice for {{weight_kg}} INTO summary',

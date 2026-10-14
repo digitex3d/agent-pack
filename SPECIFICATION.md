@@ -310,16 +310,46 @@ These terms have precise meaning and are not interchangeable.
   common heading in the compiled definition, under a filter in the
   executable — and link blocks that share them.
 
-- **D32 — variable** — a named value, read as `{{name}}`. A
-  constant, `VAR <name> = <value>`, is declared in `vars.ap` at the
-  project, team or agent level and substituted at compile time; when the
-  same name is declared at several levels, the agent's overrides the
-  team's, which overrides the project's. A constant takes no scope word:
-  `SESSION VAR <name> = <value>` fails the compilation. A session
-  variable (D38) gets its value at run time and is declared once: a
-  second declaration fails the compilation. Variables carry
-  configuration, never secrets: those stay in the environment. (Amended
-  in 1.2.)
+- **D32 — variable** — a named value, read as `{{name}}`. A variable
+  is exported like any other block (D30): one top-level line of a
+  library module, `EXPORT VAR <name> = <value>` for a constant,
+  `EXPORT VAR <name>` or `EXPORT SESSION VAR <name>`, optionally `AS
+  <template>`, for a session variable (D38). The line has no body —
+  indented lines beneath it fail the compilation — and needs no
+  `ABOUT`; a module may export several, beside its other blocks, but
+  each name once: a second `EXPORT VAR` of the same name in one module
+  fails the compilation. An `EXPORT VAR` indented inside a template's
+  `BODY` or `EXAMPLE` is literal text. Only a library module exports
+  variables: `EXPORT VAR` in an agent's file or a team's `flows.ap`
+  fails the compilation. A module declares, never assigns: `EXPORT VAR
+  <name>:` fails the compilation. A constant takes no scope word:
+  `EXPORT SESSION VAR <name> = <value>` fails the compilation.
+  A file sees a variable only if a body in it declares it (D38) or it
+  imports it itself (D4) — `IMPORT plan, board FROM @main.vars`,
+  resolved by the exported name like any block. Imports never pass on:
+  a variable a procedure or role module imports is that module's, and
+  the agent that imports the module does not see it unless it imports
+  the variable too — reading it fails the compilation, naming the file
+  that imports it. The module still reads it: the variable exists in
+  the agent's executable (D20) when the module runs. So a library
+  procedure that reads a variable imports it. Body declarations and the
+  implicit `name` constant are seen everywhere in the agent. A team's
+  `flows.ap` imports constants and `SESSION` variables only — a private
+  variable would be each member's own, and importing one fails the
+  compilation; its flows render those reads in the project's
+  `AGENTS.md` (D33), and a member that reads one imports it too.
+  Explicit re-export is not provided. A constant is substituted at
+  compile time; the implicit constant `name` is the agent's own and an
+  imported constant of that name overrides it. The same name imported
+  from two modules fails the compilation. A name means one thing to an
+  agent: a variable or a constant never shares a template's name (D15),
+  or the compilation fails. Variables carry configuration, never
+  secrets: constants are compiled into the output, and secrets stay in
+  the environment. (Amended in 1.2: the `vars.ap` files, their levels
+  and their override cascade are withdrawn; amended again in 1.2:
+  imports never pass on, a team's `flows.ap` shares constants and
+  `SESSION` variables only, an agent's file and a `flows.ap` export no
+  variable, a module exports each name once.)
 
 - **D33 — project context** — `PROJECT.ap`: the rules every agent of a
   project follows, compiled with the orchestration of every standalone
@@ -355,14 +385,16 @@ These terms have precise meaning and are not interchangeable.
   1.2.)
 
 - **D38 — session variable** — a variable (D32) whose value is set while
-  a session runs, its scope written as a word before `VAR`, as `EXPORT`
-  before a block. With no word, `VAR <name>` or `VAR <name> AS
-  <template>` is private: seen only by the agent that declares it, in its
-  own `vars.ap` or in an agent, role or procedure body — a procedure's
-  private variable belongs to the agent running it. `SESSION VAR <name>`,
-  optionally `AS <template>`, is seen by every agent of the project and
-  is declared only in a team or project `vars.ap`, so that every reader
-  sees the declaration at compile time. `GLOBAL` — every agent, every
+  a session runs, its scope written as a word before `VAR`. With no
+  word, `VAR <name>` or `VAR <name> AS <template>` is private: declared
+  in an agent, role or procedure body, it is seen only by the agent that
+  declares it — a procedure's private variable belongs to the agent
+  running it; exported by a module (D32), each agent that imports it has
+  its own. `SESSION VAR <name>`, optionally `AS <template>`, is shared by
+  the session's agents that import it, and is only ever exported by a
+  module (`EXPORT SESSION VAR <name>`), so that every reader sees the
+  same declaration at compile time; a body that declares a `SESSION`
+  variable or a constant fails the compilation. `GLOBAL` — every agent, every
   session, persisted — is reserved: this version refuses it at
   compilation. An agent never sees a private and a `SESSION` variable of
   the same name. `INTO <name>` at the end of a `DO`, `ASK`, `COMPUTE` or
@@ -371,8 +403,8 @@ These terms have precise meaning and are not interchangeable.
   <name>` stores procedure p's result, typed by its `AS` (or `RETURN AS`,
   D41), and is equivalent to a `VAR <name>:` block holding that lone
   `RUN`. The block form `VAR <name>:`
-  assigns a variable already declared in a `vars.ap` the agent reads, and
-  otherwise declares a private one; `VAR <name> AS <template>:` always
+  assigns a variable the agent imports, and otherwise declares a private
+  one; `VAR <name> AS <template>:` always
   declares. The block holds, beneath, any lines of a procedure body
   (D16) — `DO`, `RUN`, `IF` / `ELSE`, `UNTIL` — but no further `VAR`; its
   value is the block's final outcome, a procedure's result included. A
@@ -390,7 +422,8 @@ These terms have precise meaning and are not interchangeable.
   shared by every agent; the last write wins. The session id comes from
   the harness adapter (D8); without it the executable refuses. A block of
   a shared or builtin library (D30) never reads a session variable (P4):
-  it takes its input through `LENS-IN` (D6). (Added in 1.2.)
+  it takes its input through `LENS-IN` (D6). (Added in 1.2; amended in
+  1.2: shared variables are exported and imported, D32.)
 
 - **D39 — checked condition** — an `IF` or `UNTIL` (D27) whose head
   carries the marks of the force levels (D11) hands its condition to an

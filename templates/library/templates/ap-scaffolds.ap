@@ -78,7 +78,7 @@ EXPORT TEMPLATE ap-block-step:
       MUST   give at least one DO or RUN line — a step with neither is invalid
       MUST   write a rule with its force keyword (NEVER, MUST, SHOULD …) — never as DO never
       MUST   not use MEM in a step — memory belongs to an agent, a role or a procedure
-      MUST   not declare a VAR in a step — declare it in a vars.ap or in the agent's body
+      MUST   not declare a VAR in a step — declare it in the agent's body or import it
       MAY    use IF! / IF!! / UNTIL! / UNTIL!! only when BY names an agent — its apx answers the check
     shape?:   TEXT MAX_WORDS 1  "input-contract template for the step (AS); omit if none"
   BODY:
@@ -260,18 +260,17 @@ EXPORT TEMPLATE ap-block-procedure:
         AS     bug-card
 
 EXPORT TEMPLATE ap-vars-line:
-  ABOUT   one line of a vars.ap — a constant, a SESSION hand-off variable or a private variable
+  ABOUT   one EXPORT VAR line of a library module — a constant, a SESSION hand-off or a private variable
   TAGS    #agent-pack #authoring #scaffold #rule
 
   SLOTS:
-    scope?: ENUM[SESSION]  "SESSION for a variable every agent of the session shares; omit otherwise"
-      MUST   write SESSION only in a team's or the project's vars.ap — never in an agent's
+    scope?: ENUM[SESSION]  "SESSION for a variable the session's importing agents share; omit otherwise"
       MUST   omit the scope on a constant and on a private variable — GLOBAL is reserved, an error
-    name:   TEXT MAX_WORDS 1  "the variable name, declared once per agent"
+    name:   TEXT MAX_WORDS 1  "the variable name — never the name of a template its importers see"
     tail?:  TEXT MAX_WORDS 6  "`= <value>` for a constant, `AS <template>` for a typed variable; omit if untyped"
-      MUST   write a private variable only in an agent's own vars.ap; a constant at any of the three levels
+      MUST   write the line at top level of a module — no `:` block; agents IMPORT it FROM @main.vars
       MUST   never put a secret in a constant — it is compiled into the agent's output
   BODY:
-    {scope} VAR {name} {tail}
+    EXPORT {scope} VAR {name} {tail}
   EXAMPLE:
-    SESSION VAR plan AS implementation-plan
+    EXPORT SESSION VAR plan AS implementation-plan

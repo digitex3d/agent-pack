@@ -432,7 +432,7 @@ export class TemplateBlock extends ApBlock {
 /**
  * A variable (I7): a name the agent's work fills while it runs, kept by the apx
  * for the session — private to the agent, or shared by the session's agents
- * (`SESSION`) — with a type when a template shapes it. Declared in a vars.ap or
+ * (`SESSION`) — with a type when a template shapes it. Imported from a module or
  * a body; one variable namespace, so the id depends on the name alone.
  */
 export class VarBlock extends ApBlock {
@@ -444,7 +444,7 @@ export class VarBlock extends ApBlock {
   scope: VarScope = 'private';
   /** The template that types it, or null. */
   type: ApRef | null = null;
-  /** Where it is declared: `vars.ap (team)`, `procedure verify`, … */
+  /** Where it is declared: `` `@main.vars` ``, `procedure verify`, … */
   declared = '';
 
   /** The reference to a variable by name — derivable without the block. */

@@ -3,7 +3,7 @@
 import { existsSync } from 'fs';
 import { resolve, basename, isAbsolute } from 'path';
 import { BundleContext } from './types.js';
-import { lintFile } from '../lint.js';
+import { lintFile, type LintError } from '../lint.js';
 import { ingestRaw, IngestedFile } from '../ingest.js';
 
 /**
@@ -30,6 +30,32 @@ export interface LoadRequest {
  */
 export function allLibraryRoots(ctx: BundleContext): string[] {
   return [...ctx.libraryRoots, ...Object.values(ctx.libraries ?? {})];
+}
+
+/**
+ * The entry already registered under `name` in `collection`, or null: the same
+ * file again is a no-op, another file a collision — reported here, the same way
+ * for every kind.
+ */
+export function alreadyRegistered<T extends { name: string; path: string }>(
+  collection: T[], name: string, path: string, kind: string, line: number,
+  ctx: { lintErrors: LintError[] },
+): T | null {
+  const existing = collection.find(e => e.name === name);
+  if (existing && existing.path !== path) {
+    ctx.lintErrors.push({ file: path, line, message: `${kind} name "${name}" collides with already-imported ${kind} at ${existing.path}` });
+  }
+  return existing ?? null;
+}
+
+/**
+ * Resolve the IMPORT lines of a module's text, `path` being the file that
+ * writes them — what it imports, it alone sees. Dynamic import breaks the
+ * cycle with imports.js.
+ */
+export async function processImportsOf(body: string, ctx: BundleContext, path: string): Promise<string> {
+  const { processImports } = await import('./imports.js');
+  return processImports(body, ctx, path);
 }
 
 /**

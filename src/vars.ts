@@ -6,7 +6,8 @@
  *   VAR board = Product           a constant, substituted at compile time
  *   VAR best-pizza                a private variable — the declaring agent's — declared, still empty
  *   VAR report AS task-report     a private variable with a type: a template
- *   SESSION VAR plan              shared by every agent of the session (a team's or the project's vars.ap)
+ *   SESSION VAR plan              shared by every agent of the session
+ *   EXPORT SESSION VAR plan       declared in a module, for the agents that IMPORT it
  *   VAR best-pizza:               declared and assigned: the outcome of the block beneath
  *   DO … INTO best-pizza          assigns, or reassigns, a declared variable
  *   {{best-pizza}}                reads one — a constant's value, or a variable's
@@ -156,6 +157,20 @@ export function parseVarLine(keyword: string, rest: string): VarDecl | { error: 
   if (keyword === 'GLOBAL') return { error: 'GLOBAL variables are not available yet — write `SESSION VAR` for one the session\'s agents share' };
   const decl = parseVarDecl(after[1], 'session');
   if ('form' in decl && decl.form === 'constant') return { error: `a constant has no scope — write \`VAR ${decl.name} = …\`` };
+  return decl;
+}
+
+/**
+ * An exported declaration — the text after `EXPORT` (`SESSION VAR plan AS x`,
+ * `VAR board = Product`) — or null when it is none. A module only declares: a
+ * `VAR x:` block assigns while the agent works, so it is never exported.
+ */
+export function parseExportedVar(rest: string): VarDecl | { error: string } | null {
+  const m = /^(\S+)\s*(.*)$/.exec(rest.trim());
+  const decl = m ? parseVarLine(m[1], m[2]) : null;
+  if (decl && 'form' in decl && decl.form === 'variable' && decl.block) {
+    return { error: `\`EXPORT ${rest.trim()}\`: a module declares a variable, never assigns it — drop the ':' and assign it in a body` };
+  }
   return decl;
 }
 

@@ -121,25 +121,19 @@ ABOUT  always-on rules for this project
 IMPORT security FROM @main.policies
 ```
 
-## vars.ap
+## Variables
 
-A `vars.ap` declares [variables](/reference/language#variables) for the agents below it, at three levels: the project root, a team's folder, an agent's folder (a team member's folder is its team's). It holds only `VAR` lines:
+Variables have no configuration file. A shared one — a constant, or a `SESSION` hand-off — is exported by a module of the library, conventionally `agents/library/vars/<team>.ap`, and imported by every agent that uses it:
 
 ```
-VAR board = Product                        # a constant — any level
-SESSION VAR plan AS implementation-plan    # shared by the session's agents — a team's or the project's vars.ap
-VAR draft                                  # private to one agent — the agent's own vars.ap
+# agents/library/vars/delivery.ap
+EXPORT VAR board = Product
+EXPORT SESSION VAR plan AS implementation-plan
 ```
 
-| Level | Constants | `SESSION VAR` | private `VAR` |
-|---|---|---|---|
-| project root | yes | yes | no |
-| team folder | yes | yes | no |
-| agent folder | yes | no | yes |
+Every agent also has the constant `name`, its own name. How variables are exported, imported, assigned and read is in [Language → Variables](/reference/language#variables).
 
-A constant at a deeper level overrides the same one above it: agent over team over project. Every agent also has the constant `name`, its own name. How variables are assigned and read, and what their scopes mean, is in [Language → Variables](/reference/language#variables).
-
-Never put secrets in `vars.ap`: constants are compiled into the agent's output. Tools read secrets from the environment.
+Never put secrets in a constant: constants are compiled into the agent's output. Tools read secrets from the environment.
 
 ## Checks
 

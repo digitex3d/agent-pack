@@ -428,7 +428,7 @@ A variable is a named value. A **constant** is fixed when the agent is compiled;
 
 | Write | Means |
 |---|---|
-| `VAR board = Product` | a constant: `{{board}}` is replaced by `Product` at compile time |
+| `EXPORT VAR board = Product` | a constant, exported by a module: `{{board}}` is replaced by `Product` at compile time |
 | `VAR draft` | a variable, declared, still empty |
 | `VAR report AS task-report` | a variable with a type: a template |
 | `VAR draft:` + an indented block | declared and assigned: its value is the final outcome of the block |
@@ -440,24 +440,40 @@ A variable is stored, and read back, only through the agent's [apx](/guide/apx#v
 
 ### Scope
 
-A word before `VAR` says who sees a variable and how long it lives — as `EXPORT` before a block says who may import it:
+A word before `VAR` says who sees a variable and how long it lives:
 
 | Write | Who sees it | How long | Declared in |
 |---|---|---|---|
-| `VAR x` (no word: **private**) | only the agent that declares it | the session | the agent's own `vars.ap`, or the body of the agent, of a role or of a procedure |
-| `SESSION VAR x` | every agent of the project | the session | a team's or the project's `vars.ap` only |
+| `VAR x` (no word: **private**) | only the agent that declares it | the session | the body of the agent, of a role or of a procedure — or a module, `EXPORT VAR x`, each agent that imports it having its own |
+| `SESSION VAR x` | the session's agents that import it | the session | a module only: `EXPORT SESSION VAR x` |
 | `GLOBAL VAR x` | every agent | every session | not available yet — an error today |
 
 - **Private** is the default: there is no word for it. A private variable declared in a procedure or a role belongs to the agent that runs it — two agents running the same procedure each have their own. The same agent, called again in the same session, finds its own earlier values.
-- **SESSION** is how agents hand work to each other: a planner stores the plan, an auditor reads it. It is declared in a shared `vars.ap` — a team's, or the project's — so that every agent that reads it sees the declaration when it is compiled. `SESSION` in an agent's `vars.ap` or in a body is an error.
-- A private declaration in a team's or the project's `vars.ap` is an error: a private variable belongs to one agent.
+- **SESSION** is how agents hand work to each other: a planner stores the plan, an auditor reads it. It is exported once by a module — `agents/library/vars/<team>.ap`, say — and imported by every agent that reads or fills it, so each compiles with the same declaration. `SESSION VAR` or a constant in a body is an error: a module exports them.
 - A scope word stands only right before `VAR`. A constant has no scope: `SESSION VAR x = v` is an error.
 
-A session is the harness's: one conversation, with the agents it calls. See [Configuration](/reference/config#vars-ap) for which line goes in which `vars.ap`.
+A session is the harness's: one conversation, with the agents it calls.
+
+### Exporting and importing
+
+A module of a library declares a variable on one top-level line, `EXPORT` in front:
+
+```
+# agents/library/vars/delivery.ap
+EXPORT VAR board = Product
+EXPORT SESSION VAR plan AS implementation-plan
+EXPORT VAR draft
+```
+
+One line, no body, no `ABOUT`; a module may export several, next to its other blocks, each name once. A module declares, it never assigns: `EXPORT VAR x:` is an error, and so are lines indented beneath it. An agent's file and a team's `flows.ap` export no variable — they declare one in a body, or import it. A file sees a variable only when it declares it or imports it — `IMPORT plan, board FROM @main.vars`, resolved like any [import](#imports-and-tags): the exported name is matched, not the file's.
+
+**Imports never pass on.** What a module imports, it alone sees: a procedure that imports `plan` reads `{{plan}}`, and the agent that imports the procedure does not — unless it imports `plan` too. Reading it anyway fails, naming the file that imports it. A team's `flows.ap` imports constants and `SESSION` variables (a private one would be each member's own): its flows read them in `AGENTS.md`, and each member that reads one imports it too.
+
+Never put a secret in a constant: constants are compiled into the agent's output. Tools read secrets from the environment.
 
 ### Declaring once
 
-A name is declared once for an agent, whatever its scope: a second declaration — at any level, or in any body — is an error, and so is a private variable taking the name of a `SESSION` variable the agent sees (no shadowing). A loop reassigns a variable with `INTO`, it never declares it again: `VAR` never stands inside an `UNTIL`, nor inside another `VAR` block, a flow step, a template, a store or a policy. A playbook takes no variable — it has no executable yet; it neither declares, assigns nor reads one.
+A name is declared once for an agent, whatever its scope: a second declaration in any body is an error, the same name imported from two modules collides, and a private variable never takes the name of a `SESSION` variable the agent sees (no shadowing). **A name means one thing**: a variable or a constant never shares the name of a template the agent sees. A loop reassigns a variable with `INTO`, it never declares it again: `VAR` never stands inside an `UNTIL`, nor inside another `VAR` block, a flow step, a template, a store or a policy. A playbook takes no variable — it has no executable yet; it neither declares, assigns nor reads one.
 
 ### Assigning
 
@@ -474,7 +490,7 @@ VAR claim:
     RUN  verify-claim
 ```
 
-**`VAR x:` assigns a variable a `vars.ap` declares.** In a body, `VAR x:` normally declares a private `x` and assigns it. When `x` is already declared in a `vars.ap` the agent reads — a `SESSION` variable of its team, a private one of its own file — `VAR x:` only assigns it: it declares nothing. This is how a procedure's result goes into a shared variable (`VAR plan:` with `RUN make-plan` beneath). It takes no `AS` there: the type is the declaration's — `VAR plan AS x:` would declare `plan` again, an error.
+**`VAR x:` assigns an imported variable.** In a body, `VAR x:` normally declares a private `x` and assigns it. When the agent imports `x` — a `SESSION` variable, or an exported private one — `VAR x:` only assigns it: it declares nothing. This is how a procedure's result goes into a shared variable (`VAR plan:` with `RUN make-plan` beneath). It takes no `AS` there: the type is the declaration's — `VAR plan AS x:` would declare `plan` again, an error.
 
 A single step registers its result with a trailing `INTO <name>`, on a `DO`, `ASK`, `COMPUTE` or `RUN` line only — uppercase, at the very end of the line (before an `ASK`'s `BY`); anywhere else, `into` is plain text:
 
@@ -491,7 +507,7 @@ A variable has one type for its whole life. `VAR report AS task-report` declares
 
 ### Reading
 
-`{{name}}` reads a variable, in any line. A constant's read is its value; a variable's read compiles into the command that prints its value (`node .agent-pack/apx/<agent>.apx get <name>`). Reading a field of a typed variable (`{{report.status}}`) is not supported yet.
+`{{name}}` reads a variable, in any line. A constant's read is its value; a variable's read compiles into the command that prints its value (`node .agent-pack/apx/<agent>.apx get <name>`). Reading a field of a typed variable (`{{report.status}}`) is not supported yet. A read of a name the agent neither declares nor imports fails the compilation — and when the name is a template's, the error says so: declare `VAR <name> AS <template>` and read that.
 
 A read can take a shape: `{{name AS template}}` reads the variable and keeps only what fits the template, shaped as it:
 
@@ -517,22 +533,26 @@ EXPORT AGENT writer AS technical-writer:
         DO  shorten {{draft}} to the five changes that matter INTO draft
 ```
 
-A plan shared by a team — declared once, in the team's `vars.ap`:
+A plan shared by a team — exported once, by a module:
 
 ```
-# agents/teams/delivery/vars.ap
-SESSION VAR plan AS implementation-plan
+# agents/library/vars/delivery.ap
+EXPORT SESSION VAR plan AS implementation-plan
 ```
 
-the planner fills it with its procedure's result, and the auditor reads it:
+the planner fills it with its procedure's result, and the auditor reads it — each imports it:
 
 ```
-# planner.ap, in its body
+# planner.ap
+IMPORT plan FROM @main.vars
+    …
     WHEN a request arrives:
         VAR plan:
             RUN  write-plan
 
-# goal-auditor.ap, in its body
+# goal-auditor.ap
+IMPORT plan FROM @main.vars
+    …
     WHEN the plan is ready:
         DO  audit {{plan}} against the goal, from the goal backwards
 ```
@@ -542,6 +562,7 @@ the planner fills it with its procedure's result, and the auditor reads it:
 ```
 IMPORT security, privacy FROM @main.policies
 IMPORT review-report FROM @main.templates.review
+IMPORT plan, board FROM @main.vars
 ```
 
 `@main` is the project library; shared libraries have their own alias. See [Configuration](/reference/config#libraries).

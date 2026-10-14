@@ -254,8 +254,8 @@ try {
   // --- a checked condition in a flow STEP: checked by the step's BY agent, through its own apx ---
   {
     const team = join(tmp, 'teams', 'crew');
-    const teamVars = write(join(team, 'vars.ap'), ['SESSION VAR report']);
-    const flows = lines => write(join(team, 'flows.ap'), ['ABOUT  a crew', '', 'WHEN asked to ship:', '    RUN ship', '', 'FLOW ship:', ...lines]);
+    write(join(lib, 'vars', 'crew.ap'), ['EXPORT SESSION VAR report']);
+    const flows = lines => write(join(team, 'flows.ap'), ['IMPORT report FROM @main.vars', 'ABOUT  a crew', 'WHEN asked to ship:', '    RUN ship', '', 'FLOW ship:', ...lines]);
     const member = name => write(join(team, `${name}.ap`), [
       `EXPORT AGENT ${name} AS ${name}-role:`, '    ABOUT    a member', '    MANDATE  ship', '',
       `ROLE ${name}-role:`, '    ABOUT   a member', '    ALWAYS  test first',
@@ -263,7 +263,7 @@ try {
     const files = { builder: member('builder'), lead: member('lead') };
     const bundle = (name, checks = CHECKS) => bundleAgentObject({
       agentName: name, agentFile: files[name], agentDir: team, libraryRoot: lib, libraryRoots: [lib],
-      libraries: { '@main': lib }, bundleConfig: { runtime: false }, adapter, checks, varsFiles: [{ path: teamVars, level: 'team' }],
+      libraries: { '@main': lib }, bundleConfig: { runtime: false }, adapter, checks,
     });
     const stepErrors = async name => { try { await bundle(name); return ''; } catch (e) { return e.message; } };
     const orchestration = async () => (await buildOrchestrationContent({
@@ -316,7 +316,7 @@ try {
     // a checked condition at the flow's own level: not supported yet
     flows(['    UNTIL!! {{report}} says clean:', '        STEP fix it:', '            BY builder', '            DO  fix the next failure']);
     assert.match(await stepErrors('lead'), /flows\.ap:7  UNTIL!! at a flow's own level is not supported yet — put it inside a STEP/);    // the routing of the team: no executable — IF! warns and reads as IF, IF!! fails
-    const routing = lines => write(join(team, 'flows.ap'), ['ABOUT  a crew', '', 'WHEN asked to ship:', ...lines, '',
+    const routing = lines => write(join(team, 'flows.ap'), ['IMPORT report FROM @main.vars', 'ABOUT  a crew', 'WHEN asked to ship:', ...lines, '',
       'FLOW ship:', '    STEP judge it:', '        BY builder', '        DO  hand it on']);
     routing(['    IF! the request is urgent:', '        RUN ship']);
     const routed = await stderrOf(orchestration);

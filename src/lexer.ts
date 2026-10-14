@@ -24,6 +24,8 @@ import { getLifecycleAliases } from './lifecycleConfig.js';
 import { CHECK_KINDS, MAX_CHECK_LEVEL, type CheckKind } from './check.js';
 import { splitExecutorMark } from './executor.js';
 import { ACTION_VERBS } from './actionVerbs.js';
+import { VAR_SCOPE_WORDS, isVarKeyword } from './vars.js';
+import { EXPORT_MODIFIER } from './blockTypes.js';
 
 /**
  * Static (non-force-level) keywords. Force-level families and their aliases
@@ -37,7 +39,7 @@ const STATIC_KEYWORDS = [
   'RUN', 'VAR', 'IF',
   ...ACTION_VERBS,
   // A variable's scope, right before VAR (`SESSION VAR plan`) — vars.ts parses it.
-  'SESSION', 'GLOBAL',
+  ...VAR_SCOPE_WORDS,
   'ROLE', 'EXPERTISE', 'MANDATE', 'LENS-OUT', 'LENS-IN',
   'FLOW', 'STEP', 'PARALLEL', 'CONTEXT', 'BY',
   // STORE body: TYPE names the backing plugin, LASTS its lifetime, KEY the
@@ -154,6 +156,13 @@ const RAW_CLOSE_RE = /^[ \t]*:RAW[ \t]*$/;
  */
 const BLOCK_OPENER_RE = /^([ \t]*)([A-Z][A-Z0-9_-]*)(?:[ \t]+(.*?))?[ \t]*:[ \t]*$/;
 
+/**
+ * An exported declaration: `EXPORT` before a word that opens a VAR line
+ * (`VAR`, a scope word) — one line, never a block opener, even when it ends
+ * with `:`. Its grammar is vars.ts's (parseExportedVar), never re-encoded here.
+ */
+const EXPORT_LINE_RE = new RegExp(`^([ \\t]*)(${EXPORT_MODIFIER})[ \\t]+((\\S+).*?)[ \\t]*$`);
+
 export interface Position {
   /** 1-based line number in the source. */
   line: number;
@@ -219,6 +228,13 @@ export function lexRaw(source: string): Token[] {
     // emitted to the bundled .md output.
     if (raw.startsWith('#')) {
       out.push({ kind: 'comment', line, col: 1, indent: 0, raw });
+      continue;
+    }
+
+    // `EXPORT VAR …` is a declaration, before any block opener: its `:` never opens one.
+    const exportVar = raw.match(EXPORT_LINE_RE);
+    if (exportVar && isVarKeyword(exportVar[4])) {
+      out.push({ kind: 'keyword', line, col, indent, keyword: exportVar[2], rest: exportVar[3], raw });
       continue;
     }
 

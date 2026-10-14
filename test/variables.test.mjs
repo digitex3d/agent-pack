@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Giuseppe Federico
 /**
  * Variables (D32, I7) — constants substituted at compile time; session
- * variables declared in vars.ap or a body, assigned by `VAR x:` blocks and
+ * variables declared in a body or exported by a module and imported, assigned by `VAR x:` blocks and
  * `DO … INTO x`, typed by a template (declared or inferred from a procedure's
  * AS), read as `{{x}}` through the apx, which keeps their values per harness
  * session in one tabeli table the project's agents share.
@@ -14,8 +14,7 @@ import { tmpdir } from 'os';
 import { spawnSync } from 'child_process';
 
 const { bundleAgentObject } = await import('../dist/src/compiler/index.js');
-const { parseVarsAp, varsFilesFor } = await import('../dist/src/varsAp.js');
-const { checkVocabulary } = await import('../dist/src/lint.js');
+const { checkVocabulary, lintFile } = await import('../dist/src/lint.js');
 const { ApDocument } = await import('../dist/src/apdoc/document.js');
 const { ApxEngine } = await import('../dist/src/apx/engine.js');
 const { apxFiles } = await import('../dist/src/apx/write.js');
@@ -44,13 +43,13 @@ const TAIL = [
   'PROCEDURE plain:', '    ABOUT  no result shape', '    DO something', '',
 ];
 /** Compile agent `name` from its body lines (indented under its EXPORT AGENT block). */
-const compile = (lines, { vars = {}, varsFiles = [], name = 'a', extra = [], libraries } = {}) => {
+const compile = (lines, { vars = {}, name = 'a', extra = [], libraries } = {}) => {
   const file = write(join(tmp, `${name}.ap`), [
     ...extra, `EXPORT AGENT ${name} AS a-role:`, '    ABOUT    an agent', '    MANDATE  do the work', ...lines, '', ...TAIL,
   ]);
   return bundleAgentObject({
     agentName: name, agentFile: file, agentDir: tmp, libraryRoot: lib, libraryRoots: [lib],
-    libraries: libraries ?? { '@main': lib }, bundleConfig: { runtime: false }, vars, varsFiles, adapter,
+    libraries: libraries ?? { '@main': lib }, bundleConfig: { runtime: false }, vars, adapter,
   });
 };
 /** The compile errors' text — '' when it compiles. */
@@ -75,70 +74,91 @@ try {
     assert.ok(body.includes('Do read it'), 'and a declared one is substituted');
   }
 
-  // --- 3. vars.ap: constants and variables, linted; the hierarchy project < team < agent ---
+  // --- 3. EXPORT VAR: a module's declarations, found by IMPORT like every export ---
+  const mod = (path, lines) => write(join(lib, ...path.split('/')) + '.ap', lines);
   {
-    const parsed = parseVarsAp(['# shared', 'VAR board = "Product"', 'VAR best-pizza', 'SESSION VAR report AS verdict', 'VAR g = Hello:', ''].join('\n'), 'vars.ap');
-    assert.deepEqual(parsed.errors, []);
-    assert.deepEqual(parsed.constants, { board: 'Product', g: 'Hello:' }, '`VAR g = Hello:` is a constant, never a block');
-    assert.deepEqual(parsed.variables.map(s => [s.name, s.scope, s.type, s.line]), [['best-pizza', 'private', null, 3], ['report', 'session', 'verdict', 4]]);
-    const bad = parseVarsAp(['VAR x', 'VAR x = 1', 'VAR tpl-1234abcd', 'VAR y AS! verdict', 'VAR z:', '    DO z', 'DO no'].join('\n'), 'vars.ap');
-    const messages = bad.errors.map(e => `${e.line}: ${e.message}`);
-    assert.ok(messages.some(m => /^2: `x` is declared twice in vars\.ap \(first at line 1\)/.test(m)), messages.join('\n'));
-    assert.ok(messages.some(m => /^3: `tpl-1234abcd` has the shape of a block id/.test(m)), messages.join('\n'));
-    assert.ok(messages.some(m => /^4: `AS!`: the AS of a VAR is its type and takes no force level/.test(m)), messages.join('\n'));
-    assert.ok(messages.some(m => /^5: `z:` assigns a block's outcome .* never in vars\.ap/.test(m)), messages.join('\n'));
-    assert.ok(messages.some(m => /^7: vars\.ap holds only VAR lines/.test(m)), messages.join('\n'));
-
-    const project = join(tmp, 'proj');
-    const team = join(project, 'teams', 'crew');
-    const member = write(join(team, 'm.ap'), ['EXPORT AGENT m AS r:']);
-    write(join(team, 'flows.ap'), ['# crew']);
-    write(join(project, 'vars.ap'), ['VAR lang = Italian', 'VAR board = Main', 'SESSION VAR shared-note']);
-    write(join(team, 'vars.ap'), ['VAR lang = English', 'SESSION VAR crew-note AS verdict']);
-    const files = varsFilesFor(member, project);
-    assert.deepEqual(files.map(f => f.level), ['project', 'team'], "a team member's folder is its team's: one file, read once");
-    const { body, structure } = await compile(['    ALWAYS  write in {{lang}} on {{board}}', '    VAR draft'], { varsFiles: files });
-    assert.ok(body.includes('write in English on Main'), 'a deeper constant overrides');
+    mod('vars/crew', ['# crew', 'EXPORT VAR lang = English', 'EXPORT VAR board = Main', 'EXPORT VAR g = Hello:',
+      'EXPORT SESSION VAR shared-note', 'EXPORT SESSION VAR crew-note AS verdict', 'EXPORT VAR own-note']);
+    const imp = ['IMPORT lang, board, g, shared-note, crew-note, own-note FROM @main.vars'];
+    const { body, structure } = await compile(['    ALWAYS  write in {{lang}} on {{board}}, {{g}}', '    VAR draft'], { extra: imp });
+    assert.ok(body.includes('write in English on Main, Hello:'), 'an imported constant is its value — `= Hello:` never opens a block');
     assert.deepEqual(structure.byKind('var').map(v => [v.name, v.scope, v.about]), [
-      ['shared-note', 'session', 'SESSION variable, declared in vars.ap (project)'],
-      ['crew-note', 'session', 'SESSION variable shaped as `verdict`, declared in vars.ap (team)'],
+      ['shared-note', 'session', 'SESSION variable, declared in `@main.vars`'],
+      ['crew-note', 'session', 'SESSION variable shaped as `verdict`, declared in `@main.vars`'],
+      ['own-note', 'private', 'private variable, declared in `@main.vars`'],
       ['draft', 'private', 'private variable, declared in agent a'],
     ]);
-    write(join(team, 'vars.ap'), ['SESSION VAR shared-note']);
-    await fails([], /vars\.ap:1  variable `shared-note` is declared twice — first in vars\.ap \(project\)/, { varsFiles: files });
+    // exported but not imported: the agent does not see it
+    await fails(['    DO  read {{shared-note}}'], /a\.ap:4  unknown variable `\{\{shared-note\}\}` — declare it in the body \(`VAR shared-note`\), or IMPORT it FROM the module that exports it/);
+    // a variable exported from any module of the library — next to a template
+    mod('templates/tally', ['EXPORT SESSION VAR tally AS tally-row', '', 'EXPORT TEMPLATE tally-row:', '    ABOUT  a row', '    SLOTS:', '        n: TEXT "n"']);
+    await compiles(['    DO  count {{tally}}'], { extra: ['IMPORT tally FROM @main.templates'] });
+    // a variable is no unit of the library's catalogue: IMPORT finds it directly
+    const { buildMetadataIndex } = await import('../dist/src/libraryIndex.js');
+    const names = Object.values(buildMetadataIndex({ libraryRoot: lib, sharedLibraries: [] }).exports).map(e => `${e.kind} ${e.name}`);
+    assert.ok(names.includes('template tally-row') && !names.some(n => / tally$/.test(n)) && !names.some(n => / crew$|^generic /.test(n)), names.join(', '));
+    // imports never pass on: a procedure's import serves its own reads, never the agent's
+    mod('procedures/peek', ['IMPORT shared-note FROM @main.vars', '', 'EXPORT PROCEDURE peek:', '    ABOUT  peek', '    DO  look at {{shared-note}}']);
+    await fails(['    WHEN asked:', '        RUN  peek', '        DO  read {{shared-note}}'],
+      /a\.ap:7  `\{\{shared-note\}\}`: `shared-note` is imported by .*peek\.ap, not here — an import never passes on: IMPORT shared-note FROM @main\.vars in this file too/,
+      { extra: ['IMPORT peek FROM @main.procedures'] });
+    await compiles(['    WHEN asked:', '        RUN  peek', '        DO  read {{shared-note}}'], { extra: ['IMPORT peek FROM @main.procedures', 'IMPORT shared-note FROM @main.vars'] });
+    // nor do writes: assigning a variable only a procedure imports fails the same way
+    for (const write of [['        DO  note it INTO shared-note'], ['        VAR shared-note:', '            DO  note it']]) {
+      await fails(['    WHEN asked:', '        RUN  peek', ...write], /a\.ap:7  `[^`]*shared-note[^`]*`: `shared-note` is imported by .*peek\.ap, not here — an import never passes on/,
+        { extra: ['IMPORT peek FROM @main.procedures'] });
+    }
+    // the same name from two modules collides
+    mod('more/notes', ['EXPORT SESSION VAR shared-note']);
+    await fails([], /notes\.ap:1  variable name "shared-note" collides with already-imported variable at .*crew\.ap/, { extra: [...imp, 'IMPORT shared-note FROM @main.more'] });
+    // a module only declares: no block, no assignment, top level only
+    mod('bad/broken', ['EXPORT VAR z:', 'EXPORT SESSION VAR x = v', 'EXPORT GLOBAL VAR y', 'EXPORT VAR ok', 'EXPORT SESSION plan']);
+    const broken = await errorsOf([], { extra: ['IMPORT ok FROM @main.bad'] });
+    assert.match(broken, /broken\.ap:1  `EXPORT VAR z:`: a module declares a variable, never assigns it/, broken);
+    assert.match(broken, /broken\.ap:2  a constant has no scope/, broken);
+    assert.match(broken, /broken\.ap:3  GLOBAL variables are not available yet/, broken);
+    assert.match(broken, /broken\.ap:5  SESSION is a variable's scope — it stands only right before VAR/, broken);
+    // one name, one line, at the top of a module: twice, or with a body, is an error
+    const lintMod = lines => lintFile(join(lib, 'vars', 'probe.ap'), lines.join('\n')).map(e => `${e.line}: ${e.message}`);
+    assert.deepEqual(lintMod(['EXPORT VAR x = one', 'EXPORT VAR x = two']), ['2: `x` is exported twice in this module — first at line 1']);
+    assert.deepEqual(lintMod(['EXPORT VAR x', '    DO  something']), ['2: `EXPORT VAR x` is one line — an exported variable has no body']);
+    // next to a policy or a role, a variable is no line of theirs
+    assert.deepEqual(lintFile(join(lib, 'policies', 'calm.ap'), ['EXPORT VAR tone = calm', '', 'EXPORT POLICY be-calm:', '    ABOUT  calm', '    ALWAYS  stay {{tone}}'].join('\n')), []);
+    // an agent's file exports no variable: it would be no one's
+    await fails(['    DO  read it'], /a\.ap:\d+  `EXPORT VAR k = v`: a library module exports variables/, { extra: ['EXPORT VAR k = v', ''] });
+    // indented, `EXPORT VAR` is a template's literal text, kept
+    const kept = await compile(['    VAR line-text', '    DO  show {{line-text AS ap-line}}'], { extra: ['TEMPLATE ap-line:', '    ABOUT  a line', '    SLOTS:', '        n: TEXT "n"', '    EXAMPLE:', '        EXPORT SESSION VAR plan AS x', ''] });
+    assert.ok(kept.body.includes('EXPORT SESSION VAR plan AS x'), kept.body);
     await fails(['    VAR tpl-1234abcd'], /a\.ap:4  `tpl-1234abcd` has the shape of a block id/);
-    await fails(['    VAR board'], /a\.ap:4  `board` is already a constant/, { varsFiles: files });
+    await fails(['    VAR board'], /a\.ap:5  `board` is already a constant/, { extra: imp });
   }
 
-  // --- scope: private by default, SESSION shared, GLOBAL reserved — each where it may be declared ---
+  // --- a name means one thing: a variable never shares a template's name; reading a template says so ---
   {
-    const team = (lines, level = 'team') => ({ varsFiles: [{ path: write(join(tmp, 'scope', level, 'vars.ap'), lines), level }] });
-    // SESSION in an agent's vars.ap or in a body
-    await fails([], /vars\.ap:1  a SESSION variable is shared — declare it in a team's or the project's vars\.ap/, team(['SESSION VAR plan'], 'agent'));
-    await fails(['    SESSION VAR plan'], /a\.ap:4  a SESSION variable is declared in a team's or the project's vars\.ap/);
-    // private in a team's or the project's vars.ap
-    for (const level of ['team', 'project']) {
-      await fails([], /vars\.ap:1  a private variable belongs to one agent — declare it in the agent's vars\.ap or body, or write SESSION VAR/, team(['VAR draft'], level));
-    }
-    await compiles([], team(['VAR draft'], 'agent'));
-    // a scoped constant, GLOBAL, a scope word not before VAR
-    assert.match(parseVarsAp('SESSION VAR x = v').errors[0].message, /a constant has no scope — write `VAR x = …`/);
-    assert.match(parseVarsAp('GLOBAL VAR x').errors[0].message, /GLOBAL variables are not available yet/);
+    await fails(['    DO  read {{verdict}}'], /a\.ap:4  `\{\{verdict\}\}`: `verdict` is a template, not a variable — declare `VAR <name> AS verdict` and read that/);
+    await fails(['    VAR verdict AS verdict'], /`verdict` names both a variable and a template/);
+    mod('vars/clash', ['EXPORT SESSION VAR note']);
+    await fails([], /`note` names both a variable and a template/, { extra: ['IMPORT note FROM @main.vars'] });
+  }
+
+  // --- scope: private by default, SESSION shared, GLOBAL reserved ---
+  {
+    await fails(['    SESSION VAR plan'], /a\.ap:4  a module exports a SESSION variable \(`EXPORT SESSION VAR plan`\)/);
+    await fails(['    VAR x = 1'], /a\.ap:4  a module exports a constant \(`EXPORT VAR x = …`\)/);
     await fails(['    GLOBAL VAR x'], /a\.ap:4  GLOBAL variables are not available yet/);
-    assert.match(parseVarsAp('SESSION plan').errors[0].message, /SESSION is a variable's scope — it stands only right before VAR/);
     await fails(['    SESSION  keep it short'], /a\.ap:4  SESSION is a variable's scope — it stands only right before VAR/);
-    // a body's `VAR x:` assigns the SESSION variable a team declares — RUN and type inference included
-    const shared = team(['SESSION VAR plan', 'SESSION VAR verdict AS verdict']);
-    const { body, structure } = await compile(['    VAR plan:', '        RUN  judge', '    VAR verdict:', '        RUN  judge'], shared);
+    // a body's `VAR x:` assigns the SESSION variable a module exports — RUN and type inference included
+    mod('vars/scope', ['EXPORT SESSION VAR plan', 'EXPORT SESSION VAR the-verdict AS verdict']);
+    const shared = { extra: ['IMPORT plan, the-verdict FROM @main.vars'] };
+    const { body, structure } = await compile(['    VAR plan:', '        RUN  judge', '    VAR the-verdict:', '        RUN  judge'], shared);
     assert.deepEqual(structure.byKind('var').map(v => [v.name, v.scope, v.type?.target]), [
-      ['plan', 'session', '@main.templates/verdict'], ['verdict', 'session', '@main.templates/verdict'],
+      ['plan', 'session', '@main.templates/verdict'], ['the-verdict', 'session', '@main.templates/verdict'],
     ], 'assigned, not redeclared; the type comes from the procedure');
     assert.ok(body.includes('Work out `plan`'), body);
-    await fails(['    VAR verdict:', '        RUN  jot'], /`verdict` is a `verdict`, but this block yields a `note`/, shared);
+    await fails(['    VAR the-verdict:', '        RUN  jot'], /`the-verdict` is a `verdict`, but this block yields a `note`/, shared);
     // no shadowing: a private declaration taking a SESSION variable's name
-    await fails(['    VAR plan'], /a\.ap:4  `plan` is already a SESSION variable \(vars\.ap \(team\)\) — no variable of another scope takes its name/, shared);
+    await fails(['    VAR plan'], /a\.ap:5  `plan` is already a SESSION variable \(`@main\.vars`\) — no variable of another scope takes its name/, shared);
     await fails(['    VAR plan AS verdict:', '        RUN  judge'], /`plan` is already a SESSION variable/, shared);
-    await fails([], /`plan` is already a SESSION variable/, { varsFiles: [...shared.varsFiles, { path: write(join(tmp, 'scope', 'own', 'vars.ap'), ['VAR plan']), level: 'agent' }] });
   }
 
   // --- 4. INTO: only a trailing, uppercase INTO on a DO line assigns ---
@@ -163,7 +183,7 @@ try {
   {
     await compiles(['    VAR summary:', '        DO  read the notes', '        DO  write one paragraph']);
     await compiles(['    VAR claim:', '        RUN  judge']);
-    await compiles(['    VAR verdict AS verdict:', '        IF the claim holds', '            RUN  judge', '        ELSE', '            DO  reject it']);
+    await compiles(['    VAR the-verdict AS verdict:', '        IF the claim holds', '            RUN  judge', '        ELSE', '            DO  reject it']);
     await compiles(['    VAR draft:', '        UNTIL the draft reads well', '            DO  rewrite it']);
     await compiles(['    WHEN asked:', '        VAR answer:', '            DO  work it out INTO answer']);
     await fails(['    VAR x:', '        VAR y:', '            DO  z'], /a\.ap:5  a VAR block holds no VAR/);
@@ -172,7 +192,7 @@ try {
     await fails(['    VAR x:', '        WHEN  asked:', '            DO  z'], /a\.ap:5  WHEN is not allowed inside VAR/);
     await fails(['    UNTIL done', '        VAR y:', '            DO  z'], /a\.ap:5  a VAR inside UNTIL would declare its variable again on every pass/);
     await fails(['    VAR x', '        DO  z'], /a\.ap:4  `VAR x` has indented lines beneath — missing ':'/);
-    await fails(['    VAR g = Hello:'], /a\.ap:4  a constant is declared in vars\.ap/);
+    await fails(['    VAR g = Hello:'], /a\.ap:4  a module exports a constant/);
     const procedure = write(join(lib, 'procedures', 'p.ap'), ['EXPORT PROCEDURE p:', '    ABOUT  p', '    VAR found:', '        DO  look', '    DO  use {{found}}', '']);
     const { structure } = await compile(['    WHEN asked:', '        RUN  p'], { extra: ['IMPORT p FROM @main.procedures', ''] });
     assert.equal(structure.byKind('var')[0].about, 'private variable, declared in procedure p', 'a procedure body declares too');
@@ -230,11 +250,11 @@ try {
     const block = checkVocabulary('p.ap', ['EXPORT PLAYBOOK p:', '    ABOUT  p', '    VAR x:', '        DO  work'].join('\n'));
     assert.ok(block.some(e => e.line === 3 && NO.test(e.message)), JSON.stringify(block));
     const dir = join(tmp, 'pb', 'playbooks');
-    write(join(dir, 'vars.ap'), ['VAR seen', 'VAR lang = English']);
-    const playbook = write(join(dir, 'p.playbook.ap'), ['ABOUT  p', 'WHEN  asked', 'DO  use {{seen}} in {{lang}}', '']);
+    mod('vars/pb', ['EXPORT VAR seen', 'EXPORT VAR lang = English']);
+    const playbook = write(join(dir, 'p.playbook.ap'), ['IMPORT seen, lang FROM @main.vars', '', 'ABOUT  p', 'WHEN  asked', 'DO  use {{seen}} in {{lang}}', '']);
     const { buildPlaybookBundle } = await import('../dist/src/compiler/index.js');
     const config = { libraryRoot: lib, sharedLibraries: [], userRoot: '' };
-    await assert.rejects(buildPlaybookBundle(playbook, config), /p\.playbook\.ap:3  `\{\{seen\}\}`: playbooks have no executable yet/);
+    await assert.rejects(buildPlaybookBundle(playbook, config), /p\.playbook\.ap:5  `\{\{seen\}\}`: playbooks have no executable yet/);
     write(playbook, ['ABOUT  p', 'WHEN  asked', 'DO  use it in {{lang}}', '']);
     assert.ok((await buildPlaybookBundle(playbook, config)).body.includes('{{lang}}'), 'a constant in a playbook stays as today');
   }
@@ -273,9 +293,9 @@ try {
   // --- 10–14. the apx keeps variables per session: SESSION ones shared by the project's agents, private ones each agent's own ---
   {
     const project = join(tmp, 'apx-project');
-    const teamVars = write(join(tmp, 'team-vars', 'vars.ap'), ['SESSION VAR answer', 'SESSION VAR verdict AS verdict', 'VAR board = Product']);
-    const varsFiles = [{ path: teamVars, level: 'team' }];
-    const docOf = async name => ApDocument.fromJson((await compile(['    VAR mine', '    DO  read {{answer}} on {{board}}, with {{mine}}', '    DO  decide INTO verdict'], { name, varsFiles })).structure.asJson());
+    mod('vars/apx-team', ['EXPORT SESSION VAR answer', 'EXPORT SESSION VAR the-verdict AS verdict', 'EXPORT VAR board = Product']);
+    const extra = ['IMPORT answer, the-verdict, board FROM @main.vars'];
+    const docOf = async name => ApDocument.fromJson((await compile(['    VAR mine', '    DO  read {{answer}} on {{board}}, with {{mine}}', '    DO  decide INTO the-verdict'], { name, extra })).structure.asJson());
     const docs = { a: await docOf('a'), b: await docOf('b') };
     const BUILD = { builtAt: '', agentPackVersion: '', hash: '', tabeli: TABELI_ENGINE };
     /** One run of `agent`'s engine; `build` names the tabeli it creates tables with. */
@@ -296,12 +316,12 @@ try {
       assert.equal(block.code, 0);
       assert.ok(block.out.includes(`# template verdict  ${tplId}`) && block.out.includes('used by:'), block.out);
       const ls = apx('a', 'ls', 'kind=var');
-      assert.ok(ls.out.includes('var (3)') && /var-[0-9a-f]{8}  verdict  — SESSION variable shaped as `verdict`, declared in vars\.ap \(team\)/.test(ls.out)
+      assert.ok(ls.out.includes('var (3)') && /var-[0-9a-f]{8}  the-verdict  — SESSION variable shaped as `verdict`, declared in `@main\.vars`/.test(ls.out)
         && /var-[0-9a-f]{8}  mine  — private variable, declared in agent a/.test(ls.out), ls.out);
       let r = apx('a', 'get', 'answer');
       assert.equal(r.code, 0, r.out);
       assert.ok(r.out.includes('SESSION variable') && r.out.includes('read by:\n  agent a') && r.out.endsWith('# value: (empty — nothing stored in this session yet)'), r.out);
-      assert.ok(apx('a', 'get', 'verdict').out.includes('used by:\n  agent a'), 'who stores it: the DO … INTO line');
+      assert.ok(apx('a', 'get', 'the-verdict').out.includes('used by:\n  agent a'), 'who stores it: the DO … INTO line');
       assert.match(apx('a', 'get', 'board').out, /^# constant board = Product/);
       r = apx('a', 'set', 'answer', '42');
       assert.equal(r.code, 0, r.out);
@@ -312,14 +332,14 @@ try {
       r = apx('a', 'set', 'board', 'x');
       assert.equal(r.code, 1);
       assert.match(r.out, /`board` is a constant, fixed at compile time/);
-      r = apx('a', 'set', 'verdict', '{"decision":"accept"}');
+      r = apx('a', 'set', 'the-verdict', '{"decision":"accept"}');
       assert.equal(r.code, 2);
       assert.match(r.out, /the value is not shaped as `verdict`: reason: required field missing — nothing was written/);
-      assert.ok(apx('a', 'get', 'verdict').out.endsWith('# value: (empty — nothing stored in this session yet)'), 'a refused value writes nothing');
-      assert.match(apx('a', 'set', 'verdict', 'not json').out, /not valid JSON/);
+      assert.ok(apx('a', 'get', 'the-verdict').out.endsWith('# value: (empty — nothing stored in this session yet)'), 'a refused value writes nothing');
+      assert.match(apx('a', 'set', 'the-verdict', 'not json').out, /not valid JSON/);
       const verdict = '{"decision":"reject","reason":"two sources disagree"}';
-      assert.equal(apx('a', 'set', 'verdict', verdict).code, 0);
-      assert.equal(valueOf(apx('a', 'get', 'verdict').out), verdict);
+      assert.equal(apx('a', 'set', 'the-verdict', verdict).code, 0);
+      assert.equal(valueOf(apx('a', 'get', 'the-verdict').out), verdict);
 
       // 11. byte for byte: a literal \n in code, real newlines, quotes, `=`, UTF-8 — through argv and stdin
       const tricky = 'console.log("a\\nb");\nline 2 \'single\' "double" x=y a==b\nàé€ 日本 \\\\ end\n\n';

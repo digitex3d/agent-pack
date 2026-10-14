@@ -21,6 +21,29 @@
 import { lex, Token } from './lexer.js';
 import { blockTypeOf, EXPORT_MODIFIER } from './blockTypes.js';
 import { computeHead, splitExecutorMark } from './executor.js';
+import { parseExportedVar, type VarDecl } from './vars.js';
+
+/** Why an indented EXPORT is refused — a block's or a variable's alike. */
+const EXPORT_TOP_LEVEL_ONLY = 'EXPORT is only allowed on a top-level block';
+
+/** The key of the block an `EXPORT VAR` line becomes. */
+export const EXPORTED_VAR_KEY = 'VAR';
+
+/** Whether a block is an exported variable — the one test of every reader. */
+export function isExportedVar(block: Block): block is Block & { variable: VarDecl } {
+  return block.key === EXPORTED_VAR_KEY && block.variable !== undefined;
+}
+
+/** An `EXPORT … VAR …` line — the lexer gives it the keyword EXPORT (a block's EXPORT opens a block). */
+export function exportedVar(t: Token): Extract<Token, { kind: 'keyword' }> | null {
+  return t.kind === 'keyword' && t.keyword === EXPORT_MODIFIER ? t : null;
+}
+
+/** An `EXPORT … VAR …` line's declaration, or what is wrong with it — the parser's and the lint's one check. */
+export function readExportedVar(t: Extract<Token, { kind: 'keyword' }>): VarDecl | { error: string } {
+  if (t.indent > 0) return { error: EXPORT_TOP_LEVEL_ONLY };
+  return parseExportedVar(t.rest) ?? { error: `\`EXPORT ${t.rest}\` is no declaration — write \`EXPORT VAR <name>\`` };
+}
 
 export interface Line {
   type: 'line';
@@ -64,6 +87,8 @@ export interface Block {
   executor?: number;
   /** A `COMPUTE <name>:` block — read as a PROCEDURE** whose body holds REQUIRE / RETURN AS / ENSURE. */
   computed?: boolean;
+  /** An exported variable's declaration — set on the block an `EXPORT VAR` line becomes. */
+  variable?: VarDecl;
 }
 
 export type Node = Block | Line;
@@ -181,7 +206,7 @@ export function parseBlocks(source: string): ParseResult {
   let i = 0;
   while (i < tokens.length) {
     const t = tokens[i];
-    if (asBlockOpener(t) !== null) break;
+    if (asBlockOpener(t) !== null || exportedVar(t)?.indent === 0) break;
     if (t.kind === 'blank' || t.kind === 'comment') {
       prologue.push(t);
       i++;
@@ -231,6 +256,18 @@ export function parseBlocks(source: string): ParseResult {
 
     if (t.kind === 'blank' || t.kind === 'comment') continue;
 
+    // `EXPORT VAR x` is a declaration a module exports: a top-level block with
+    // no body, named by its variable, so IMPORT resolves it like any export.
+    // Indented, it is no declaration — a template's literal text, or the lint's error.
+    const ev = exportedVar(t);
+    if (ev && ev.indent === 0) {
+      const decl = readExportedVar(ev);
+      if (ev.indent === 0) popUntilParentOf(0);
+      if ('error' in decl) errors.push({ line: ev.line, message: decl.error });
+      else blocks.push({ type: 'block', key: EXPORTED_VAR_KEY, name: decl.name, rest: ev.rest, children: [], startLine: ev.line, indent: 0, exported: true, variable: decl });
+      continue;
+    }
+
     const bo = asBlockOpener(t);
     if (bo !== null && 'indent' in t) {
       popUntilParentOf(t.indent);
@@ -247,7 +284,7 @@ export function parseBlocks(source: string): ParseResult {
           // still parse the inner block (private) so its children stay nested.
           errors.push({
             line: t.line,
-            message: 'EXPORT is only allowed on a top-level block',
+            message: EXPORT_TOP_LEVEL_ONLY,
           });
         }
         const resolved = resolveExportModifier(bo.rest);

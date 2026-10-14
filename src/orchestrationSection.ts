@@ -13,12 +13,12 @@ import {
   reportLintIssues,
   lintSource,
 } from './compiler/index.js';
-import { checkedHeadIssues } from './lint.js';
+import { checkedHeadIssues, lineOfName } from './lint.js';
 import { Config } from './config.js';
 import { AGENTS_MD } from './projectContext.js';
 import { apxCommand } from './apx/paths.js';
 import { resolveReads, constantOf } from './vars.js';
-import { parseVarsAp, varsFilesFor } from './varsAp.js';
+import { importedVariables, type ImportedVariable } from './exportedVars.js';
 import { varCommand } from '../adapters/md/phrases.js';
 import { BundleContext } from './dispatch/index.js';
 import { parseBlocks } from './parseBlocks.js';
@@ -121,8 +121,10 @@ interface TeamRaw {
   members: AgentInfo[];
   /** Routing body (WHEN/RUN) with FLOW definitions already stripped into the shared ctx. */
   routingRaw: string;
-  /** The team's `flows.ap` — where its flows, and their vars.ap, come from. */
+  /** The team's `flows.ap` — where its flows, and the variables they import, come from. */
   flowsAp: string;
+  /** The variables its flows.ap imports — the team's own. */
+  variables: ImportedVariable[];
 }
 
 /** A team's `flows.ap`, read and parsed exactly once. */
@@ -155,31 +157,16 @@ function readTeamFiles(teamsRoot: string): TeamFile[] {
 }
 
 /**
- * Collect every team's `flows.ap` into the SHARED orchestration context. Each
- * file's top-level FLOW blocks are extracted into `ctx.flows` (so they render
- * once, numbered, in the single shared Flows chapter — like procedures and
- * templates), and the remaining routing body (WHEN/RUN) is returned raw. It is
- * post-processed later, after the chapter has assigned each flow its `(id)`, so
- * `RUN <flow>` resolves to a numbered cross-reference instead of being inlined.
- *
- * Builds the role→agent RoleIndex from the already-parsed blocks of the same
- * files, so `BY <role>` resolves with one walk/read/parse per file.
+ * A team's `{{…}}` reads as AGENTS.md renders them — the variables its flows.ap
+ * imports, which its members compile with: a constant's read is its value, a
+ * variable's how to read it with a member's apx (a SESSION variable reads the
+ * same from every member). Any other read stays as written. Applied to the
+ * rendered text: a checked head's id is the condition as written.
  */
-/**
- * A team's `{{…}}` reads as AGENTS.md renders them — the same vars.ap files its
- * members compile with (the project's, the team's): a constant's read is its
- * value, a variable's how to read it with a member's apx (a SESSION variable
- * reads the same from every member). Any other read stays as written. Applied
- * to the rendered text: a checked head's id is the condition as written.
- */
-function teamReads(flowsAp: string, projectRoot: string, member: string | undefined, ctx: BundleContext): (text: string) => string {
-  const constants: Record<string, string> = {};
-  const variables = new Set<string>();
-  for (const f of varsFilesFor(flowsAp, projectRoot)) {
-    const parsed = parseVarsAp(ctx.sources.read(f.path), f.path);
-    Object.assign(constants, parsed.constants);
-    for (const v of parsed.variables) variables.add(v.name);
-  }
+function teamReads(team: TeamRaw): (text: string) => string {
+  const member = team.members[0]?.name;
+  const { constants, variables: declared } = importedVariables(team.variables, {});
+  const variables = new Set(declared.map(v => v.name));
   const V = FORMULAS.keywords.VAR;
   return text => resolveReads(text, r => {
     if (r.template) return undefined;
@@ -199,6 +186,19 @@ function renderFlowReads(chapters: string, ctx: BundleContext, readsOf: Map<stri
   }).join('');
 }
 
+/**
+ * Collect every team's `flows.ap` into the SHARED orchestration context. Each
+ * file's top-level FLOW blocks are extracted into `ctx.flows` (so they render
+ * once, numbered, in the single shared Flows chapter — like procedures and
+ * templates), and the remaining routing body (WHEN/RUN) is returned raw. It is
+ * post-processed later, after the chapter has assigned each flow its `(id)`, so
+ * `RUN <flow>` resolves to a numbered cross-reference instead of being inlined.
+ *
+ * Builds the role→agent RoleIndex from the already-parsed blocks of the same
+ * files, so `BY <role>` resolves with one walk/read/parse per file. The
+ * variables a team's flows.ap imports are that team's alone: each team's
+ * imports register in a list of its own.
+ */
 async function collectTeams(teamsRoot: string, ctx: BundleContext): Promise<TeamRaw[]> {
   const files = readTeamFiles(teamsRoot);
 
@@ -247,14 +247,19 @@ async function collectTeams(teamsRoot: string, ctx: BundleContext): Promise<Team
       }
     }
     await hoistLensInTemplates(teamDir, members, ctx);
-    out.push({
-      name: teamName,
-      about: readTeamPurpose(teamDir),
-      members,
-      routingRaw: await resolveInlineBlocks(stripped, ctx, flowsAp),
-      flowsAp,
-    });
+    ctx.variables = [];
+    const routingRaw = await resolveInlineBlocks(stripped, ctx, flowsAp);
+    // What flows.ap imports itself — imports never pass on. A team shares constants
+    // and SESSION variables: a private one would be each member's own.
+    const variables = ctx.variables.filter(v => v.importers.includes(flowsAp));
+    for (const v of variables) {
+      if (v.decl.form === 'variable' && v.decl.scope === 'private') {
+        ctx.lintErrors.push({ file: flowsAp, line: lineOfName(flowsAp, v.name, 'import'), message: `IMPORT ${v.name}: \`${v.name}\` is a private variable — each member would have its own; a team's flows.ap imports constants and SESSION variables` });
+      }
+    }
+    out.push({ name: teamName, about: readTeamPurpose(teamDir), members, routingRaw, flowsAp, variables });
   }
+  ctx.variables = [];
   return out;
 }
 
@@ -382,7 +387,7 @@ export async function buildOrchestrationContent(opts: OrchestrationSectionOption
   // with `BY <role>` resolved against the RoleIndex built from the same
   // single walk/read/parse of each team's flows.ap).
   const teamRaws = await collectTeams(teamsDir, ctx);
-  const readsOf = new Map(teamRaws.map(t => [t.flowsAp, teamReads(t.flowsAp, opts.cwd, t.members[0]?.name, ctx)]));
+  const readsOf = new Map(teamRaws.map(t => [t.flowsAp, teamReads(t)]));
 
   reportLintIssues(ctx, 'Orchestration section');
 

@@ -5,6 +5,7 @@ import { LintError, LintOptions } from '../lint.js';
 import type { Definition } from '../definition.js';
 import type { ExportedBlockBody } from '../services/text.js';
 import type { SourceRegistry } from '../sources.js';
+import type { ImportedVariable } from '../exportedVars.js';
 
 export interface ToolEntry {
   name: string;
@@ -40,6 +41,8 @@ export interface BundleContext {
   procedures: ProcedureEntry[];
   flows: FlowEntry[];
   stores: StoreEntry[];
+  /** The `EXPORT VAR`s the compilation's IMPORTs resolved (src/exportedVars.ts). */
+  variables: ImportedVariable[];
   lintErrors: LintError[];
   lintOptions?: LintOptions;
   /**

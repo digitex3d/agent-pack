@@ -4,7 +4,7 @@ import { BundleContext } from './types.js';
 import { numberSteps } from '../refactor.js';
 import { applyVars } from '../vars.js';
 import { headingLine } from '../formulas.js';
-import { loadImport, resolveImportPath, readAndLint, allLibraryRoots, LoadRequest } from './shared.js';
+import { loadImport, resolveImportPath, readAndLint, allLibraryRoots, alreadyRegistered, processImportsOf, LoadRequest } from './shared.js';
 import { ingestExportBlock, type IngestedFile, type BreadcrumbSegment } from '../ingest.js';
 import { exportedBlockBodies, nonExportedSource, type ExportedBlockBody } from '../services/text.js';
 
@@ -44,11 +44,6 @@ type Collected = {
   executor?: number;
 };
 
-/** Resolve the body's own IMPORT directives. Dynamic import breaks the cycle with imports.js. */
-async function processImportsOf(body: string, ctx: BundleContext): Promise<string> {
-  const { processImports } = await import('./imports.js');
-  return processImports(body, ctx);
-}
 
 export async function resolveFile(imp: LoadRequest, ctx: BundleContext): Promise<string> {
   return imp.exportBlockName
@@ -88,12 +83,12 @@ async function resolveExportBlock(imp: LoadRequest, ctx: BundleContext): Promise
  * per-block by `collectUnit`, so neither pass visits them twice). The cache makes
  * an N-export file imported M times read+parse+lint+side-effect exactly once.
  */
-async function exportBlocksOf(path: string, ctx: BundleContext): Promise<ExportedBlockBody[]> {
+export async function exportBlocksOf(path: string, ctx: BundleContext): Promise<ExportedBlockBody[]> {
   const cache = (ctx.parsedExports ??= new Map<string, ExportedBlockBody[]>());
   const cached = cache.get(path);
   if (cached) return cached;
   const raw = readAndLint(path, ctx);
-  await processImportsOf(nonExportedSource(raw), ctx);
+  await processImportsOf(nonExportedSource(raw), ctx, path);
   const blocks = exportedBlockBodies(raw);
   cache.set(path, blocks);
   return blocks;
@@ -121,21 +116,13 @@ async function collectUnit(
   if (unit.kind === 'playbook' || unit.kind === 'procedure') body = numberSteps(body);
   const when = extractWhen(body);
   if (Object.keys(props).length > 0) body = applyVars(body, props);
-  body = await processImportsOf(body, ctx);
+  body = await processImportsOf(body, ctx, unit.path);
 
   const mergedTags = mergeBreadcrumbTags(unit.breadcrumb, unit.tags);
   const collect = (kind: string, collection: Collected[]): string => {
-    const existing = collection.find(e => e.name === unit.name);
-    if (existing) {
-      // Same block re-collected (e.g. a redundant same-file IMPORT) is a no-op;
-      // a same name from a DIFFERENT file is a genuine collision.
-      if (existing.path === unit.path) return '';
-      ctx.lintErrors.push({
-        file: unit.path, line: 1,
-        message: `${kind} name "${unit.name}" collides with already-imported ${kind} at ${existing.path}`,
-      });
-      return '';
-    }
+    // Same block re-collected (e.g. a redundant same-file IMPORT) is a no-op;
+    // a same name from a DIFFERENT file is a genuine collision.
+    if (alreadyRegistered(collection, unit.name, unit.path, kind, 1, ctx)) return '';
     collection.push({
       kind, name: unit.name, about: unit.about, body: body.trimEnd(), path: unit.path,
       tags: mergedTags,

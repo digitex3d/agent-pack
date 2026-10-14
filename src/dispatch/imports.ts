@@ -4,14 +4,15 @@ import { lineOfName } from '../lint.js';
 import { readFileSync, existsSync, readdirSync } from 'fs';
 import { resolve as resolvePath, relative as relativeFrom } from 'path';
 import { BundleContext } from './types.js';
-import { resolveFile } from './file.js';
+import { resolveFile, exportBlocksOf } from './file.js';
 import { resolveRole } from './role.js';
 import { findInRoots, LoadRequest } from './shared.js';
 import { unwrapExportFile } from '../services/text.js';
 import { lex } from '../lexer.js';
 import { parseNamespace } from '../namespace.js';
-import { parseBlocks, Block } from '../parseBlocks.js';
+import { parseBlocks, isExportedVar, Block } from '../parseBlocks.js';
 import { KIND_DIRS } from '../ingest.js';
+import { importVariable } from '../exportedVars.js';
 
 /**
  * Bare-line module-style import directive:
@@ -216,6 +217,10 @@ export interface ResolvedImport {
   name: string;
   absolutePath: string;
   kind: string;
+  /** The EXPORT block the name resolved to — absent for a LEGACY FALLBACK file. */
+  exportUnit?: Block;
+  /** The module path it was imported FROM, as written. */
+  from: string;
 }
 
 export function resolveImports(
@@ -235,7 +240,7 @@ export function resolveImports(
       // Skip unresolved (null) and found-but-not-exported (NotExported): this
       // out-of-pipeline resolver surfaces only successfully located files.
       if (target !== null && !isNotExported(target)) {
-        out.push({ name, absolutePath: target.absolutePath, kind: target.kind });
+        out.push({ name, absolutePath: target.absolutePath, kind: target.kind, from: modulePath, ...(target.exportUnit ? { exportUnit: target.exportUnit } : {}) });
       }
     }
   }
@@ -315,6 +320,15 @@ export async function processImports(body: string, ctx: BundleContext, sourcePat
           ...at(name, t.line),
           message: `IMPORT ${name} FROM ${modulePath}: "${name}" exists in ${target.namespace} but is not exported`,
         });
+        continue;
+      }
+
+      // An exported variable has no body to collect: its module is read like
+      // any other's (linted, its own IMPORTs resolved, once), the variable
+      // recorded with the file that imports it — that file alone sees it.
+      if (target.exportUnit && isExportedVar(target.exportUnit)) {
+        await exportBlocksOf(target.absolutePath, ctx);
+        importVariable(target.exportUnit, target.absolutePath, modulePath, sourcePath ?? '<body>', ctx);
         continue;
       }
 
