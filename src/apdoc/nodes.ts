@@ -27,7 +27,7 @@ import {
 } from '../../adapters/md/toolkit.js';
 import {
   controlHead, executorHead, executorRounds, refName, runLine, unresolvedRun,
-  parallelEachHead, stepSignature, stepsHeader, storeScopeLine, varBlockHead,
+  parallelHead, stepSignature, stepsHeader, storeScopeLine, varBlockHead,
 } from '../../adapters/md/phrases.js';
 
 /** What a node answers as a line: its primitive and the text after it. */
@@ -514,7 +514,7 @@ export class ParallelNode extends NodeBase implements ApParallelNode {
   asMdLines(env: MdEnv): string[] {
     const each = this.each;
     return [
-      each ? parallelEachHead(each.item, env.substitute(`{{${refName(each.list)}}}`), each.max) : `${controlHead('PARALLEL')}:`,
+      parallelHead(each && { ...each, list: refName(each.list) }, t => env.substitute(t)),
       stepsHeader(),
       ...this.steps.flatMap((s, i) => (s as StepNode).asMdItem(env, i, false)),
     ];

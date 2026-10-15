@@ -331,6 +331,9 @@ await import('./judge.test.mjs');
 // --- IF/ELSE inside a flow STEP: lint, document lines, md, apx flow, Workflow script ---
 await import('./stepIf.test.mjs');
 
+// --- PARALLEL EACH: the head, its lint, the list's type, md, apx, Workflow script ---
+await import('./parallelEach.test.mjs');
+
 // --- force-level lines in PROCEDURE, STEP and STEP IF/ELSE bodies: lint, document, md, apx, Workflow script ---
 await import('./forceInBodies.test.mjs');
 

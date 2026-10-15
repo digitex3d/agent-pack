@@ -14,8 +14,9 @@
  * The request travels as the workflow's `args.request`; the script returns
  * every step's result, in order. Every statement ends with `;`: a line opening
  * with `[` must never continue the one before it. A flow the script cannot express — a step run
- * by a team, or anything but steps at its top level — compiles to null, and
- * its steps are carried out as written.
+ * by a team, a `PARALLEL EACH` (its list is a variable the script does not hold),
+ * or anything but steps at its top level — compiles to null, and its steps are
+ * carried out as written.
  */
 import type { ApBlock } from '../../src/apdoc/block.js';
 import type { ApDocument } from '../../src/apdoc/document.js';
@@ -41,7 +42,7 @@ export function compileWorkflow(flow: ApBlock, doc: ApDocument): string | null {
   const units: Unit[] = [];
   for (const node of flow.body) {
     if (node.type === 'step') units.push([node]);
-    else if (node.type === 'parallel') units.push(node.steps);
+    else if (node.type === 'parallel' && !node.each) units.push(node.steps);
     else return null;
   }
   const steps = units.flat();

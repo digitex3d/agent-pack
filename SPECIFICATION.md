@@ -282,7 +282,17 @@ These terms have precise meaning and are not interchangeable.
   with `BY` may have no memory in its harness — memory belongs to an
   agent, a role or a procedure. A directive is a rule of the step, never
   its action: a step needs at least one action (`DO`, `ASK`, `COMPUTE`,
-  D40) or `RUN`. (Amended in 1.2.)
+  D40) or `RUN`. `PARALLEL EACH <item> IN <list> MAX <n>` holds one
+  step and runs it once per element of a list, all at the same time;
+  in the step, `{{<item>}}` is the run's element. The list is a variable
+  (D32) typed with a template holding one `LIST` slot, its elements;
+  anything else fails the compilation. The bound is always written:
+  without `MAX`, or with one that is not a whole number of at least 1,
+  the compilation fails, and a list longer than it is an error that
+  stops the flow when it runs. A run that fails does not stop the
+  others; its report goes on with theirs. The language adds nothing to
+  clone an agent: a step `BY` the agent that split the work, with
+  `CONTEXT inherited`, is its clone. (Amended in 1.2.)
 
 - **D25 — context mode** — how much upstream context a step's executor
   receives: `isolated` (only its own intent), `summary` (a synthesized

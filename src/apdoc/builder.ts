@@ -49,7 +49,7 @@ import {
   TEAM_FLOWS_FILE,
 } from '../services/teamMetadata.js';
 import type { ApNode, ApRef, ApShape, ApSlotType, ApStepNode, ApIfNode, ApDocumentMeta, ApStoreProjection } from './types.js';
-import { parseVarLine, parseParallelHead, readsOf, splitBy, splitInto, takesInto, constantOf, type VarScope } from '../vars.js';
+import { parseVarLine, parallelEachOf, readsOf, splitBy, splitInto, takesInto, constantOf, type VarScope } from '../vars.js';
 import type { PlacedVariable } from '../exportedVars.js';
 import { introOf, fill, refSuffix, FORMULAS } from '../formulas.js';
 import { readWithHead, withPhrase, type WithProblem } from '../withUse.js';
@@ -281,8 +281,7 @@ export class DocumentBuilder implements BlockCx {
 
       if (kw === 'PARALLEL') {
         // `PARALLEL EACH <item> IN <list> MAX <n>`: a malformed head is the lint's to report.
-        const head = parseParallelHead(t.rest);
-        const each = head && !('error' in head) ? head : null;
+        const each = parallelEachOf(t.rest);
         const node = this.at(new ParallelNode(each ? { item: each.item, list: VarBlock.ref(each.list), max: each.max } : undefined), t);
         if (each) this.eachLists.push({ name: each.list, node, path: this.sourcePath });
         sink.push(node);

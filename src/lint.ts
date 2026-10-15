@@ -849,8 +849,9 @@ export function validateBlockContracts(
     } else if (t.keyword === 'PARALLEL' && contracts.PARALLEL) {
       // `PARALLEL EACH <item> IN <list> MAX <n>` holds its one step; a bare PARALLEL, its steps.
       const head = parseParallelHead(t.rest);
-      if (head && 'error' in head) errors.push({ file, line: t.line, message: head.error });
-      const key = head && !('error' in head) ? 'PARALLEL EACH' : 'PARALLEL';
+      const malformed = head && 'error' in head;
+      if (malformed) errors.push({ file, line: t.line, message: head.error });
+      const key = head && !malformed ? 'PARALLEL EACH' : 'PARALLEL';
       stack.push({ keyword: key, line: t.line, indent: t.indent, children: new Map(), contract: contracts[key] ?? contracts.PARALLEL });
     } else if (contracts[t.keyword]) {
       stack.push({ keyword: t.keyword, line: t.line, indent: t.indent, children: new Map(), contract: contracts[t.keyword] });

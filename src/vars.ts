@@ -168,6 +168,12 @@ export function parseParallelHead(rest: string): ParallelEach | { error: string 
   return error ? { error } : { item, list, max: Number(max) };
 }
 
+/** The head after `PARALLEL` when it is a well-formed EACH — else null (a malformed one is the lint's to report). */
+export function parallelEachOf(rest: string): ParallelEach | null {
+  const head = parseParallelHead(rest);
+  return head && !('error' in head) ? head : null;
+}
+
 const CONSTANT_RE = /^([^\s=]+)\s*=\s*(.*)$/;
 const SESSION_RE = /^([^\s:=]+)(?:\s+(!*AS!*)\s+([^\s:]+))?\s*(:)?$/;
 

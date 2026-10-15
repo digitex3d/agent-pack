@@ -211,6 +211,28 @@ FLOW complex-task:
 | `MUST`, `NEVER`, `SHOULD`, … | a [rule](#rules) of the step — `NEVER skip a finding`, not `DO never skip a finding`; never `MEM` |
 | `IF <condition>:` / `ELSE` | the `DO`, `RUN` and rule lines indented under it apply only when the condition holds (or, under `ELSE`, when it does not); `BY`, `CONTEXT` and `AS` stay unconditional |
 | `PARALLEL` | the steps indented under it run at the same time |
+| `PARALLEL EACH <item> IN <list> MAX <n>:` | the one step indented under it runs once per element of the list, all at the same time — `{{<item>}}` is the run's element |
+
+**`PARALLEL EACH` — one run per element of a list.** A step fills a list variable (`DO … INTO subtasks`); `PARALLEL EACH subtask IN subtasks MAX 5:` then runs the one step beneath it once per element, all at the same time. The list is a variable typed with a template that holds one `LIST` slot — in a team's `flows.ap`, an imported `SESSION VAR`. `MAX` is required: a list longer than it stops the flow with an error. A run that fails does not stop the others: its report goes on with theirs, to the step that comes next. To clone an agent over the parts of a task, the step is `BY` that agent with `CONTEXT inherited`:
+
+```
+FLOW divide-and-conquer:
+    STEP split the task:
+        BY developer
+        CONTEXT full
+        DO split the task into independent subtasks INTO subtasks
+    PARALLEL EACH subtask IN subtasks MAX 5:
+        STEP work the subtask:
+            BY developer
+            CONTEXT inherited
+            DO work only on {{subtask}}
+    STEP merge the results:
+        BY developer
+        CONTEXT full
+        DO merge every subtask report into one result
+```
+
+A flow with a `PARALLEL EACH` runs as written, never as a Workflow script: the script does not hold the list.
 
 A flow itself may put its `STEP`, `PARALLEL` and `RUN` lines under `IF <condition>:` and its `ELSE`, or repeat them under `UNTIL <condition>:`, and nest further `IF`/`ELSE`/`UNTIL` inside them. The condition is prose, judged by whoever runs the flow; an `UNTIL` takes no mandatory bound — write it in the condition when there is one.
 

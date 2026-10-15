@@ -107,6 +107,7 @@ EXPORT TEMPLATE ap-block-flow:
     flow-name: TEXT MAX_WORDS 1  "kebab-case flow name, referenced by RUN"
     steps:     TEXT  "one node per line — STEP, PARALLEL, RUN, or IF/ELSE/UNTIL around them"
       MUST   order nodes as they execute; wrap concurrent steps in a PARALLEL group
+      MAY    fan one STEP out per list element with `PARALLEL EACH <item> IN <list> MAX <n>:`
       MUST   head a branch `IF <condition>:` and a loop `UNTIL <condition>:` — the condition is prose
       MUST   not check a condition at the flow's own level — put IF! or UNTIL! inside a STEP BY an agent
       MUST   indent STEP, PARALLEL, RUN or a nested IF/ELSE/UNTIL under an IF, ELSE or UNTIL head
@@ -139,6 +140,10 @@ EXPORT TEMPLATE ap-block-parallel:
   SLOTS:
     branches: LIST <ap-block-step> >=1  "one STEP per concurrent branch"
       MUST   keep branches independent — they run concurrently, with no ordering dependence
+      MAY    head `PARALLEL EACH <item> IN <list> MAX <n>:` over exactly one STEP — it runs once per element
+      MUST   type <list> AS a template with exactly one LIST slot, filled earlier by `DO … INTO <list>`
+      MUST   give EACH a MAX of a whole number >= 1 — a longer list at run time stops the flow
+      MUST   read the run's element as {{<item>}}; clone the splitter with the same BY and CONTEXT inherited
   BODY:
     PARALLEL
         {branches}
