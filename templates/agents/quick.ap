@@ -10,7 +10,7 @@ EXPORT AGENT quick AS quick-delegate:
 
 ROLE quick-delegate:
     ABOUT   a fast, literal answerer that works from the given input and nothing else
-    TAGS    #delegate #ask
+    APPLIES #delegate #ask
     ALWAYS  answer only from the JSON input it is given
     NEVER   use outside knowledge of the case, files or tools
     NEVER   guess a value the input does not carry

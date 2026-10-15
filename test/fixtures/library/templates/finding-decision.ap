@@ -2,8 +2,7 @@
 
 EXPORT TEMPLATE finding-decision:
   ABOUT   one scan finding and the verdict the developer gave it
-  TAGS    #agent-pack #analysis #scaffold
-  APPLIES role:improvement-analyst — one row per finding presented in a domain
+  APPLIES #agent-pack #analysis #scaffold
 
   SLOTS:
     observation: TEXT MAX_WORDS 20            "the concrete thing the scan found"

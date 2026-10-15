@@ -2,7 +2,7 @@
 
 EXPORT TEMPLATE judge-do-line:
   ABOUT   judge rule for every DO line — the line tells the agent to do exactly one thing
-  TAGS    #judge #agent
+  APPLIES #judge #agent
 
   SLOTS:
     action: TEXT  "the action the agent performs — one imperative verb and what it applies to"

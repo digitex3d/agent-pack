@@ -2,7 +2,7 @@ IMPORT board-rules FROM @main.policies
 
 EXPORT TEMPLATE plan:
     ABOUT  the routing plan — text gantt
-    TAGS   #board
+    APPLIES #board
     SLOTS:
         request: TEXT MAX_WORDS 25  "one-line restatement"
     BODY:

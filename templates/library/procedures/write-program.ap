@@ -2,7 +2,7 @@
 
 EXPORT PROCEDURE write-program:
   ABOUT   write the program of a contract the first time `apx run` says there is none
-  TAGS    #program #compute
+  APPLIES #program #compute
   MUST    read the contract with `apx get <exe-id>` and the block it carries out before writing a line
   MUST    write the script and its tests yourself, in the same pass
   NEVER   hardcode a value that arrives as input — read it from the JSON on stdin

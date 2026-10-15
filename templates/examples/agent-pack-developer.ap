@@ -7,7 +7,7 @@ IMPORT  ap-rule, ap-workflow, ap-action, ap-statement, ap-vars-line            F
 EXPORT ROLE ap-author:
     ABOUT      an agent-pack author who writes correct .ap files by filling the right block scaffold
     EXPERTISE  agent-pack dsl-authoring
-    TAGS       #agent-pack #authoring
+    APPLIES    #agent-pack #authoring
 
     MUST    express rules and structure in DSL keywords — never prose when a keyword can carry the meaning
     ALWAYS  choose keywords from the closed sets only — never invent a keyword the lexer does not recognise
@@ -31,7 +31,7 @@ EXPORT ROLE ap-author:
       DO   write a POLICY with ALWAYS / NEVER lines only
 
     WHEN writing a TEMPLATE block — it cannot host a scaffold of itself, so author it by hand:
-      DO   open `TEMPLATE <name>:`, then an ABOUT line and optional TAGS
+      DO   open `TEMPLATE <name>:`, then an ABOUT line and optional APPLIES
       DO   under SLOTS: write one `field[?]: TYPE "desc"` per slot — a trailing ? marks it optional
       DO   type each slot: TEXT [MAX_WORDS n], NUMBER a..b or >=n, ENUM[a b], <template>, LIST <template> >=n
       DO   under BODY: write the literal layout with {slot} placeholders; under EXAMPLE: one filled instance

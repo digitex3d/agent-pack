@@ -46,11 +46,12 @@ One agent per file, anywhere under `agents/`.
 ```
 EXPORT SKILL pdf-report AS reporter:
     ABOUT    Turns a PDF into a short report
+    APPLIES  #reports
     MANDATE  read the PDF and report its tables
     MUST     quote every table as CSV
 ```
 
-A skill is an agent in every respect — the same lines, the same compilation, its own apx — that the adapter writes as a skill of the harness instead of a subagent (`.claude/skills/<name>/SKILL.md`, `.junie/skills/<name>/SKILL.md`). It lives in the project library, under `skills/`; `bundle all` builds every one. Its `ABOUT` is the description the harness picks it by. An agent uses it by importing it — see [Skills](#skills).
+A skill is an agent in every respect — the same lines, the same compilation, its own apx — that the adapter writes as a skill of the harness instead of a subagent (`.claude/skills/<name>/SKILL.md`, `.junie/skills/<name>/SKILL.md`). It lives in the project library, under `skills/`; `bundle all` builds every one. Its `ABOUT` is the description the harness picks it by. Its `APPLIES` line — its own, never its role's — gives its tags and, like a [policy](#policy)'s, where it holds. An agent uses it by importing it — see [Skills](#skills).
 
 ### ROLE
 
@@ -71,12 +72,21 @@ A role can extend another with `EXTENDS <parent>`: the parent's rules — looked
 ```
 EXPORT POLICY security:
     ABOUT   baseline security rules every agent in this project respects
-    TAGS    #baseline
+    APPLIES #baseline universal
     ALWAYS  validate every input crossing a trust boundary
     NEVER   commit credentials, .env files or private keys
 ```
 
-Invariants: only `ALWAYS` and `NEVER` rules. Every policy an agent imports applies, cumulatively.
+Invariants: only `ALWAYS` and `NEVER` rules. A policy holds where its scope says, and every policy that holds applies, cumulatively. The scope is on its `APPLIES` line:
+
+| `APPLIES` | the policy holds |
+|---|---|
+| `universal` | everywhere it is imported |
+| `team:<team>` | in the members of that team that import it |
+| `agent:<agent>` | in that agent, when it imports it |
+| tags only, or no `APPLIES` | only in the lines a [`WITH`](#with) names it for |
+
+A policy imported where it holds nowhere — no perimeter and no `WITH` naming it — fails the build. In the compiled definition every policy opens with the line that says where it applies.
 
 ### TEMPLATE
 
@@ -578,7 +588,7 @@ IMPORT plan, board FROM @main.vars
 
 `@main` is the project library; shared libraries have their own alias. See [Configuration](/reference/config#libraries).
 
-`TAGS #board #planning` groups blocks: in the compiled definition, blocks sharing tags sit under a common heading, and the apx filters by them (`ls tag=board`, or `tag=#board`).
+`APPLIES #board #planning` tags a block: in the compiled definition, blocks sharing tags sit under a common heading, the apx filters by them (`ls tag=board`, or `tag=#board`), and a [`WITH #policy:board:`](#with) (or `#skill:board`) selects every imported policy (or skill) that carries the tag. On a policy or a skill, `APPLIES` also takes its perimeter — `universal`, `team:<team>`, `agent:<agent>` (see [POLICY](#policy)); on any other block a perimeter fails the build.
 
 ## Skills
 
@@ -591,30 +601,36 @@ IMPORT pdf, frontend-design:frontend-design FROM @harness.skills
 
 `@harness.skills` is reserved: agent-pack neither compiles nor writes those skills — the adapter tells the agent how its harness loads them (Claude Code: the Skill tool). The name is written as the harness knows it.
 
-**Free by default.** An imported skill is listed in the agent's *Skills* chapter, with how to load it — run its apx, or ask the harness — and the agent uses it whenever it judges it fits the task. Its own body stays in its apx: it is loaded when it is needed, never with the agent.
+**A skill holds where its scope says — like a policy.** An imported skill is listed in the agent's *Skills* chapter with its scope line and how to load it — run its apx, or ask the harness. With `universal`, `team:<team>` or `agent:<agent>` on its `APPLIES` line it holds there; otherwise only in the lines a [`WITH`](#with) names it for. A skill imported where it holds nowhere fails the build; a skill of `@harness.skills` has no `APPLIES` line, so a `WITH` names it. Its own body stays in its apx: it is loaded when it is needed, never with the agent.
 
-**`WITH` says which work a skill is for**, like a decorator:
+### WITH
+
+**`WITH` says which work skills and policies are for.** It is a block: the lines nested below it are under the skills and policies it names — by name, or by a tag with its kind (`#policy:<tag>`, `#skill:<tag>`), comma separated.
 
 ```
-WITH pdf-report AS report
-IF the input is a text PDF:
-    MUST extract every table as CSV
+EXPORT PROCEDURE reasoning:
+    ABOUT  reason a decision out with the developer
+    WITH developer-reasons-first:
+        UNTIL the developer has a solution:
+            DO  ask one question that helps the developer reason it out
 
-!WITH pdf
-IF the input is a scanned image:
-    MUST run OCR with the project script
+    WITH pdf-report AS report:
+        IF the input is a text PDF:
+            MUST extract every table as CSV
 
-WITH frontend-design:frontend-design
-EXPORT PROCEDURE design-page:
-    MUST pick an aesthetic direction before writing code
+    !WITH pdf, #skill:scanning:
+        IF the input is a scanned image:
+            MUST run OCR with the project script
 ```
 
-| Line | |
+| Head | |
 |---|---|
-| `WITH <skill>` | use the skill for the block right below it |
-| `WITH <skill> AS <template>` | and shape its answer as the template |
-| `!WITH <skill>` | do not use it for that block |
+| `WITH <name>, #policy:<tag>, #skill:<tag>:` | the lines below are under these skills and policies |
+| `WITH <skill> AS <template>:` | and the skill's answer is shaped as the template |
+| `!WITH <name>, #policy:<tag>:` | the lines below are out of them |
 
-A `WITH` decorates the block on the very next line — an `IF`, a `WHEN`, a block with lines beneath, or another `WITH` (they stack); no blank line or comment between. First in a body, it is for the whole block; above an exported block — a procedure, an agent — it opens that block's body, so the skill travels with it: whoever imports the procedure gets the skill for that procedure, and only for it. The skill is imported in the file that writes the `WITH`. A `WITH` naming a skill no import brings fails the build; so does a `WITH` with nothing to decorate, and an `AS` on `!WITH`. A flow step takes no `WITH` — its `BY` agent uses the skills it imports.
+`#policy:<tag>` selects every imported policy whose `APPLIES` line carries `#<tag>`, `#skill:<tag>` every such skill; the compiler writes their names, each with its id, in place of the tag. A tag without its kind, and a name or a tag that selects nothing, fail the build. `AS` shapes the answer of one skill — named, never a policy or a tag — and never on `!WITH`.
 
-`!WITH` is an instruction to the agent: a skill the harness triggers on its own description may still be offered, the agent is told not to use it there.
+`WITH` stands in a body — an agent, a role, a procedure — around the lines it is for; first in a procedure's body, it covers the whole procedure, and whoever imports the procedure gets it with it. Its zone holds lines, never a block, and a flow step takes none — its `BY` agent uses what it imports. It reads the same in `PROJECT.ap`, whose `AGENTS.md` lists the skills it imports in its own *Skills* chapter.
+
+`!WITH` is an instruction to the agent: a skill the harness triggers on its own description may still be offered, the agent is told not to use it there; a policy that holds everywhere does not hold there.

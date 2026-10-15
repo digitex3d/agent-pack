@@ -2,7 +2,7 @@
 
 EXPORT TEMPLATE judge-do-condition:
   ABOUT   judge rule for every DO line — a condition is written as an IF line with the DO under it, never inside the DO
-  TAGS    #judge
+  APPLIES #judge
 
   SLOTS:
     action: TEXT  "the action the agent performs, always — a 'that'/'where' clause on its object does not gate it"

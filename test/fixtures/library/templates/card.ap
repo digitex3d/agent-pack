@@ -2,7 +2,7 @@
 
 EXPORT TEMPLATE card:
   ABOUT   the contract every board card satisfies — the shape plus the obligation on each field
-  TAGS    #board #planning
+  APPLIES #board #planning
 
   SLOTS:
     type:               ENUM[Feature Bug Chore Spike]  "card type"

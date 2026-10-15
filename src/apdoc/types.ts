@@ -57,13 +57,13 @@ export interface ApDirectiveNode {
   body?: ApNode[];
   /**
    * The template the directive's subject takes (`MEM <event>` + `AS <template>`,
-   * `WITH <skill> AS <template>`), or — with `into` — the type of the variable its result fills.
+   * `WITH <skill> AS <template>:`), or — with `into` — the type of the variable its result fills.
    */
   shape?: ApShape;
   /** `DO … INTO <name>`: the session variable the step's result is stored in. */
   into?: ApRef;
-  /** `WITH <skill>` / `!WITH <skill>`: the skill the line is about. */
-  skill?: ApRef;
+  /** `WITH …:` / `!WITH …:`: the skills and policies the lines nested below are under — a tag already expanded. */
+  uses?: ApRef[];
   /** `ASK … BY <agent>`: the agent or team the line is handed to; absent = the default delegate. */
   by?: string;
   /** An ASK / COMPUTE line's contract id (`exe-…`, `meta.executors`) — src/executor.ts. */
@@ -304,7 +304,8 @@ export interface ApBlockData {
   chars: number;
   about: string | null;
   tags: string[];
-  applies: string | null;
+  /** The perimeter tokens of its APPLIES line — absent when it has none. */
+  scopes?: string[];
   when: string;
   args: Record<string, unknown>;
   body: ApNode[];

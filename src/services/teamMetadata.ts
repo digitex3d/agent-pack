@@ -3,7 +3,8 @@
 import { readFileSync, readdirSync, existsSync, statSync } from 'fs';
 import { resolve, dirname, basename } from 'path';
 import { parseAgentSignature } from '../definitionArgs.js';
-import { exportedBlockBodies, nonExportedSource, nonExportedLines, extractAbout, extractPrimitive, ExportedBlockBody } from './text.js';
+import { exportedBlockBodies, nonExportedSource, nonExportedLines, extractAbout, extractPrimitive, extractPrimitives, ExportedBlockBody } from './text.js';
+import { parseApplies } from './tags.js';
 import { SourceRegistry, type SourceSpan } from '../sources.js';
 import { AGENT_KEYS } from '../blockTypes.js';
 import { apFilesUnder } from './fs.js';
@@ -44,6 +45,8 @@ export interface AgentInfo {
   role?: string;
   /** True when the block is a `SKILL` — an agent the adapter writes as a skill. */
   skill: boolean;
+  /** A skill's APPLIES line: its tags and its perimeter, read by whoever imports it (src/withUse.ts). */
+  applies: { tags: string[]; scopes: string[] };
 }
 
 /** A flat agent file, read once into its orchestration metadata and bundle source. */
@@ -143,6 +146,7 @@ export function readAgentFile(path: string, sources: SourceRegistry = new Source
     role: parseAgentSignature(agent.rest).role ?? undefined,
     lensIn: extractPrimitive(agent.body, 'LENS-IN') ?? undefined,
     skill: agent.key === 'SKILL',
+    applies: parseApplies(extractPrimitives(agent.body, 'APPLIES')),
   };
 
   // Every exported block that is neither the AGENT nor its ROLE is one the

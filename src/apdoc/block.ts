@@ -22,7 +22,8 @@ export interface ApBlockInit {
   namespace: string;
   about?: string | null;
   tags?: string[];
-  applies?: string | null;
+  /** The perimeter tokens of its APPLIES line — `universal`, `team:<team>`, `agent:<agent>`. */
+  scopes?: string[];
   when?: string;
 }
 
@@ -37,7 +38,7 @@ export abstract class ApBlock {
   chars = 0;
   about: string | null;
   tags: string[];
-  applies: string | null;
+  scopes: string[];
   when: string;
   body: ApNode[] = [];
   /**
@@ -72,7 +73,7 @@ export abstract class ApBlock {
     this.namespace = init.namespace;
     this.about = init.about ?? null;
     this.tags = init.tags ?? [];
-    this.applies = init.applies ?? null;
+    this.scopes = init.scopes ?? [];
     this.when = init.when ?? 'always';
   }
 
@@ -101,7 +102,7 @@ export abstract class ApBlock {
       chars: this.chars,
       about: this.about,
       tags: this.tags,
-      applies: this.applies,
+      ...(this.scopes.length ? { scopes: this.scopes } : {}),
       when: this.when,
       args: this.argsJson(),
       body: this.body,

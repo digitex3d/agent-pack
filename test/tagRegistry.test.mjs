@@ -23,7 +23,7 @@ import { useTagRegistry } from '../dist/src/services/tags.js';
 
   const snap = registry.snapshot();
   assert.equal(snap.errors.length, 1, 'one error recorded');
-  assert.ok(snap.errors[0].message.includes('no TAGS'), 'error message mentions "no TAGS"');
+  assert.ok(snap.errors[0].message.includes('module has no tag'), 'error message mentions "no tag"');
   assert.equal(snap.errors[0].file, 'foo.ap', 'error file is foo.ap');
   assert.equal(snap.errors[0].severity, 'error', 'severity is error');
   assert.deepEqual(snap.byTag, {}, 'byTag remains empty after failed registration');

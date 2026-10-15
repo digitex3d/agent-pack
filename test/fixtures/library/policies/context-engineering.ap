@@ -2,8 +2,7 @@
 
 EXPORT POLICY context-engineering:
   ABOUT  context-engineering rules for agent-pack multi-agent flows — what to pass between steps and how much
-  TAGS   #context-engineering #multi-agent #orchestration
-  APPLIES universal — every agent participating in a multi-agent context flow respects these
+  APPLIES #context-engineering #multi-agent #orchestration universal
 
   ALWAYS  chain context as typed contracts — feed a step's output into the next as its AS or LENS shape
   ALWAYS  pass the CONTEXT a step needs and no more — isolated by default, summary or full only when the step earns it

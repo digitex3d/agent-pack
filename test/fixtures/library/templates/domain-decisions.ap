@@ -3,8 +3,7 @@ IMPORT  finding-decision  FROM @main.templates
 
 EXPORT TEMPLATE domain-decisions:
   ABOUT   the outcome of analysing one domain — the domain plus every finding's verdict
-  TAGS    #agent-pack #analysis #scaffold #block
-  APPLIES role:improvement-analyst — emitted when a domain's analysis closes
+  APPLIES #agent-pack #analysis #scaffold #block
 
   SLOTS:
     domain:   TEXT MAX_WORDS 4            "the analysed domain name"

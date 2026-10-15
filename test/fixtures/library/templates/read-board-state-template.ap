@@ -2,7 +2,7 @@
 
 EXPORT TEMPLATE read-board-state-template:
   ABOUT   the resolved board context — the IDs plus the cards already present
-  TAGS    #board #planning
+  APPLIES #board #planning
 
   SLOTS:
     board-id:    TEXT  "resolved id of the project board"

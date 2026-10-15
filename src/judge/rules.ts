@@ -97,7 +97,7 @@ export function loadJudgeRules(config: Pick<Config, 'libraryRoot' | 'sharedLibra
       const unit = ingestExportBlock(block, file, roots, libraries);
       const template = TemplateBlock.fromBody({
         name: unit.name, namespace: entry.namespace, about: unit.about,
-        tags: unit.tags.map(t => t.replace(/^#/, '')), applies: null, when: 'always',
+        tags: unit.tags.map(t => t.replace(/^#/, '')), when: 'always',
       }, unit.body, cx);
       return ruleOf(template);
     });

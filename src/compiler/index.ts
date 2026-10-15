@@ -8,6 +8,7 @@ import { projectAgentFiles } from '../agentDiscovery.js';
 import { Config, BundleConfig, LintConfig, libraryRoots as libraryRootsOf, librariesAliasMap } from '../config.js';
 import { BundleContext, RoleEntry } from '../dispatch/index.js';
 import { processImports, resolveTargetWith, SKILL_IMPORT_HINT } from '../dispatch/imports.js';
+import { unknownWithMessage, scanWith, unappliedBlocks, unappliedMessage, withScopeLine, type WithProblem } from '../withUse.js';
 import { resolveBundleDefaults, resolveTeamShared } from '../bundleDefaults.js';
 import { resolveTeamMembership } from '../services/teamMembership.js';
 import { findAgentFiles, readAgentFile, standaloneDir, agentNameOf, teamRootForAgentFile, TEAM_FLOWS_FILE } from '../services/teamMetadata.js';
@@ -18,7 +19,7 @@ import { extractInlineDefinitions } from '../dispatch/inlineBlocks.js';
 import { renderTree } from '../bundlers/renderTree.js';
 import { renderEnumLegend } from '../enumPrimitives.js';
 import { partitionMetadata, mergeMetadata, protectVerbatim } from '../services/text.js';
-import { lex } from '../lexer.js';
+import { lex, opensBlock } from '../lexer.js';
 import { OwnsPrimitive, applyBodySubstitutions, stripHeaderKeyword, AGENT_METADATA_KEYWORDS } from '../primitives.js';
 import { resolveShapeRefs } from '../shapeCompiler.js';
 import { AdapterPlugin } from '../../adapters/types.js';
@@ -168,10 +169,35 @@ function unresolvedErrors(unresolved: { path: string; name: string; kind: string
   return unresolved.map(u => ({ file: u.path, line: lineOfName(u.path, u.name), message: unresolvedMessage(u.kind, u.name) }));
 }
 
+/** What does not hold in a WITH head (src/withUse.ts), as an error at the file — and the line, when known — it was written in. */
+function withProblemErrors(problems: (WithProblem & { path: string; line?: number | null })[]): LintError[] {
+  return problems.map(p => ({ file: p.path, line: p.line ?? lineOfName(p.path, p.name), message: p.message ?? unresolvedMessage(p.kind, p.name) }));
+}
+
+/**
+ * The policies and skills the compilation imports that hold nowhere — no
+ * perimeter on their APPLIES line and no positive WITH naming them: an error
+ * each, so a rule or a skill never sits silently unused (src/withUse.ts).
+ */
+function unappliedErrors(ctx: BundleContext, named: ReadonlySet<string>): LintError[] {
+  return unappliedBlocks([...ctx.policies, ...ctx.skills], named).map(b => ({ file: b.path, line: lineOfName(b.path, b.name), message: unappliedMessage(b) }));
+}
+
+/**
+ * The WITH checks of a standalone file, which has no document builder: every
+ * head of the file and of the blocks it brings in, read once (scanWith).
+ */
+function standaloneWithErrors(ctx: BundleContext, file: string, body: string): LintError[] {
+  const blocks = [ctx.roles, ctx.procedures, ctx.flows, ctx.policies, ctx.skills].flat();
+  const { named, problems } = scanWith([{ path: file, tokens: lex(body) }, ...blocks.map(d => ({ path: d.path, tokens: lex(d.body) }))], ctx);
+  return [...withProblemErrors(problems), ...unappliedErrors(ctx, named)];
+}
+
 /** What a name that resolves to no block of its kind is told. */
 function unresolvedMessage(kind: string, name: string): string {
   if (kind === 'agent') return `unknown agent \`${name}\` — BY names a member of this team`;
   if (kind === 'skill') return `unknown skill \`${name}\` — ${SKILL_IMPORT_HINT}`;
+  if (kind === 'with') return unknownWithMessage(name);
   return `unknown ${kind} \`${name}\` — define it, or IMPORT it FROM @<lib>.${kind}s`;
 }
 
@@ -445,9 +471,9 @@ async function emitTools(ctx: BundleContext): Promise<string> {
  * generic verbatim body, header keyword stripped when the kind declares one.
  */
 function renderShapeBody(s: DefinitionStrategy, e: Definition, ctx: BundleContext): string {
-  const rendered = s.renderBody?.(e, ctx);
-  if (rendered != null) return rendered;
-  return s.headerKeyword ? stripHeaderKeyword(e.body, s.headerKeyword, e.name) : e.body;
+  const body = s.renderBody?.(e, ctx) ?? (s.headerKeyword ? stripHeaderKeyword(e.body, s.headerKeyword, e.name) : e.body);
+  // A policy or a skill opens with the line that says where it applies (src/withUse.ts).
+  return withScopeLine(e.kind, e.scopes, body);
 }
 
 function buildChapterFromStrategy(s: DefinitionStrategy, ctx: BundleContext) {
@@ -488,17 +514,23 @@ interface StandaloneHeader {
  * Single-pass extraction for standalone sources: ABOUT, all WHEN triggers,
  * and a stripped body produced from the same token stream.
  *
- * TAGS / APPLIES are file-level metadata like ABOUT — consumed into the map so
- * they never leak into the rendered body.
+ * APPLIES is file-level metadata like ABOUT — consumed into the map so it
+ * never leaks into the rendered body.
  */
 function parseStandaloneHeader(raw: string): StandaloneHeader {
-  const HEADER_KEYWORDS = new Set(['ABOUT', 'WHEN', 'TAGS', 'APPLIES']);
+  const HEADER_KEYWORDS = new Set(['ABOUT', 'WHEN', 'APPLIES']);
   const metadata = new Map<string, string[]>();
   const out: string[] = [];
 
-  for (const t of lex(raw)) {
+  const tokens = lex(raw);
+  // A `WHEN <trigger>:` with lines nested below is the file's own trigger, never header metadata: it stays in the body.
+  const opensTrigger = (i: number): boolean => {
+    const below = tokens.slice(i + 1).find(n => n.kind !== 'blank' && n.kind !== 'comment');
+    return tokens[i].kind === 'keyword' && (tokens[i] as { keyword: string }).keyword === 'WHEN' && opensBlock(tokens[i]) && !!below && below.indent > tokens[i].indent;
+  };
+  for (const [i, t] of tokens.entries()) {
     if (t.kind === 'comment') continue;
-    if (t.kind === 'keyword' && t.indent === 0 && HEADER_KEYWORDS.has(t.keyword)) {
+    if (t.kind === 'keyword' && t.indent === 0 && HEADER_KEYWORDS.has(t.keyword) && !opensTrigger(i)) {
       if (t.rest) {
         const arr = metadata.get(t.keyword) ?? [];
         // WHEN accumulates; the others: first wins.
@@ -547,6 +579,7 @@ export async function bundleStandaloneToString(
   lintSource(absolute, ctx);
 
   let body = await resolveInlineBlocks(header.stripped, ctx, absolute);
+  ctx.lintErrors.push(...standaloneWithErrors(ctx, absolute, body));
   body = `${emitCollectedSections(ctx)}${tidyBlankLines(body)}\n`;
   noExecutableChecks(absolute, ctx);
 
@@ -675,6 +708,8 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     ({ file: e.path, line: e.line ?? lineOfName(e.path, e.name), message: e.message, ...(e.severity ? { severity: e.severity } : {}) });
   reportIssues([
     ...unresolvedErrors(builder.unresolved),
+    ...withProblemErrors(builder.withProblems),
+    ...unappliedErrors(ctx, builder.withNamed),
     ...storeErrors(structure, ctx, agentFilePath),
     ...builder.varErrors.map(located),
     ...builder.checkIssues.map(located),

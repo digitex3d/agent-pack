@@ -250,7 +250,7 @@ console.log('shapeCompiler back-compat tests passed.');
 // ---------------------------------------------------------------------------
 
 {
-  const file = '# problem-line\n\nABOUT   one SEO problem\nTAGS    #seo\n\n' + PROBLEM_LINE;
+  const file = '# problem-line\n\nABOUT   one SEO problem\nAPPLIES    #seo\n\n' + PROBLEM_LINE;
   const errors = lintFile('problem-line.template.ap', file).filter(e => e.severity !== 'warning');
   assert.deepEqual(errors, [], 'v3 template lints clean (regions are indented, skipped by topLevelOnly)');
 }

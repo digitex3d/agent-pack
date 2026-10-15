@@ -2,7 +2,7 @@
 
 EXPORT TEMPLATE judge-do-force:
   ABOUT   judge rule for every DO line — a force level is written with its primitive (MUST, NEVER…), never inside the DO
-  TAGS    #judge
+  APPLIES #judge
 
   SLOTS:
     action: TEXT  "the action the agent performs, as a plain imperative"

@@ -52,8 +52,8 @@
     {
       "name": "WITH",
       "levels": {
-        "-1": "Do not use the skill",
-        "0": "Use the skill"
+        "-1": "For the work below, do not use",
+        "0": "For the work below, use"
       }
     },
     {

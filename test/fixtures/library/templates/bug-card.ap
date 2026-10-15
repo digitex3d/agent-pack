@@ -2,7 +2,7 @@
 
 EXPORT TEMPLATE bug-card:
   ABOUT   the required fields of a bug report card
-  TAGS    #product #planning #bug
+  APPLIES #product #planning #bug
 
   SLOTS:
     title:              TEXT              "short bug title"

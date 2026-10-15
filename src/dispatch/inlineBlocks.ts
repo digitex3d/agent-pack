@@ -18,7 +18,7 @@
  * new kind costs zero lines here.
  */
 
-import { lex } from '../lexer.js';
+import { lex, opensBlock } from '../lexer.js';
 import { EXPORT_MODIFIER } from '../blockTypes.js';
 import { computeHead, splitExecutorMark } from '../executor.js';
 import { STRATEGIES, type DefinitionStrategy, type Definition } from '../definition.js';
@@ -92,7 +92,7 @@ function findInlineHeaders(rawBody: string): InlineHeader[] {
     // `COMPUTE <name>:` is a procedure a program carries out — src/executor.ts. Without
     // its colon, `COMPUTE …` is a line a program carries out, never a block.
     const compute = key !== null ? computeHead(key) : null;
-    if (compute && t.kind === 'keyword' && !t.rest.trimEnd().endsWith(':')) continue;
+    if (compute && t.kind === 'keyword' && !opensBlock(t)) continue;
     if (compute) ({ key, executor } = compute);
     const strat = STRATEGIES.find(s => s.headerKeyword === key);
     if (!strat) continue;
@@ -160,7 +160,7 @@ function collectInlineDefinition(
     });
     return false;
   }
-  // Same metadata seam as an imported unit: ABOUT/TAGS lifted, metadata lines
+  // Same metadata seam as an imported unit: ABOUT/APPLIES lifted, metadata lines
   // stripped from the body.
   const lifted = liftUnitMetadata(body);
   const def: Definition = {
@@ -170,6 +170,7 @@ function collectInlineDefinition(
     body: lifted.body,
     path: sourcePath,
     tags: lifted.tags,
+    scopes: lifted.scopes,
     breadcrumb: [],
     breadcrumbSegments: [],
     ...(executor ? { executor } : {}),

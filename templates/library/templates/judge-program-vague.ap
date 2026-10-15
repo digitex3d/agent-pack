@@ -2,7 +2,7 @@
 
 EXPORT TEMPLATE judge-program-vague:
   ABOUT   judge rule for every line a program carries out — it leaves the programmer nothing to guess
-  TAGS    #judge #program
+  APPLIES #judge #program
   SLOTS:
     line: TEXT  "a line of a calculation"
       NEVER  require the programmer to guess a detail to implement it

@@ -3,8 +3,7 @@ IMPORT  score-row FROM @main.templates
 
 EXPORT TEMPLATE readiness-verdict:
   ABOUT   OSS production-readiness verdict — scorecard on docs/onboarding/hygiene, utility score, gaps, SHIP/HOLD/BLOCK
-  TAGS    #readiness #evaluation #scoring #release #verdict #oss
-  APPLIES role:readiness-judge — applied when the judge aggregates the three audits into a go/no-go verdict
+  APPLIES #readiness #evaluation #scoring #release #verdict #oss
 
   SLOTS:
     target:          TEXT MAX_WORDS 25 "what is being evaluated for readiness (repo/release)"

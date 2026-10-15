@@ -23,7 +23,7 @@ import { parseBlocks, isExportedVar, Block } from './parseBlocks.js';
 import { buildNamespace } from './namespace.js';
 import { librariesAliasMap } from './config.js';
 import type { Config } from './config.js';
-import { parseTagsPayload, useTagRegistry } from './services/tags.js';
+import { parseApplies, useTagRegistry } from './services/tags.js';
 import type { LibraryIndexError } from './services/tags.js';
 
 // ---------------------------------------------------------------------------
@@ -38,8 +38,8 @@ export interface ExportEntry {
   source: string;
   about: string | null;
   tags: string[];
-  /** Raw text after the APPLIES keyword, verbatim. Null when absent. */
-  applies: string | null;
+  /** The perimeter tokens of the APPLIES line — `universal`, `team:<team>`, `agent:<agent>`. */
+  scopes: string[];
   /** WHEN payload verbatim, or `"always"` when absent. */
   when: string;
   sizeBytes: number;
@@ -104,7 +104,7 @@ function lastLineOf(block: Block): number {
 /**
  * Verbatim source of a single block — the opener line through its last
  * descendant. Feeding this slice (one EXPORT block) back through the metadata
- * extractors yields that block's scoped ABOUT / TAGS / WHEN / APPLIES.
+ * extractors yields that block's scoped ABOUT / APPLIES / WHEN.
  */
 function blockSource(lines: string[], block: Block): string {
   return lines.slice(block.startLine - 1, lastLineOf(block)).join('\n');
@@ -124,22 +124,19 @@ interface RawUnit {
   tags: string[];
   /**
    * True for an EXPORT-block unit, false for a legacy whole-file unit. EXPORT
-   * blocks are indexed unconditionally, so absent TAGS is not a drop. Legacy units keep the
-   * TAGS-required contract until they migrate.
+   * blocks are indexed unconditionally, so absent APPLIES is not a drop. Legacy units keep the
+   * APPLIES-required contract until they migrate.
    */
   isExport: boolean;
   entry: ExportEntry;
 }
 
-/** Extract scoped metadata (TAGS/WHEN/APPLIES) from a unit's source text. */
-function extractMetadata(source: string): { tags: string[]; when: string; applies: string | null } {
-  const tagTokens = extractPrimitives(source, 'TAGS');
+/** Extract scoped metadata (APPLIES/WHEN) from a unit's source text. */
+function extractMetadata(source: string): { tags: string[]; when: string; scopes: string[] } {
+  const { tags, scopes } = parseApplies(extractPrimitives(source, 'APPLIES'));
   const whenTokens = extractPrimitives(source, 'WHEN');
-  const appliesTokens = extractPrimitives(source, 'APPLIES');
-  const tags = tagTokens.length > 0 ? tagTokens.flatMap(t => parseTagsPayload(t)) : [];
   const when = whenTokens.length > 0 ? whenTokens[0] : 'always';
-  const applies = appliesTokens.length > 0 ? appliesTokens[0] : null;
-  return { tags, when, applies };
+  return { tags, when, scopes };
 }
 
 /**
@@ -160,8 +157,10 @@ function unitsForFile(
 
   if (exported.length === 0) {
     // Legacy file: one entry per file, metadata read at file-top (source line 1).
+    // Its tags and perimeter were read by the ingest, once; only its WHEN is the index's to read.
     const ingested = ingestRaw(raw, filePath, roots, libraries);
-    const { tags, when, applies } = extractMetadata(raw);
+    const { tags, scopes } = ingested;
+    const { when } = extractMetadata(raw);
     return [{
       key: exportKey(ingested.namespace, ingested.name),
       filePath,
@@ -174,7 +173,7 @@ function unitsForFile(
         source: `${filePath}:1`,
         about: ingested.about,
         tags,
-        applies,
+        scopes,
         when,
         sizeBytes: Buffer.byteLength(raw, 'utf-8'),
       },
@@ -186,7 +185,7 @@ function unitsForFile(
     const source = blockSource(lines, block);
     const name = block.name as string;
     const kind = blockKind(block, filePath);
-    const { tags, when, applies } = extractMetadata(source);
+    const { tags, when, scopes } = extractMetadata(source);
     return {
       key: exportKey(namespace, name),
       filePath,
@@ -199,7 +198,7 @@ function unitsForFile(
         source: `${filePath}:${block.startLine}`,
         about: extractAbout(source),
         tags,
-        applies,
+        scopes,
         when,
         sizeBytes: Buffer.byteLength(source, 'utf-8'),
       },
@@ -265,7 +264,7 @@ function scanUnits(config: Config): ScanResult {
       }
       // Everything else (tagged EXPORT block, any legacy unit) goes through the
       // registry. register() is transactional and drops the unit on failure:
-      // a similar-tag conflict for either, or absent TAGS for a legacy unit.
+      // a similar-tag conflict for either, or absent APPLIES for a legacy unit.
       if (!tags.register(unit.key, unit.filePath, unit.tags).ok) continue;
       accepted.push(unit);
     }

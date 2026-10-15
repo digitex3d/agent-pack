@@ -333,7 +333,7 @@ try {
     write(join(proj, 'agent-pack.config.mjs'), ['export default {', "  libraryRoot: 'library',", "  agentsDir: 'agents',", "  adapters: ['claude-code'],",
       "  judge: { adapter: { type: 'judge', name: 'fake', ask: (...a) => globalThis.__executedAsk(...a) } },", '};']);
     const rule = (name, tag, force = 'NEVER', layout = '{line}') => write(join(proj, 'library', 'templates', `${name}.ap`), [
-      `EXPORT TEMPLATE ${name}:`, '  ABOUT  test rule', `  TAGS   #judge ${tag}`, '  SLOTS:', '    line: TEXT  "a line"', `      ${force}  name a planet`, '  BODY:', `    ${layout}`,
+      `EXPORT TEMPLATE ${name}:`, '  ABOUT  test rule', `  APPLIES   #judge ${tag}`, '  SLOTS:', '    line: TEXT  "a line"', `      ${force}  name a planet`, '  BODY:', `    ${layout}`,
     ]);
     rule('t-executed', '#executed');
     rule('t-program', '#program');

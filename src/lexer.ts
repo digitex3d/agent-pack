@@ -35,7 +35,7 @@ const STATIC_KEYWORDS = [
   'PROCEDURE', 'TEMPLATE', 'EXTENDS', 'APPLIES',
   'IMPORT',
   'UNTIL', 'ABOUT', 'SCOPE',
-  'ELSE', 'WHEN', 'OWNS', 'TAGS',
+  'ELSE', 'WHEN', 'OWNS',
   'RUN', 'VAR', 'IF',
   ...ACTION_VERBS,
   // A variable's scope, right before VAR (`SESSION VAR plan`) — vars.ts parses it.
@@ -321,10 +321,14 @@ export function lex(source: string): Token[] {
 }
 
 /**
- * A decorator line: `WITH <skill>` / `!WITH <skill>`. A decorator is for the
- * block on the very next line — no blank line, no comment between — or, first
- * in a body, for the whole block. The one predicate every reader asks.
+ * A `WITH …:` / `!WITH …:` head — a block whose nested lines are under the
+ * skills and policies it names (src/withUse.ts). The one predicate every reader asks.
  */
-export function isDecorator(t: Token | undefined): boolean {
+export function isWithHead(t: Token | undefined): boolean {
   return t?.kind === 'keyword' && forceLevelBaseOf(t.keyword as string) === 'WITH';
+}
+
+/** A keyword line written as a block head — its rest ends with the block colon (`WHEN x:`, `WITH a:`). */
+export function opensBlock(t: Token | undefined): boolean {
+  return t?.kind === 'keyword' && t.rest.trimEnd().endsWith(':');
 }

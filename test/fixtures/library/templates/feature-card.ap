@@ -2,7 +2,7 @@
 
 EXPORT TEMPLATE feature-card:
   ABOUT   a feature card — a user story with acceptance criteria, priority and goal link
-  TAGS    #product #planning
+  APPLIES #product #planning
 
   SLOTS:
     story:    TEXT               "the feature as a user story — As a <role>, I want <action>, so that <benefit>"

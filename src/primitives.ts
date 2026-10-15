@@ -56,33 +56,17 @@ export const AboutPrimitive: PrimitiveStrategy = {
 };
 
 /**
- * `APPLIES <gate> [gloss]` — library-catalog metadata declaring the
- * applicability scope of a rule file (e.g. `universal`, `requires:typescript`,
- * `role:backend`, `domain-scoped`).
+ * `APPLIES #tag1 #tag2 … [universal | team:<team> | agent:<agent>]` — the
+ * block's tags, searchable in the catalog and selectable by a WITH
+ * (`#policy:<tag>`, `#skill:<tag>`), and the perimeter on which a policy or
+ * a skill holds with no WITH naming it. Read by `parseApplies`
+ * (src/services/tags.ts), the line's one reader.
  *
- * Gate token forms: `universal` | `requires:<cap>` | `role:<role>` |
- * `domain-scoped`.  An optional free-text gloss may follow the gate token.
- *
- * This is catalog metadata only — it must NOT appear in the rendered agent
- * body. `renderNeutral` returns '' and no adapter frontmatter is emitted.
- * Consumption belongs to the index generator (a later task).
+ * Metadata — never a line of the rendered agent body: `renderNeutral`
+ * returns '' and no adapter frontmatter is emitted.
  */
 export const AppliesPrimitive: PrimitiveStrategy = {
   keyword: 'APPLIES',
-  renderNeutral: () => '',
-  contributesFrontmatter: () => null,
-};
-
-/**
- * `TAGS #tag1 #tag2 …` — library-catalog metadata attaching searchable
- * tags to a rule file. Payload is space-separated `#tag` tokens.
- *
- * Catalog metadata only — must NOT appear in the rendered agent body.
- * `renderNeutral` returns '' and no adapter frontmatter is emitted.
- * Consumption belongs to the index generator (a later task).
- */
-export const TagsPrimitive: PrimitiveStrategy = {
-  keyword: 'TAGS',
   renderNeutral: () => '',
   contributesFrontmatter: () => null,
 };
@@ -458,7 +442,6 @@ export const AGENT_METADATA_KEYWORDS: Keyword[] = [
   AboutPrimitive.keyword as Keyword,      // ABOUT
   OwnsPrimitive.keyword as Keyword,       // OWNS  (rendered via injectNeutralIfUnclaimed, not partitionMetadata body)
   AppliesPrimitive.keyword as Keyword,    // APPLIES
-  TagsPrimitive.keyword as Keyword,       // TAGS
   // ROLE is NOT stripped here: it is the inline `ROLE <name>:` block opener,
   // extracted by inlineBlocks. Stripping it would orphan the block body.
   ExpertisePrimitive.keyword as Keyword,  // EXPERTISE  (lint-forbidden in agent.ap — lives in the bound role)

@@ -123,9 +123,10 @@ These terms have precise meaning and are not interchangeable.
   workflow, a procedure, a piece of expertise — that is an agent in
   every respect (D1), materialized as a skill of the runtime instead of
   a subagent. Skills are imported into agents, not duplicated; the same
-  skill can serve dozens of agents. An imported skill is the agent's to
-  use where it judges it fits; a `WITH` decorator binds it to the one
-  block it is for, `!WITH` keeps it out of one. A skill the runtime
+  skill can serve dozens of agents. Like a policy (D23), an imported
+  skill holds where its scope says: its `APPLIES` perimeter, or the
+  lines a `WITH` block names it for; `!WITH` keeps it out of them, and
+  a skill imported where it holds nowhere fails the compilation. A skill the runtime
   provides itself is imported by name from `@harness.skills`, never
   compiled. (Amended in 1.2: was *playbook*, a triggered workflow.)
 
@@ -261,8 +262,13 @@ These terms have precise meaning and are not interchangeable.
   ID is retained per the append-only rule (§4) and not reused.
 
 - **D23 — policy** — a set of invariants: `ALWAYS` and `NEVER` rules
-  that hold across every task. Every policy an agent imports applies,
-  cumulatively; none is weighed against convenience.
+  that hold wherever the policy's scope says. A policy holds everywhere
+  it is imported with `APPLIES universal`, in a team's members with
+  `team:<team>`, in one agent with `agent:<agent>`; otherwise only in
+  the lines a `WITH` block names it for (D2, D31), and `!WITH` takes
+  it out of them. A policy imported where it holds nowhere fails the
+  compilation. Every policy that holds applies, cumulatively; none is
+  weighed against convenience. (Amended in 1.2.)
 
 - **D24 — flow** — the ordered steps a team follows for one kind of
   work. Each `STEP` names who carries it out (`BY`, an agent or a team),
@@ -310,9 +316,13 @@ These terms have precise meaning and are not interchangeable.
   shipped with the compiler). A reference resolves to exactly one block
   or the compilation fails.
 
-- **D31 — tags** — `TAGS #a #b`: the labels that group blocks — under a
+- **D31 — tags** — `APPLIES #a #b`: the labels that group blocks — under a
   common heading in the compiled definition, under a filter in the
-  executable — and link blocks that share them.
+  executable — and link blocks that share them; a `WITH #a` block selects
+  the imported policies that carry one, `WITH #skill:a` the skills (D23).
+  On a policy or a skill the line also takes its perimeter: `universal`,
+  `team:<team>`, `agent:<agent>`. (Amended in 1.2: was `TAGS`; the catalog-only
+  `APPLIES` gate is withdrawn.)
 
 - **D32 — variable** — a named value, read as `{{name}}`. A variable
   is exported like any other block (D30): one top-level line of a

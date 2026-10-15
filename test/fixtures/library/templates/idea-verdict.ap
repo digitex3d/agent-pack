@@ -3,8 +3,7 @@ IMPORT  score-row FROM @main.templates
 
 EXPORT TEMPLATE idea-verdict:
   ABOUT   severe single-idea verdict — scorecard, utility score, overengineering check, REJECT/RESHAPE/REFINE/ADOPT
-  TAGS    #concept-shaper #evaluation #scoring #overengineering #verdict #upstream-of-pm
-  APPLIES role:concept-shaper — applied when the idea-evaluation advisor returns a verdict on one atomic idea
+  APPLIES #concept-shaper #evaluation #scoring #overengineering #verdict #upstream-of-pm
 
   SLOTS:
     idea:           TEXT MAX_WORDS 25 "one-line restatement of the single atomic idea under evaluation"

@@ -2,7 +2,7 @@
 
 EXPORT TEMPLATE ap-statement:
   ABOUT   one statement of an action body — an allowed keyword plus its text
-  TAGS    #agent-pack #authoring #scaffold #rule
+  APPLIES #agent-pack #authoring #scaffold #rule
 
   SLOTS:
     key:  ENUM[DO ASK COMPUTE RUN IF ELSE UNTIL IF! IF!! UNTIL! UNTIL!! IF* IF** UNTIL* UNTIL** IN VAR]  "the keyword"
@@ -23,7 +23,7 @@ EXPORT TEMPLATE ap-statement:
 
 EXPORT TEMPLATE ap-action:
   ABOUT   an imperative action body — the ordered statements a procedure or workflow runs
-  TAGS    #agent-pack #authoring #scaffold #rule
+  APPLIES #agent-pack #authoring #scaffold #rule
 
   SLOTS:
     steps: LIST <ap-statement> >=1  "one statement per line, in execution order"
@@ -39,7 +39,7 @@ EXPORT TEMPLATE ap-action:
 
 EXPORT TEMPLATE ap-rule:
   ABOUT   scaffold for one force-level directive line — the unit a policy's or role's rules are built from
-  TAGS    #agent-pack #authoring #scaffold #rule
+  APPLIES #agent-pack #authoring #scaffold #rule
 
   SLOTS:
     force: ENUM[MUST ALWAYS NEVER SHOULD MAY MEM]  "force-level keyword — how binding it is (MEM: remember)"
@@ -52,7 +52,7 @@ EXPORT TEMPLATE ap-rule:
 
 EXPORT TEMPLATE ap-workflow:
   ABOUT   scaffold for one WHEN-triggered workflow block — a conditional behaviour a role or agent runs
-  TAGS    #agent-pack #authoring #scaffold #rule
+  APPLIES #agent-pack #authoring #scaffold #rule
 
   SLOTS:
     trigger: TEXT MAX_WORDS 15  "the situation that activates the block (WHEN); the header ends with a colon"
@@ -68,7 +68,7 @@ EXPORT TEMPLATE ap-workflow:
 
 EXPORT TEMPLATE ap-block-step:
   ABOUT   scaffold for a STEP — a single executable node inside a FLOW or a PARALLEL group
-  TAGS    #agent-pack #authoring #scaffold #block
+  APPLIES #agent-pack #authoring #scaffold #block
 
   SLOTS:
     label:    TEXT MAX_WORDS 8  "imperative step label; the header ends with a colon"
@@ -100,7 +100,7 @@ EXPORT TEMPLATE ap-block-step:
 
 EXPORT TEMPLATE ap-block-flow:
   ABOUT   scaffold for a FLOW — ordered STEP, PARALLEL and RUN nodes, IF/ELSE/UNTIL around them; referenced by RUN
-  TAGS    #agent-pack #authoring #scaffold #block
+  APPLIES #agent-pack #authoring #scaffold #block
 
   SLOTS:
     flow-name: TEXT MAX_WORDS 1  "kebab-case flow name, referenced by RUN"
@@ -133,7 +133,7 @@ EXPORT TEMPLATE ap-block-flow:
 
 EXPORT TEMPLATE ap-block-parallel:
   ABOUT   scaffold for a PARALLEL group — sibling STEPs that run concurrently inside a FLOW
-  TAGS    #agent-pack #authoring #scaffold #block
+  APPLIES #agent-pack #authoring #scaffold #block
 
   SLOTS:
     branches: LIST <ap-block-step> >=1  "one STEP per concurrent branch"
@@ -152,7 +152,7 @@ EXPORT TEMPLATE ap-block-parallel:
 
 EXPORT TEMPLATE ap-block-agent:
   ABOUT   scaffold for an agent-pack AGENT block — fill the slots to emit a valid `AGENT … AS …:` definition
-  TAGS    #agent-pack #authoring #scaffold #block
+  APPLIES #agent-pack #authoring #scaffold #block
 
   SLOTS:
     importable?: ENUM[EXPORT]  "prefix EXPORT to make the agent importable cross-file; omit for a local agent"
@@ -179,7 +179,7 @@ EXPORT TEMPLATE ap-block-agent:
 
 EXPORT TEMPLATE ap-block-role:
   ABOUT   scaffold for a ROLE — the craft an agent binds via AS; identity lives here, never in the agent
-  TAGS    #agent-pack #authoring #scaffold #block
+  APPLIES #agent-pack #authoring #scaffold #block
 
   SLOTS:
     importable?: ENUM[EXPORT]  "prefix EXPORT to import the role cross-file; omit for an inline role"
@@ -187,7 +187,7 @@ EXPORT TEMPLATE ap-block-role:
     about:       TEXT MAX_WORDS 25  "self-description of the craft — the practitioner"
       MUST   describe the craft itself — never restate the binding agent's wiring or mandate
     expertise?:  TEXT MAX_WORDS 8  "space-separated capability domains (EXPERTISE); omit if none"
-    tags?:       TEXT MAX_WORDS 6  "space-separated #tags (TAGS); omit if none"
+    tags?:       TEXT MAX_WORDS 6  "space-separated #tags (APPLIES); omit if none"
     rules:       LIST <ap-rule> >=1  "the role's ALWAYS / NEVER / MUST directives, one per line"
       MUST   keep all identity here — rules and EXPERTISE live in the role, never in the agent
     workflows?:  LIST <ap-workflow>  "optional WHEN-triggered behaviour blocks the role runs"
@@ -195,65 +195,62 @@ EXPORT TEMPLATE ap-block-role:
     {importable} ROLE {role-name}:
         ABOUT      {about}
         EXPERTISE  {expertise}
-        TAGS       {tags}
+        APPLIES    {tags}
         {rules}
         {workflows}
   EXAMPLE:
     EXPORT ROLE software-architect:
         ABOUT      keeps the system legible as a small set of consistent PlantUML diagrams
         EXPERTISE  plantuml system-design domain-modeling
-        TAGS       #architecture #plantuml
+        APPLIES    #architecture #plantuml
         ALWAYS  model the system as nodes and labelled edges, never prose
         NEVER   leave a dependency edge without a protocol and an intent
 
 EXPORT TEMPLATE ap-block-policy:
   ABOUT   scaffold for a POLICY — ABOUT plus ALWAYS/NEVER assertions, no control flow and no triggers
-  TAGS    #agent-pack #authoring #scaffold #block
+  APPLIES #agent-pack #authoring #scaffold #block
 
   SLOTS:
     importable?: ENUM[EXPORT]  "prefix EXPORT to import the policy cross-file; omit for local"
     policy-name: TEXT MAX_WORDS 1  "kebab-case policy name"
     about:       TEXT MAX_WORDS 15  "one-line description of what the policy governs"
-    tags?:       TEXT MAX_WORDS 6  "space-separated #tags (TAGS); omit if none"
-    applies?:    TEXT MAX_WORDS 12  "gate — universal | requires:<cap> | role:<role> | domain-scoped; omit if none"
+    applies?:    TEXT MAX_WORDS 8  "space-separated #tags, plus universal | team:<team> | agent:<agent> where it holds with no WITH; omit if none"
     rules:       LIST <ap-rule> >=1  "one ALWAYS / NEVER directive per line"
       MUST   use only ALWAYS / NEVER force — a policy admits no control flow and no triggers
   BODY:
     {importable} POLICY {policy-name}:
         ABOUT    {about}
-        TAGS     {tags}
         APPLIES  {applies}
         {rules}
   EXAMPLE:
     EXPORT POLICY security:
         ABOUT    baseline security rules every agent respects
-        TAGS     #security #baseline
-        APPLIES  universal — every agent respects the security baseline
+        APPLIES  #security #baseline universal
         ALWAYS  validate every input crossing a trust boundary
         NEVER   commit credentials, .env files, or private keys
 
 EXPORT TEMPLATE ap-block-procedure:
   ABOUT   scaffold for a PROCEDURE — an ordered DO/RUN routine with optional IF/ELSE/UNTIL and an output shape
-  TAGS    #agent-pack #authoring #scaffold #block
+  APPLIES #agent-pack #authoring #scaffold #block
 
   SLOTS:
     importable?:    ENUM[EXPORT]  "prefix EXPORT to import the procedure cross-file; omit for local"
     procedure-name: TEXT MAX_WORDS 1  "kebab-case procedure name, referenced by RUN"
       MAY    mark the head PROCEDURE* for a delegate or PROCEDURE** for a program — its lines inherit the mark
     about:          TEXT MAX_WORDS 15  "one-line description of what the procedure does"
-    tags?:          TEXT MAX_WORDS 6  "space-separated #tags (TAGS); omit if none"
+    tags?:          TEXT MAX_WORDS 6  "space-separated #tags (APPLIES); omit if none"
     body:           <ap-action>  "the steps the procedure runs"
     shape?:         TEXT MAX_WORDS 1  "output template (AS); declare only when downstream steps reference the result"
   BODY:
     {importable} PROCEDURE {procedure-name}:
         ABOUT  {about}
-        TAGS   {tags}
+        APPLIES {tags}
         {body}
         AS     {shape}
   EXAMPLE:
     EXPORT PROCEDURE create-bug-card:
         ABOUT  open a bug report card shaped as a bug-card
-        TAGS   #product #planning #bug
+        APPLIES #product #planning #bug
         DO     create the card in the Backlog list
         IF     the bug has no reproduction steps
           DO   move the card to Needs Clarification
@@ -261,7 +258,7 @@ EXPORT TEMPLATE ap-block-procedure:
 
 EXPORT TEMPLATE ap-vars-line:
   ABOUT   one EXPORT VAR line of a library module — a constant, a SESSION hand-off or a private variable
-  TAGS    #agent-pack #authoring #scaffold #rule
+  APPLIES #agent-pack #authoring #scaffold #rule
 
   SLOTS:
     scope?: ENUM[SESSION]  "SESSION for a variable the session's importing agents share; omit otherwise"

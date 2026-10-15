@@ -5,14 +5,13 @@ import { resolve, basename, dirname } from 'path';
 import { BundleContext, RoleEntry } from './types.js';
 import { lintFile } from '../lint.js';
 import { checkAndRegister, findInRoots, allLibraryRoots, processImportsOf, LoadRequest } from './shared.js';
-import { parseTagsPayload } from '../services/tags.js';
-import { extractPrimitive, unwrapExportFile, liftRoleIdentity } from '../services/text.js';
+import { parseApplies } from '../services/tags.js';
+import { extractPrimitives, stripPrimitives, unwrapExportFile, liftRoleIdentity } from '../services/text.js';
 import { deslugifyRole } from '../services/role.js';
 import { ingestRaw, unitNameFromPath } from '../ingest.js';
 
 const EXTENDS_RE = /^EXTENDS\s+(.+)$/m;
 const ABOUT_RE = /^ABOUT\s+(.+)$/m;
-const TAGS_RE = /^TAGS\s+(.+)$/m;
 const H1_RE = /^#\s+(.+)$/m;
 
 function extractRoleName(body: string, filePath: string): string {
@@ -32,11 +31,10 @@ function extractExtends(body: string): string | null {
 }
 
 function stripMetadata(body: string): string {
-  return body
+  return stripPrimitives(body, 'APPLIES')
     .replace(H1_RE, '')
     .replace(ABOUT_RE, '')
     .replace(EXTENDS_RE, '')
-    .replace(TAGS_RE, '')
     .replace(/^\n+/, '')
     .replace(/\n{3,}/g, '\n\n')
     .trimEnd();
@@ -68,12 +66,12 @@ function resolveRoleFile(
   ctx.lintErrors.push(...lintFile(absPath, raw, ctx.lintOptions));
   // TRANSITIONAL: route the column-0 metadata regexes through the shared EXPORT
   // seam (services/text.ts). unwrapExportFile lifts an `EXPORT ROLE <name>:`
-  // block's children back to indent 0 so ABOUT/TAGS/EXTENDS/H1 land where the
+  // block's children back to indent 0 so ABOUT/APPLIES/EXTENDS/H1 land where the
   // existing regexes read them; a legacy file (no EXPORT block) is returned
   // verbatim, so behaviour is byte-identical. Lint keeps the original `raw`
   // (it has its own block-scoped EXPORT handling).
   const unwrapped = unwrapExportFile(raw);
-  const ownTags = parseTagsPayload(extractPrimitive(unwrapped, 'TAGS') ?? '');
+  const ownTags = parseApplies(extractPrimitives(unwrapped, 'APPLIES')).tags;
   const merged = mergeParent(extractExtends(unwrapped), stripMetadata(unwrapped), absPath, ctx, seen);
   return {
     name: extractRoleName(unwrapped, absPath),
@@ -152,6 +150,7 @@ export async function resolveRole(imp: LoadRequest, ctx: BundleContext): Promise
     body: identity.rules,
     path: imp.path,
     tags: mergedTags,
+    scopes: [],
     breadcrumb: ingested.breadcrumb,
     breadcrumbSegments: ingested.breadcrumbSegments,
     role: deslugifyRole(resolved.name),

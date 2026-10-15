@@ -17,7 +17,7 @@ function extractWhen(body: string): string | null {
 
 /**
  * Merge tags auto-derived from the breadcrumb chain with tags explicitly
- * declared via the TAGS keyword. Duplicates are collapsed; breadcrumb slugs
+ * declared via the APPLIES keyword. Duplicates are collapsed; breadcrumb slugs
  * are converted to `#slug` tags (the same convention used by the wider tag
  * system).
  */
@@ -39,6 +39,7 @@ type Collected = {
   body: string;
   path: string;
   tags: string[];
+  scopes: string[];
   breadcrumb: string[];
   breadcrumbSegments: BreadcrumbSegment[];
   executor?: number;
@@ -126,6 +127,7 @@ async function collectUnit(
     collection.push({
       kind, name: unit.name, about: unit.about, body: body.trimEnd(), path: unit.path,
       tags: mergedTags,
+      scopes: unit.scopes,
       breadcrumb: unit.breadcrumb,
       breadcrumbSegments: unit.breadcrumbSegments,
       ...(unit.executor ? { executor: unit.executor } : {}),

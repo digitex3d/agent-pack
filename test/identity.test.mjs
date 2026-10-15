@@ -207,10 +207,10 @@ console.log('identity cross-kind lint tests passed.');
     assert.ok(errs.some(e => /EXPERTISE is not allowed inside an AGENT block/.test(e.message)), 'EXPERTISE rejected in AGENT block');
   }
 
-  // HARD error: TAGS inside an AGENT block.
+  // HARD error: APPLIES inside an AGENT block.
   {
-    const errs = lintAgentBlocks('team.ap', 'AGENT impl AS simplifier:\n  MANDATE x\n  TAGS #foo\n');
-    assert.ok(errs.some(e => /TAGS is not allowed inside an AGENT block/.test(e.message)), 'TAGS rejected in AGENT block');
+    const errs = lintAgentBlocks('team.ap', 'AGENT impl AS simplifier:\n  MANDATE x\n  APPLIES #foo\n');
+    assert.ok(errs.some(e => /APPLIES is not allowed inside an AGENT block/.test(e.message)), 'APPLIES rejected in AGENT block');
   }
 
   // Missing AS header → error.

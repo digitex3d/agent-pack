@@ -17,7 +17,7 @@ function writeMod(dir, name, content) {
 }
 
 // ---------------------------------------------------------------------------
-// Case 1: module with no TAGS → error "module has no TAGS", not indexed
+// Case 1: module with no APPLIES → error "module has no tag", not indexed
 // ---------------------------------------------------------------------------
 {
   const tmp = mkdtempSync(join(tmpdir(), 'ap-lint-'));
@@ -26,7 +26,7 @@ function writeMod(dir, name, content) {
 
     const index = buildMetadataIndex(makeConfig(tmp));
     assert.equal(index.errors.length, 1, 'one error for untagged module');
-    assert.ok(index.errors[0].message.includes('module has no TAGS'), 'error message mentions "no TAGS"');
+    assert.ok(index.errors[0].message.includes('module has no tag'), 'error message mentions "no tag"');
     assert.equal(index.errors[0].severity, 'error');
     assert.equal(Object.keys(index.exports).length, 0, 'untagged module is not indexed');
   } finally {
@@ -41,8 +41,8 @@ function writeMod(dir, name, content) {
   const tmp = mkdtempSync(join(tmpdir(), 'ap-lint-'));
   try {
     // Use names so alphabetical sort puts a_ before b_
-    writeMod(tmp, 'a_mod.policy.ap', '# a\nABOUT a\nTAGS #vue\nALWAYS do a\n');
-    writeMod(tmp, 'b_mod.policy.ap', '# b\nABOUT b\nTAGS #vue3\nALWAYS do b\n');
+    writeMod(tmp, 'a_mod.policy.ap', '# a\nABOUT a\nAPPLIES #vue\nALWAYS do a\n');
+    writeMod(tmp, 'b_mod.policy.ap', '# b\nABOUT b\nAPPLIES #vue3\nALWAYS do b\n');
 
     const index = buildMetadataIndex(makeConfig(tmp));
     assert.equal(index.errors.length, 1, 'one error for similar tag');
@@ -64,8 +64,8 @@ function writeMod(dir, name, content) {
 {
   const tmp = mkdtempSync(join(tmpdir(), 'ap-lint-'));
   try {
-    writeMod(tmp, 'a_mod.policy.ap', '# a\nABOUT a\nTAGS #vue\nALWAYS do a\n');
-    writeMod(tmp, 'b_mod.policy.ap', '# b\nABOUT b\nTAGS #vue\nALWAYS do b\n');
+    writeMod(tmp, 'a_mod.policy.ap', '# a\nABOUT a\nAPPLIES #vue\nALWAYS do a\n');
+    writeMod(tmp, 'b_mod.policy.ap', '# b\nABOUT b\nAPPLIES #vue\nALWAYS do b\n');
 
     const index = buildMetadataIndex(makeConfig(tmp));
     assert.equal(index.errors.length, 0, 'no errors when both modules use the same tag');
@@ -82,8 +82,8 @@ function writeMod(dir, name, content) {
 {
   const tmp = mkdtempSync(join(tmpdir(), 'ap-lint-'));
   try {
-    writeMod(tmp, 'a_mod.policy.ap', '# a\nABOUT a\nTAGS #typescript\nALWAYS do a\n');
-    writeMod(tmp, 'b_mod.policy.ap', '# b\nABOUT b\nTAGS #typscript\nALWAYS do b\n');
+    writeMod(tmp, 'a_mod.policy.ap', '# a\nABOUT a\nAPPLIES #typescript\nALWAYS do a\n');
+    writeMod(tmp, 'b_mod.policy.ap', '# b\nABOUT b\nAPPLIES #typscript\nALWAYS do b\n');
 
     const index = buildMetadataIndex(makeConfig(tmp));
     assert.equal(index.errors.length, 1, 'one error for typo tag');
@@ -100,7 +100,7 @@ function writeMod(dir, name, content) {
 {
   const tmp = mkdtempSync(join(tmpdir(), 'ap-lint-'));
   try {
-    writeMod(tmp, 'a_mod.policy.ap', '# a\nABOUT a\nTAGS #laravel #php #backend\nALWAYS do a\n');
+    writeMod(tmp, 'a_mod.policy.ap', '# a\nABOUT a\nAPPLIES #laravel #php #backend\nALWAYS do a\n');
 
     const index = buildMetadataIndex(makeConfig(tmp));
     assert.equal(index.errors.length, 0, 'no errors for 3 unique tags');
@@ -122,8 +122,8 @@ function writeMod(dir, name, content) {
   const tmp = mkdtempSync(join(tmpdir(), 'ap-lint-'));
   try {
     // alpha sort: a_vue.policy.ap < b_vue3.policy.ap → vue wins
-    writeMod(tmp, 'a_vue.policy.ap', '# av\nABOUT av\nTAGS #vue\nALWAYS do a\n');
-    writeMod(tmp, 'b_vue3.policy.ap', '# bv\nABOUT bv\nTAGS #vue3\nALWAYS do b\n');
+    writeMod(tmp, 'a_vue.policy.ap', '# av\nABOUT av\nAPPLIES #vue\nALWAYS do a\n');
+    writeMod(tmp, 'b_vue3.policy.ap', '# bv\nABOUT bv\nAPPLIES #vue3\nALWAYS do b\n');
 
     const index1 = buildMetadataIndex(makeConfig(tmp));
     assert.equal(index1.errors.length, 1);
@@ -136,8 +136,8 @@ function writeMod(dir, name, content) {
   // Now flip: vue3 file sorts before vue file
   const tmp2 = mkdtempSync(join(tmpdir(), 'ap-lint-'));
   try {
-    writeMod(tmp2, 'a_vue3.policy.ap', '# av3\nABOUT av3\nTAGS #vue3\nALWAYS do a\n');
-    writeMod(tmp2, 'b_vue.policy.ap', '# bv\nABOUT bv\nTAGS #vue\nALWAYS do b\n');
+    writeMod(tmp2, 'a_vue3.policy.ap', '# av3\nABOUT av3\nAPPLIES #vue3\nALWAYS do a\n');
+    writeMod(tmp2, 'b_vue.policy.ap', '# bv\nABOUT bv\nAPPLIES #vue\nALWAYS do b\n');
 
     const index2 = buildMetadataIndex(makeConfig(tmp2));
     assert.equal(index2.errors.length, 1);
@@ -150,7 +150,7 @@ function writeMod(dir, name, content) {
 
 // ---------------------------------------------------------------------------
 // Case 7: untagged EXPORT block → indexed, no error, absent from byTag
-//   An EXPORT block without TAGS is indexed unconditionally — never dropped.
+//   An EXPORT block without APPLIES is indexed unconditionally — never dropped.
 // ---------------------------------------------------------------------------
 {
   const tmp = mkdtempSync(join(tmpdir(), 'ap-lint-'));
@@ -175,7 +175,7 @@ function writeMod(dir, name, content) {
 
 // ---------------------------------------------------------------------------
 // Case 8: mixed file — untagged EXPORT block indexed, untagged legacy dropped
-//   The legacy TAGS-required contract is unchanged; only EXPORT blocks survive
+//   The legacy APPLIES-required contract is unchanged; only EXPORT blocks survive
 //   absent tagging. A tagged EXPORT block alongside an untagged one both index.
 // ---------------------------------------------------------------------------
 {
@@ -187,14 +187,14 @@ function writeMod(dir, name, content) {
       'a.policy.ap',
       '# a\n' +
         'EXPORT POLICY untagged-rule:\n  ABOUT no tags\n  ALWAYS do a\n\n' +
-        'EXPORT POLICY tagged-rule:\n  ABOUT has tags\n  TAGS #governed\n  ALWAYS do b\n',
+        'EXPORT POLICY tagged-rule:\n  ABOUT has tags\n  APPLIES #governed\n  ALWAYS do b\n',
     );
-    // Legacy file (no EXPORT block) with no TAGS → dropped with an error, as before.
+    // Legacy file (no EXPORT block) with no APPLIES → dropped with an error, as before.
     writeMod(tmp, 'z_legacy.policy.ap', '# z\nABOUT legacy untagged\nALWAYS do z\n');
 
     const index = buildMetadataIndex(makeConfig(tmp));
     assert.equal(index.errors.length, 1, 'only the legacy untagged file errors');
-    assert.ok(index.errors[0].message.includes('module has no TAGS'), 'legacy drop reason unchanged');
+    assert.ok(index.errors[0].message.includes('module has no tag'), 'legacy drop reason unchanged');
     assert.ok(index.errors[0].file.includes('z_legacy'), 'the error is for the legacy file');
 
     const keys = Object.keys(index.exports);

@@ -19,8 +19,10 @@ export interface Definition {
   about: string | null;
   body: string;
   path: string;
-  /** TAGS declared by the source module (empty when none). */
+  /** The tags of the source module's APPLIES line (empty when none). */
   tags: string[];
+  /** The perimeter tokens of its APPLIES line — `universal`, `team:<team>`, `agent:<agent>`; empty when none. */
+  scopes: string[];
   /** The executor mark of a `PROCEDURE*` / `PROCEDURE**` head (src/executor.ts); absent = the agent. */
   executor?: number;
   /** Breadcrumb slug chain (e.g., ["coding", "code-quality"]). Empty when the file is at the library root. */
@@ -120,6 +122,9 @@ export const STRATEGIES: DefinitionStrategy[] = [
   // Policy, like role, is inline-able as `POLICY <name>:` in an agent file;
   // `stripHeaderKeyword` is a no-op on the import path.
   { ...defaults('policy'),    headerKeyword: 'POLICY', sectionTitle: 'Policies', getEntries: ctx => (ctx as any).policies as Definition[] },
+  // A skill the file imports: its entry is how to load it (dispatch/imports.ts),
+  // never a block written inline. Like a policy, it opens with its scope line.
+  { ...defaults('skill'),     headerKeyword: null },
   // Role is file-implicit when imported from a role file (the file's H1
   // names it), but also inline-able as a `ROLE <role>:` block inside an
   // agent.ap. `headerKeyword: 'ROLE'` lets `extractInlineDefinitions` collect

@@ -28,12 +28,13 @@ import { sequencePrimitiveFor } from '../sequencePrimitives.js';
 import { definitionArgsFor } from '../definitionArgs.js';
 import type { BundleContext } from '../dispatch/types.js';
 import { forceLevelBaseOf } from '../forceLevelConfig.js';
-import { FORMULAS, fill } from '../formulas.js';
+import { FORMULAS, fill, refSuffix } from '../formulas.js';
 import { checkHead, condCheckOf, type CheckKind } from '../check.js';
 import { apxCommand } from '../apx/paths.js';
 import { executorHead } from '../../adapters/md/phrases.js';
 import { directiveText } from '../../adapters/md/toolkit.js';
 import { splitBy } from '../vars.js';
+import { readWithHead, withPhrase } from '../withUse.js';
 
 const CONTROL_HEADS: Record<string, string> = { IF: 'If', ELSE: 'Else', UNTIL: 'Until' };
 
@@ -157,7 +158,7 @@ function minIndent(lines: string[]): number {
 
 /** Render a maximal run of leaf nodes through the existing flat primitive passes. */
 function renderLeafRun(nodes: Node[], ctx?: BundleContext): string[] {
-  const text = nodes.map(n => askLine(n.token) ?? rawOf(n.token)).join('\n');
+  const text = nodes.map(n => askLine(n.token) ?? withLine(n.token, ctx) ?? rawOf(n.token)).join('\n');
   const rendered = applyEnumPrimitives(applyForceLevels(text, ctx), ctx);
   return rendered.split('\n');
 }
@@ -167,6 +168,23 @@ function askLine(t: Token): string | null {
   if (t.kind !== 'keyword' || t.keyword !== 'ASK') return null;
   const by = splitBy(t.rest);
   return by ? `${' '.repeat(t.indent)}ASK ${directiveText({ text: by.text, by: by.name })}` : null;
+}
+
+/**
+ * A `WITH …:` head as rendered — what it names, each with the id its chapter
+ * entry was stamped with, a tag expanded (src/withUse.ts readWithHead, the
+ * reader the document builder shares); null for any other line. What does not
+ * hold is the compiler's to report (standaloneWithErrors).
+ */
+function withLine(t: Token, ctx?: BundleContext): string | null {
+  const head = ctx ? readWithHead(t, ctx) : null;
+  if (!head || t.kind !== 'keyword') return null;
+  const template = head.template ? ctx!.templates.find(d => d.name === head.template) : undefined;
+  const phrase = withPhrase(
+    head.uses.map(d => ({ kind: d.kind, name: d.name, ref: refSuffix(d.refId) })),
+    head.template ? { name: head.template, ref: refSuffix(template?.refId) } : undefined,
+  );
+  return `${' '.repeat(t.indent)}${t.keyword} ${phrase}:`;
 }
 
 export function isStructural(t: Token, hasChildren: boolean): boolean {
@@ -281,7 +299,7 @@ function memWithShape(t: Token & { kind: 'keyword' }, children: Node[]): string 
   if (!as || as.token.kind !== 'keyword') return null;
   const target = as.token.rest.trim();
   const m = /^`([^`]+)`(.*)$/.exec(target);
-  const text = fill(FORMULAS.keywords.MEM.shaped, { text: stripTrailingColon(t.rest).trim(), name: m ? m[1] : target, ref: m ? m[2] : '' });
+  const text = fill(FORMULAS.keywords.AS.shaped, { text: stripTrailingColon(t.rest).trim(), name: m ? m[1] : target, ref: m ? m[2] : '' });
   return `${' '.repeat(t.indent)}${kw}  ${text}`;
 }
 

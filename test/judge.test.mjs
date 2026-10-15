@@ -54,7 +54,7 @@ try {
     write(join(lib, 'templates', 'one-action.ap'), [
       'EXPORT TEMPLATE one-action:',
       '    ABOUT  test rule — one action per DO line',
-      '    TAGS   #judge',
+      '    APPLIES   #judge',
       '    SLOTS:',
       '        action: TEXT  "the action"',
       '            SHOULD  name one action',
@@ -66,7 +66,7 @@ try {
     write(join(lib, 'templates', 'when-rule.ap'), [
       'EXPORT TEMPLATE when-rule:',
       '    ABOUT  test rule for WHEN lines',
-      '    TAGS   #judge',
+      '    APPLIES   #judge',
       '    SLOTS:',
       '        trigger: TEXT  "the trigger"',
       '            SHOULD  name an observable event',
@@ -103,7 +103,7 @@ try {
     for (const [keyword, word] of [['ALWAYS', 'ALWAYS'], ['MAY', 'MAY']]) {
       const bad = join(root, `bad-${keyword}`);
       write(join(bad, 'templates', 'bad.ap'), [
-        'EXPORT TEMPLATE bad-rule:', '    ABOUT  a bad rule', '    TAGS   #judge', '    SLOTS:',
+        'EXPORT TEMPLATE bad-rule:', '    ABOUT  a bad rule', '    APPLIES   #judge', '    SLOTS:',
         '        action: TEXT  "the action"', `            ${keyword}  be short`, '    BODY:', '        DO {action}', '',
       ]);
       assert.throws(() => loadJudgeRules({ libraryRoot: bad, sharedLibraries: [], userRoot: '' }),
@@ -114,7 +114,7 @@ try {
     // are reference examples, and such a rule reads a JSON state.
     const direct = join(root, 'direct-lib');
     write(join(direct, 'templates', 'no-guess.ap'), [
-      'EXPORT TEMPLATE no-guess:', '    ABOUT  test rule — nothing left to guess', '    TAGS   #judge', '    SLOTS:',
+      'EXPORT TEMPLATE no-guess:', '    ABOUT  test rule — nothing left to guess', '    APPLIES   #judge', '    SLOTS:',
       '        action: TEXT  "a step of a calculation"',
       '            NEVER  leave the programmer a detail to guess',
       '                YES  a detail the result depends on is left open',
@@ -148,13 +148,13 @@ try {
 
     const orphan = join(root, 'orphan-lib');
     write(join(orphan, 'templates', 'orphan.ap'), [
-      'EXPORT TEMPLATE orphan:', '    ABOUT  YES with no rule', '    TAGS   #judge', '    SLOTS:',
+      'EXPORT TEMPLATE orphan:', '    ABOUT  YES with no rule', '    APPLIES   #judge', '    SLOTS:',
       '        action: TEXT  "the action"', '            YES  something', '            SHOULD  be short', '    BODY:', '        DO {action}', '',
     ]);
     assert.throws(() => loadJudgeRules({ libraryRoot: orphan, sharedLibraries: [], userRoot: '' }), /YES\s+something.*no slot rule above it/, 'a YES with no rule above is an error');
     const noBody = join(root, 'no-body');
     write(join(noBody, 'templates', 'nb.ap'), [
-      'EXPORT TEMPLATE no-layout:', '    ABOUT  no layout', '    TAGS   #judge', '    SLOTS:',
+      'EXPORT TEMPLATE no-layout:', '    ABOUT  no layout', '    APPLIES   #judge', '    SLOTS:',
       '        action: TEXT  "the action"', '            SHOULD  be short', '',
     ]);
     assert.throws(() => loadJudgeRules({ libraryRoot: noBody, sharedLibraries: [], userRoot: '' }), /no-layout.*BODY/, 'a rule needs a layout to name its lines');
@@ -162,7 +162,7 @@ try {
     // A project rule named like a builtin one is a rule of its own.
     const twin = join(root, 'twin-lib');
     write(join(twin, 'templates', 'judge-do-line.ap'), [
-      'EXPORT TEMPLATE judge-do-line:', '    ABOUT  a project rule named like the builtin one', '    TAGS   #judge', '    SLOTS:',
+      'EXPORT TEMPLATE judge-do-line:', '    ABOUT  a project rule named like the builtin one', '    APPLIES   #judge', '    SLOTS:',
       '        action: TEXT  "the action"', '            SHOULD  name a project file', '    BODY:', '        DO {action}', '',
     ]);
     const twins = loadJudgeRules({ libraryRoot: twin, sharedLibraries: [], userRoot: '' }).filter(r => r.template.name === 'judge-do-line');
@@ -249,7 +249,7 @@ try {
   const ruleFile = write(join(proj, 'library', 'templates', 'one-action.ap'), [
     'EXPORT TEMPLATE one-action:',
     '    ABOUT  test rule — one action per DO line',
-    '    TAGS   #judge',
+    '    APPLIES   #judge',
     '    SLOTS:',
     '        action: TEXT  "the action"',
     '            SHOULD  name one action',
@@ -564,7 +564,7 @@ try {
   // --- a MUST rule fails the agent with an error at the line ---
   {
     const strictRule = write(join(proj, 'library', 'templates', 'english.ap'), [
-      'EXPORT TEMPLATE english:', '    ABOUT  test rule', '    TAGS   #judge', '    SLOTS:',
+      'EXPORT TEMPLATE english:', '    ABOUT  test rule', '    APPLIES   #judge', '    SLOTS:',
       '        action: TEXT  "the action"', '            MUST  be written in English', '    BODY:', '        DO {action}', '',
     ]);
     const saved = globalThis.__judgeAsk;
@@ -586,7 +586,7 @@ try {
   // --- a NEVER rule: the judge reads a JSON state, and a line that breaks it fails the agent ---
   {
     const neverRule = write(join(proj, 'library', 'templates', 'no-file.ap'), [
-      'EXPORT TEMPLATE no-file:', '    ABOUT  test rule', '    TAGS   #judge', '    SLOTS:',
+      'EXPORT TEMPLATE no-file:', '    ABOUT  test rule', '    APPLIES   #judge', '    SLOTS:',
       '        action: TEXT  "an action of the agent"', '            NEVER  name a file in a foreign language',
       '                YES  the line is not in English', '    BODY:', '        DO {action}',
       '    EXAMPLE:', '        read the task → fine', '',

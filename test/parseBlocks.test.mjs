@@ -263,7 +263,7 @@ PROCEDURE foo:
 {
   const src = `EXPORT POLICY ctx-eng:
   ABOUT context-engineering rules for multi-agent work
-  TAGS  #multi-agent #orchestration
+  APPLIES  #multi-agent #orchestration
   APPLIES universal
   ALWAYS engineer the informational environment
 `;
@@ -274,7 +274,7 @@ PROCEDURE foo:
   assert.equal(b.key, 'POLICY', '15: modifier unwrapped to inner KIND');
   assert.equal(b.name, 'ctx-eng', '15: inner name extracted');
   assert.equal(b.exported, true, '15: block flagged exported');
-  // ABOUT/TAGS/APPLIES accepted as children with no error (metadata is out of
+  // ABOUT/APPLIES accepted as children with no error (metadata is out of
   // scope for parsing — they must simply nest cleanly).
   const aboutChild = b.children.find(c => c.type === 'line' && c.keyword === 'ABOUT');
   assert.ok(aboutChild, '15: ABOUT accepted as a child line');

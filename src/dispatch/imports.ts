@@ -350,7 +350,7 @@ export async function processImports(body: string, ctx: BundleContext, sourcePat
           ctx.lintErrors.push({ ...at(name, t.line), message: `IMPORT ${name} FROM ${modulePath}: \`${name}\` is no SKILL block` });
           continue;
         }
-        collectSkill({ name, about: info.about || null, path: target.absolutePath, native: false }, ctx);
+        collectSkill({ name, about: info.about || null, path: target.absolutePath, native: false, ...info.applies }, ctx);
         continue;
       }
 
@@ -398,12 +398,13 @@ function skillInfo(path: string, ctx: BundleContext) {
  * says how to load it — run its apx, or ask the harness for it — in the
  * adapter's words when it has its own (renderings.SKILL).
  */
-function collectSkill(skill: { name: string; about: string | null; path: string; native: boolean }, ctx: BundleContext): void {
+function collectSkill(skill: { name: string; about: string | null; path: string; native: boolean; tags?: string[]; scopes?: string[] }, ctx: BundleContext): void {
   if (ctx.skills.some(s => s.name === skill.name)) return;
   const how = skill.native ? 'harness' : 'apx';
   const line = fill(ctx.renderings?.['SKILL']?.[how] ?? FORMULAS.blocks.skill[how], { name: skill.name, command: apxCommand(skill.name, 'start') });
   ctx.skills.push({
-    kind: 'skill', name: skill.name, about: skill.about, body: line, path: skill.path, tags: [], breadcrumb: [], breadcrumbSegments: [],
+    kind: 'skill', name: skill.name, about: skill.about, body: line, path: skill.path,
+    tags: skill.tags ?? [], scopes: skill.scopes ?? [], breadcrumb: [], breadcrumbSegments: [],
     ...(skill.native ? { namespace: `${HARNESS_ALIAS}.${SKILLS}` } : {}),
   });
 }

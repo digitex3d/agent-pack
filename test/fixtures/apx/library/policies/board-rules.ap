@@ -1,4 +1,4 @@
 EXPORT POLICY board-rules:
     ABOUT  how the board is kept
-    TAGS   #board
+    APPLIES #board team:product
     ALWAYS keep one card per task

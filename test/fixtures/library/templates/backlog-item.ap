@@ -2,8 +2,7 @@
 
 EXPORT TEMPLATE backlog-item:
   ABOUT   one agreed improvement in the final backlog — its domain, action, and impact
-  TAGS    #agent-pack #analysis #scaffold
-  APPLIES role:improvement-analyst — one row per accepted finding across all domains
+  APPLIES #agent-pack #analysis #scaffold
 
   SLOTS:
     domain: TEXT MAX_WORDS 4          "the domain the improvement came from"

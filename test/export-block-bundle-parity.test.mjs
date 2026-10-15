@@ -4,14 +4,14 @@
  * Bundle-level oracle for the EXPORT block-scoped ingest seam.
  *
  * Fixture: the SAME policy module authored two ways — legacy (file-top
- * ABOUT/TAGS/APPLIES, body at indent 0) and migrated (`EXPORT POLICY <name>:`
+ * ABOUT/APPLIES, body at indent 0) and migrated (`EXPORT POLICY <name>:`
  * with metadata + body as block children). Both are imported by an identical
  * agent and run through the real bundle pipeline.
  *
  * Acceptance (task block-scoped-ingest, requirement 4):
  *   - the bundled output is BYTE-IDENTICAL between the two forms;
  *   - the `EXPORT <KIND> <name>:` opener never appears in the bundle;
- *   - ABOUT / TAGS / APPLIES metadata never leaks into the agent prompt.
+ *   - ABOUT / APPLIES metadata never leaks into the agent prompt.
  *
  * Mirrors the harness of import-metadata-leak.test.mjs (same real entry point).
  */
@@ -50,8 +50,7 @@ async function bundlePolicy(policyText) {
 const LEGACY = [
   '# ctx',
   'ABOUT  context-engineering rules for multi-agent work',
-  'TAGS   #context-engineering #multi-agent #orchestration',
-  'APPLIES universal — every agent participating respects these',
+  'APPLIES   #context-engineering #multi-agent #orchestration universal',
   'ALWAYS  engineer the informational environment as a structured blueprint',
   'ALWAYS  chain context: feed each step output as the typed input of the next',
   'NEVER  rely on a single shared prompt across multiple agents',
@@ -63,8 +62,7 @@ const EXPORTED = [
   '# ctx',
   'EXPORT POLICY ctx:',
   '  ABOUT  context-engineering rules for multi-agent work',
-  '  TAGS   #context-engineering #multi-agent #orchestration',
-  '  APPLIES universal — every agent participating respects these',
+  '  APPLIES   #context-engineering #multi-agent #orchestration universal',
   '',
   '  ALWAYS  engineer the informational environment as a structured blueprint',
   '  ALWAYS  chain context: feed each step output as the typed input of the next',
@@ -92,9 +90,7 @@ assert.equal(exportBundle, legacyBundle, 'EXPORT-form bundle must be byte-identi
 // --- Zero leakage of the EXPORT opener and metadata into the prompt -------
 assert.ok(!/EXPORT/.test(exportBundle), 'EXPORT opener must not appear in the bundle');
 assert.ok(!/^\s*ABOUT\b/m.test(exportBundle), 'ABOUT line must not appear in the bundle');
-assert.ok(!/^\s*TAGS\b/m.test(exportBundle), 'TAGS line must not appear in the bundle');
 assert.ok(!/^\s*APPLIES\b/m.test(exportBundle), 'APPLIES line must not appear in the bundle');
-assert.ok(!exportBundle.includes('universal — every agent participating respects these'), 'APPLIES payload must not leak');
 
 // --- The real rule body IS present (the unit content survived) ------------
 assert.ok(exportBundle.includes('engineer the informational environment as a structured blueprint'), 'ALWAYS rule text present');

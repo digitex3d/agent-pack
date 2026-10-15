@@ -41,13 +41,13 @@ export interface Formulas {
     COMPUTE: { intro: Text; require: Text; return: Text; ensure: Text; rule: { require: Text; ensure: Text; never: Text } };
     EXECUTOR: Record<'1' | '2', Text> & { procedure: Record<'1' | '2', Text>; ask: Text; run: Text; who: Record<'1' | '2', Text>; answer: { holds: Text; shaped: Text; text: Text }; rounds: Text; loop: RoundWords; into: Record<'1' | '2', Text> };
     BY: { intro: Text; inline: Text };
-    AS: { fallback: Text; line: Text; agent: Text };
+    AS: { fallback: Text; line: Text; agent: Text; shaped: Text };
+    APPLIES: { scope: Record<'universal' | 'team' | 'agent' | 'with' | 'ls', Text> };
     OWNS: { fence: Text[]; glob: Text };
     'LENS-IN': { line: Text; input: Text };
     'LENS-OUT': { bridge: Text };
     MANDATE: { line: Text };
-    MEM: { shaped: Text };
-    WITH: { line: Text };
+    WITH: { skill: Text; policy: Text; and: Text };
     VAR: { read: Text; readShaped: Text; block: Text; store: Text; storeTyped: Text; about: Text; scopes: Record<'private' | 'session', Text>; typed: Text; entry: Text };
   };
   blocks: {

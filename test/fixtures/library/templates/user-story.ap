@@ -2,7 +2,7 @@
 
 EXPORT TEMPLATE user-story:
   ABOUT   the canonical user-story format for a feature card
-  TAGS    #product #planning
+  APPLIES #product #planning
 
   SLOTS:
     user-type: TEXT  "the user role the story serves"

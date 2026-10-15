@@ -6,7 +6,7 @@ import { extractAbout, partitionMetadata, exportedBlocksOf, type ExportedBlockBo
 import { parseBlocks } from './parseBlocks.js';
 import { AGENT_METADATA_KEYWORDS } from './primitives.js';
 import { buildNamespace } from './namespace.js';
-import { parseTagsPayload } from './services/tags.js';
+import { parseApplies } from './services/tags.js';
 
 export type IngestKind =
   | 'policy'
@@ -64,8 +64,10 @@ export interface IngestedFile {
    */
   breadcrumbSegments: BreadcrumbSegment[];
   body: string;
-  /** TAGS declared by the source file (empty when none). */
+  /** The tags of the source file's APPLIES line (empty when none). */
   tags: string[];
+  /** The perimeter tokens of its APPLIES line — `universal`, `team:<team>`, `agent:<agent>`. */
+  scopes: string[];
   /** The executor mark of a `PROCEDURE*` / `PROCEDURE**` head — src/executor.ts. */
   executor?: number;
 }
@@ -309,20 +311,20 @@ function fileFacets(
 const UNIT_METADATA_KEYWORDS = AGENT_METADATA_KEYWORDS.filter(k => k !== 'AS' && k !== 'LENS-IN');
 
 /**
- * Lift a unit's ABOUT/TAGS and strip its metadata keywords (ABOUT, OWNS,
- * APPLIES, TAGS, …), returning the rendered body. The single seam shared by
+ * Lift a unit's ABOUT/APPLIES and strip its metadata keywords (ABOUT, OWNS,
+ * APPLIES, …), returning the rendered body. The single seam shared by
  * the whole-file path ({@link ingestRaw}) and the per-block path
  * ({@link ingestExportBlock}), so a single-export file and one block of a
  * multi-export file are processed identically (metadata stripped, body cleaned).
  * Inline blocks written inside an agent file go through it too
  * (see `collectInlineDefinition`).
  */
-export function liftUnitMetadata(source: string): { about: string | null; tags: string[]; body: string } {
+export function liftUnitMetadata(source: string): { about: string | null; tags: string[]; scopes: string[]; body: string } {
   const { metadata, stripped } = partitionMetadata(source, UNIT_METADATA_KEYWORDS);
   const body = stripped.replace(H1_RE, '').replace(/^\n+/, '').replace(/\n{3,}/g, '\n\n').trimEnd();
   const about = metadata.get('ABOUT')?.[0] ?? null;
-  const tags = parseTagsPayload((metadata.get('TAGS') ?? []).join(' '));
-  return { about, tags, body };
+  const { tags, scopes } = parseApplies(metadata.get('APPLIES') ?? []);
+  return { about, tags, scopes, body };
 }
 
 export function ingestRaw(
@@ -334,13 +336,13 @@ export function ingestRaw(
   const path = resolve(filePath);
   const kind = unitKindOf(path, raw);
   const name = extractName(raw, kind, path);
-  const { about, tags, body } = liftUnitMetadata(raw);
-  return { path, kind, name, about, ...fileFacets(path, libraryRoot, libraries), body, tags };
+  const { about, tags, scopes, body } = liftUnitMetadata(raw);
+  return { path, kind, name, about, ...fileFacets(path, libraryRoot, libraries), body, tags, scopes };
 }
 
 /**
  * Ingest ONE exported block of a multi-export module as its own unit. The unit's
- * kind, name, ABOUT, TAGS and body come from the block itself (its de-indented
+ * kind, name, ABOUT, APPLIES and body come from the block itself (its de-indented
  * children), while the namespace/breadcrumb facets are the module's — so sibling
  * `EXPORT <KIND> <name>:` blocks never bleed into each other. The single seam the
  * import resolver uses to register each exported block under its own name.
@@ -352,7 +354,7 @@ export function ingestExportBlock(
   libraries?: Record<string, string>,
 ): IngestedFile {
   const path = resolve(filePath);
-  const { about, tags, body } = liftUnitMetadata(block.body);
+  const { about, tags, scopes, body } = liftUnitMetadata(block.body);
   return {
     path,
     kind: block.key.toLowerCase() as IngestKind,
@@ -361,6 +363,7 @@ export function ingestExportBlock(
     ...fileFacets(path, libraryRoot, libraries),
     body,
     tags,
+    scopes,
     ...(block.executor ? { executor: block.executor } : {}),
   };
 }

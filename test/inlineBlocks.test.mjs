@@ -4,7 +4,7 @@
  * Tests for inline blocks written inside an agent file (`extractInlineDefinitions`).
  *
  * An inline block goes through the same metadata seam as an imported unit
- * (`liftUnitMetadata`): its ABOUT and TAGS are lifted onto the Definition and
+ * (`liftUnitMetadata`): its ABOUT and APPLIES are lifted onto the Definition and
  * stripped from the body — they must never reach the bundle as raw lines —
  * while `AS <template>`, the block's output contract, stays in the body.
  */
@@ -25,7 +25,7 @@ const { makeBundleContext } = await import('../dist/src/compiler/index.js');
     '',
     'PROCEDURE verify-claim:',
     '    ABOUT  back one claim with independent sources',
-    '    TAGS   #research',
+    '    APPLIES   #research',
     '    DO     search for the claim',
     '    AS     finding',
     '',
@@ -36,8 +36,8 @@ const { makeBundleContext } = await import('../dist/src/compiler/index.js');
   const proc = ctx.procedures.find(p => p.name === 'verify-claim');
   assert.ok(proc, 'inline PROCEDURE collected');
   assert.equal(proc.about, 'back one claim with independent sources', 'ABOUT lifted onto the definition');
-  assert.deepEqual(proc.tags, ['#research'], 'TAGS lifted onto the definition');
-  assert.ok(!/ABOUT|TAGS/.test(proc.body), 'metadata lines stripped from the body');
+  assert.deepEqual(proc.tags, ['#research'], 'APPLIES lifted onto the definition');
+  assert.ok(!/ABOUT|APPLIES/.test(proc.body), 'metadata lines stripped from the body');
   assert.ok(proc.body.includes('DO     search for the claim'), 'content lines kept');
   assert.ok(/^AS\s+finding$/m.test(proc.body), 'AS (the output contract) is content, never stripped');
 }
@@ -48,7 +48,7 @@ const { makeBundleContext } = await import('../dist/src/compiler/index.js');
   const source = [
     'EXPORT POLICY board-rules:',
     '    ABOUT  how the board is kept',
-    '    TAGS   #board',
+    '    APPLIES   #board',
     '    ALWAYS keep one card per task',
     '',
     'EXPORT AGENT a AS a-role:',
@@ -61,7 +61,7 @@ const { makeBundleContext } = await import('../dist/src/compiler/index.js');
   const policy = ctx.policies.find(p => p.name === 'board-rules');
   assert.ok(policy, 'inline POLICY collected');
   assert.equal(policy.about, 'how the board is kept', 'ABOUT lifted onto the definition');
-  assert.deepEqual(policy.tags, ['#board'], 'TAGS lifted onto the definition');
+  assert.deepEqual(policy.tags, ['#board'], 'APPLIES lifted onto the definition');
   assert.ok(policy.body.includes('ALWAYS keep one card per task'), 'rules kept in the body');
 }
 
@@ -71,7 +71,7 @@ const { makeBundleContext } = await import('../dist/src/compiler/index.js');
   try {
     mkdirSync(join(lib, 'roles'));
     writeFileSync(join(lib, 'roles', 'careful-reader.ap'),
-      ['EXPORT ROLE careful-reader:', '    ABOUT   reads everything first', '    TAGS    #reading', '    ALWAYS  read the whole change first', ''].join('\n'));
+      ['EXPORT ROLE careful-reader:', '    ABOUT   reads everything first', '    APPLIES    #reading', '    ALWAYS  read the whole change first', ''].join('\n'));
     const ctx = makeBundleContext({ agentName: 'a', libraryRoot: lib, libraryRoots: [lib] });
     const source = [
       'EXPORT AGENT a AS code-reviewer:',

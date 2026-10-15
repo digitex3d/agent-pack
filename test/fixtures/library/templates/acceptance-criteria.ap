@@ -2,7 +2,7 @@
 
 EXPORT TEMPLATE acceptance-criteria:
   ABOUT   the canonical Given/When/Then acceptance-criteria format
-  TAGS    #product #planning
+  APPLIES #product #planning
 
   SLOTS:
     context: TEXT  "the precondition or situation"

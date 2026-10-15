@@ -38,7 +38,7 @@ try {
   // --- A role's IMPORTs bring their blocks in, and leave no line behind ---
   const lib = join(tmp, 'library');
   write(join(lib, 'templates', 'comp.ap'), ['EXPORT TEMPLATE comp:', '    ABOUT  a component', '    SLOTS:', '        name  text  the name', '    BODY:', '        name: {name}']);
-  write(join(lib, 'policies', 'pol.ap'), ['EXPORT POLICY pol:', '    ABOUT   a policy', '    ALWAYS  be careful']);
+  write(join(lib, 'policies', 'pol.ap'), ['EXPORT POLICY pol:', '    ABOUT   a policy', '    APPLIES universal', '    ALWAYS  be careful']);
   write(join(lib, 'roles', 'builder.ap'), [
     'IMPORT comp FROM @main.templates', '', 'EXPORT ROLE builder:', '    ABOUT   a builder',
     '    IMPORT pol FROM @main.policies', '    ALWAYS  answer as comp',

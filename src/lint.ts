@@ -2,12 +2,13 @@
 // Copyright (c) 2026 Giuseppe Federico
 import { existsSync, readFileSync } from 'fs';
 import { basename } from 'path';
-import { lex, Token, Keyword, KEYWORDS, isDecorator } from './lexer.js';
+import { lex, Token, Keyword, KEYWORDS, isWithHead, opensBlock } from './lexer.js';
 import { ACTION_VERBS } from './actionVerbs.js';
 import { desugar } from './desugar.js';
-import { TAG_RE } from './services/tags.js';
+import { parseApplies, PERIMETER_FORMS, SCOPED_KINDS } from './services/tags.js';
+import { splitWith, withItemError } from './withUse.js';
 import { getFamilyBases, getIntroByKeyword, forceLevelBaseOf, forceLevelFamilies, toCanonicalKeyword, parseForceLevel, NON_RULE_FAMILIES } from './forceLevelConfig.js';
-import { enumPrimitiveFor, AGENT_METADATA_KEYWORDS } from './primitives.js';
+import { enumPrimitiveFor } from './primitives.js';
 import { BLOCK_CONTRACTS, BlockContract, VAR_BLOCK } from './blockContracts.js';
 import { TEAM_FLOWS_FILE } from './services/teamMetadata.js';
 import { parseBlocks, exportedVar, readExportedVar, isExportedVar, type Block, type Node } from './parseBlocks.js';
@@ -20,7 +21,7 @@ import { parseTypeSpec } from './shapeSchema.js';
 import { STORE_LIFETIMES } from './storeTypes/types.js';
 import { stripTrailingColon, buildTree, type Node as TreeNode } from './bundlers/renderTree.js';
 import { condCheckOf, type CheckKind, type CheckSite } from './check.js';
-import { parseVarLine, isVarKeyword, splitBy, splitInto, splitWith, takesInto, readsOf } from './vars.js';
+import { parseVarLine, isVarKeyword, splitBy, splitInto, takesInto, readsOf } from './vars.js';
 
 export interface LintError {
   file: string;
@@ -49,21 +50,15 @@ const DEFAULT_MAX_LINE_LENGTH = 120;
 // ---------------------------------------------------------------------------
 
 /**
- * Validate a TAGS payload using the shared TAG_RE from tags.ts.
- *
- * TAG_RE enforces the `.ap` DSL contract: `#` + alphanumeric start + only
- * alphanumeric/hyphen chars. No commas, slashes, underscores, or missing `#`.
+ * Validate an APPLIES payload through the one reader of the line
+ * (`parseApplies`, src/services/tags.ts): every token a `#tag` — `#` + an
+ * alphanumeric start + alphanumerics and hyphens — or a perimeter.
  */
-function validateTagsPayload(rest: string): string | null {
-  const trimmed = rest.trim();
-  if (!trimmed) return 'TAGS payload is empty — provide at least one #hashtag';
-  const tokens = trimmed.split(/\s+/);
-  for (const tok of tokens) {
-    if (!TAG_RE.test(tok)) {
-      return `TAGS token "${tok}" is invalid — expected classic flat hashtag like #kebab-slug (no commas, slashes, or missing #)`;
-    }
-  }
-  return null;
+function validateAppliesPayload(rest: string): string | null {
+  if (!rest.trim()) return `APPLIES payload is empty — provide at least one #hashtag, or ${PERIMETER_FORMS}`;
+  const [tok] = parseApplies([rest]).invalid;
+  return tok === undefined ? null
+    : `APPLIES token "${tok}" is invalid — expected a classic flat hashtag like #kebab-slug (no commas, slashes, or missing #), or ${PERIMETER_FORMS}`;
 }
 
 function validateTriggerContent(content: string): string | null {
@@ -110,32 +105,37 @@ function nextSubstantive(tokens: Token[], from: number): number {
 }
 
 /**
- * What is wrong with a `WITH` line — a decorator: one skill, an `AS <template>`
- * only when the skill is used, and a place that says which work it is for —
- * the block right below it (a head with lines beneath, or another WITH), or,
- * first in a body after the metadata, the whole block.
+ * What is wrong with a `WITH` head — a block (src/withUse.ts): names and kind
+ * tags (`#policy:<tag>`, `#skill:<tag>`), comma separated, an `AS <template>`
+ * only on one name that is used, the block colon, lines nested below it — its
+ * zone, holding lines, never a block — and a body to stand in.
  */
 function withLineErrors(tokens: Token[], index: number): string[] {
   const t = tokens[index] as Extract<Token, { kind: 'keyword' }>;
+  const head = t.raw.trim();
   const errors: string[] = [];
   const use = splitWith(t.rest);
-  if (!use) errors.push(`\`${t.raw.trim()}\`: WITH names one skill — \`WITH <skill>\`, or \`WITH <skill> AS <template>\` to shape its answer`);
-  else if (use.template && (parseForceLevel(t.keyword as string)?.level ?? 0) < 0) errors.push(`\`${t.raw.trim()}\`: a skill not used has no answer to shape — drop the AS`);
-  // The very next line — nothing between: a WITH, or a head with lines beneath.
-  const next = tokens[index + 1];
-  const after = nextSubstantive(tokens, index + 2);
-  const decoratesBelow = next !== undefined && next.indent === t.indent
-    && (isDecorator(next) || next.kind === 'blockOpener' || (after !== -1 && tokens[after].indent > t.indent));
-  // First in a body: only WITHs, and the metadata the body opens with, before it.
-  let prev = index - 1;
-  while (prev >= 0 && (['blank', 'comment', 'rawLine'].includes(tokens[prev].kind) || (tokens[prev].indent === t.indent && isDecorator(tokens[prev])))) prev--;
-  const p = prev < 0 ? undefined : tokens[prev];
-  // The file's own top opens no body: a decorator there is for the block below.
-  const opensBody = p !== undefined && (p.indent < t.indent
-    || (p.indent === t.indent && p.kind === 'keyword' && (AGENT_METADATA_KEYWORDS as string[]).includes(p.keyword as string)));
-  if (!decoratesBelow && !opensBody) {
-    errors.push(`\`${t.raw.trim()}\` decorates the block on the very next line, or — first in a body — the whole block: put it right above a block, or at the top of the body`);
+  if (!use) errors.push(`\`${head}\`: WITH names skills and policies, by name or kind tag, comma separated — \`WITH <name>, #policy:<tag>:\`, or \`WITH <skill> AS <template>:\` to shape a skill's answer`);
+  else {
+    for (const item of use.items) { const e = withItemError(item); if (e) errors.push(e); }
+    if (use.template && (parseForceLevel(t.keyword as string)?.level ?? 0) < 0) errors.push(`\`${head}\`: a skill not used has no answer to shape — drop the AS`);
+    else if (use.template && (use.items.length > 1 || use.items[0].startsWith('#'))) errors.push(`\`${head}\`: AS shapes the answer of one skill — name only that skill`);
   }
+  if (!opensBlock(t)) errors.push(`\`${head}\`: WITH is a block — end the line with \`:\` and nest the lines it is for below it`);
+  else {
+    const below = nextSubstantive(tokens, index + 1);
+    if (below === -1 || tokens[below].indent <= t.indent) errors.push(`\`${head}\`: nothing is nested below it — indent the lines it is for under it`);
+  }
+  // Its zone holds lines; a block (PROCEDURE, ROLE, …) inside it, like a WITH at the file top, stands outside any body.
+  let j = index + 1;
+  while (j < tokens.length && (tokens[j].kind === 'blank' || tokens[j].kind === 'comment' || tokens[j].indent > t.indent)) {
+    const n = tokens[j];
+    const key = n.kind === 'blockOpener' ? (n.key === EXPORT_MODIFIER ? n.rest.split(/\s+/)[0] : n.key)
+      : opensBlock(n) ? (n as { keyword: string }).keyword : '';
+    if (key && blockTypeOf(key)) { errors.push(`\`${head}\`: WITH stands in a body, around lines — \`${(n as { raw: string }).raw.trim()}\` opens a block: put the WITH inside it`); break; }
+    j++;
+  }
+  if (t.indent === 0) errors.push(`\`${head}\`: WITH stands in a body — inside an agent, a role or a procedure, around the lines it is for`);
   return errors;
 }
 
@@ -143,7 +143,7 @@ function withLineErrors(tokens: Token[], index: number): string[] {
 // Block-scoped metadata model (EXPORT) — TRANSITIONAL
 //
 // The exportable unit is a top-level `EXPORT <KIND> <name>:` block: its metadata
-// (ABOUT/TAGS/APPLIES) lives in block scope, not at file-top. A file that uses
+// (ABOUT/APPLIES) lives in block scope, not at file-top. A file that uses
 // EXPORT blocks takes the block-scoped lint path; a legacy file (file-top
 // metadata, no EXPORT block) keeps the current file-top path unchanged.
 //
@@ -152,7 +152,7 @@ function withLineErrors(tokens: Token[], index: number): string[] {
 // ---------------------------------------------------------------------------
 
 /** Metadata keywords that, in an EXPORT file, must live inside a block, not at file-top. */
-const METADATA_KEYWORDS = new Set<Keyword>(['ABOUT', 'TAGS', 'APPLIES', 'SCOPE']);
+const METADATA_KEYWORDS = new Set<Keyword>(['ABOUT', 'APPLIES', 'SCOPE']);
 
 interface ExportModel {
   /** True when any top-level block carries the EXPORT modifier. */
@@ -170,7 +170,7 @@ interface ExportModel {
 
 /**
  * Derive the EXPORT-mode model from a single parse. Validates two block-scoped
- * rules — every exported block needs an ABOUT child (TAGS optional, APPLIES/WHEN
+ * rules — every exported block needs an ABOUT child (APPLIES optional, WHEN
  * children valid); file-top metadata outside a block is an error — and collects
  * the unit-body line set used to scope the body walk. Metadata inside a private
  * (non-exported) block is permitted and inert.
@@ -353,9 +353,9 @@ function checkAbout(state: State, errors: LintError[], file: string): void {
   if (!state.hasAbout) errors.push({ file, line: 1, message: 'missing ABOUT' });
 }
 
-/** TAGS: validate classic flat hashtag payload, accept silently when valid. */
-const tagsHandler: KeywordHandler = (t, ctx) => {
-  const err = validateTagsPayload(t.rest);
+/** APPLIES: validate its hashtag / perimeter payload, accept silently when valid. */
+const appliesHandler: KeywordHandler = (t, ctx) => {
+  const err = validateAppliesPayload(t.rest);
   if (err) ctx.errors.push({ file: ctx.file, line: t.line, message: err });
 };
 
@@ -516,6 +516,13 @@ const roleIdentityEntries = ROLE_IDENTITY_KEYWORDS.map(
  */
 const FLOW_ONLY_KEYWORDS: Keyword[] = ['FLOW', 'STEP', 'PARALLEL'];
 
+/** The metadata every unit's file opens with — its ABOUT, its SCOPE, its APPLIES line. */
+const unitMetadataEntries: [Keyword, KeywordHandler][] = [
+  ['ABOUT',   aboutHandler],
+  ['SCOPE',   passthrough],
+  ['APPLIES', appliesHandler],
+];
+
 const flowOnlyEntries = FLOW_ONLY_KEYWORDS.map(
   kw => makeRejectHandler(kw, `${kw} is only allowed in a flow`),
 );
@@ -531,10 +538,7 @@ const POLICY_ASSERTION_KEYWORDS: Keyword[] = ['ALWAYS'];
 const POLICY_SPEC: LintSpec = {
   topLevelOnly: false,
   keywords: new Map<Keyword, KeywordHandler>([
-    ['ABOUT',   aboutHandler],
-    ['SCOPE',   passthrough],
-    ['APPLIES', passthrough],
-    ['TAGS',    tagsHandler],
+    ...unitMetadataEntries,
     ...POLICY_ASSERTION_KEYWORDS.map(kw => [kw, flags('hasAssertion')] as const),
     // INVARIANT: every file-kind spec except role and agent must include both
     // agentOnlyEntries and roleIdentityEntries — identity keywords are only
@@ -557,10 +561,7 @@ const PROCEDURE_FLOW_KEYWORDS: Keyword[] = ['IMPORT', ...ACTION_VERBS, 'VAR', 'U
 const PROCEDURE_SPEC: LintSpec = {
   topLevelOnly: true,
   keywords: new Map<Keyword, KeywordHandler>([
-    ['ABOUT',   aboutHandler],
-    ['SCOPE',     passthrough],
-    ['APPLIES',   passthrough],
-    ['TAGS',      tagsHandler],
+    ...unitMetadataEntries,
     ['PROCEDURE', headerHandler('PROCEDURE')],
     ['IF',        ifElseHandler],
     ['ELSE',      ifElseHandler],
@@ -589,10 +590,7 @@ const ROLE_SPEC: LintSpec = {
   topLevelOnly: false,
   acceptBlockOpeners: true,
   keywords: new Map<Keyword, KeywordHandler>([
-    ['ABOUT',     aboutHandler],
-    ['SCOPE',     passthrough],
-    ['APPLIES',   passthrough],
-    ['TAGS',      tagsHandler],
+    ...unitMetadataEntries,
     // The block name IS the role; ROLE is the block opener (a `ROLE <name>:`
     // header), never an identity attribute. EXPERTISE (0-1) is the only
     // identity attribute a role declares; an AGENT binds the role by name and
@@ -623,10 +621,7 @@ const ROLE_SPEC: LintSpec = {
 const TEMPLATE_SPEC: LintSpec = {
   topLevelOnly: true,
   keywords: new Map<Keyword, KeywordHandler>([
-    ['ABOUT',   aboutHandler],
-    ['SCOPE',    passthrough],
-    ['APPLIES',  passthrough],
-    ['TAGS',     tagsHandler],
+    ...unitMetadataEntries,
     // Templates compose other templates: `IMPORT <tpl> FROM @lib.templates`
     // brings the shapes referenced by `<tpl>` / `LIST <tpl>` slots into scope.
     ['IMPORT',   accept],
@@ -658,7 +653,7 @@ const TEMPLATE_SPEC: LintSpec = {
 };
 
 // A flat agent file is a `.ap` file holding an `EXPORT AGENT <name> AS <role>:`
-// block. Its surface contract — required AS + MANDATE, forbidden EXPERTISE/TAGS,
+// block. Its surface contract — required AS + MANDATE, forbidden EXPERTISE/APPLIES,
 // allowed force-level lines (every family but DISTILL) and WHEN — lives entirely in `BLOCK_CONTRACTS.AGENT` and
 // is validated by `lintAgentBlocks` (below). There is no separate file-top
 // `agent.ap` spec: the block IS the unit.
@@ -680,7 +675,7 @@ const TEMPLATE_SPEC: LintSpec = {
  * validated separately. Enforces:
  *   - `AS <role>` present on the header (the role binding);
  *   - exactly one child MANDATE (contract: `requiresAll` ≥1 + `unique` ≤1);
- *   - HARD error on any ROLE/EXPERTISE/TAGS child — define them in the role;
+ *   - HARD error on any ROLE/EXPERTISE/APPLIES child — define them in the role;
  *   - any child keyword outside the contract's `allows` is rejected.
  *
  * This is the single agent contract: a flat agent file IS its `EXPORT AGENT`
@@ -689,13 +684,14 @@ const TEMPLATE_SPEC: LintSpec = {
  */
 export function lintAgentBlocks(file: string, body: string): LintError[] {
   const errors: LintError[] = [];
-  const contract = BLOCK_CONTRACTS.AGENT;
-  // Role-owned children that get the "declare it in the role" hint — read from
-  // the contract so `allows` and this set can never silently diverge.
-  const forbidden = new Set<string>(contract.identityKeywords ?? []);
 
   for (const block of parseBlocks(body).blocks) {
     if (!AGENT_KEYS.has(block.key)) continue;
+    // A SKILL is an agent that also carries an APPLIES line: its own contract.
+    const contract = BLOCK_CONTRACTS[block.key] ?? BLOCK_CONTRACTS.AGENT;
+    // Role-owned children that get the "declare it in the role" hint — read from
+    // the contract so `allows` and this set can never silently diverge.
+    const forbidden = new Set<string>(contract.identityKeywords ?? []);
 
     // Header signature: `AS <role>` is required.
     if (!parseAgentSignature(block.rest).role) {
@@ -1158,7 +1154,7 @@ function ownerOf(ancestors: string[], file: string): string {
 /** The lines each body admits — a VAR stands in those whose list holds it. */
 const BODY_KEYWORDS: Record<string, readonly Keyword[]> = {
   AGENT: BLOCK_CONTRACTS.AGENT.allows,
-  SKILL: BLOCK_CONTRACTS.AGENT.allows,
+  SKILL: BLOCK_CONTRACTS.SKILL.allows,
   ROLE: ROLE_RULE_KEYWORDS,
   PROCEDURE: PROCEDURE_FLOW_KEYWORDS,
 };
@@ -1271,7 +1267,12 @@ export function checkVocabulary(file: string, body: string): LintError[] {
       if (early) err(t.line, `BY ${early.name} must end the ASK line — write \`ASK … INTO <name> BY ${early.name}\``);
       const base = forceLevelBaseOf(key);
       if (base && getIntroByKeyword(key) === null) err(t.line, unknownLevel(key, base));
-      if (isDecorator(t)) for (const message of withLineErrors(tokens, index)) err(t.line, message);
+      if (isWithHead(t)) for (const message of withLineErrors(tokens, index)) err(t.line, message);
+      // A perimeter says where a policy or a skill holds with no WITH: any other block has none to say.
+      if (key === 'APPLIES' && parseApplies([t.rest]).scopes.length > 0) {
+        const owner = ownerOf(stack.map(s => s.key), file);
+        if (!SCOPED_KINDS.includes(owner.toLowerCase())) err(t.line, `APPLIES: a perimeter (${PERIMETER_FORMS}) goes on a POLICY or a SKILL — found on ${owner}`);
+      }
       const prim = enumPrimitiveFor(key);
       const value = t.rest.trim().replace(/:$/, '');
       if (prim && value && !prim.values[value]) {
@@ -1358,7 +1359,7 @@ function computeBlockErrors(file: string, body: string): LintError[] {
       const seen: string[] = [];
       for (const c of b.children) {
         if (c.type === 'line') {
-          if (c.keyword !== 'ABOUT' && c.keyword !== 'TAGS' && !isRule(c.keyword)) {
+          if (c.keyword !== 'ABOUT' && c.keyword !== 'APPLIES' && !isRule(c.keyword)) {
             err(c.line, `${c.keyword} is not allowed on top of COMPUTE \`${name}\` — ABOUT and rules on how the script is written, then REQUIRE:, RETURN AS <template>: and ENSURE:`);
           }
           continue;

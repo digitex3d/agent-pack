@@ -64,7 +64,7 @@ const checksFile = write(join(lib, 'procedures', 'checks.ap'), [
   '',                                  // 2
   'EXPORT PROCEDURE verify:',          // 3
   '    ABOUT  verify the change',      // 4
-  '    TAGS   #quality',               // 5
+  '    APPLIES   #quality',               // 5
   '    DO  run the tests',             // 6
   '    IF the tests fail:',            // 7
   '        UNTIL they pass:',          // 8

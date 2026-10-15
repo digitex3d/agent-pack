@@ -39,22 +39,22 @@ const { lintPolicy, lintRole, lintProcedure, lintTemplate } = await import('../d
 }
 
 {
-  // TAGS validation: valid payload passes, invalid forms produce lint errors
-  const validTags = lintPolicy('t.policy.ap', `# t\nABOUT t\nTAGS #typescript #code-review #bash\nALWAYS do something\n`);
-  assert.equal(validTags.length, 0, 'valid TAGS payload should produce no errors');
+  // APPLIES validation: valid payload passes, invalid forms produce lint errors
+  const validTags = lintPolicy('t.policy.ap', `# t\nABOUT t\nAPPLIES #typescript #code-review #bash\nALWAYS do something\n`);
+  assert.equal(validTags.length, 0, 'valid APPLIES payload should produce no errors');
 
-  // Bare TAGS (no payload) is lexed as unknown → rejected as unexpected line
-  const emptyTags = lintPolicy('t.policy.ap', `# t\nABOUT t\nTAGS\nALWAYS do something\n`);
-  assert.ok(emptyTags.length > 0, 'empty TAGS should be rejected');
+  // Bare APPLIES (no payload) is lexed as unknown → rejected as unexpected line
+  const emptyTags = lintPolicy('t.policy.ap', `# t\nABOUT t\nAPPLIES\nALWAYS do something\n`);
+  assert.ok(emptyTags.length > 0, 'empty APPLIES should be rejected');
 
-  const commaTags = lintPolicy('t.policy.ap', `# t\nABOUT t\nTAGS #a, #b\nALWAYS do something\n`);
-  assert.ok(commaTags.some(e => /TAGS token/.test(e.message)), 'comma-separated TAGS should be rejected');
+  const commaTags = lintPolicy('t.policy.ap', `# t\nABOUT t\nAPPLIES #a, #b\nALWAYS do something\n`);
+  assert.ok(commaTags.some(e => /APPLIES token/.test(e.message)), 'comma-separated APPLIES should be rejected');
 
-  const slashTags = lintPolicy('t.policy.ap', `# t\nABOUT t\nTAGS #coding/scripting\nALWAYS do something\n`);
-  assert.ok(slashTags.some(e => /TAGS token/.test(e.message)), 'hierarchical slash TAGS should be rejected');
+  const slashTags = lintPolicy('t.policy.ap', `# t\nABOUT t\nAPPLIES #coding/scripting\nALWAYS do something\n`);
+  assert.ok(slashTags.some(e => /APPLIES token/.test(e.message)), 'hierarchical slash APPLIES should be rejected');
 
-  const noHash = lintPolicy('t.policy.ap', `# t\nABOUT t\nTAGS typescript\nALWAYS do something\n`);
-  assert.ok(noHash.some(e => /TAGS token/.test(e.message)), 'TAGS token without # should be rejected');
+  const noHash = lintPolicy('t.policy.ap', `# t\nABOUT t\nAPPLIES typescript\nALWAYS do something\n`);
+  assert.ok(noHash.some(e => /APPLIES token/.test(e.message)), 'APPLIES token without # should be rejected');
 }
 
 console.log('Lint tests passed.');
@@ -63,19 +63,19 @@ console.log('Lint tests passed.');
 {
   // EXPORT block missing ABOUT → error
   const noAbout = lintPolicy('ctx.policy.ap',
-    `# p\nEXPORT POLICY needs-about:\n    TAGS #x\n    ALWAYS do something\n`);
+    `# p\nEXPORT POLICY needs-about:\n    APPLIES #x\n    ALWAYS do something\n`);
   assert.ok(noAbout.some(e => /exported block requires ABOUT/.test(e.message)),
     'EXPORT block without ABOUT should error');
 
-  // EXPORT block with ABOUT + TAGS + APPLIES → clean
+  // EXPORT block with ABOUT + APPLIES → clean
   const full = lintPolicy('ctx.policy.ap',
-    `# p\nEXPORT POLICY ctx:\n    ABOUT context rules\n    TAGS #multi-agent\n    APPLIES universal\n    ALWAYS engineer the environment\n    NEVER rely on one prompt\n`);
-  assert.equal(full.length, 0, 'EXPORT block with ABOUT+TAGS+APPLIES should be clean');
+    `# p\nEXPORT POLICY ctx:\n    ABOUT context rules\n    APPLIES #multi-agent universal\n    ALWAYS engineer the environment\n    NEVER rely on one prompt\n`);
+  assert.equal(full.length, 0, 'EXPORT block with ABOUT+APPLIES should be clean');
 
-  // EXPORT block without TAGS → clean (TAGS optional)
+  // EXPORT block without APPLIES → clean (APPLIES optional)
   const noTags = lintPolicy('ctx.policy.ap',
     `# p\nEXPORT POLICY ctx:\n    ABOUT context rules\n    ALWAYS engineer the environment\n`);
-  assert.equal(noTags.length, 0, 'EXPORT block without TAGS should be clean (optional)');
+  assert.equal(noTags.length, 0, 'EXPORT block without APPLIES should be clean (optional)');
 
   // EXPORT TEMPLATE with nested SLOTS body → clean (nested lines not flagged)
   const tpl = lintTemplate('handoff-digest.template.ap',
@@ -84,11 +84,11 @@ console.log('Lint tests passed.');
 
   // Mixed file: EXPORT block + file-top metadata → error on the file-top metadata
   const mixed = lintPolicy('ctx.policy.ap',
-    `# p\nABOUT file-top about\nTAGS #stray\nEXPORT POLICY ctx:\n    ABOUT block about\n    ALWAYS do something\n`);
+    `# p\nABOUT file-top about\nAPPLIES #stray\nEXPORT POLICY ctx:\n    ABOUT block about\n    ALWAYS do something\n`);
   assert.ok(mixed.some(e => /file-top is not allowed/.test(e.message) && e.line === 2),
     'file-top ABOUT in an EXPORT file should error');
   assert.ok(mixed.some(e => /file-top is not allowed/.test(e.message) && e.line === 3),
-    'file-top TAGS in an EXPORT file should error');
+    'file-top APPLIES in an EXPORT file should error');
 
   // Private (non-export) block carrying metadata alongside an EXPORT block → inert
   const privateBlock = lintPolicy('ctx.policy.ap',
@@ -98,7 +98,7 @@ console.log('Lint tests passed.');
 
   // Legacy file (no EXPORT block) → unchanged, clean
   const legacy = lintPolicy('ctx.policy.ap',
-    `# p\nABOUT context rules\nTAGS #multi-agent\nALWAYS engineer the environment\nNEVER rely on one prompt\n`);
+    `# p\nABOUT context rules\nAPPLIES #multi-agent\nALWAYS engineer the environment\nNEVER rely on one prompt\n`);
   assert.equal(legacy.length, 0, 'legacy file-top policy should be unchanged (clean)');
 
   // Legacy file still requires ABOUT (file-top rule not retired)
@@ -232,7 +232,7 @@ await import('./identity.test.mjs');
   console.log('resolveImports tools kind test passed.');
 }
 
-// --- Metadata stripping: APPLIES/TAGS not leaked to rendered body ---
+// --- Metadata stripping: APPLIES not leaked to rendered body ---
 await import('./metadata-stripping.test.mjs');
 
 // --- Integration: metadata keywords must not leak from imported modules ---
@@ -320,7 +320,7 @@ await import('./compileErrors.test.mjs');
 // --- apx engine: start/quiz, scope, ls, get, refs, find, md, errors, stores ---
 await import('./apx.test.mjs');
 
-// --- Inline blocks: ABOUT/TAGS lifted through the same seam as imported units ---
+// --- Inline blocks: ABOUT/APPLIES lifted through the same seam as imported units ---
 await import('./inlineBlocks.test.mjs');
 
 // --- Slot-schema validator: TYPE grammar + record validation against a TEMPLATE ---

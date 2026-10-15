@@ -6,7 +6,7 @@
  * (e.g. `ABOUT …`, `OWNS …`, `WHEN …`).
  */
 import { FORMULAS } from '../formulas.js';
-import { lex, escapeRegex, Keyword, isDecorator } from '../lexer.js';
+import { lex, escapeRegex, Keyword } from '../lexer.js';
 import { parseBlocks, Block } from '../parseBlocks.js';
 export { escapeRegex };
 
@@ -15,7 +15,7 @@ export { escapeRegex };
 //
 // The metadata chain (extractPrimitive(s), stripPrimitives, partitionMetadata,
 // extractAbout) reads ONLY indent-0 lines: in a legacy file the unit's
-// ABOUT/TAGS/APPLIES/SCOPE sit at file-top (indent 0) and its body follows at
+// ABOUT/APPLIES/SCOPE sit at file-top (indent 0) and its body follows at
 // indent 0. After the codemod wraps a module as `EXPORT <KIND> <name>:`, those
 // same lines become children of the block at indent ≥ 1, so the indent-0
 // readers stop seeing them.
@@ -114,8 +114,7 @@ export function exportedBlockBodies(source: string): ExportedBlockBody[] {
   return exportedBlocksOf(parseBlocks(source).blocks).map(block => {
     const dedentByLine = new Map<number, number>();
     indexBlockDedent(block, dedentByLine);
-    // The decorators above the header open the body: they are for the whole block.
-    const out: string[] = decoratorLines(lines, block).map(lineNo => lines[lineNo - 1]);
+    const out: string[] = [];
     for (const [lineNo, dedent] of [...dedentByLine.entries()].sort((a, b) => a[0] - b[0])) {
       const raw = lines[lineNo - 1] ?? '';
       out.push(dedent ? raw.slice(dedent) : raw);
@@ -147,30 +146,13 @@ export function nonExportedSource(source: string): string {
  */
 export function nonExportedLines(source: string): number[] {
   const owned = new Set<number>();
-  const lines = source.split(/\r?\n/);
   for (const block of exportedBlocksOf(parseBlocks(source).blocks)) {
     owned.add(block.startLine);
-    for (const lineNo of decoratorLines(lines, block)) owned.add(lineNo);
     const dedentByLine = new Map<number, number>();
     indexBlockDedent(block, dedentByLine);
     for (const lineNo of dedentByLine.keys()) owned.add(lineNo);
   }
   return source.split(/\r?\n/).map((_, idx) => idx + 1).filter(lineNo => !owned.has(lineNo));
-}
-
-/**
- * The decorators of a top-level block: the decorator lines (`isDecorator`)
- * right above its header, at column 0, nothing between them — the skills its
- * work is done with. Their 1-based line numbers, in order.
- */
-function decoratorLines(lines: string[], block: Block): number[] {
-  const out: number[] = [];
-  for (let lineNo = block.startLine - 1; lineNo >= 1; lineNo--) {
-    const t = lex(lines[lineNo - 1] ?? '')[0];
-    if (!isDecorator(t) || t.indent !== 0) break;
-    out.unshift(lineNo);
-  }
-  return out;
 }
 
 /**
@@ -263,7 +245,7 @@ export function stripPrimitives(body: string, ...keywords: Keyword[]): string {
  * The block name IS the role (its display name is the de-slugified name); a role
  * optionally declares ABOUT and EXPERTISE. The agent that binds it via
  * `AS <role>` renders them in its `# Identity` block. `rules` is the body with
- * the ABOUT/TAGS/EXPERTISE lines removed — only the behaviours
+ * the ABOUT/APPLIES/EXPERTISE lines removed — only the behaviours
  * (ALWAYS/NEVER/WHEN/…) remain, to fuse into Identity or render in the Roles
  * chapter. Single source of truth for both the imported role-file and inline
  * (`ROLE <role>:`) paths.
@@ -278,7 +260,7 @@ export function liftRoleIdentity(body: string): RoleIdentity {
   return {
     about: extractPrimitive(body, 'ABOUT'),
     expertise: extractPrimitive(body, 'EXPERTISE'),
-    rules: stripPrimitives(body, 'ABOUT', 'TAGS', 'EXPERTISE'),
+    rules: stripPrimitives(body, 'ABOUT', 'APPLIES', 'EXPERTISE'),
   };
 }
 

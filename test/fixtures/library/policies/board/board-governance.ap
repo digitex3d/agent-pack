@@ -2,8 +2,7 @@
 
 EXPORT POLICY board-discipline:
   ABOUT   how the board and its cards must be kept — resolve, reconcile, order, satisfy invariants
-  TAGS    #board #planning #hygiene #project-management
-  APPLIES every agent that drives the project board
+  APPLIES #board #planning #hygiene #project-management team:product
 
   ALWAYS  shape every active card to the `card` contract
   ALWAYS  place blockers before the cards they block, and main-goal cards before secondary-goal cards
@@ -16,7 +15,7 @@ EXPORT POLICY board-discipline:
 
 EXPORT POLICY prioritization:
   ABOUT   what to prioritise — one main goal, severity-ranked, goal-aligned
-  TAGS    #product #planning #priority
+  APPLIES #product #planning #priority team:product
 
   ALWAYS  keep exactly one active main goal and link every card to it, a subgoal, or a critical necessity
   ALWAYS  assign one priority per card — P0 critical, P1 high goal-aligned, P2 useful, P3 nice-to-have

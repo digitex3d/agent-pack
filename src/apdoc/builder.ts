@@ -49,9 +49,10 @@ import {
   TEAM_FLOWS_FILE,
 } from '../services/teamMetadata.js';
 import type { ApNode, ApRef, ApShape, ApSlotType, ApStepNode, ApIfNode, ApDocumentMeta, ApStoreProjection } from './types.js';
-import { parseVarLine, readsOf, splitBy, splitInto, splitWith, takesInto, constantOf, type VarScope } from '../vars.js';
+import { parseVarLine, readsOf, splitBy, splitInto, takesInto, constantOf, type VarScope } from '../vars.js';
 import type { PlacedVariable } from '../exportedVars.js';
 import { introOf, fill, refSuffix, FORMULAS } from '../formulas.js';
+import { readWithHead, withPhrase, type WithProblem } from '../withUse.js';
 import { parseForceLevel, toCanonicalKeyword, getIntroByKeyword, forceLevelFamilies } from '../forceLevelConfig.js';
 
 /** Keyword (post-desugar or alias) → family base + numeric force; null force for bullets. */
@@ -151,6 +152,10 @@ export class DocumentBuilder implements BlockCx {
   private checkSites: { id: string; kind: CheckKind; level: CheckLevel; condition: string; inStep: boolean; path: string; line: number | null }[] = [];
   /** What is wrong with the checked conditions: a compile error each — or a warning — reported by the caller. */
   readonly checkIssues: { path: string; name: string; line: number | null; message: string; severity?: 'warning' }[] = [];
+  /** What does not hold in the WITH heads walked — reported by the caller (src/withUse.ts). */
+  readonly withProblems: (WithProblem & { path: string; line: number | null })[] = [];
+  /** The skills and policies a positive WITH names — the ones that hold somewhere without a perimeter. */
+  readonly withNamed = new Set<string>();
 
   /** The reference index a kind's strategy names — lookup, never a branch. */
   private refIndex(ref: RefClass): Map<string, IndexedBlock> {
@@ -322,7 +327,11 @@ export class DocumentBuilder implements BlockCx {
         i++;
         continue;
       }
-      if (base === 'WHEN') {
+      if (base === 'WITH') {
+        const node = this.at(this.withHead(t, force), t);
+        sink.push(node);
+        this.visit(n.children, node.body!, host, steps);
+      } else if (base === 'WHEN') {
         const node = this.at(new WhenNode(rest, t.indent), t);
         sink.push(node);
         this.visit(n.children, node.body, host, steps);
@@ -444,8 +453,6 @@ export class DocumentBuilder implements BlockCx {
         for (let k = i; k < j; k++) this.variable(tokens[k] as Token & { kind: 'keyword' }, [], sink, host, steps);
       } else if (base === 'AS') {
         this.applyShape(force ?? 0, actions[0] ?? '', sink, host, steps);
-      } else if (base === 'WITH') {
-        actions.forEach((a, k) => sink.push(this.at(this.skillUse(force, a, indent), tokens[i + k])));
       } else if (base === 'LENS-IN' && host?.kind === 'procedure') {
         // A procedure's input contract.
         host.lensIn = { force: 0, ref: this.templateRef(stripColon(actions[0] ?? '')) };
@@ -483,19 +490,25 @@ export class DocumentBuilder implements BlockCx {
   }
 
   /**
-   * A `WITH <skill> [AS <template>]` line — `!WITH <skill>`, its negation: the
-   * skill, resolved among the ones the compilation imports, and the shape of
-   * its answer. Where it stands says which work it is for: the block right
-   * below it, or the whole block when it opens a body.
+   * A `WITH …:` head — `!WITH …:`, its negation — read by `readWithHead`
+   * (src/withUse.ts): the skills and policies it names, each a Ref, the shape
+   * of a skill's answer, and what does not hold, reported with its line. The
+   * lines nested below it are its zone; the caller walks them into its body.
    */
-  private skillUse(force: number | null, text: string, indent: number): DirectiveNode {
-    const use = splitWith(text);
-    const name = use?.name ?? text.trim();
-    const def = this.ctx?.skills.find(s => s.name === name);
-    const ref = this.ref(def && { kind: def.kind, name, namespace: namespaceOf(def, this.ctx!.libraryRoots, this.ctx!.libraries) }, name, 'skill');
-    const node = new DirectiveNode('WITH', force, fill(FORMULAS.keywords.WITH.line, { name, ref: refSuffix(ref.id) }), indent);
-    node.skill = ref;
-    if (use?.template) node.shape = { force: 0, ref: this.templateRef(use.template) };
+  private withHead(t: Token & { kind: 'keyword' }, force: number | null): DirectiveNode {
+    const head = this.ctx ? readWithHead(t, this.ctx) : null;
+    const uses = head?.uses ?? [];
+    for (const p of head?.problems ?? []) this.withProblems.push({ ...p, path: this.sourcePath, line: this.fileLine(t) });
+    if (head && !head.negated) for (const d of uses) this.withNamed.add(d.name);
+    const refs = uses.map(d => this.ref({ kind: d.kind, name: d.name, namespace: this.nsOf(d) }, d.name, d.kind));
+    const shape = head?.template ? { force: 0, ref: this.templateRef(head.template, false) } : null;
+    const phrase = withPhrase(
+      uses.map((d, k) => ({ kind: d.kind, name: d.name, ref: refSuffix(refs[k].id) })),
+      shape ? { name: head!.template!, ref: refSuffix(shape.ref.id) } : undefined,
+    );
+    const node = new DirectiveNode('WITH', force, phrase, t.indent, []);
+    node.uses = refs;
+    if (shape) node.shape = shape;
     return node;
   }
 
@@ -645,7 +658,7 @@ export class DocumentBuilder implements BlockCx {
       namespace: this.nsOf(def),
       about: def.about,
       tags: def.tags.map(t => t.replace(/^#/, '')),
-      applies: extractPrimitive(def.body, 'APPLIES'),
+      scopes: def.scopes,
       when: extractPrimitive(def.body, 'WHEN') ?? 'always',
     };
   }
@@ -659,8 +672,8 @@ export class DocumentBuilder implements BlockCx {
     // ABOUT is stripped only when it was LIFTED into the catalog field (imported
     // and inline blocks alike go through liftUnitMetadata).
     return def.about !== null
-      ? stripPrimitives(body, 'ABOUT', 'TAGS', 'APPLIES', 'EXPERTISE')
-      : stripPrimitives(body, 'TAGS', 'APPLIES', 'EXPERTISE');
+      ? stripPrimitives(body, 'ABOUT', 'APPLIES', 'EXPERTISE')
+      : stripPrimitives(body, 'APPLIES', 'EXPERTISE');
   }
 
   // ---------------------------------------------------------- index (pass 1)

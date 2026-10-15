@@ -146,7 +146,7 @@ export function renderNodes(env: MdEnv, nodes: ApNode[], ordered = true): string
       while (i < nodes.length) {
         const c = nodes[i];
         if (c.type !== 'directive' || c.body || c.into || c.keyword !== keyword || c.force !== force || (c.indent ?? 0) !== indent) break;
-        texts.push(c.shape ? fill(FORMULAS.keywords.MEM.shaped, { text: c.text, name: refName(c.shape.ref), ref: env.refOf(c.shape.ref.target) }) : directiveText(c, env));
+        texts.push(c.shape ? fill(FORMULAS.keywords.AS.shaped, { text: c.text, name: refName(c.shape.ref), ref: env.refOf(c.shape.ref.target) }) : directiveText(c, env));
         i++;
       }
       out.push(...indentLines(renderDirectiveGroup(env, keyword, force, texts), indent));

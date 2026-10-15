@@ -18,6 +18,7 @@ import { ApBlock, ApBlockInit } from './block.js';
 import { stableId } from './ids.js';
 import { buildNamespace } from '../namespace.js';
 import { FORMULAS, fill } from '../formulas.js';
+import { withScopeLine } from '../withUse.js';
 import { executorKey, headerExecutorOf } from '../executor.js';
 import { MdEnv, slotTypePhrase, forceIntro, renderNodes, shapeLine, executorHow } from '../../adapters/md/toolkit.js';
 import {
@@ -64,7 +65,7 @@ export interface BlockCx {
 function initOf(data: ApBlockData): ApBlockInit {
   return {
     name: data.name, namespace: data.namespace, about: data.about,
-    tags: data.tags, applies: data.applies, when: data.when,
+    tags: data.tags, scopes: data.scopes, when: data.when,
   };
 }
 
@@ -166,6 +167,8 @@ export class RuleBlock extends ApBlock {
    */
   override asMdBody(env: MdEnv): string {
     let body = this.require || this.ensure ? this.computeMd(env) : super.asMdBody(env);
+    // A policy or a skill opens with the line that says where it applies (src/withUse.ts).
+    body = withScopeLine(this.kind, this.scopes, body);
     if (this.lensIn) body = `${fill(FORMULAS.keywords['LENS-IN'].input, { name: refName(this.lensIn.ref), ref: env.refOf(this.lensIn.ref.target) })}\n${body}`;
     if (this.executor) body = `${fill(FORMULAS.keywords.EXECUTOR.procedure[executorKey(this.executor)], { how: executorHow(env, this.exe, this.executor) })}\n${body}`;
     return body;

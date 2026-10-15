@@ -2,8 +2,7 @@
 
 EXPORT TEMPLATE domain-spec:
   ABOUT   one analysis domain — its name and what the scan should look for within it
-  TAGS    #agent-pack #analysis #scaffold
-  APPLIES role:improvement-analyst — one per domain fed to analyze-domain
+  APPLIES #agent-pack #analysis #scaffold
 
   SLOTS:
     name:  TEXT MAX_WORDS 4   "the analysis domain name, e.g. parser/structure or performance"

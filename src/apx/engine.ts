@@ -32,6 +32,8 @@ import { PROGRAM, WRITE_PROGRAM, executorKey, programDir, programFolders, type A
 import { resolveJudge } from '../judge/builtins.js';
 import type { JudgePlugin } from '../judge/types.js';
 import { refName } from '../../adapters/md/phrases.js';
+import { scopeLabel } from '../withUse.js';
+import { SCOPED_KINDS } from '../services/tags.js';
 import { CREDIT } from '../credits.js';
 import { validateRecord, slotSpecsOf, formatIssues, jsonExample } from '../shapeSchema.js';
 import { BLOCK_ID_RE, addressName, sha256Hex } from '../apdoc/ids.js';
@@ -854,7 +856,9 @@ export class ApxEngine {
 
   private lsLine(block: ApBlock): string {
     const tags = block.tags.length > 0 ? `  ${block.tags.map(t => `#${t}`).join(' ')}` : '';
-    return `${block.id}  ${block.name}${tags}${block.about ? `  — ${block.about}` : ''}`;
+    // A policy or a skill says where it holds: its perimeter, or only under a WITH that names it (src/withUse.ts).
+    const scope = SCOPED_KINDS.includes(block.kind) ? `  [${scopeLabel(block.scopes)}]` : '';
+    return `${block.id}  ${block.name}${tags}${scope}${block.about ? `  — ${block.about}` : ''}`;
   }
 
   /** Blocks grouped by kind, in reading order. */

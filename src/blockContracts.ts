@@ -88,6 +88,15 @@ export interface BlockContract {
  * rules generically. Adding a new block kind = adding an entry here, not
  * writing custom lint logic.
  */
+/** The agent surface — see its comment in BLOCK_CONTRACTS.AGENT. */
+const AGENT_CONTRACT: BlockContract = {
+  allows: ['ABOUT', 'MANDATE', 'OWNS', 'LENS-OUT', 'LENS-IN', 'IMPORT', 'ON-INVOKE', 'WHEN', 'VAR', ...AGENT_FAMILIES],
+  excluded: AGENT_EXCLUDED,
+  requiresAll: ['AS', 'MANDATE'] as const,
+  unique: ['AS', 'ABOUT', 'MANDATE', 'LENS-OUT', 'LENS-IN'] as const,
+  identityKeywords: ['ROLE', 'EXPERTISE', 'APPLIES'] as const,
+};
+
 export const BLOCK_CONTRACTS: Record<string, BlockContract> = {
   FLOW: {
     // `IF <condition>:` (and its `ELSE`) and `UNTIL <condition>:` put some of
@@ -126,7 +135,7 @@ export const BLOCK_CONTRACTS: Record<string, BlockContract> = {
   // region and not a keyword — the same grammar TEMPLATE uses, so there is no
   // second type language to learn or maintain.
   STORE: {
-    allows: ['ABOUT', 'TAGS', 'TYPE', 'LASTS', 'KEY'] as const,
+    allows: ['ABOUT', 'APPLIES', 'TYPE', 'LASTS', 'KEY'] as const,
     requiresAll: ['TYPE'] as const,
     unique: ['ABOUT', 'TYPE', 'LASTS', 'KEY'] as const,
   },
@@ -147,14 +156,16 @@ export const BLOCK_CONTRACTS: Record<string, BlockContract> = {
   // This is the single source of truth for the agent surface: `lintAgentBlocks`
   // in lint.ts reads `allows`, `requiresAll`, `unique`, and `identityKeywords`
   // directly — no second, hand-authored keyword list. `identityKeywords` names
-  // the role-owned children (ROLE/EXPERTISE/TAGS) that are rejected with the
+  // the role-owned children (ROLE/EXPERTISE/APPLIES) that are rejected with the
   // "declare it in the role" hint; they are deliberately absent from `allows`, so
   // the two fields can never silently contradict.
-  AGENT: {
-    allows: ['ABOUT', 'MANDATE', 'OWNS', 'LENS-OUT', 'LENS-IN', 'IMPORT', 'ON-INVOKE', 'WHEN', 'VAR', ...AGENT_FAMILIES],
-    excluded: AGENT_EXCLUDED,
-    requiresAll: ['AS', 'MANDATE'] as const,
-    unique: ['AS', 'ABOUT', 'MANDATE', 'LENS-OUT', 'LENS-IN'] as const,
-    identityKeywords: ['ROLE', 'EXPERTISE', 'TAGS'] as const,
+  AGENT: AGENT_CONTRACT,
+  // A SKILL is an AGENT the adapter writes as a skill — and, like a policy, it
+  // holds where its APPLIES line or a WITH says (src/withUse.ts): APPLIES is its
+  // own, never its role's.
+  SKILL: {
+    ...AGENT_CONTRACT,
+    allows: [...AGENT_CONTRACT.allows, 'APPLIES'],
+    identityKeywords: ['ROLE', 'EXPERTISE'] as const,
   },
 };

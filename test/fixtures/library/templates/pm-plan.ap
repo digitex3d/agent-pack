@@ -2,8 +2,7 @@
 
 EXPORT TEMPLATE pm-plan:
   ABOUT   the routing Plan — text Gantt with phases, parallelism, dependencies, and assigns
-  TAGS    #pm #planning #orchestration #product-manager #planner
-  APPLIES role:pm — applied when the pm planner emits a routing Plan
+  APPLIES #pm #planning #orchestration #product-manager #planner
 
   SLOTS:
     request:        TEXT MAX_WORDS 25 "one-line restatement of the user's request"

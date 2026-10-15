@@ -2,7 +2,7 @@
 
 EXPORT TEMPLATE judge-executed-inputs:
   ABOUT   judge rule for every line a delegate or a program carries out — it receives only the inputs the line reads
-  TAGS    #judge #executed
+  APPLIES #judge #executed
   SLOTS:
     line: TEXT  "a line carried out by a delegate or a program, which receives only `inputs`"
       NEVER  rely on any information that is neither one of `inputs` nor written out literally in `line`

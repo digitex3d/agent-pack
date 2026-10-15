@@ -2,7 +2,7 @@
 
 EXPORT TEMPLATE judge-compute-suggestion:
   ABOUT   judge rule for every DO line the agent carries out itself — a calculation is better left to a COMPUTE block
-  TAGS    #judge #agent
+  APPLIES #judge #agent
   SLOTS:
     action: TEXT  "a line the agent carries out"
       SHOULD-NOT  describe a calculation that a deterministic program could carry out exactly, with no judgment, interpretation or writing
