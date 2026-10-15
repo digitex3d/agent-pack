@@ -5,7 +5,7 @@ EXPORT TEMPLATE ap-statement:
   APPLIES #agent-pack #authoring #scaffold #rule
 
   SLOTS:
-    key:  ENUM[DO ASK COMPUTE RUN IF ELSE UNTIL IF! IF!! UNTIL! UNTIL!! IF* IF** UNTIL* UNTIL** IN VAR]  "the keyword"
+    key:  ENUM[DO ASK COMPUTE RUN IF ELSE UNTIL IF! IF!! UNTIL! UNTIL!! WHEN! IF* IF** UNTIL* UNTIL** IN VAR] "keyword"
       MUST   act with DO (the agent), ASK (a delegate), COMPUTE (a program) or RUN; branch with IF / ELSE
       MUST   loop with UNTIL; a line may raise its executor (agent, delegate, program), never lower it
       MUST   hand a condition to the judge with IF! / UNTIL! (agent sees it) or IF!! / UNTIL!! (sealed)
@@ -15,7 +15,8 @@ EXPORT TEMPLATE ap-statement:
       MUST   never write a round limit on a checked or starred UNTIL — the apx counts the rounds
       MUST   open `IN <store>:` to work on a store, `VAR <name>:` to assign a block's final outcome
       MUST   put INTO <name> at the end of a DO, ASK, COMPUTE or RUN line — on an ASK only `BY <agent>` follows
-    text: TEXT  "the statement body (ELSE takes none); IN and VAR heads end with a colon"
+      MUST   write `WHEN! <condition>:` as sugar for `WHEN <condition>:` + `IF! <condition>:` beneath; never WHEN!!
+    text: TEXT  "the statement body (ELSE takes none); IN, VAR and WHEN! heads end with a colon"
   BODY:
     {key} {text}
   EXAMPLE:

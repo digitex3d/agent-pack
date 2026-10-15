@@ -18,7 +18,7 @@
 import type {
   ApNode, ApRef, ApShape,
   ApDirectiveNode, ApRunNode, ApTextNode,
-  ApIfNode, ApUntilNode, ApWhenNode, ApStepNode, ApParallelNode, ApInNode, ApVarNode,
+  ApIfNode, ApUntilNode, ApWhenNode, ApStepNode, ApParallelNode, ApParallelEach, ApInNode, ApVarNode,
   ApPos, ApLine,
 } from './types.js';
 import { checkHead, type ApCondCheck, type CheckKind } from '../check.js';
@@ -27,7 +27,7 @@ import {
 } from '../../adapters/md/toolkit.js';
 import {
   controlHead, executorHead, executorRounds, refName, runLine, unresolvedRun,
-  stepSignature, stepsHeader, storeScopeLine, varBlockHead,
+  parallelEachHead, stepSignature, stepsHeader, storeScopeLine, varBlockHead,
 } from '../../adapters/md/phrases.js';
 
 /** What a node answers as a line: its primitive and the text after it. */
@@ -496,27 +496,33 @@ export class ParallelNode extends NodeBase implements ApParallelNode {
   readonly type = 'parallel';
   steps: ApStepNode[] = [];
 
+  constructor(public each?: ApParallelEach) {
+    super();
+  }
+
   static fromData(n: ApParallelNode): ParallelNode {
-    const node = new ParallelNode();
+    const node = new ParallelNode(n.each);
     node.steps = reviveNodes(n.steps) as ApStepNode[];
     node.chars = n.chars;
     return node;
   }
 
   toJSON(): ApParallelNode {
-    return { type: this.type, chars: this.chars, steps: this.steps };
+    return { type: this.type, chars: this.chars, ...(this.each ? { each: this.each } : {}), steps: this.steps };
   }
 
   asMdLines(env: MdEnv): string[] {
+    const each = this.each;
     return [
-      `${controlHead('PARALLEL')}:`,
+      each ? parallelEachHead(each.item, env.substitute(`{{${refName(each.list)}}}`), each.max) : `${controlHead('PARALLEL')}:`,
       stepsHeader(),
       ...this.steps.flatMap((s, i) => (s as StepNode).asMdItem(env, i, false)),
     ];
   }
 
   asLine(): LineHead {
-    return { primitive: 'PARALLEL', text: '' };
+    const each = this.each;
+    return { primitive: 'PARALLEL', text: each ? `EACH ${each.item} IN ${refName(each.list)} MAX ${each.max}` : '' };
   }
 }
 

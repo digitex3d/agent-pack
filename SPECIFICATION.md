@@ -460,8 +460,14 @@ These terms have precise meaning and are not interchangeable.
   judge, a state too large or an empty variable all close it, and a
   checked `UNTIL` stops after its last round with the condition closed.
   Every check is recorded in the session. A condition has one judge: a
-  head never carries both `!` and an executor's star (D40). (Added in
-  1.2.)
+  head never carries both `!` and an executor's star (D40). `WHEN!
+  <condition>:` (D26) is sugar, rewritten before compilation into `WHEN
+  <condition>:` with `IF! <condition>:` beneath and the trigger's lines
+  under that: the agent still picks the moment, as for every trigger,
+  and the judge decides the condition, as for every `IF!`. `WHEN!!` fails
+  the compilation — a sealed condition has no moment the agent could see;
+  a sealed trigger is written as a prose `WHEN` with `IF!!` beneath. `!WHEN`
+  fails too. (Added in 1.2; `WHEN!` added in 1.2.)
 
 - **D40 — executor** — who carries out a line: the agent, a delegate or
   a program. A line names it by its verb — `DO` the agent, `ASK` a

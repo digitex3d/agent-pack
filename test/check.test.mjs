@@ -149,6 +149,23 @@ try {
       [[2, '`!IF` is not allowed — write IF, IF! (a judge decides) or IF!! (a sealed gate): "!IF the tests pass:"']]);
   }
 
+  // --- WHEN!: sugar for WHEN <condition>: with IF! <condition>: beneath — the agent picks the moment, the judge decides ---
+  {
+    const sugar = await compile(['    VAR request', '    WHEN! {{request}} submits one idea:', '        DO  shape the idea']);
+    const plain = await compile(['    VAR request', '    WHEN {{request}} submits one idea:', '        IF! {{request}} submits one idea:', '            DO  shape the idea']);
+    assert.equal(sugar.body, plain.body, 'WHEN! compiles byte-identical to the hand-written pair');
+    assert.deepEqual(sugar.structure.meta.checks, plain.structure.meta.checks);
+    const id = idOf(sugar.structure);
+    assert.equal(sugar.structure.meta.checks[id].kind, 'IF');
+    assert.ok(sugar.body.includes(`When \`request\` (read its value: \`node .agent-pack/apx/a.apx get request\`) submits one idea:\n    If \`request\``), sugar.body);
+    assert.match(await errorsOf(['    WHEN! the tests pass:', '        DO  ship']), /a\.ap:4  WHEN!: a checked condition reads at least one variable/, 'the IF! rule holds, named WHEN!, at the WHEN! line');
+    // WHEN!! has no moment the agent could see; !WHEN means nothing
+    assert.deepEqual(checkVocabulary('t.ap', ['EXPORT AGENT t:', '    WHEN!! {{r}} is clean:', '        DO  x', '    !WHEN {{r}} is clean:', '        DO  x', ''].join('\n')).map(e => [e.line, e.message]), [
+      [2, '`WHEN!!` is not allowed — a sealed trigger has no moment the agent could see: write `WHEN <moment>:` with `IF!! <condition>:` beneath: "WHEN!! {{r}} is clean:"'],
+      [4, '`!WHEN` is not allowed — write WHEN, or WHEN! (a judge decides the condition): "!WHEN {{r}} is clean:"'],
+    ]);
+  }
+
   // --- without `checks`: IF! warns and reads as IF; IF!! fails ---
   {
     const { result, stderr } = await stderrOf(() => compile(['    VAR report', '    IF! {{report}} is clean:', '        DO  ship'], { checks: null }));
@@ -322,6 +339,13 @@ try {
     const routed = await stderrOf(orchestration);
     assert.match(routed.stderr, /flows\.ap:4  IF!: no executable here — the condition is the agent's: it reads as IF; checks run in an agent's body, a procedure an agent runs, or a flow step whose BY is an agent/);
     assert.ok(routed.result.includes('If the request is urgent:'), routed.result);
+    // WHEN! in the routing: the same pair, the same fallback, at the WHEN! line
+    const routingWhen = lines => write(join(team, 'flows.ap'), ['IMPORT report FROM @main.vars', 'ABOUT  a crew', ...lines, '',
+      'FLOW ship:', '    STEP judge it:', '        BY builder', '        DO  hand it on']);
+    routingWhen(['WHEN! {{report}} says the request is urgent:', '    RUN ship']);
+    const sugared = await stderrOf(orchestration);
+    assert.match(sugared.stderr, /flows\.ap:3  WHEN!: no executable here — the condition is the agent's: it reads as WHEN/);
+    assert.ok(sugared.result.includes('When `report` (read its value: `node .agent-pack/apx/builder.apx get report`) says the request is urgent:\n    If `report`'), sugared.result);
     routing(['    IF!! the request is urgent:', '        RUN ship']);
     await assert.rejects(orchestration, /flows\.ap:4  IF!!: no executable here — a sealed condition can never be checked here/);
 

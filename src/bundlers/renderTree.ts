@@ -31,9 +31,9 @@ import { forceLevelBaseOf } from '../forceLevelConfig.js';
 import { FORMULAS, fill, refSuffix } from '../formulas.js';
 import { checkHead, condCheckOf, type CheckKind } from '../check.js';
 import { apxCommand } from '../apx/paths.js';
-import { executorHead } from '../../adapters/md/phrases.js';
+import { controlHead, executorHead, parallelEachHead } from '../../adapters/md/phrases.js';
 import { directiveText } from '../../adapters/md/toolkit.js';
-import { splitBy } from '../vars.js';
+import { parseParallelHead, splitBy } from '../vars.js';
 import { readWithHead, withPhrase } from '../withUse.js';
 
 const CONTROL_HEADS: Record<string, string> = { IF: 'If', ELSE: 'Else', UNTIL: 'Until' };
@@ -251,9 +251,12 @@ function renderNodes(nodes: Node[], ctx: BundleContext | undefined, ordered: boo
       continue;
     }
 
-    // PARALLEL container: its STEP children render as an unordered list.
+    // PARALLEL container: its STEP children render as an unordered list. With
+    // EACH, its head says how the runs go; the list's read resolves with the flow's reads.
     if (kw === 'PARALLEL') {
-      out.push(`${' '.repeat(S)}In parallel:`);
+      const head = parseParallelHead(t.rest);
+      const each = head && !('error' in head) ? head : null;
+      out.push(`${' '.repeat(S)}${each ? parallelEachHead(each.item, `{{${each.list}}}`, each.max) : `${controlHead('PARALLEL')}:`}`);
       const body = renderNodes(n.children, ctx, false);
       out.push(...reindent(body, minIndent(body), S));
       i++;

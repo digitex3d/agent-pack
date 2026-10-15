@@ -12,6 +12,7 @@
  *   DO … INTO best-pizza          assigns, or reassigns, a declared variable
  *   {{best-pizza}}                reads one — a constant's value, or a variable's
  *   {{report AS dividend-table}}  reads a variable, keeping only what fits a template
+ *   PARALLEL EACH part IN parts MAX 5   one run per element of a list variable, `{{part}}` the run's element
  *
  * Every reader of these forms — the lint, the compiler, the document builder,
  * the md renderer, the apx — asks this module; none writes its own pattern.
@@ -135,6 +136,36 @@ export function varNameError(name: string): string | null {
   if (BLOCK_ID_RE.test(name)) return `\`${name}\` has the shape of a block id — give the variable another name`;
   if (!VAR_NAME_RE.test(name)) return `\`${name}\` is not a variable name — use letters, digits, _ and -`;
   return null;
+}
+
+/** The head of a `PARALLEL` that runs its step once per element of a list variable. */
+export interface ParallelEach {
+  /** The name `{{item}}` reads in the step: the run's element. */
+  item: string;
+  /** The variable holding the list. */
+  list: string;
+  /** The most runs the list may ask for — more is an error at run time. */
+  max: number;
+}
+
+const EACH_RE = new RegExp(`^EACH\\s+(${NAME})\\s+IN\\s+(${NAME})(?:\\s+MAX\\s+(\\S+))?$`);
+
+/**
+ * The text after `PARALLEL` — `EACH <item> IN <list> MAX <n>`, with an optional
+ * trailing `:` — or null for a bare `PARALLEL`. The bound is always written: a
+ * list nobody bounds starts as many agents as it has elements.
+ */
+export function parseParallelHead(rest: string): ParallelEach | { error: string } | null {
+  const text = rest.trim().replace(/\s*:$/, '');
+  if (!text) return null;
+  const m = EACH_RE.exec(text);
+  if (!m) return { error: `\`PARALLEL ${text}\`: PARALLEL takes nothing, or \`EACH <item> IN <list> MAX <n>\`` };
+  const [, item, list, max] = m;
+  if (max === undefined) return { error: `\`PARALLEL ${text}\`: write the bound — \`PARALLEL EACH ${item} IN ${list} MAX <n>\`` };
+  if (!/^[1-9]\d*$/.test(max)) return { error: `\`PARALLEL ${text}\`: MAX takes a whole number of runs, at least 1` };
+  if (item === list) return { error: `\`PARALLEL ${text}\`: the element needs a name of its own, not the list's` };
+  const error = varNameError(item);
+  return error ? { error } : { item, list, max: Number(max) };
 }
 
 const CONSTANT_RE = /^([^\s=]+)\s*=\s*(.*)$/;

@@ -143,9 +143,12 @@ const escape = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 function linePattern(line: string): RegExp | null {
   const text = line.trim();
   if (text === '') return null;
+  // A `STEP` head may have become a number; a `WHEN!` head the plain `WHEN` of its
+  // desugared pair (src/desugar.ts) — the `IF!` line beneath it, with no match, takes this line.
   const step = /^STEP\s+/.exec(text);
-  const head = step ? '(?:STEP\\s+|\\d+\\.\\s+)' : '';
-  const rest = splitOnReads(step ? text.slice(step[0].length) : text)
+  const sugar = step ? null : /^WHEN!\s+/.exec(text);
+  const head = step ? '(?:STEP\\s+|\\d+\\.\\s+)' : sugar ? 'WHEN!?\\s+' : '';
+  const rest = splitOnReads(step ? text.slice(step[0].length) : sugar ? text.slice(sugar[0].length) : text)
     .map(escape)
     .join('[\\s\\S]*?');
   return new RegExp(`^${head}${rest}$`);

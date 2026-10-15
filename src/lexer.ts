@@ -102,18 +102,26 @@ const FORCE_BASES_ALT = FORCE_LEVEL_BASES.map(escapeRegex).join('|');
 // their highest level are check.ts's.
 // A head may also carry its executor's stars (`IF*` a delegate, `IF**` a program decides),
 // before or after the `!`s — a star with a `!` is the vocabulary check's error.
-const CONTROL_ALT = `!?(?:${CHECK_KINDS.join('|')})(?:!{1,${MAX_CHECK_LEVEL}}\\*{1,2}|\\*{1,2}!{0,${MAX_CHECK_LEVEL}}|!{0,${MAX_CHECK_LEVEL}})`;
+// `WHEN!` is sugar: the desugar pass rewrites it as `WHEN <condition>:` with
+// `IF! <condition>:` beneath (src/desugar.ts). `WHEN!!` and `!WHEN` are lexed
+// with their level only so the vocabulary check rejects them by name; no star.
+const CONTROL_ALT = `!?(?:${CHECK_KINDS.join('|')})(?:!{1,${MAX_CHECK_LEVEL}}\\*{1,2}|\\*{1,2}!{0,${MAX_CHECK_LEVEL}}|!{0,${MAX_CHECK_LEVEL}})|!?WHEN!{0,${MAX_CHECK_LEVEL}}`;
+
+/** The heads that take a `!` level: the checked kinds and `WHEN` (sugar for `WHEN` + `IF!`). */
+export type ControlKind = CheckKind | 'WHEN';
+const CONTROL_KINDS: readonly string[] = [...CHECK_KINDS, 'WHEN'];
 
 /**
  * `IF!!` → `{ keyword: 'IF', level: 2 }`; `!IF` → level -1; `IF**` → executor 2;
- * any other word → null.
+ * `WHEN!` → `{ keyword: 'WHEN', level: 1 }`; any other word → null.
  */
-export function splitControl(keyword: string): { keyword: CheckKind; level: number; executor?: number } | null {
+export function splitControl(keyword: string): { keyword: ControlKind; level: number; executor?: number } | null {
   const stars = keyword.match(/\*+/)?.[0].length ?? 0;
   const split = splitBangs(keyword.replace(/\*+/, ''));
-  if (!split || !(CHECK_KINDS as readonly string[]).includes(split.base)) return null;
+  if (!split || !CONTROL_KINDS.includes(split.base)) return null;
   if (split.level < -1 || split.level > MAX_CHECK_LEVEL || stars > 2) return null;
-  return { keyword: split.base as CheckKind, level: split.level, ...(stars ? { executor: stars } : {}) };
+  if (split.base === 'WHEN' && stars) return null;
+  return { keyword: split.base as ControlKind, level: split.level, ...(stars ? { executor: stars } : {}) };
 }
 const ALIAS_ALT = ALIAS_NAMES.map(escapeRegex).join('|');
 const STATIC_ALT = [...STATIC_KEYWORDS].map(escapeRegex).join('|');

@@ -71,7 +71,7 @@ const ALL_ALIASES = new Map<string, AliasRule['to']>(
  * preserving `kind`, `raw`, `line`, `col`, and `indent` from the source token.
  */
 export function desugar(tokens: Token[]): Token[] {
-  return tokens.map(t => {
+  return checkedTriggers(tokens).map(t => {
     if (t.kind !== 'keyword') return t;
     const target = ALL_ALIASES.get(t.keyword as string);
     if (!target) return t;
@@ -87,4 +87,44 @@ export function desugar(tokens: Token[]): Token[] {
       rest,
     };
   });
+}
+
+/**
+ * `WHEN! <condition>:` is sugar for a prose trigger with a checked branch beneath:
+ *
+ *   WHEN! {{request}} submits one idea:      WHEN {{request}} submits one idea:
+ *       RUN shape-idea                 →         IF! {{request}} submits one idea:
+ *                                                    RUN shape-idea
+ *
+ * The agent still picks the moment, as for every WHEN; the judge decides the
+ * condition, as for every IF!, and everything downstream sees only that pair.
+ * The IF! head takes the body's indent and the body moves one level deeper —
+ * the level being the body's own, so the rewrite is byte-identical to the
+ * hand-written form. Every rewritten token's `raw` is its rewritten line: the
+ * pipeline rebuilds a block's body from `raw` and lexes it again, so the pass
+ * must be idempotent — a re-lex of its output finds nothing left to rewrite.
+ * Both heads keep the source line. `WHEN!!` (level 2) and `!WHEN` (level -1)
+ * are left as they are: the vocabulary check rejects them — a sealed
+ * condition could not sit in a prose head.
+ */
+function checkedTriggers(tokens: Token[]): Token[] {
+  const isSugar = (t: Token): t is Token & { kind: 'keyword' } => t.kind === 'keyword' && t.keyword === 'WHEN' && t.level === 1;
+  if (!tokens.some(isSugar)) return tokens;
+  const out: Token[] = [];
+  const shifts: { above: number; by: number }[] = [];   // open rewrites: a line deeper than `above` moves by `by`
+  const moved = <T extends Token>(t: T, by: number): T =>
+    by && t.kind !== 'blank' && 'raw' in t ? { ...t, indent: t.indent + by, raw: ' '.repeat(by) + t.raw } : t;
+  tokens.forEach((t, i) => {
+    if (t.kind !== 'blank') while (shifts.length && t.indent <= shifts[shifts.length - 1].above) shifts.pop();
+    const by = shifts.reduce((n, s) => n + s.by, 0);
+    if (!isSugar(t)) { out.push(moved(t, by)); return; }
+    const body = tokens.slice(i + 1).find(n => n.kind !== 'blank');
+    const step = body && body.indent > t.indent ? body.indent - t.indent : 4;
+    const { level: _level, ...plain } = t;
+    const line = (keyword: string, indent: number) => `${' '.repeat(indent)}${keyword} ${t.rest}`;
+    out.push({ ...plain, indent: t.indent + by, raw: line('WHEN', t.indent + by) });
+    out.push({ ...plain, keyword: 'IF' as Keyword, level: 1, indent: t.indent + by + step, raw: line('IF!', t.indent + by + step) });
+    shifts.push({ above: t.indent, by: step });
+  });
+  return out;
 }

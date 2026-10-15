@@ -31,6 +31,15 @@ export function executorRounds(rounds: number): string {
   return fill(K.EXECUTOR.rounds, { rounds });
 }
 
+/**
+ * A `PARALLEL EACH <item> IN <list> MAX <n>` head: one run per element, the
+ * bound, what a run's failure does. `list` is the list variable's read as the
+ * projection renders it; the element reads as written, `{{item}}`.
+ */
+export function parallelEachHead(item: string, list: string, max: number): string {
+  return `${fill(K.PARALLEL.each, { head: controlHead('PARALLEL'), list, max, item: `{{${item}}}` })}:`;
+}
+
 /** The STEP list header (`Steps:`). */
 export function stepsHeader(): string {
   return `${K.STEP.list}:`;

@@ -20,8 +20,8 @@ import { COMPUTE_SECTIONS, executorMark, returnShape, splitExecutorMark } from '
 import { parseTypeSpec } from './shapeSchema.js';
 import { STORE_LIFETIMES } from './storeTypes/types.js';
 import { stripTrailingColon, buildTree, type Node as TreeNode } from './bundlers/renderTree.js';
-import { condCheckOf, type CheckKind, type CheckSite } from './check.js';
-import { parseVarLine, isVarKeyword, splitBy, splitInto, takesInto, readsOf } from './vars.js';
+import { condCheckOf, checkedKeyword, sugaredHead, type CheckKind, type CheckSite } from './check.js';
+import { parseVarLine, parseParallelHead, isVarKeyword, splitBy, splitInto, takesInto, readsOf } from './vars.js';
 
 export interface LintError {
   file: string;
@@ -846,6 +846,12 @@ export function validateBlockContracts(
         contract: { allows: branches.allows, excluded: parent.contract.excluded, branches: branches.nests ? branches : undefined },
         host: parent.host ?? parent,
       });
+    } else if (t.keyword === 'PARALLEL' && contracts.PARALLEL) {
+      // `PARALLEL EACH <item> IN <list> MAX <n>` holds its one step; a bare PARALLEL, its steps.
+      const head = parseParallelHead(t.rest);
+      if (head && 'error' in head) errors.push({ file, line: t.line, message: head.error });
+      const key = head && !('error' in head) ? 'PARALLEL EACH' : 'PARALLEL';
+      stack.push({ keyword: key, line: t.line, indent: t.indent, children: new Map(), contract: contracts[key] ?? contracts.PARALLEL });
     } else if (contracts[t.keyword]) {
       stack.push({ keyword: t.keyword, line: t.line, indent: t.indent, children: new Map(), contract: contracts[t.keyword] });
     }
@@ -1255,7 +1261,13 @@ export function checkVocabulary(file: string, body: string): LintError[] {
     } else if (t.kind === 'keyword') {
       key = t.keyword as string;
       // `!IF` / `!UNTIL` mean nothing: the `!`s after the keyword say who decides the condition.
-      if ((t.level ?? 0) < 0) err(t.line, `\`!${key}\` is not allowed — write ${key}, ${key}! (a judge decides) or ${key}!! (a sealed gate): "${quoteRaw(t)}"`);
+      // `WHEN!` is sugar for WHEN + IF! (desugared before this check); `WHEN!!` has no moment the
+      // agent could see, so a sealed trigger is written as a prose WHEN with IF!! beneath.
+      if (key === 'WHEN' && (t.level ?? 0) !== 0) {
+        err(t.line, (t.level ?? 0) < 0
+          ? `\`!WHEN\` is not allowed — write WHEN, or WHEN! (a judge decides the condition): "${quoteRaw(t)}"`
+          : `\`WHEN!!\` is not allowed — a sealed trigger has no moment the agent could see: write \`WHEN <moment>:\` with \`IF!! <condition>:\` beneath: "${quoteRaw(t)}"`);
+      } else if ((t.level ?? 0) < 0) err(t.line, `\`!${key}\` is not allowed — write ${key}, ${key}! (a judge decides) or ${key}!! (a sealed gate): "${quoteRaw(t)}"`);
       // The stars say who carries the condition out, the `!`s who judges it: a condition has one judge.
       if (t.executor && (t.level ?? 0) > 0) {
         err(t.line, `\`${t.raw.trim().split(/\s/)[0]}\` is not allowed — a condition has one judge: write ${key}! / ${key}!! (a judge decides) or ${key}* / ${key}** (a delegate or a program decides): "${quoteRaw(t)}"`);
@@ -1491,12 +1503,16 @@ export function checkedHeadIssues(
 ): LintError[] {
   const issues: LintError[] = [];
   const keyOf = (n: TreeNode): string => (n.token.kind === 'keyword' ? n.token.keyword as string : n.token.kind === 'blockOpener' ? n.token.key : '');
-  const visit = (nodes: TreeNode[], site: CheckSite): void => {
+  const visit = (nodes: TreeNode[], site: CheckSite, parent: { keyword: string; condition: string } | null = null): void => {
+    const first = nodes.find(c => c.token.kind !== 'blank');
     for (const n of nodes) {
       const t = n.token;
       const key = keyOf(n);
       if (t.kind === 'keyword' && (key === 'IF' || key === 'UNTIL')) {
-        const { issue } = condCheckOf(key as CheckKind, t.level ?? 0, stripTrailingColon(t.rest), site, checks);
+        const condition = stripTrailingColon(t.rest);
+        // The IF! of a desugared WHEN! reports as WHEN! — the head the author wrote.
+        const head = sugaredHead(parent, n === first, t.level ?? 0, condition) ?? checkedKeyword(key as CheckKind, t.level ?? 0);
+        const { issue } = condCheckOf(key as CheckKind, t.level ?? 0, condition, site, checks, head);
         if (issue) issues.push({ file, line: t.line, ...issue });
       }
       let inner = site;
@@ -1505,7 +1521,7 @@ export function checkedHeadIssues(
         const by = n.children.find(c => keyOf(c) === 'BY');
         inner = { at: 'step', agent: by && by.token.kind === 'keyword' ? agentOf(stripTrailingColon(by.token.rest).trim()) : null };
       }
-      visit(n.children, inner);
+      visit(n.children, inner, t.kind === 'keyword' && key === 'WHEN' ? { keyword: 'WHEN', condition: stripTrailingColon(t.rest) } : null);
     }
   };
   visit(buildTree(lex(source)), { at: 'none' });

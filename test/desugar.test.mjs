@@ -135,4 +135,26 @@ assert.ok(
   assert.equal(kwTokens[2].rest, 'run checks');
 }
 
+// --- WHEN! <condition>: is sugar for WHEN <condition>: with IF! <condition>: beneath ---
+// The body moves one level deeper — its own level — so the rewrite is byte-identical
+// to the hand-written pair; both heads keep the source line. WHEN!! and !WHEN are left
+// for the vocabulary check.
+
+{
+  const sugar = ['    WHEN! {{request}} submits one idea:', '        RUN shape-idea', '        IF it rains:', '            DO  stay', '', '    WHEN plain:', '        DO  y'];
+  const plain = ['    WHEN {{request}} submits one idea:', '        IF! {{request}} submits one idea:', '            RUN shape-idea', '            IF it rains:', '                DO  stay', '', '    WHEN plain:', '        DO  y'];
+  const shape = t => [t.kind, t.indent, t.keyword ?? '', t.rest ?? '', t.level ?? 0];
+  assert.deepEqual(lex(sugar.join('\n')).map(shape), lex(plain.join('\n')).map(shape), 'WHEN! lexes as WHEN + IF!');
+  const [when, cond] = lex(sugar.join('\n')).filter(t => t.kind === 'keyword');
+  assert.equal(when.line, 1); assert.equal(cond.line, 1, 'both heads point at the source line');
+  assert.equal(when.raw, '    WHEN {{request}} submits one idea:'); assert.equal(cond.raw, '        IF! {{request}} submits one idea:', 'raw is the rewritten line');
+  const once = lex(sugar.join('\n')).map(t => t.raw ?? '').join('\n');
+  assert.equal(lex(once).map(t => t.raw ?? '').join('\n'), once, 'the rewrite is idempotent: the pipeline re-lexes a body rebuilt from raw');
+  const sealed = lex('WHEN!! {{r}} is clean:\n    DO x').filter(t => t.kind === 'keyword');
+  assert.equal(sealed[0].keyword, 'WHEN'); assert.equal(sealed[0].level, 2, 'WHEN!! is not rewritten');
+  const negated = lex('!WHEN {{r}} is clean:\n    DO x').filter(t => t.kind === 'keyword');
+  assert.equal(negated[0].level, -1, '!WHEN is not rewritten');
+  assert.equal(lex('WHEN* x:').filter(t => t.kind === 'keyword').length, 0, 'WHEN takes no executor star');
+}
+
 console.log('desugar tests passed.');

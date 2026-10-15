@@ -114,6 +114,15 @@ export interface CheckIssue {
 }
 
 /**
+ * The `IF!` of a desugared `WHEN!` (src/desugar.ts): the first line under a WHEN,
+ * with the WHEN's own condition. Its messages name the head the author wrote.
+ * Structural, since a body rebuilt from the tokens and lexed again keeps no mark.
+ */
+export function sugaredHead(parent: { keyword: string; condition: string } | null, first: boolean, level: number, condition: string): string | null {
+  return parent?.keyword === 'WHEN' && first && level === 1 && parent.condition.trim() === condition.trim() ? 'WHEN!' : null;
+}
+
+/**
  * THE rule of a checked head (`IF!`, `IF!!`, `UNTIL!`, `UNTIL!!`): who answers
  * for it and with which id, or why no one does. `IF!` with no one to check it
  * reads as `IF`, with a warning; `IF!!` there fails — it could never be sealed.
@@ -123,20 +132,21 @@ export interface CheckIssue {
  */
 export function condCheckOf(
   kind: CheckKind, level: number, condition: string, site: CheckSite, checks: { rounds: number } | null | undefined,
+  head = checkedKeyword(kind, level),
 ): { check?: ApCondCheck; issue?: CheckIssue } {
   if (level < 1) return {};   // `!IF` is the vocabulary check's error
-  const head = checkedKeyword(kind, level);
+  const plain = head.replace(/!+$/, '');   // what the head reads as when no one checks it
   const warn = (message: string): { issue: CheckIssue } => ({ issue: { message, severity: 'warning' } });
   const fail = (message: string): { issue: CheckIssue } => ({ issue: { message } });
   if (site.at === 'none') {
     const where = 'checks run in an agent\'s body, a procedure an agent runs, or a flow step whose BY is an agent';
     return level === 1
-      ? warn(`${head}: no executable here — the condition is the agent's: it reads as ${kind}; ${where}`)
+      ? warn(`${head}: no executable here — the condition is the agent's: it reads as ${plain}; ${where}`)
       : fail(`${head}: no executable here — a sealed condition can never be checked here; ${where}`);
   }
   if (!checks) {
     return level === 1
-      ? warn(`${head}: no judge for checked conditions is configured — the condition is the agent's: it reads as ${kind}; to have a judge decide it, add checks: { adapter: 'jev' } to agent-pack.config.mjs`)
+      ? warn(`${head}: no judge for checked conditions is configured — the condition is the agent's: it reads as ${plain}; to have a judge decide it, add checks: { adapter: 'jev' } to agent-pack.config.mjs`)
       : fail(`${head} needs checks: { adapter: 'jev' } in agent-pack.config.mjs — a sealed condition is decided by a judge, and none is configured`);
   }
   // A checked condition between a flow's steps has no one agent to answer for it — not supported yet.

@@ -28,7 +28,7 @@ import type { BundleContext } from '../dispatch/types.js';
 import type { Definition } from '../definition.js';
 import { lex, Token } from '../lexer.js';
 import { buildTree, isStructural, splitArgs, stripTrailingColon, rawOf, restOf, Node as WalkNode } from '../bundlers/renderTree.js';
-import { DEFAULT_ROUNDS, condCheckOf, checkedKeyword, checkedVars, questionOf, type ApCheckSpec, type CheckKind, type CheckLevel, type CheckSite } from '../check.js';
+import { DEFAULT_ROUNDS, condCheckOf, checkedKeyword, checkedVars, questionOf, sugaredHead, type ApCheckSpec, type CheckKind, type CheckLevel, type CheckSite } from '../check.js';
 import { sequencePrimitiveFor } from '../sequencePrimitives.js';
 import { parseTypeSpec, jsonExample, templateClosure } from '../shapeSchema.js';
 import { refName } from '../../adapters/md/phrases.js';
@@ -49,7 +49,7 @@ import {
   TEAM_FLOWS_FILE,
 } from '../services/teamMetadata.js';
 import type { ApNode, ApRef, ApShape, ApSlotType, ApStepNode, ApIfNode, ApDocumentMeta, ApStoreProjection } from './types.js';
-import { parseVarLine, readsOf, splitBy, splitInto, takesInto, constantOf, type VarScope } from '../vars.js';
+import { parseVarLine, parseParallelHead, readsOf, splitBy, splitInto, takesInto, constantOf, type VarScope } from '../vars.js';
 import type { PlacedVariable } from '../exportedVars.js';
 import { introOf, fill, refSuffix, FORMULAS } from '../formulas.js';
 import { readWithHead, withPhrase, type WithProblem } from '../withUse.js';
@@ -146,10 +146,14 @@ export class DocumentBuilder implements BlockCx {
   private varSites: VarSite[] = [];
   /** Every assignment of a variable — a `VAR x:` block, a `DO … INTO x` — in walk order. */
   private varWrites: { name: string; node: VarNode | DirectiveNode | RunNode; path: string }[] = [];
+  /** Every `PARALLEL EACH … IN <list>` — its list must be a variable typed with one LIST slot. */
+  private eachLists: { name: string; node: ParallelNode; path: string }[] = [];
   /** What is wrong with the variables: a compile error each, reported by the caller. */
   readonly varErrors: { path: string; name: string; line: number | null; message: string }[] = [];
   /** The checked conditions this agent's apx answers for, in walk order — their questions are built at finish. */
-  private checkSites: { id: string; kind: CheckKind; level: CheckLevel; condition: string; inStep: boolean; path: string; line: number | null }[] = [];
+  private checkSites: { id: string; kind: CheckKind; level: CheckLevel; head: string; condition: string; inStep: boolean; path: string; line: number | null }[] = [];
+  /** The IF! token a `WHEN!` was desugared into, while its WHEN's body is walked — named WHEN! in messages. */
+  private sugared: Token | null = null;
   /** What is wrong with the checked conditions: a compile error each — or a warning — reported by the caller. */
   readonly checkIssues: { path: string; name: string; line: number | null; message: string; severity?: 'warning' }[] = [];
   /** What does not hold in the WITH heads walked — reported by the caller (src/withUse.ts). */
@@ -276,7 +280,11 @@ export class DocumentBuilder implements BlockCx {
       }
 
       if (kw === 'PARALLEL') {
-        const node = this.at(new ParallelNode(), t);
+        // `PARALLEL EACH <item> IN <list> MAX <n>`: a malformed head is the lint's to report.
+        const head = parseParallelHead(t.rest);
+        const each = head && !('error' in head) ? head : null;
+        const node = this.at(new ParallelNode(each ? { item: each.item, list: VarBlock.ref(each.list), max: each.max } : undefined), t);
+        if (each) this.eachLists.push({ name: each.list, node, path: this.sourcePath });
         sink.push(node);
         this.visit(n.children, node.steps as unknown as ApNode[], host, steps);
         i++;
@@ -334,7 +342,12 @@ export class DocumentBuilder implements BlockCx {
       } else if (base === 'WHEN') {
         const node = this.at(new WhenNode(rest, t.indent), t);
         sink.push(node);
+        const first = n.children.find(c => c.token.kind !== 'blank')?.token;
+        const prior = this.sugared;
+        this.sugared = first?.kind === 'keyword' && first.keyword === 'IF'
+          && sugaredHead({ keyword: 'WHEN', condition: rest }, true, first.level ?? 0, stripTrailingColon(first.rest)) ? first : null;
         this.visit(n.children, node.body, host, steps);
+        this.sugared = prior;
       } else {
         const node = this.at(new DirectiveNode(base, force, rest, t.indent, []), t);
         sink.push(node);
@@ -379,12 +392,13 @@ export class DocumentBuilder implements BlockCx {
     const by = step?.by;
     const site: CheckSite = step ? { at: 'step', agent: by && by.kind === 'agent' && by.resolved !== false ? refName(by) : null }
       : host?.kind === 'flow' ? { at: 'flow' } : { at: 'agent', agent: this.ctx!.agentName };
-    const { check, issue } = condCheckOf(kind, t.level ?? 0, node.condition, site, this.ctx?.checks);
+    const head = t === this.sugared ? 'WHEN!' : checkedKeyword(kind, t.level ?? 0);
+    const { check, issue } = condCheckOf(kind, t.level ?? 0, node.condition, site, this.ctx?.checks, head);
     const at = { path: this.sourcePath, name: node.condition, line: this.fileLine(t) };
     if (issue) this.checkIssues.push({ ...at, ...issue });
     if (!check) return;
     node.check = check;
-    if (check.agent === this.ctx!.agentName) this.checkSites.push({ ...at, id: check.id, kind, level: check.level, condition: node.condition, inStep: !!step });
+    if (check.agent === this.ctx!.agentName) this.checkSites.push({ ...at, id: check.id, kind, level: check.level, head, condition: node.condition, inStep: !!step });
     if (check.level === 2) node.condition = '';
   }
 
@@ -402,7 +416,7 @@ export class DocumentBuilder implements BlockCx {
     const checks: Record<string, ApCheckSpec> = {};
     for (const site of this.checkSites) {
       const issue = (message: string) => { this.checkIssues.push({ path: site.path, name: site.condition, line: site.line, message }); };
-      const head = checkedKeyword(site.kind, site.level);
+      const { head } = site;
       const vars = checkedVars(site.condition, isConstant);
       const unseen = vars.filter(v => !visible.has(v));
       // A step's reads are checked here: a flow file's reads are no other check's.
@@ -823,7 +837,8 @@ export class DocumentBuilder implements BlockCx {
         ? `INTO ${w.name}: \`${w.name}\` is a constant — only a variable takes a value while the agent works`
         : `INTO ${w.name}: no variable \`${w.name}\` — declare it with \`VAR ${w.name}\` in the agent's body, or IMPORT the module that exports it`);
     }
-    return [...table.values()].map(site => {
+    const types = new Map<string, ApRef | null>();
+    const blocks = [...table.values()].map(site => {
       const writes = this.varWrites.filter(w => w.name === site.name);
       this.sourcePath = site.path;
       // A shared declaration nobody here fills needs no template here; one this agent fills, or declares, does.
@@ -840,8 +855,21 @@ export class DocumentBuilder implements BlockCx {
         }
       }
       if (type) for (const w of writes) w.node.shape = { force: 1, ref: type };
+      types.set(site.name, type);
       return VarBlock.fromDeclaration(site.name, site.scope, type, site.where);
     });
+    // `PARALLEL EACH … IN <list>`: the list is a variable whose template holds one LIST slot — the elements.
+    for (const { name, node, path } of this.eachLists) {
+      const at = (message: string) => fail(path, name, node.pos?.line ?? null, `PARALLEL EACH ${node.each!.item} IN ${name}: ${message}`);
+      const type = types.get(name);
+      if (type === undefined) at(`no variable \`${name}\` — IMPORT the module that exports it, or declare it with \`VAR ${name} AS <template>\``);
+      else if (!type) at(`\`${name}\` has no type — declare it \`AS <template>\`, a template with one LIST slot`);
+      else {
+        const lists = (doc.slotsOf(type) ?? []).filter(s => s.spec.kind === 'list');
+        if (lists.length !== 1) at(`\`${refName(type)}\` has ${lists.length} LIST slots — the list to run over is its one LIST slot`);
+      }
+    }
+    return blocks;
   }
 
   /**

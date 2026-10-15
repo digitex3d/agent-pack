@@ -198,7 +198,18 @@ export interface ApParallelNode {
   /** Where the node was written — provenance, never serialized. */
   pos?: ApPos;
   chars: number;
+  /** `PARALLEL EACH <item> IN <list> MAX <n>`: its step runs once per element of the list variable. */
+  each?: ApParallelEach;
   steps: ApStepNode[];
+}
+
+export interface ApParallelEach {
+  /** The name `{{item}}` reads in the step: the run's element. */
+  item: string;
+  /** The variable holding the list. */
+  list: ApRef;
+  /** The most runs — a longer list is an error at run time. */
+  max: number;
 }
 
 

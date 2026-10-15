@@ -97,9 +97,10 @@ EXPORT ROLE ap-author:
       DO   leave the round limit of a checked UNTIL to the apx
       DO   place a check in an agent's body, a role, a procedure, or a flow STEP whose BY names an agent
       DO   confirm the project config sets `checks` — without it IF! reads as IF and IF!! fails
+      DO   write `WHEN! <condition>:` as the short form of `WHEN <condition>:` with `IF! <condition>:` beneath
       NEVER write a round count such as "three rounds at most" on a checked UNTIL head
       NEVER put a checked condition at a FLOW's own level or in a team's routing
-      NEVER write !IF or !UNTIL — both fail the compilation
+      NEVER write !IF, !UNTIL, WHEN!! or !WHEN — all four fail the compilation
       NEVER put a `!` and a star on one condition — a condition has one judge: IF! / IF!! or IF* / IF**
 
     WHEN a condition does not need a judge:

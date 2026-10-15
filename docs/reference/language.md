@@ -363,6 +363,7 @@ An `UNTIL*` or `UNTIL**` asks its condition after each round, at most `rounds` t
 | `IF <condition>` … `ELSE` | a branch; the indented lines are its body. An `ELSE` must come right after an `IF` in the same body |
 | `UNTIL <condition>` | repeat the indented lines until the condition holds |
 | `IF!` / `IF!!`, `UNTIL!` / `UNTIL!!` | the same, with the condition decided by a judge — see [Checked conditions](#checked-conditions) |
+| `WHEN! <condition>:` | a trigger whose condition a judge decides — sugar for `WHEN <condition>:` with `IF! <condition>:` beneath — see [Checked conditions](#checked-conditions) |
 | `IF*` / `IF**`, `UNTIL*` / `UNTIL**` | the same, with the condition decided by a delegate or a program — see [Executors](#executors) |
 | `RUN <procedure or flow>` | carry out that procedure or flow |
 | `RUN <procedure> INTO <name>` | carry it out, and store its result in a variable |
@@ -391,6 +392,23 @@ The `!`s after `IF` or `UNTIL` say how little the agent is trusted with the cond
 | `IF!! <condition>` | never sees it: the condition is **sealed** — in no prompt, in no view of the apx | a judge; the agent hears only *open* or *closed* |
 
 `UNTIL!` and `UNTIL!!` are the same as a loop head: repeat the lines beneath until the judge opens the gate, at most `rounds` rounds (3 by default); at the limit the agent stops and reports that the gate stayed closed. A gate needs no keyword of its own: it is an `UNTIL` the judge decides, and a branch is an `IF` the judge decides. `ELSE` follows `IF!` and `IF!!` as it follows `IF`. `!IF` is an error.
+
+**`WHEN!` is sugar.** `WHEN! <condition>:` is rewritten, before anything else reads the source, into `WHEN <condition>:` with `IF! <condition>:` beneath it and the trigger's lines under that — byte-identical to the hand-written pair. The agent still picks the moment, as for every `WHEN`; the judge decides the condition, as for every `IF!`, with the same rules: it reads at least one variable, it needs `checks` configured, it is checked by the agent whose apx answers for it. `WHEN!!` is an error: a sealed condition has no moment the agent could see, so a sealed trigger is written as a prose `WHEN <moment>:` with `IF!! <condition>:` beneath. `!WHEN` and `WHEN*` are errors too.
+
+```
+VAR request
+WHEN! {{request}} submits one new idea, not a bug nor a task already decided:
+    RUN shape-idea
+```
+
+reads as
+
+```
+VAR request
+WHEN {{request}} submits one new idea, not a bug nor a task already decided:
+    IF! {{request}} submits one new idea, not a bug nor a task already decided:
+        RUN shape-idea
+```
 
 ```
 VAR report

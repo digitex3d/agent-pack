@@ -127,6 +127,12 @@ export const BLOCK_CONTRACTS: Record<string, BlockContract> = {
     allows: ['STEP'] as const,
     requiresAll: ['STEP'] as const,
   },
+  // `PARALLEL EACH <item> IN <list> MAX <n>`: one step, run once per element.
+  'PARALLEL EACH': {
+    allows: ['STEP'] as const,
+    requiresAll: ['STEP'] as const,
+    unique: ['STEP'] as const,
+  },
   // A store is a named working table an agent reads and writes. TYPE names the
   // backing plugin — required even while one type exists, so a second one is an
   // addition rather than a migration. LASTS is its lifetime, KEY the field that

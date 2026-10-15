@@ -31,7 +31,7 @@ export interface Formulas {
       question: Text; shapedRead: Text; field: Text; fieldSeparator: Text; state: Text; stateSeparator: Text;
     };
     WHEN: { head: Text };
-    PARALLEL: { head: Text };
+    PARALLEL: { head: Text; each: Text };
     IN: { head: Text; store: Text; unresolved: Text };
     /** `args` is a list: the order the signature fragments read in is data too. */
     STEP: { head: Text; list: Text; signature: Text; args: { keyword: string; formula: Text }[] };
