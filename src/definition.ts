@@ -29,6 +29,8 @@ export interface Definition {
   breadcrumbSegments: BreadcrumbSegment[];
   /** Block id stamped during bundle render — the target of every reference to it. */
   refId?: string;
+  /** The namespace, when no file gives it — a skill of the harness (`@harness.skills`). */
+  namespace?: string;
   /**
    * Role identity — the display name this role embodies (the de-slugified block
    * name). Set only on `kind: 'role'` entries; an agent that binds the role via
@@ -136,18 +138,18 @@ export const STRATEGIES: DefinitionStrategy[] = [
   //
   // Rendering lives in StoreBlock (apdoc), because the md is a projection of
   // the document and a second renderer here would be a second source of truth.
-  // But only `bundleAgentToString` goes through the document. The three legacy
-  // callers of `emitCollectedSections` — buildPlaybookBundle,
-  // bundleStandaloneToString and orchestrationSection — still render from THIS
+  // But only `bundleAgentToString` goes through the document. The two legacy
+  // callers of `emitCollectedSections` — bundleStandaloneToString and
+  // orchestrationSection — still render from THIS
   // registry, and with no `renderBody` here they fall through to the generic
   // verbatim body.
   //
-  // So a playbook that imports a store prints its RAW SOURCE — `TYPE tabeli`,
+  // So a standalone file that imports a store prints its RAW SOURCE — `TYPE tabeli`,
   // `LASTS project`, the SLOTS region as written — instead of the field list
   // and the commands. Not an error, and silent.
   //
-  // It does not bite today: no playbook declares or imports a store. It closes
-  // when playbook/orchestration migrate onto the document (see the header of
+  // It does not bite today: no standalone file declares or imports a store. It closes
+  // when standalone/orchestration migrate onto the document (see the header of
   // src/apdoc/builder.ts) — not by adding a renderer here, which would put the
   // same prose in two places again.
   { ...defaults('store'),     afterEmit: propagateRefId },

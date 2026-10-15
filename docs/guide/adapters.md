@@ -32,10 +32,10 @@ export default {
 
 ## Built-in adapters
 
-| Name | Agent | Playbook | Project pointer |
+| Name | Agent | Skill | Project pointer |
 |---|---|---|---|
 | `claude-code` | `.claude/agents/<name>.md` — the whole definition | `.claude/skills/<name>/SKILL.md` | `CLAUDE.md` → `@AGENTS.md` |
-| `claude-code-apx` | `.claude/agents/<name>.md` — the agent's own definition (team, identity, mandate, shapes, its own rules) in the same words as `claude-code`, then a pointer to the agent's apx for the rest | as `claude-code` | as `claude-code` |
+| `claude-code-apx` | `.claude/agents/<name>.md` — the agent's own definition (team, identity, mandate, shapes, its own rules) in the same words as `claude-code`, then a pointer to the agent's apx for the rest | `.claude/skills/<name>/SKILL.md` — the same, under the skill's frontmatter | as `claude-code` |
 | `cursor` | `.cursor/rules/<name>.mdc` | `.cursor/rules/<name>.mdc` | — |
 | `junie` | `.junie/AGENTS.md` | `.junie/skills/<name>/SKILL.md` | — |
 
@@ -43,12 +43,14 @@ Options:
 
 ```javascript
 claudeCodeAdapter({ agentsDir: '.claude/agents', skillsDir: '.claude/skills', tools: '*' });
-claudeCodeApxAdapter({ agentsDir: '.claude/agents', tools: '*' });
+claudeCodeApxAdapter({ agentsDir: '.claude/agents', skillsDir: '.claude/skills', tools: '*' });
 cursorAdapter({ rulesDir: '.cursor/rules', agentsAlwaysActive: false });
 junieAdapter({ agentsFile: '.junie/AGENTS.md', skillsDir: '.junie/skills' });
 ```
 
-A playbook is compiled by path: `agent-pack bundle path/to/file.playbook.ap`.
+A skill is an agent: `bundle all` builds every `EXPORT SKILL` of the project library, with its apx, and the adapter writes it as a skill instead of a subagent. The frontmatter carries its name and its `ABOUT` as `description`.
+
+An adapter may word how an imported skill is loaded: `renderings.SKILL.apx` (an agent-pack skill, `{command}` its apx) and `renderings.SKILL.harness` (a skill of the harness, `{name}`). `claude-code` says to load the harness's skills with the Skill tool.
 
 ## Writing an adapter
 
@@ -61,11 +63,11 @@ interface AdapterPlugin {
   name: string;
   emitters: {
     agent?: (bundle: AgentBundle, ctx: AdapterCtx) => EmittedFile[];
-    playbook?: (bundle: PlaybookBundle, ctx: AdapterCtx) => EmittedFile[];
+    skill?: (bundle: SkillBundle, ctx: AdapterCtx) => EmittedFile[];
   };
   /** The harness's own instructions file and the line pointing it at AGENTS.md. */
   projectPointer?: { file: string; content: string };
-  /** Harness-native phrases, keyed by keyword: enum values ({ CONTEXT: { full: '…' } }) or force levels ({ MEM: { '0': '…' } }). */
+  /** Harness-native phrases, keyed by keyword: enum values ({ CONTEXT: { full: '…' } }), force levels ({ MEM: { '0': '…' } }) or skill loading ({ SKILL: { harness: '…' } }). */
   renderings?: Record<string, Record<string, string>>;
 }
 ```

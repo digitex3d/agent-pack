@@ -140,7 +140,7 @@ console.log('renderIdentityBlock tests passed.');
 // lintAgent
 // --------------------------------------------------------------------------
 
-const { lintPolicy, lintPlaybook, lintProcedure, lintRole, lintTemplate } = await import('../dist/src/lint.js');
+const { lintPolicy, lintProcedure, lintRole, lintTemplate } = await import('../dist/src/lint.js');
 
 {
   // EXPERTISE in policy.ap must be rejected — it belongs to the role now
@@ -152,12 +152,6 @@ const { lintPolicy, lintPlaybook, lintProcedure, lintRole, lintTemplate } = awai
   // MANDATE in policy.ap must be rejected — it is the agent's own directive (EXPORT AGENT block)
   const errs = lintPolicy('coding.policy.ap', '# coding\nABOUT test\nMANDATE do things\nALWAYS write tests\n');
   assert.ok(errs.some(e => /MANDATE is only allowed inside an EXPORT AGENT block/.test(e.message)), 'MANDATE rejected in policy.ap');
-}
-
-{
-  // EXPERTISE in playbook.ap must be rejected
-  const errs = lintPlaybook('review.playbook.ap', '# review\nWHEN review requested\nEXPERTISE nodejs\nDO review the code\n');
-  assert.ok(errs.some(e => /EXPERTISE is only allowed in a role/.test(e.message)), 'EXPERTISE rejected in playbook.ap');
 }
 
 {

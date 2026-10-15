@@ -5,6 +5,8 @@ import { resolve, dirname, basename } from 'path';
 import { parseAgentSignature } from '../definitionArgs.js';
 import { exportedBlockBodies, nonExportedSource, nonExportedLines, extractAbout, extractPrimitive, ExportedBlockBody } from './text.js';
 import { SourceRegistry, type SourceSpan } from '../sources.js';
+import { AGENT_KEYS } from '../blockTypes.js';
+import { apFilesUnder } from './fs.js';
 
 /**
  * The single reader for team/agent metadata pulled straight from `.ap` source.
@@ -40,6 +42,8 @@ export interface AgentInfo {
   lensIn?: string;
   /** Role this agent binds via the `AS <role>` header signature. */
   role?: string;
+  /** True when the block is a `SKILL` — an agent the adapter writes as a skill. */
+  skill: boolean;
 }
 
 /** A flat agent file, read once into its orchestration metadata and bundle source. */
@@ -127,9 +131,9 @@ function asAgentBody(agent: ExportedBlockBody): string {
 export function readAgentFile(path: string, sources: SourceRegistry = new SourceRegistry()): AgentFile {
   const source = sources.read(path);
   const blocks = exportedBlockBodies(source);
-  const agent = blocks.find(b => b.key === 'AGENT');
+  const agent = blocks.find(b => AGENT_KEYS.has(b.key));
   if (!agent) {
-    throw new Error(`${path}: no EXPORT AGENT block — a flat agent file must declare one`);
+    throw new Error(`${path}: no EXPORT AGENT or EXPORT SKILL block — a flat agent file must declare one`);
   }
   const role = blocks.find(b => b.key === 'ROLE');
 
@@ -138,6 +142,7 @@ export function readAgentFile(path: string, sources: SourceRegistry = new Source
     about: extractPrimitive(agent.body, 'ABOUT') ?? '',
     role: parseAgentSignature(agent.rest).role ?? undefined,
     lensIn: extractPrimitive(agent.body, 'LENS-IN') ?? undefined,
+    skill: agent.key === 'SKILL',
   };
 
   // Every exported block that is neither the AGENT nor its ROLE is one the
@@ -153,7 +158,7 @@ export function readAgentFile(path: string, sources: SourceRegistry = new Source
     .trim() + '\n';
 
   const lines = source.split(/\r?\n/);
-  const agentSpan = sources.span(path, 'agent', agent.name);
+  const agentSpan = sources.span(path, agent.key, agent.name);
   const span = agentSpan && {
     ...agentSpan,
     lines: [...nonExportedLines(source).map(line => ({ line, text: lines[line - 1] })), ...agentSpan.lines],
@@ -162,9 +167,18 @@ export function readAgentFile(path: string, sources: SourceRegistry = new Source
   return { path, info, unitSource, span };
 }
 
-/** True when a `.ap` source holds at least one `EXPORT AGENT` block. */
-function holdsAgentBlock(source: string): boolean {
-  return exportedBlockBodies(source).some(b => b.key === 'AGENT');
+/** True when a `.ap` source holds at least one exported block of `key`. */
+function holdsBlock(source: string, key: string): boolean {
+  return exportedBlockBodies(source).some(b => b.key === key);
+}
+
+/**
+ * Every skill file under `roots`, recursively: a `.ap` file holding an
+ * `EXPORT SKILL` block. Skills live in a library — where an agent IMPORTs them
+ * FROM — never beside a team's flows.ap, so they stay out of the orchestration.
+ */
+export function findSkillFiles(roots: string[]): string[] {
+  return roots.flatMap(apFilesUnder).filter(path => holdsBlock(readFileSync(path, 'utf-8'), 'SKILL'));
 }
 
 /**
@@ -179,7 +193,7 @@ export function findAgentFiles(dir: string): string[] {
     if (!entry.endsWith('.ap')) continue;
     const path = resolve(dir, entry);
     if (!statSync(path).isFile()) continue;
-    if (holdsAgentBlock(readFileSync(path, 'utf-8'))) out.push(path);
+    if (holdsBlock(readFileSync(path, 'utf-8'), 'AGENT')) out.push(path);
   }
   return out;
 }

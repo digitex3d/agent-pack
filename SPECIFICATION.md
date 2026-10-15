@@ -45,7 +45,7 @@ The seven non-negotiable foundations of the paradigm.
   not yet exist.
 
 - **P4 — Composable through explicit imports.** Every dependency
-  between agents, playbooks, and rules is named, declared with
+  between agents, skills, and rules is named, declared with
   `IMPORT FROM`. There is no global namespace, no auto-loading, no
   ambient context, no implicit inheritance. If it is not imported, it
   is not in scope. The composition graph is fully traceable from the
@@ -115,25 +115,29 @@ These terms have precise meaning and are not interchangeable.
 
 - **D1 — agent** — an executable unit defined by a mission (what it
   must accomplish), a set of constraints (what it must not violate),
-  and a compiled context (the rules and playbooks it has access to). The
+  and a compiled context (the rules and skills it has access to). The
   smallest addressable unit of the paradigm — every other primitive
   exists to serve, compose, or constrain agents.
 
-- **D2 — playbook** — a self-contained, reusable capability — a
-  workflow, a procedure, a piece of expertise — activated when a
-  declarative trigger matches the current task. Playbooks are imported
-  into agents, not duplicated; the same playbook can serve dozens of
-  agents.
+- **D2 — skill** — a self-contained, reusable capability — a
+  workflow, a procedure, a piece of expertise — that is an agent in
+  every respect (D1), materialized as a skill of the runtime instead of
+  a subagent. Skills are imported into agents, not duplicated; the same
+  skill can serve dozens of agents. An imported skill is the agent's to
+  use where it judges it fits; a `WITH` decorator binds it to the one
+  block it is for, `!WITH` keeps it out of one. A skill the runtime
+  provides itself is imported by name from `@harness.skills`, never
+  compiled. (Amended in 1.2: was *playbook*, a triggered workflow.)
 
 - **D3 — directive** — the smallest unit of normative content: a
   single rule, written once, identifiable by ID, versionable in git,
   citable across agents and projects. The "sentence" of the language:
-  every larger artifact (playbook, agent, team shared block) is built
+  every larger artifact (skill, agent, team shared block) is built
   out of directives.
 
 - **D4 — IMPORT FROM** — the explicit dependency operator. Statements
   like `IMPORT <directive> FROM <library>.<path>` declare exactly which
-  rule or playbook is pulled into a definition, and from where. There is
+  rule or skill is pulled into a definition, and from where. There is
   no ambient inheritance, no auto-discovery — every link is named and
   traceable from the source alone.
 
@@ -187,7 +191,7 @@ These terms have precise meaning and are not interchangeable.
   language, not a documentation convention: a level is always written
   with its keyword, never as an action (`DO`) carrying a strength word —
   `NEVER skip a finding`, not `DO never skip a finding`. Every body that
-  holds actions — agent, role, playbook, procedure (D16), flow step
+  holds actions — agent, skill, role, procedure (D16), flow step
   (D24) — admits the levels for that reason. (Rule added in 1.1;
   `SHOULD-NOT`, the negative of `SHOULD`, added in 1.2.)
 

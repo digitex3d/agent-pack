@@ -39,7 +39,7 @@ const refNameOf = shape => shape?.ref?.target?.split('/').pop();
   assert.equal(splitBy('sort by name'), null, 'a lowercase by is prose');
 }
 
-// --- the tree renderer (playbooks, team routing) says the same as the document ---
+// --- the tree renderer (standalone files, team routing) says the same as the document ---
 assert.equal(renderTree('WHEN asked:\n    IF** {{a}} is odd:\n        DO  stop\n    UNTIL* {{b}} holds:\n        DO  retry\n    ASK  explain it BY legal\n    ASK  summarise it'), [
   'When asked:',
   '    If {{a}} is odd — a program decides:',
@@ -326,15 +326,6 @@ try {
       process.chdir(prevCwd);
     }
   }
-  // --- an imported playbook: its `COMPUTE …` line (no colon) stays a line, never a COMPUTE block ---
-  {
-    write(join(lib, 'playbooks', 'triage.ap'), ['EXPORT PLAYBOOK triage:', '    ABOUT  triage an issue', '    DO     read the issue', '    COMPUTE  count the comments of the issue']);
-    const file = write(join(dir, 'triager.ap'), ['IMPORT triage FROM @main.playbooks', '', 'EXPORT AGENT triager:', '    ABOUT    triager', '    MANDATE  triage']);
-    const { body, structure } = await bundleAgentObject({ agentName: 'triager', agentFile: file, agentDir: dir, libraryRoot: lib, libraryRoots: [lib], libraries: { '@main': lib }, bundleConfig: { runtime: false } });
-    assert.ok(body.includes('Have a program count the comments of the issue'), body);
-    assert.ok(!structure.byKind('procedure').some(b => b.name === 'count'), 'no procedure named after the line\'s first word');
-  }
-
   // --- the judge: a #executed rule judges only what a delegate or a program carries out, a #program rule only a program's,
   // an #agent rule only the agent's own ---
   {

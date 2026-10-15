@@ -6,14 +6,15 @@ import { getFamilyBases } from './forceLevelConfig.js';
 
 /**
  * The force-level families (MUST, ALWAYS/NEVER, SHOULD, MAY, …) a step admits,
- * by base: the list roles and playbooks admit, less MEM — a step's BY agent may have no
- * memory in its harness. Listing a base admits every declared declension
+ * by base: the list roles admit, less MEM — a step's BY agent may have no
+ * memory in its harness — and WITH — it loads the skills it imports itself. Listing a base admits every declared declension
  * (`MUST!`, `!ALWAYS`, …) — the validator normalises a child to its family
  * base. `AS` is among them as the step's shape signature, so a branch, which
  * holds only conditional lines, leaves it out.
  */
 const STEP_EXCLUDED: Partial<Record<Keyword, string>> = {
   MEM: "a step's BY agent may have no memory in its harness; MEM goes in an agent, a role or a procedure",
+  WITH: "a step's BY agent uses the skills it imports; WITH goes in an agent, a role or a procedure",
 };
 const STEP_FAMILIES = familiesWithout(STEP_EXCLUDED);
 const BRANCH_FAMILIES = STEP_FAMILIES.filter(base => base !== 'AS');

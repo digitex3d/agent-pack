@@ -41,6 +41,17 @@ One agent per file, anywhere under `agents/`.
 | `LENS-OUT <template>` | the shape of its answers |
 | rules and `WHEN` workflows | its own behaviour — rules at every level, `SHOULD`, `MAY` and [`MEM`](#memory) included (see [Rules](#rules)), and [Control flow](#control-flow); `ASK` and `COMPUTE` lines hand a line to a delegate or a program (see [Executors](#executors)) |
 
+### SKILL
+
+```
+EXPORT SKILL pdf-report AS reporter:
+    ABOUT    Turns a PDF into a short report
+    MANDATE  read the PDF and report its tables
+    MUST     quote every table as CSV
+```
+
+A skill is an agent in every respect — the same lines, the same compilation, its own apx — that the adapter writes as a skill of the harness instead of a subagent (`.claude/skills/<name>/SKILL.md`, `.junie/skills/<name>/SKILL.md`). It lives in the project library, under `skills/`; `bundle all` builds every one. Its `ABOUT` is the description the harness picks it by. An agent uses it by importing it — see [Skills](#skills).
+
 ### ROLE
 
 ```
@@ -396,7 +407,7 @@ Else:
 
 **Closed when in doubt.** The judge answers with a probability. At or above the threshold (0.7 by default) the condition is *open*; below it — or when a variable it reads is empty, when the state is too large for the judge, or when the judge cannot be reached or gives no probability — it is *closed*, and nothing is sent when nothing can be decided. Every check is recorded in the session: the condition's id, the agent, the level, the round, a fingerprint of the state (never the state), the judge's model and probability, the threshold and the outcome. The agent's own opinion is never asked.
 
-**Where a check is possible:** in an agent's body, in a procedure or role an agent runs, and in a flow step whose `BY` is an agent — wherever an apx can answer for it. Anywhere else — a playbook, a team's routing — there is no executable: `IF!` and `UNTIL!` read as `IF` and `UNTIL`, decided by the agent, with a warning naming the line, and `IF!!` and `UNTIL!!` fail the compilation, since they could never be sealed there.
+**Where a check is possible:** in an agent's body, in a procedure or role an agent runs, and in a flow step whose `BY` is an agent — wherever an apx can answer for it. Anywhere else — a standalone file, a team's routing — there is no executable: `IF!` and `UNTIL!` read as `IF` and `UNTIL`, decided by the agent, with a warning naming the line, and `IF!!` and `UNTIL!!` fail the compilation, since they could never be sealed there.
 
 **In a flow step**, a checked `IF!` or `IF!!` is checked by the step's `BY` agent, through its own apx: the condition is compiled into that agent's apx, and `AGENTS.md`, `apx flow` and the Workflow script name its command. The variables it reads are the ones that agent sees — its own, or its team's `SESSION` ones. `BY` must name an agent — or the role a member takes, which names that member, as everywhere in a flow: a team is resolved by routing, and no one apx answers for the check. A checked condition at a flow's own level — between its steps, run by whoever drives the flow — is not supported yet.
 
@@ -473,7 +484,7 @@ Never put a secret in a constant: constants are compiled into the agent's output
 
 ### Declaring once
 
-A name is declared once for an agent, whatever its scope: a second declaration in any body is an error, the same name imported from two modules collides, and a private variable never takes the name of a `SESSION` variable the agent sees (no shadowing). **A name means one thing**: a variable or a constant never shares the name of a template the agent sees. A loop reassigns a variable with `INTO`, it never declares it again: `VAR` never stands inside an `UNTIL`, nor inside another `VAR` block, a flow step, a template, a store or a policy. A playbook takes no variable — it has no executable yet; it neither declares, assigns nor reads one.
+A name is declared once for an agent, whatever its scope: a second declaration in any body is an error, the same name imported from two modules collides, and a private variable never takes the name of a `SESSION` variable the agent sees (no shadowing). **A name means one thing**: a variable or a constant never shares the name of a template the agent sees. A loop reassigns a variable with `INTO`, it never declares it again: `VAR` never stands inside an `UNTIL`, nor inside another `VAR` block, a flow step, a template, a store or a policy.
 
 ### Assigning
 
@@ -569,6 +580,41 @@ IMPORT plan, board FROM @main.vars
 
 `TAGS #board #planning` groups blocks: in the compiled definition, blocks sharing tags sit under a common heading, and the apx filters by them (`ls tag=board`, or `tag=#board`).
 
-## Playbooks
+## Skills
 
-A file ending in `.playbook.ap` holds one triggered workflow compiled into a harness skill: `ABOUT`, a `WHEN` trigger, and its steps. Compile it by path: `agent-pack bundle path/to/on-release.playbook.ap`.
+An agent imports the skills it may use: a [`SKILL`](#skill) of the project library, or a skill the harness provides itself.
+
+```
+IMPORT pdf-report FROM @main.skills
+IMPORT pdf, frontend-design:frontend-design FROM @harness.skills
+```
+
+`@harness.skills` is reserved: agent-pack neither compiles nor writes those skills — the adapter tells the agent how its harness loads them (Claude Code: the Skill tool). The name is written as the harness knows it.
+
+**Free by default.** An imported skill is listed in the agent's *Skills* chapter, with how to load it — run its apx, or ask the harness — and the agent uses it whenever it judges it fits the task. Its own body stays in its apx: it is loaded when it is needed, never with the agent.
+
+**`WITH` says which work a skill is for**, like a decorator:
+
+```
+WITH pdf-report AS report
+IF the input is a text PDF:
+    MUST extract every table as CSV
+
+!WITH pdf
+IF the input is a scanned image:
+    MUST run OCR with the project script
+
+WITH frontend-design:frontend-design
+EXPORT PROCEDURE design-page:
+    MUST pick an aesthetic direction before writing code
+```
+
+| Line | |
+|---|---|
+| `WITH <skill>` | use the skill for the block right below it |
+| `WITH <skill> AS <template>` | and shape its answer as the template |
+| `!WITH <skill>` | do not use it for that block |
+
+A `WITH` decorates the block on the very next line — an `IF`, a `WHEN`, a block with lines beneath, or another `WITH` (they stack); no blank line or comment between. First in a body, it is for the whole block; above an exported block — a procedure, an agent — it opens that block's body, so the skill travels with it: whoever imports the procedure gets the skill for that procedure, and only for it. The skill is imported in the file that writes the `WITH`. A `WITH` naming a skill no import brings fails the build; so does a `WITH` with nothing to decorate, and an `AS` on `!WITH`. A flow step takes no `WITH` — its `BY` agent uses the skills it imports.
+
+`!WITH` is an instruction to the agent: a skill the harness triggers on its own description may still be offered, the agent is told not to use it there.

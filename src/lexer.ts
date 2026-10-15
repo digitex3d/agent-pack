@@ -19,7 +19,7 @@
 // which TypeScript erases at compile time. The runtime dependency graph is
 // strictly one-directional: lexer.js → desugar.js (no back-edge).
 import { desugar } from './desugar.js';
-import { getFamilyBases, getAliasNames, splitBangs } from './forceLevelConfig.js';
+import { getFamilyBases, getAliasNames, splitBangs, forceLevelBaseOf } from './forceLevelConfig.js';
 import { getLifecycleAliases } from './lifecycleConfig.js';
 import { CHECK_KINDS, MAX_CHECK_LEVEL, type CheckKind } from './check.js';
 import { splitExecutorMark } from './executor.js';
@@ -239,7 +239,7 @@ export function lexRaw(source: string): Token[] {
     }
 
     // Block-opener: `<NEW-KEY>[ <rest>]:` for primitives that are NOT in the
-    // existing keyword whitelist (POLICY, PLAYBOOK,
+    // existing keyword whitelist (POLICY, SKILL,
     // AGENT, TOOL …). Known keywords keep their legacy emission to
     // preserve every downstream lint/render consumer. The universal parser
     // (parseBlocks) recognises both forms via a normalising helper, so the
@@ -318,4 +318,13 @@ export function lexRaw(source: string): Token[] {
  */
 export function lex(source: string): Token[] {
   return desugar(lexRaw(source));
+}
+
+/**
+ * A decorator line: `WITH <skill>` / `!WITH <skill>`. A decorator is for the
+ * block on the very next line — no blank line, no comment between — or, first
+ * in a body, for the whole block. The one predicate every reader asks.
+ */
+export function isDecorator(t: Token | undefined): boolean {
+  return t?.kind === 'keyword' && forceLevelBaseOf(t.keyword as string) === 'WITH';
 }

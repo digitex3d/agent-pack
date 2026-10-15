@@ -6,7 +6,7 @@
  * (e.g. `ABOUT …`, `OWNS …`, `WHEN …`).
  */
 import { FORMULAS } from '../formulas.js';
-import { lex, escapeRegex, Keyword } from '../lexer.js';
+import { lex, escapeRegex, Keyword, isDecorator } from '../lexer.js';
 import { parseBlocks, Block } from '../parseBlocks.js';
 export { escapeRegex };
 
@@ -114,7 +114,8 @@ export function exportedBlockBodies(source: string): ExportedBlockBody[] {
   return exportedBlocksOf(parseBlocks(source).blocks).map(block => {
     const dedentByLine = new Map<number, number>();
     indexBlockDedent(block, dedentByLine);
-    const out: string[] = [];
+    // The decorators above the header open the body: they are for the whole block.
+    const out: string[] = decoratorLines(lines, block).map(lineNo => lines[lineNo - 1]);
     for (const [lineNo, dedent] of [...dedentByLine.entries()].sort((a, b) => a[0] - b[0])) {
       const raw = lines[lineNo - 1] ?? '';
       out.push(dedent ? raw.slice(dedent) : raw);
@@ -146,13 +147,30 @@ export function nonExportedSource(source: string): string {
  */
 export function nonExportedLines(source: string): number[] {
   const owned = new Set<number>();
+  const lines = source.split(/\r?\n/);
   for (const block of exportedBlocksOf(parseBlocks(source).blocks)) {
     owned.add(block.startLine);
+    for (const lineNo of decoratorLines(lines, block)) owned.add(lineNo);
     const dedentByLine = new Map<number, number>();
     indexBlockDedent(block, dedentByLine);
     for (const lineNo of dedentByLine.keys()) owned.add(lineNo);
   }
   return source.split(/\r?\n/).map((_, idx) => idx + 1).filter(lineNo => !owned.has(lineNo));
+}
+
+/**
+ * The decorators of a top-level block: the decorator lines (`isDecorator`)
+ * right above its header, at column 0, nothing between them — the skills its
+ * work is done with. Their 1-based line numbers, in order.
+ */
+function decoratorLines(lines: string[], block: Block): number[] {
+  const out: number[] = [];
+  for (let lineNo = block.startLine - 1; lineNo >= 1; lineNo--) {
+    const t = lex(lines[lineNo - 1] ?? '')[0];
+    if (!isDecorator(t) || t.indent !== 0) break;
+    out.unshift(lineNo);
+  }
+  return out;
 }
 
 /**
@@ -361,7 +379,7 @@ export function protectVerbatim(text: string, transform: (masked: string) => str
  * with multiple values renders as `<intro>:` followed by `- v1`, `- v2`, …
  *
  * Shared by ForceLevels (per-keyword consecutive grouping) and primitives that
- * need the same shape (e.g. WHEN — multiple triggers in a playbook).
+ * need the same shape (e.g. WHEN — several trigger lines).
  */
 export function renderKeywordBlock(intro: string, values: string[]): string {
   if (values.length === 0) return '';

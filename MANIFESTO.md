@@ -19,7 +19,7 @@ agent definitions as source code.
 
 > **Agent Pack is a programming language for LLM contexts.**
 >
-> Agents, playbooks, directives, vocabularies are not prompt fragments —
+> Agents, skills, directives, vocabularies are not prompt fragments —
 > they are constructs of a language with syntax, imports, scope, and a
 > compiler. AI agents must be treated as first-class code: structured,
 > versioned, composable, and runtime-agnostic.
@@ -38,10 +38,10 @@ The state of practice is indefensible.
    have accepted, without protest, a regression of thirty years of
    software engineering practice.
 2. **Runtime lock-in.** The same agent — a code reviewer, a refactoring
-   playbook, a team workflow — is rewritten by hand for Claude Code,
+   skill, a team workflow — is rewritten by hand for Claude Code,
    Cursor, Codex, Copilot. Every copy diverges within two weeks.
    The cost is paid in silence, project by project.
-3. **No shared vocabulary.** *Agent*, *playbook*, *directive*, *team*,
+3. **No shared vocabulary.** *Agent*, *skill*, *directive*, *team*,
    *lens* mean a different thing in every repository. Knowledge does
    not transfer. Each team reinvents the primitives, badly, in
    isolation.

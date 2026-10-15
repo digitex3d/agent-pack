@@ -24,7 +24,7 @@ ${CREDIT}
 
 Commands:
   init                           Write a default agent-pack.config.mjs and the .agent-pack/ dir
-  bundle <name|path>             Compile a bundle (agent or *.playbook.ap); use --adapter to
+  bundle <name|path>             Compile a bundle (agent or skill); use --adapter to
                                  materialize for a target harness
   bundle all                     Compile every discovered agent for the configured adapters
   agents list                    List discoverable agents grouped by domain (project, global,

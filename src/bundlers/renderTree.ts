@@ -41,7 +41,7 @@ const CONTROL_HEADS: Record<string, string> = { IF: 'If', ELSE: 'Else', UNTIL: '
  * Render a control-head line (the text before the trailing colon): `Until <condition>`.
  * A checked head (`IF!`, `IF!!`) in a flow step is checked by the step's BY
  * agent, through its own apx — `condCheckOf` decides, as for the document
- * builder. Anywhere else this pass renders (a playbook, a team's routing) no
+ * builder. Anywhere else this pass renders (a standalone file, a team's routing) no
  * executable checks it: it reads as the plain head — the source scan
  * (`checkedHeadIssues`) has warned, or failed the build of an `IF!!`.
  */

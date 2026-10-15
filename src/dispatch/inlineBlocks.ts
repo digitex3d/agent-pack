@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
 /**
- * Extract inline `<KIND> <name>: <body>` blocks from an agent or playbook
+ * Extract inline `<KIND> <name>: <body>` blocks from an agent or skill
  * body and route them through the SAME collection path used for imported
  * kind files.
  *

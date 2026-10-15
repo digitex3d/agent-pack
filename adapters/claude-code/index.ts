@@ -22,7 +22,7 @@ export default function claudeCodeAdapter(opts: ClaudeCodeOptions = {}): Adapter
         agentsDir: opts.agentsDir ?? '.claude/agents',
         tools: opts.tools,
       }),
-      playbook: makeClaudeSkillEmitter(opts.skillsDir ?? '.claude/skills'),
+      skill: makeClaudeSkillEmitter(opts.skillsDir ?? '.claude/skills'),
     },
     // Claude Code reads CLAUDE.md; `@AGENTS.md` imports the project context and
     // the orchestration agent-pack writes there.
@@ -50,6 +50,10 @@ export default function claudeCodeAdapter(opts: ClaudeCodeOptions = {}): Adapter
       // way when it is missing — and for a flow whose steps talk with the user.
       FLOW: {
         run: 'run this flow with the Workflow tool: Workflow({ scriptPath: "{script}", args: { request: "<the request, verbatim>" } }) — the result is every step\'s answer, in order. Only when the user asked for this flow, or asked for a workflow or ultracode; otherwise, or when a step must talk with the user, carry out its steps yourself: {steps}',
+      },
+      // A skill of the harness (`IMPORT … FROM @harness.skills`) is loaded with the Skill tool.
+      SKILL: {
+        harness: 'Load it when you need it with the Skill tool: `{name}`.',
       },
       CONTEXT: {
         isolated:  "launch the step's executor with the Agent tool, its prompt carrying only the step's own intent — no upstream context",

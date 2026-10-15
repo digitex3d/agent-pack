@@ -7,11 +7,12 @@
  * agent) and says to start there. The apx explains itself; the definition is
  * read on demand, verb by verb, instead of being loaded whole.
  *
- * Everything else — skills, the CLAUDE.md pointer to AGENTS.md, the CONTEXT
- * renderings — is the claude-code adapter's, taken as is.
+ * A skill's `SKILL.md` does the same. Everything else — the CLAUDE.md pointer
+ * to AGENTS.md, the CONTEXT renderings — is the claude-code adapter's, taken as is.
  */
 import { resolve } from 'path';
 import { AdapterPlugin, AgentBundle, Emitter } from '../types.js';
+import { makeClaudeSkillEmitter } from '../claude-code/emitters/claude-skill.js';
 import claudeCodeAdapter, { ClaudeCodeOptions } from '../claude-code/index.js';
 import { buildAgentFrontmatter } from '../claude-code/emitters/agent-md.js';
 import { apxPath, apxCommand } from '../../src/apx/paths.js';
@@ -28,6 +29,8 @@ export default function claudeCodeApxAdapter(opts: ClaudeCodeOptions = {}): Adap
     emitters: {
       ...base.emitters,
       agent: makeApxAgentEmitter(opts.agentsDir ?? '.claude/agents', opts.tools ?? DEFAULT_TOOLS),
+      // A skill is an agent: its SKILL.md, like an agent's file, names its apx.
+      skill: makeClaudeSkillEmitter(opts.skillsDir ?? '.claude/skills', b => usageBody(b.name, b.structure)),
     },
   };
 }

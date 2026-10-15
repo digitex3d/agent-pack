@@ -8,7 +8,7 @@
  *   <KEY> <name>:
  *     <indented body>
  *
- * Every primitive in this registry — AGENT, POLICY, PLAYBOOK, PROCEDURE,
+ * Every primitive in this registry — AGENT, SKILL, POLICY, PROCEDURE,
  * TEMPLATE, ROLE, FLOW, TOOL — is a NAMED declaration
  * with an indented body. Adding a new primitive is one entry here: zero
  * changes to lexer, parser, ingest, or resolver.
@@ -39,7 +39,8 @@ export interface BlockType {
 export const BLOCK_TYPES: Record<string, BlockType> = {
   AGENT:      { key: 'AGENT'      },
   POLICY:     { key: 'POLICY'     },
-  PLAYBOOK:   { key: 'PLAYBOOK'   },
+  // `SKILL <name> AS <role>:` — an agent the adapter writes as a skill (see AGENT_KEYS).
+  SKILL:      { key: 'SKILL'      },
   PROCEDURE:  { key: 'PROCEDURE'  },
   TEMPLATE:   { key: 'TEMPLATE'   },
   ROLE:       { key: 'ROLE'       },
@@ -50,6 +51,13 @@ export const BLOCK_TYPES: Record<string, BlockType> = {
   STORE:      { key: 'STORE'      },
   EXPORT:     { key: 'EXPORT', modifier: true },
 };
+
+/**
+ * The block keys that declare an agent: `AGENT`, and `SKILL` — an agent in every
+ * respect (same body, same compilation, its own apx) that the adapter writes as
+ * a skill of its harness instead of a subagent, and that an agent may IMPORT.
+ */
+export const AGENT_KEYS: ReadonlySet<string> = new Set(['AGENT', 'SKILL']);
 
 /** The block-modifier key marking a top-level block as exported. */
 export const EXPORT_MODIFIER = 'EXPORT';

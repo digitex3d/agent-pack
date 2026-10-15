@@ -42,7 +42,7 @@ const LIBRARIES = { '@main': MAIN_LIB };
 //   2. flat path-shape fallback: `<kind>/<scope>/<name>.ap` (legacy file-as-unit
 //      and symbol-in-file modules carry no EXPORT block).
 // If the new resolver diverges on any real import, parity is broken.
-const FILE_KINDS = new Set(['policies', 'playbooks', 'procedures', 'templates', 'roles', 'tools', 'flows']);
+const FILE_KINDS = new Set(['policies', 'skills', 'procedures', 'templates', 'roles', 'tools', 'flows']);
 function exportUnitFile(dir, name) {
   if (!existsSync(dir)) return null;
   for (const entry of readdirSync(dir)) {

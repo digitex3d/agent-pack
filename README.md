@@ -138,7 +138,7 @@ A complete team you can bundle as it is — two members, routing, a two-step flo
 | `AS`, `LENS-IN`, `LENS-OUT` | which template an answer — or an incoming request — is shaped as |
 | `IMPORT … FROM @main.<kind>` | reuse blocks from the project library (`library/`) |
 | `VAR`, `SESSION VAR`, `INTO`, `{{name}}` | constants substituted at compile time, and variables the agent fills (`VAR x:`, `DO … INTO x`) and reads back through its apx — private to it, or shared by the session's agents — never secrets |
-| `PLAYBOOK` (`*.playbook.ap`) | one triggered workflow compiled into a harness skill |
+| `SKILL` | an agent the adapter writes as a skill of the harness; an agent `IMPORT`s it, and `WITH <skill>` above a block says which work it is for |
 
 The full reference is [docs/reference/language.md](./docs/reference/language.md).
 

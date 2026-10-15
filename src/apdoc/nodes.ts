@@ -56,6 +56,7 @@ export class DirectiveNode extends NodeBase implements ApDirectiveNode {
   body?: ApNode[];
   shape?: ApShape;
   into?: ApRef;
+  skill?: ApRef;
   by?: string;
   exe?: string;
 
@@ -78,6 +79,7 @@ export class DirectiveNode extends NodeBase implements ApDirectiveNode {
       ...(this.body ? { body: this.body } : {}),
       ...(this.shape ? { shape: this.shape } : {}),
       ...(this.into ? { into: this.into } : {}),
+      ...(this.skill ? { skill: this.skill } : {}),
       ...(this.by ? { by: this.by } : {}),
       ...(this.exe ? { exe: this.exe } : {}),
     };
@@ -87,6 +89,7 @@ export class DirectiveNode extends NodeBase implements ApDirectiveNode {
     const node = new DirectiveNode(n.keyword, n.force, n.text, n.indent, n.body ? reviveNodes(n.body) : undefined);
     if (n.shape) node.shape = n.shape;
     if (n.into) node.into = n.into;
+    if (n.skill) node.skill = n.skill;
     if (n.by) node.by = n.by;
     if (n.exe) node.exe = n.exe;
     node.chars = n.chars;

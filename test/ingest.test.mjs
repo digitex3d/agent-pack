@@ -10,7 +10,7 @@ import { ingestFile, kindFromDir, unitKindOf, deriveNamespace } from '../dist/sr
 //     a filename suffix. ---
 
 assert.equal(kindFromDir('/lib/policies/foo.ap'), 'policy');
-assert.equal(kindFromDir('/lib/playbooks/foo.ap'), 'playbook');
+assert.equal(kindFromDir('/lib/skills/foo.ap'), 'skill');
 assert.equal(kindFromDir('/lib/procedures/foo.ap'), 'procedure');
 assert.equal(kindFromDir('/lib/templates/foo.ap'), 'template');
 assert.equal(kindFromDir('/lib/roles/foo.ap'), 'role');
@@ -29,8 +29,8 @@ assert.equal(unitKindOf('/lib/policies/x.ap', 'POLICY english\nALWAYS write in E
   'top-level POLICY block names the kind');
 assert.equal(unitKindOf('/lib/whatever/x.ap', 'EXPORT TEMPLATE foo:\n  SLOTS:\n    a: TEXT "x"\n'), 'template',
   'EXPORT block KIND names the kind regardless of dir');
-assert.equal(unitKindOf('/lib/playbooks/x.ap', '# x\nWHEN something:\n  DO act\n'), 'playbook',
-  'no kind block → dir-fallback to playbook');
+assert.equal(unitKindOf('/lib/skills/x.ap', '# x\nWHEN something:\n  DO act\n'), 'skill',
+  'no kind block → dir-fallback to skill');
 assert.equal(unitKindOf('/lib/elsewhere/x.ap', '# x\n\nbody only\n'), 'generic',
   'no kind block and no kind-folder → generic');
 

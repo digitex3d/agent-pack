@@ -55,7 +55,7 @@ export interface ParsedNamespace {
   alias: string | null;
   /**
    * The first path segment after the prefix — corresponds to the kind folder
-   * (e.g. `policies`, `playbooks`, `procedures`).
+   * (e.g. `policies`, `skills`, `procedures`).
    */
   kind: string;
   /**

@@ -113,7 +113,7 @@ async function collectUnit(
   ctx: BundleContext,
 ): Promise<string> {
   let body = unit.body;
-  if (unit.kind === 'playbook' || unit.kind === 'procedure') body = numberSteps(body);
+  if (unit.kind === 'procedure') body = numberSteps(body);
   const when = extractWhen(body);
   if (Object.keys(props).length > 0) body = applyVars(body, props);
   body = await processImportsOf(body, ctx, unit.path);
@@ -139,7 +139,7 @@ async function collectUnit(
   if (unit.kind === 'procedure')   return collect('procedure', ctx.procedures as Collected[]);
   if (unit.kind === 'template')    return collect('template',  ctx.templates  as Collected[]);
 
-  // Non-collected kinds (rare — e.g. inlined playbook bodies): emit a single
+  // Non-collected kinds (rare): emit a single
   // chapter heading derived from the unit name; breadcrumb-driven nested
   // rendering is reserved for collected kinds that share a SectionSpec.
   const lines: string[] = [];

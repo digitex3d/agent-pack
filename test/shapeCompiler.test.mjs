@@ -234,7 +234,7 @@ console.log('shapeCompiler scalar tests passed.');
 // ---------------------------------------------------------------------------
 
 {
-  const prose = 'TEMPLATE rule-classification\n  kind: POLICY | PLAYBOOK\n  rationale: <short reason>';
+  const prose = 'TEMPLATE rule-classification\n  kind: POLICY | SKILL\n  rationale: <short reason>';
   assert.equal(renderTemplate(prose, 'rule-classification'), null, 'prose template → verbatim fallback');
 
   // prose templates use <task-id>/<slug> as placeholders — resolveShapeRefs must NOT touch them

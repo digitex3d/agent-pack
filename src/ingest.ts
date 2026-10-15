@@ -10,7 +10,7 @@ import { parseTagsPayload } from './services/tags.js';
 
 export type IngestKind =
   | 'policy'
-  | 'playbook'
+  | 'skill'
   | 'procedure'
   | 'template'
   | 'role'
@@ -95,7 +95,7 @@ export interface IngestOptions {
  */
 export const KIND_DIRS: Record<Exclude<IngestKind, 'generic' | 'agent'>, string> = {
   policy: 'policies',
-  playbook: 'playbooks',
+  skill: 'skills',
   procedure: 'procedures',
   template: 'templates',
   role: 'roles',
@@ -121,7 +121,8 @@ export const BLOCK_KINDS = new Set<string>([...Object.keys(KIND_DIRS), 'agent'])
 
 const STRUCTURAL_KEYWORD: Partial<Record<IngestKind, RegExp>> = {
   policy: /^POLICY\s+(.+)$/m,
-  playbook: /^PLAYBOOK\s+(.+)$/m,
+  // `SKILL <name> AS <role>:` — the name only, like AGENT.
+  skill: /^SKILL\s+([^\s:]+)/m,
   procedure: /^PROCEDURE\s+(.+)$/m,
   // Name only — stop at whitespace or a `:` so the scalar/block-opener form
   // `TEMPLATE name: TYPE …` yields `name`, not the whole line.
@@ -203,7 +204,7 @@ export function kindFromDir(filePath: string): IngestKind {
  *   3. dir-fallback — `kindFromDir`, the kind-folder closest to the file. Now
  *      that `flow` is a kind with a `flows/` folder, this covers flows too.
  *
- * Every kind-routing site (lint dispatch, import collection, playbook/agent
+ * Every kind-routing site (lint dispatch, import collection, skill/agent
  * bundle detection, skill listing) funnels through this one function.
  */
 export function unitKindOf(filePath: string, body: string): IngestKind {

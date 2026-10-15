@@ -337,9 +337,8 @@ export function createBulletGroupPrimitive(opts: {
 }
 
 /**
- * `WHEN <trigger>` — playbook activation trigger. A playbook may declare
- * multiple WHEN clauses (any of them activates it). On claude-code skills the
- * adapter emits them into `when-to-use:` and the body injection is skipped.
+ * `WHEN <trigger>` — a trigger line; several WHEN lines group into one block.
+ * On claude-code a file-level WHEN goes to the frontmatter's `when-to-use:`.
  */
 export const WhenPrimitive = createBulletGroupPrimitive({
   keyword: 'WHEN',
@@ -387,7 +386,7 @@ export const RunPrimitive: BulletGroupPrimitive = {
 };
 
 /**
- * `DO <action>` — imperative action inside a playbook. Multiple consecutive
+ * `DO <action>` — an imperative action. Multiple consecutive
  * `DO` lines collapse into a `Do:` block with the actions as bullets.
  * Replaces the legacy `STEP` keyword.
  */

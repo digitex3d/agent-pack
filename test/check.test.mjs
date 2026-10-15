@@ -23,7 +23,7 @@ const { TABELI_ENGINE } = await import('../dist/src/config.js');
 const { checkId } = await import('../dist/src/check.js');
 const { JudgeError } = await import('../dist/src/judge/types.js');
 const { buildOrchestrationContent } = await import('../dist/src/orchestrationSection.js');
-const { buildPlaybookBundle } = await import('../dist/src/compiler/index.js');
+const { bundleStandaloneToString } = await import('../dist/src/compiler/index.js');
 const { compileWorkflow } = await import('../dist/adapters/claude-code/workflow.js');
 const { default: claudeCode } = await import('../dist/adapters/claude-code/index.js');
 
@@ -333,18 +333,18 @@ try {
   }
   console.log('checked conditions: flow step tests passed.');
 
-  // --- a playbook has no executable: IF! warns and reads as IF, IF!! fails ---
+  // --- a standalone file has no executable: IF! warns and reads as IF, IF!! fails ---
   {
     const config = { libraryRoot: lib, sharedLibraries: [], userRoot: join(tmp, 'home') };
-    const playbook = lines => write(join(tmp, 'playbooks', 'release.ap'), ['# release', 'ABOUT  cut a release', 'WHEN asked for a release', 'DO  read the changes', ...lines]);
-    playbook(['IF! the changes are small:', '    DO  release now']);
-    const { result, stderr } = await stderrOf(() => buildPlaybookBundle(join(tmp, 'playbooks', 'release.ap'), config));
-    assert.match(stderr, /release\.ap:5  IF!: no executable here — the condition is the agent's: it reads as IF/);
-    assert.ok(result.body.includes('If the changes are small:'), result.body);
-    playbook(['IF!! the changes are small:', '    DO  release now']);
-    await assert.rejects(() => buildPlaybookBundle(join(tmp, 'playbooks', 'release.ap'), config), /release\.ap:5  IF!!: no executable here — a sealed condition can never be checked here/);
+    const standalone = lines => write(join(tmp, 'release.ap'), ['# release', 'ABOUT  cut a release', 'DO  read the changes', ...lines]);
+    standalone(['IF! the changes are small:', '    DO  release now']);
+    const { result, stderr } = await stderrOf(() => bundleStandaloneToString(join(tmp, 'release.ap'), config));
+    assert.match(stderr, /release\.ap:4  IF!: no executable here — the condition is the agent's: it reads as IF/);
+    assert.ok(result.includes('If the changes are small:'), result);
+    standalone(['IF!! the changes are small:', '    DO  release now']);
+    await assert.rejects(() => bundleStandaloneToString(join(tmp, 'release.ap'), config), /release\.ap:4  IF!!: no executable here — a sealed condition can never be checked here/);
   }
-  console.log('checked conditions: playbook tests passed.');
+  console.log('checked conditions: standalone tests passed.');
 } finally {
   rmSync(tmp, { recursive: true, force: true });
 }

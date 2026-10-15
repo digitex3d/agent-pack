@@ -10,7 +10,7 @@
  *             data)` sink; while ARMED (only during the scoped walks below)
  *             the events become plain nodes. Other render passes fire events
  *             too — ignored, the builder is disarmed. When the remaining
- *             legacy paths (playbook/orchestration) migrate onto the
+ *             legacy paths (standalone/orchestration) migrate onto the
  *             document, the walker becomes a direct AST visit and the event
  *             bridge retires.
  *
@@ -49,9 +49,9 @@ import {
   TEAM_FLOWS_FILE,
 } from '../services/teamMetadata.js';
 import type { ApNode, ApRef, ApShape, ApSlotType, ApStepNode, ApIfNode, ApDocumentMeta, ApStoreProjection } from './types.js';
-import { parseVarLine, readsOf, splitBy, splitInto, takesInto, constantOf, type VarScope } from '../vars.js';
+import { parseVarLine, readsOf, splitBy, splitInto, splitWith, takesInto, constantOf, type VarScope } from '../vars.js';
 import type { PlacedVariable } from '../exportedVars.js';
-import { introOf } from '../formulas.js';
+import { introOf, fill, refSuffix, FORMULAS } from '../formulas.js';
 import { parseForceLevel, toCanonicalKeyword, getIntroByKeyword, forceLevelFamilies } from '../forceLevelConfig.js';
 
 /** Keyword (post-desugar or alias) → family base + numeric force; null force for bullets. */
@@ -444,6 +444,8 @@ export class DocumentBuilder implements BlockCx {
         for (let k = i; k < j; k++) this.variable(tokens[k] as Token & { kind: 'keyword' }, [], sink, host, steps);
       } else if (base === 'AS') {
         this.applyShape(force ?? 0, actions[0] ?? '', sink, host, steps);
+      } else if (base === 'WITH') {
+        actions.forEach((a, k) => sink.push(this.at(this.skillUse(force, a, indent), tokens[i + k])));
       } else if (base === 'LENS-IN' && host?.kind === 'procedure') {
         // A procedure's input contract.
         host.lensIn = { force: 0, ref: this.templateRef(stripColon(actions[0] ?? '')) };
@@ -477,6 +479,23 @@ export class DocumentBuilder implements BlockCx {
       node.into = VarBlock.ref(into.name);
       this.varWrites.push({ name: into.name, node, path: this.sourcePath });
     }
+    return node;
+  }
+
+  /**
+   * A `WITH <skill> [AS <template>]` line — `!WITH <skill>`, its negation: the
+   * skill, resolved among the ones the compilation imports, and the shape of
+   * its answer. Where it stands says which work it is for: the block right
+   * below it, or the whole block when it opens a body.
+   */
+  private skillUse(force: number | null, text: string, indent: number): DirectiveNode {
+    const use = splitWith(text);
+    const name = use?.name ?? text.trim();
+    const def = this.ctx?.skills.find(s => s.name === name);
+    const ref = this.ref(def && { kind: def.kind, name, namespace: namespaceOf(def, this.ctx!.libraryRoots, this.ctx!.libraries) }, name, 'skill');
+    const node = new DirectiveNode('WITH', force, fill(FORMULAS.keywords.WITH.line, { name, ref: refSuffix(ref.id) }), indent);
+    node.skill = ref;
+    if (use?.template) node.shape = { force: 0, ref: this.templateRef(use.template) };
     return node;
   }
 

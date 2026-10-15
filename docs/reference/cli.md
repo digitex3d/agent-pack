@@ -33,7 +33,7 @@ agent-pack bundle <name|path>    [--adapter <name>] [--out <dir>] [--apx-compres
 
 AGENTS.md and CLAUDE.md are written as managed blocks: whatever you write outside them is kept. Program folders in `distilled/` that no piece owns any more — because it was edited or removed — are listed, never deleted (see [Programs](/reference/language#programs)). The default delegate, `quick`, is built with the agents when one of them hands it work (`ASK` without `BY`) and the project has no agent of that name.
 
-**`bundle <name|path>`** compiles one agent by name, or a playbook by the path of its `.playbook.ap` file.
+**`bundle <name|path>`** compiles one agent or skill, by name or by the path of its file.
 
 | Option | |
 |---|---|

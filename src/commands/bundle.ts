@@ -14,7 +14,7 @@ import { standaloneDir } from '../services/teamMetadata.js';
 import { openJudgeRun, finishJudgeRun, type JudgeRun } from '../judge/phase.js';
 
 /**
- * CLI command: parse args, build a bundle (agent or playbook), optionally
+ * CLI command: parse args, build a bundle (agent or skill), optionally
  * apply an adapter, then materialize via the bundle's emitter. The compilation
  * itself lives in `src/compiler` — this is the thin CLI wrapper over it.
  */

@@ -36,6 +36,17 @@ EXPORT ROLE ap-author:
       DO   type each slot: TEXT [MAX_WORDS n], NUMBER a..b or >=n, ENUM[a b], <template>, LIST <template> >=n
       DO   under BODY: write the literal layout with {slot} placeholders; under EXAMPLE: one filled instance
 
+    WHEN writing or using a skill — an agent the harness loads as a skill:
+      DO   write it as one EXPORT SKILL <name> AS <role> under agents/library/skills/ — the lines of an AGENT
+      DO   import a library skill FROM @main.skills, a harness one FROM @harness.skills — named as the harness knows it
+      DO   let the agent use an imported skill freely; add WITH <skill> to say which block it is for
+      DO   put WITH right above an IF, a WHEN, a block with lines beneath or a WITH — first in a body for all of it
+      DO   put WITH above an EXPORT block to open its body — the skill travels with that block
+      DO   write WITH <skill> AS <template> to shape its answer, !WITH <skill> to keep it out of that block
+      DO   import the skill in the file that writes the WITH
+      NEVER write a WITH on a flow STEP or a COMPUTE block, nor a WITH with nothing below it to decorate
+      NEVER write AS on a !WITH — it fails the build
+
     WHEN binding shapes:
       DO   bind an agent's answers with LENS-OUT <template> and the requests it receives with LENS-IN <template>
       DO   bind a procedure's result or what a STEP hands over with AS <template> on its own line
@@ -66,7 +77,7 @@ EXPORT ROLE ap-author:
       NEVER read a field with a dot after the name — field reads are not supported yet
       NEVER give a constant a shaped read, nor a force level to the AS inside the braces
       NEVER read a variable in a shared or builtin library block — it takes its input through LENS-IN
-      NEVER read a variable in a TEMPLATE's BODY or EXAMPLE, or in a playbook
+      NEVER read a variable in a TEMPLATE's BODY or EXAMPLE
 
     WHEN declaring variables shared across agents — one EXPORT VAR line each, filling ap-vars-line:
       DO   write them in a library module, e.g. agents/library/vars/<team>.ap — one top-level line per variable
@@ -87,7 +98,7 @@ EXPORT ROLE ap-author:
       DO   place a check in an agent's body, a role, a procedure, or a flow STEP whose BY names an agent
       DO   confirm the project config sets `checks` — without it IF! reads as IF and IF!! fails
       NEVER write a round count such as "three rounds at most" on a checked UNTIL head
-      NEVER put a checked condition at a FLOW's own level, in a playbook or in a team's routing
+      NEVER put a checked condition at a FLOW's own level or in a team's routing
       NEVER write !IF or !UNTIL — both fail the compilation
       NEVER put a `!` and a star on one condition — a condition has one judge: IF! / IF!! or IF* / IF**
 

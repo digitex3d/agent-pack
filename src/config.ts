@@ -194,7 +194,7 @@ export interface Config {
   outputDir: string;
   /**
    * The project library root. Single source of truth for project-local
-   * .ap files (policies, playbooks, procedures, templates, roles).
+   * .ap files (policies, skills, procedures, templates, roles).
    * Default: 'library'. Override only when a different layout is required.
    */
   libraryRoot: string;

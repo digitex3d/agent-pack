@@ -197,7 +197,7 @@ try {
     const { structure } = await compile(['    WHEN asked:', '        RUN  p'], { extra: ['IMPORT p FROM @main.procedures', ''] });
     assert.equal(structure.byKind('var')[0].about, 'private variable, declared in procedure p', 'a procedure body declares too');
     const policy = checkVocabulary('x.ap', ['EXPORT POLICY x:', '    ABOUT  x', '    VAR y', '    ALWAYS  z'].join('\n'));
-    assert.ok(policy.some(e => /VAR goes in the body of one of: AGENT, ROLE, PROCEDURE — found inside POLICY/.test(e.message)), JSON.stringify(policy));
+    assert.ok(policy.some(e => /VAR goes in the body of one of: AGENT, SKILL, ROLE, PROCEDURE — found inside POLICY/.test(e.message)), JSON.stringify(policy));
     rmSync(procedure);
   }
 
@@ -241,22 +241,10 @@ try {
     await compiles(['    WHEN asked:', '        RUN  reader'], { libraries, vars: { seen: 'it' }, extra: ['IMPORT reader FROM @shared.procedures', ''] });
   }
 
-  // --- playbooks have no executable yet: no session variable — declared, assigned or read; constants as before ---
+  // --- a skill is an agent: its body declares and assigns variables like an agent's ---
   {
-    const NO = /playbooks have no executable yet — session variables are not available/;
-    const legacy = checkVocabulary(join(tmp, 'playbooks', 'p.ap'), ['ABOUT  p', 'WHEN  asked', 'VAR x', 'DO  work INTO x'].join('\n'));
-    assert.deepEqual(legacy.map(e => e.line), [3, 4], JSON.stringify(legacy));
-    assert.ok(legacy.every(e => NO.test(e.message)), JSON.stringify(legacy));
-    const block = checkVocabulary('p.ap', ['EXPORT PLAYBOOK p:', '    ABOUT  p', '    VAR x:', '        DO  work'].join('\n'));
-    assert.ok(block.some(e => e.line === 3 && NO.test(e.message)), JSON.stringify(block));
-    const dir = join(tmp, 'pb', 'playbooks');
-    mod('vars/pb', ['EXPORT VAR seen', 'EXPORT VAR lang = English']);
-    const playbook = write(join(dir, 'p.playbook.ap'), ['IMPORT seen, lang FROM @main.vars', '', 'ABOUT  p', 'WHEN  asked', 'DO  use {{seen}} in {{lang}}', '']);
-    const { buildPlaybookBundle } = await import('../dist/src/compiler/index.js');
-    const config = { libraryRoot: lib, sharedLibraries: [], userRoot: '' };
-    await assert.rejects(buildPlaybookBundle(playbook, config), /p\.playbook\.ap:5  `\{\{seen\}\}`: playbooks have no executable yet/);
-    write(playbook, ['ABOUT  p', 'WHEN  asked', 'DO  use it in {{lang}}', '']);
-    assert.ok((await buildPlaybookBundle(playbook, config)).body.includes('{{lang}}'), 'a constant in a playbook stays as today');
+    const skill = checkVocabulary('p.ap', ['EXPORT SKILL p AS r:', '    ABOUT  p', '    MANDATE  p', '    VAR x', '    DO  work INTO x', '    VAR y:', '        DO  work'].join('\n'));
+    assert.deepEqual(skill, [], JSON.stringify(skill));
   }
 
   // --- shaped reads: `{{x AS template}}` — the agent keeps only what fits the template ---

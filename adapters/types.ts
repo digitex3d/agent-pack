@@ -33,7 +33,7 @@ export const neutralEmitter: Emitter = (b, ctx) => [{
  * `instanceof` returns false for a bundle that is, in every way that matters, an
  * agent. A string compares by value and is immune to that.
  */
-export type BundleKind = 'agent' | 'playbook';
+export type BundleKind = 'agent' | 'skill';
 
 export abstract class Bundle {
   /** The core stamps this at construction — it is the only party that knows for sure. */
@@ -44,7 +44,7 @@ export abstract class Bundle {
   /**
    * All metadata-style primitives extracted from the source, keyed by
    * keyword. e.g. `metadata.get('ABOUT')[0]` is the description, and
-   * `metadata.get('WHEN')` is the list of trigger lines (playbook).
+   * `metadata.get('AS')` is the role binding.
    * Single source of truth — adapters obtain frontmatter fields by asking
    * each primitive how it contributes for the active adapter.
    */
@@ -61,8 +61,9 @@ export class AgentBundle extends Bundle {
   readonly kind = 'agent' as const;
 }
 
-export class PlaybookBundle extends Bundle {
-  readonly kind = 'playbook' as const;
+/** A skill: an agent in every respect, written by the adapter as a skill of its harness. */
+export class SkillBundle extends Bundle {
+  readonly kind = 'skill' as const;
 }
 
 /**
@@ -72,11 +73,11 @@ export class PlaybookBundle extends Bundle {
  * and `emitterFor` below looks the handler up by `bundle.kind`.
  *
  * Every key is optional: an adapter that handles only agents simply omits
- * `playbook`, and is then a hard error if asked to emit one (see `emitterFor`).
+ * `skill`, and is then a hard error if asked to emit one (see `emitterFor`).
  */
 export interface AdapterEmitters {
   agent?: Emitter<AgentBundle>;
-  playbook?: Emitter<PlaybookBundle>;
+  skill?: Emitter<SkillBundle>;
 }
 
 export interface AdapterPlugin {

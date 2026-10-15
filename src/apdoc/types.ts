@@ -56,12 +56,14 @@ export interface ApDirectiveNode {
   chars: number;
   body?: ApNode[];
   /**
-   * The template the directive's subject takes (`MEM <event>` + `AS <template>`),
-   * or — with `into` — the type of the variable its result fills.
+   * The template the directive's subject takes (`MEM <event>` + `AS <template>`,
+   * `WITH <skill> AS <template>`), or — with `into` — the type of the variable its result fills.
    */
   shape?: ApShape;
   /** `DO … INTO <name>`: the session variable the step's result is stored in. */
   into?: ApRef;
+  /** `WITH <skill>` / `!WITH <skill>`: the skill the line is about. */
+  skill?: ApRef;
   /** `ASK … BY <agent>`: the agent or team the line is handed to; absent = the default delegate. */
   by?: string;
   /** An ASK / COMPUTE line's contract id (`exe-…`, `meta.executors`) — src/executor.ts. */

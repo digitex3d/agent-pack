@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
 import { resolve } from 'path';
-import { AdapterPlugin, AgentBundle, PlaybookBundle, Emitter } from '../types.js';
+import { AdapterPlugin, AgentBundle, SkillBundle, Emitter } from '../types.js';
+import { buildSkillFrontmatter } from '../skill-frontmatter.js';
 
 /**
  * JetBrains Junie adapter.
@@ -15,23 +16,12 @@ import { AdapterPlugin, AgentBundle, PlaybookBundle, Emitter } from '../types.js
  *                    If multiple agents are bundled, the LAST one wins (Junie has no
  *                    multi-agent concept). Use one project-level agent for Junie, or
  *                    aggregate them upstream.
- * - PlaybookBundle → .junie/skills/<name>/SKILL.md (each skill in its own folder,
+ * - SkillBundle    → .junie/skills/<name>/SKILL.md (each skill in its own folder,
  *                    matching Junie's "one domain per skill" principle).
  */
 export interface JunieOptions {
   agentsFile?: string;      // default: '.junie/AGENTS.md'
   skillsDir?: string;       // default: '.junie/skills'
-}
-
-function buildJunieSkillFrontmatter(b: PlaybookBundle): string {
-  const description = b.metadata.get('ABOUT')?.[0] ?? b.metadata.get('WHEN')?.[0] ?? b.name;
-  return [
-    '---',
-    `name: ${b.name}`,
-    `description: ${description}`,
-    '---',
-    '',
-  ].join('\n');
 }
 
 export default function junieAdapter(opts: JunieOptions = {}): AdapterPlugin {
@@ -43,15 +33,15 @@ export default function junieAdapter(opts: JunieOptions = {}): AdapterPlugin {
     content: b.body,
   }];
 
-  const playbookEmitter: Emitter<PlaybookBundle> = (b, ctx) => [{
+  const skillEmitter: Emitter<SkillBundle> = (b, ctx) => [{
     path: resolve(ctx.projectRoot, skillsDir, b.name, 'SKILL.md'),
-    content: buildJunieSkillFrontmatter(b) + b.body,
+    content: buildSkillFrontmatter(b) + b.body,
   }];
 
   return {
     type: 'adapter',
     apiVersion: 2,
     name: 'junie',
-    emitters: { agent: agentEmitter, playbook: playbookEmitter },
+    emitters: { agent: agentEmitter, skill: skillEmitter },
   };
 }

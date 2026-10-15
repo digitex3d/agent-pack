@@ -87,11 +87,14 @@ export function applyVars(text: string, vars: Record<string, string>): string {
   return resolveReads(text, r => (r.template ? undefined : constantOf(vars, r.name)));
 }
 
+/** A `WITH` line's rest: `<skill>`, or `<skill> AS <template>` — null when it is neither. */
+export function splitWith(text: string): { name: string; template: string | null } | null {
+  const m = text.trim().match(/^(\S+)(?:\s+AS\s+(\S+))?$/);
+  return m ? { name: m[1], template: m[2] ?? null } : null;
+}
+
 /** A trailing `INTO <name>` — uppercase, at the very end of the line: anywhere else it is prose. */
 const INTO_RE = new RegExp(`^(.*?)\\s+INTO\\s+(${NAME})\\s*$`);
-
-/** Why a playbook takes no session variable: it compiles into a skill, which has no apx yet. */
-export const NO_PLAYBOOK_VARIABLES = 'playbooks have no executable yet — session variables are not available';
 
 /** An action line assigns with a trailing INTO — DO, ASK, COMPUTE (src/executor.ts) — and RUN: its procedure's result. */
 export function takesInto(keyword: string): boolean {

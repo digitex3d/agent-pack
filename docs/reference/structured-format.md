@@ -98,7 +98,7 @@ One entry per `ASK` or `COMPUTE` line, starred condition and starred procedure (
 
 | Field | |
 |---|---|
-| `kind` | `agent`, `role`, `policy`, `template`, `procedure`, `flow`, `store`, `team`, `playbook`, `var` |
+| `kind` | `agent`, `role`, `policy`, `template`, `procedure`, `flow`, `store`, `team`, `skill`, `var` |
 | `about`, `tags`, `applies`, `when` | on every block, whatever its kind |
 | `args` | what is specific to the kind — a template's slots and layout (a slot's `criteria`: the `YES`/`NO` lines of its rules), a procedure's `executor` (`1` or `2`, from `PROCEDURE*`/`PROCEDURE**`), its `exe` and, for a `COMPUTE` block, its `require` and `ensure` sections as nodes, an agent's mandate, perimeter and lenses, a team's members and routing, a store's type and key, a variable's scope (`private` or `session`), its type (a `Ref` to its template) and where it is declared |
 | `body` | the behaviour, as nodes |

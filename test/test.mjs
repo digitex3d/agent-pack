@@ -12,7 +12,7 @@ const COMMON_LIB = resolve(PROJECT_ROOT, '../common');
 
 // --- Lint tests (rule grammar) ---
 
-const { lintPolicy, lintPlaybook, lintProcedure, lintTemplate } = await import('../dist/src/lint.js');
+const { lintPolicy, lintRole, lintProcedure, lintTemplate } = await import('../dist/src/lint.js');
 
 {
   const ok = lintPolicy('english.policy.ap', `# english\nABOUT english only\nALWAYS write in English\nNEVER mix languages\n`);
@@ -23,18 +23,18 @@ const { lintPolicy, lintPlaybook, lintProcedure, lintTemplate } = await import('
 }
 
 {
-  const ok = lintPlaybook('ok.playbook.ap', `# ok\nABOUT ok\nWHEN a AND b\nDO something\n`);
+  const ok = lintRole('ok.role.ap', `# ok\nABOUT ok\nWHEN a AND b\nDO something\n`);
   assert.equal(ok.length, 0, 'AND-joined trigger should be accepted');
 
-  const orErr = lintPlaybook('or.playbook.ap', `# or\nABOUT or\nWHEN a OR b\nDO something\n`);
+  const orErr = lintRole('or.role.ap', `# or\nABOUT or\nWHEN a OR b\nDO something\n`);
   assert.ok(orErr.some(e => /OR not supported/.test(e.message)), 'OR should be rejected');
 
-  const trailing = lintPlaybook('tr.playbook.ap', `# tr\nABOUT tr\nWHEN a AND \nDO something\n`);
+  const trailing = lintRole('tr.role.ap', `# tr\nABOUT tr\nWHEN a AND \nDO something\n`);
   assert.ok(trailing.some(e => /AND must join non-empty/.test(e.message)), 'trailing AND should be rejected');
 }
 
 {
-  const ifOr = lintPlaybook('iff.playbook.ap', `# iff\nABOUT iff\nWHEN x\nIF a OR b\n  THEN DO y\n`);
+  const ifOr = lintRole('iff.role.ap', `# iff\nABOUT iff\nWHEN x\nIF a OR b\n  THEN DO y\n`);
   assert.ok(ifOr.some(e => /IF trigger.*OR not supported/.test(e.message)), 'IF with OR should be rejected');
 }
 
@@ -348,5 +348,8 @@ await import('./check.test.mjs');
 
 // --- library files compile like inline blocks: procedure LENS-IN, role ELSE and IMPORTs; team flows render the reads of their imports ---
 await import('./libraryUnits.test.mjs');
+
+// --- skills: agents the adapter writes as skills ---
+await import('./skills.test.mjs');
 
 console.log('All tests passed.');

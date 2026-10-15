@@ -47,6 +47,7 @@ export interface Formulas {
     'LENS-OUT': { bridge: Text };
     MANDATE: { line: Text };
     MEM: { shaped: Text };
+    WITH: { line: Text };
     VAR: { read: Text; readShaped: Text; block: Text; store: Text; storeTyped: Text; about: Text; scopes: Record<'private' | 'session', Text>; typed: Text; entry: Text };
   };
   blocks: {
@@ -59,6 +60,7 @@ export interface Formulas {
     } & KindGuide;
     procedure: { chapter: Text } & KindGuide;
     flow: { chapter: Text } & KindGuide;
+    skill: { chapter: Text; apx: Text; harness: Text } & KindGuide;
     store: {
       chapter: Text; home: Text; lasts: Record<'project' | 'session', Text>; field: Text; key: Text;
       reject: Text; create: Text; usage: Text; noType: Text; unknownType: Text;

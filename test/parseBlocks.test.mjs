@@ -53,17 +53,17 @@ import { parseBlocks } from '../dist/src/parseBlocks.js';
   console.log('3. POLICY ok');
 }
 
-// --- 4. PLAYBOOK block ---
+// --- 4. SKILL block ---
 {
-  const src = `PLAYBOOK draw-architecture:
-  WHEN asked to design the architecture
+  const src = `SKILL draw-architecture AS architect:
+  MANDATE draw the architecture
   DO   confirm the scope
 `;
   const r = parseBlocks(src);
   assert.equal(r.errors.length, 0, '4: no errors');
-  assert.equal(r.blocks[0].key, 'PLAYBOOK');
+  assert.equal(r.blocks[0].key, 'SKILL');
   assert.equal(r.blocks[0].name, 'draw-architecture');
-  console.log('4. PLAYBOOK ok');
+  console.log('4. SKILL ok');
 }
 
 // --- 5. ROLE block ---

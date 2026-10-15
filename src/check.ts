@@ -99,7 +99,7 @@ export function checkHead(kind: CheckKind, check: Pick<ApCondCheck, 'id' | 'leve
  * `agent` — an agent's body, or a procedure or role it runs: the agent's apx;
  * `step` — a flow step: its BY agent's apx (null when BY names no agent);
  * `flow` — a flow's own level, between its steps: no one agent (not supported yet);
- * `none` — a playbook, a team's routing: no executable at all.
+ * `none` — a standalone file, a team's routing: no executable at all.
  */
 export type CheckSite =
   | { at: 'agent'; agent: string }
@@ -118,8 +118,8 @@ export interface CheckIssue {
  * for it and with which id, or why no one does. `IF!` with no one to check it
  * reads as `IF`, with a warning; `IF!!` there fails — it could never be sealed.
  * `checks` is the configured judge (only its round limit matters here). Every
- * producer of a head — the document builder, the md of AGENTS.md and playbooks,
- * the source scan of flows.ap and playbooks — asks this function.
+ * producer of a head — the document builder, the md of AGENTS.md and standalone
+ * files, the source scan of flows.ap and standalone files — asks this function.
  */
 export function condCheckOf(
   kind: CheckKind, level: number, condition: string, site: CheckSite, checks: { rounds: number } | null | undefined,

@@ -4,12 +4,13 @@ import { existsSync } from 'fs';
 import { FORMULAS, fill, introOf } from '../formulas.js';
 import { resolve, join, dirname, basename, sep } from 'path';
 import { unitNameFromPath } from '../ingest.js';
+import { projectAgentFiles } from '../agentDiscovery.js';
 import { Config, BundleConfig, LintConfig, libraryRoots as libraryRootsOf, librariesAliasMap } from '../config.js';
 import { BundleContext, RoleEntry } from '../dispatch/index.js';
-import { processImports, resolveTargetWith } from '../dispatch/imports.js';
+import { processImports, resolveTargetWith, SKILL_IMPORT_HINT } from '../dispatch/imports.js';
 import { resolveBundleDefaults, resolveTeamShared } from '../bundleDefaults.js';
 import { resolveTeamMembership } from '../services/teamMembership.js';
-import { allAgentFiles, allUserAgentFiles, findAgentFiles, readAgentFile, standaloneDir, agentNameOf, teamRootForAgentFile, TEAM_FLOWS_FILE } from '../services/teamMetadata.js';
+import { findAgentFiles, readAgentFile, standaloneDir, agentNameOf, teamRootForAgentFile, TEAM_FLOWS_FILE } from '../services/teamMetadata.js';
 import { askTargetErrors, executorErrors, usesPrograms, WRITE_PROGRAM, type AgentIndexEntry } from '../executor.js';
 import { BUILTIN_AGENTS_DIR, resolveDelegateConfig, type DelegateConfig } from '../config.js';
 import { formatErrors, LintError, checkVocabulary, lineOfName, checkedHeadIssues } from '../lint.js';
@@ -18,9 +19,9 @@ import { renderTree } from '../bundlers/renderTree.js';
 import { renderEnumLegend } from '../enumPrimitives.js';
 import { partitionMetadata, mergeMetadata, protectVerbatim } from '../services/text.js';
 import { lex } from '../lexer.js';
-import { OwnsPrimitive, WhenPrimitive, applyBodySubstitutions, stripHeaderKeyword, injectNeutralIfUnclaimed, AGENT_METADATA_KEYWORDS } from '../primitives.js';
+import { OwnsPrimitive, applyBodySubstitutions, stripHeaderKeyword, AGENT_METADATA_KEYWORDS } from '../primitives.js';
 import { resolveShapeRefs } from '../shapeCompiler.js';
-import { AdapterPlugin, PlaybookBundle } from '../../adapters/types.js';
+import { AdapterPlugin } from '../../adapters/types.js';
 import { renderMd } from '../../adapters/md/index.js';
 import { emitChapter } from '../bundlers/sections.js';
 import { STRATEGIES, strategyFor, type DefinitionStrategy, type Definition } from '../definition.js';
@@ -32,7 +33,7 @@ import { SourceRegistry } from '../sources.js';
 import { judgeDocument, type JudgeRun } from '../judge/phase.js';
 import type { ChecksConfig } from '../judge/types.js';
 import { importedVariables, visibleIn } from '../exportedVars.js';
-import { readsOf, constantOf, parseVarLine, splitInto, takesInto, NO_PLAYBOOK_VARIABLES } from '../vars.js';
+import { readsOf, constantOf, parseVarLine, splitInto, takesInto } from '../vars.js';
 import { APX_VERBS } from '../apx/verbs.js';
 
 
@@ -70,9 +71,14 @@ function builtinAgentFiles(): string[] {
   return existsSync(BUILTIN_AGENTS_DIR) ? findAgentFiles(BUILTIN_AGENTS_DIR) : [];
 }
 
+/** Every agent file: the project's (its agents, the global ones, its skills), then the built-ins. */
+function agentFiles(config: Config): string[] {
+  return [...projectAgentFiles(config), ...builtinAgentFiles()];
+}
+
 /** Every agent of the project (the global ones after it) and the team it belongs to. */
 function agentIndexOf(config: Config): AgentIndexEntry[] {
-  return [...allAgentFiles(config.agentsDir, config.teamsDir), ...allUserAgentFiles(config.userRoot), ...builtinAgentFiles()].map(file => {
+  return agentFiles(config).map(file => {
     const teamRoot = teamRootForAgentFile(file);
     return { name: agentNameOf(file), team: teamRoot ? basename(teamRoot) : null };
   });
@@ -80,18 +86,15 @@ function agentIndexOf(config: Config): AgentIndexEntry[] {
 
 /**
  * Resolve an agent name to its `.ap` file: the file whose `EXPORT AGENT <name>`
- * block matches. Precedence mirrors the config cascade: project shadows global
+ * block matches — or `EXPORT SKILL <name>`, a skill being an agent the library
+ * holds. Precedence mirrors the config cascade: project shadows global
  * (user home).
  */
 export function resolveAgentFile(agentName: string, config: Config): string {
   // Flat agent: the file whose `EXPORT AGENT <name>` block name matches, over the
   // shared discovery dir set (standalone + team roots). Precedence mirrors the
   // config cascade: project shadows global (user home).
-  for (const file of [
-    ...allAgentFiles(config.agentsDir, config.teamsDir),
-    ...allUserAgentFiles(config.userRoot),
-    ...builtinAgentFiles(),
-  ]) {
+  for (const file of agentFiles(config)) {
     if (agentNameOf(file) === agentName) return file;
   }
   // Fallback: a conventional standalone path so the bundler reports a precise
@@ -99,10 +102,6 @@ export function resolveAgentFile(agentName: string, config: Config): string {
   return resolve(standaloneDir(config.agentsDir), `${agentName}.ap`);
 }
 
-/** The directory that hosts an agent's file. */
-export function resolveAgentDir(agentName: string, config: Config): string {
-  return dirname(resolveAgentFile(agentName, config));
-}
 
 
 /** Subset of BundleOptions that callers typically vary; the rest is derived from Config. */
@@ -135,7 +134,7 @@ export async function bundleAgentObjectFromConfig(
   agentName: string,
   config: Config,
   overrides: BundleFromConfigOverrides = {},
-): Promise<{ body: string; metadata: Map<string, string[]>; structure?: ApDocument }> {
+): Promise<{ body: string; metadata: Map<string, string[]>; structure?: ApDocument; skill: boolean; agentFile: string }> {
   return bundleAgentObject(buildBundleOpts(agentName, config, overrides));
 }
 
@@ -171,12 +170,12 @@ function unresolvedErrors(unresolved: { path: string; name: string; kind: string
 
 /** What a name that resolves to no block of its kind is told. */
 function unresolvedMessage(kind: string, name: string): string {
-  return kind === 'agent'
-    ? `unknown agent \`${name}\` — BY names a member of this team`
-    : `unknown ${kind} \`${name}\` — define it, or IMPORT it FROM @<lib>.${kind}s`;
+  if (kind === 'agent') return `unknown agent \`${name}\` — BY names a member of this team`;
+  if (kind === 'skill') return `unknown skill \`${name}\` — ${SKILL_IMPORT_HINT}`;
+  return `unknown ${kind} \`${name}\` — define it, or IMPORT it FROM @<lib>.${kind}s`;
 }
 
-// Shared bundle pipeline helpers used by both agent bundle and playbook bundle.
+// Shared bundle pipeline helpers used by the agent bundle and the standalone one.
 
 export interface MakeContextOpts {
   agentName: string;
@@ -206,6 +205,7 @@ export function makeBundleContext(opts: MakeContextOpts): BundleContext {
     procedures: [],
     flows: [],
     stores: [],
+    skills: [],
     variables: [],
     lintErrors: [],
     lintOptions: opts.lintOptions,
@@ -224,7 +224,7 @@ export async function expandImports(content: string, ctx: BundleContext, sourceP
 /**
  * Canonical source-body resolution: expand `IMPORT`s, then hoist inline
  * `<KIND> <name>:` blocks into `ctx` so `emitCollectedSections` renders them.
- * Single source of truth shared by every bundle path (agent, playbook,
+ * Single source of truth shared by every bundle path (agent, skill,
  * standalone, orchestration) so a FLOW/PROCEDURE/TEMPLATE resolves identically
  * regardless of which file declares it.
  */
@@ -271,15 +271,14 @@ function bindRoleIdentity(metadata: Map<string, string[]>, ctx: BundleContext): 
 /**
  * Every `{{name}}` a compilation reads — its source file and every block it
  * imports, comment lines aside — names a constant or a variable that file sees
- * (`seen`: imports never pass on), or the compilation fails where it is written
- * (`unknown` false: an undeclared read is left alone, as a playbook does).
+ * (`seen`: imports never pass on), or the compilation fails where it is written.
  * `sessionRead` says why a file may not read a variable, or null when it may.
  * A write — `… INTO x`, `VAR x:` — of a variable another file imports fails
  * alike: the file that writes it imports it too.
  */
 function variableUseErrors(
   ctx: BundleContext, sourcePath: string, seen: (file: string) => { constants: Record<string, string>; variables: Set<string> },
-  sessionRead: (file: string) => string | null, unknown = true,
+  sessionRead: (file: string) => string | null,
 ): LintError[] {
   const kinds = [ctx.policies, ctx.roles, ctx.templates, ctx.procedures, ctx.flows, ctx.stores] as { path: string }[][];
   const files = new Set([sourcePath, ...kinds.flat().map(d => d.path)]);
@@ -307,7 +306,7 @@ function variableUseErrors(
         else if (template && !ctx.templates.some(tpl => tpl.name === template)) err(`\`${read}\`: ${unresolvedMessage('template', template)}`);
         if (constantOf(constants, name) !== undefined) continue;
         if (!variables.has(name)) {
-          if (unknown) err(unknownVariable(read, name, ctx));
+          err(unknownVariable(read, name, ctx));
         } else if (refused) {
           errors.push({ file, line: i + 1, message: `\`${read}\`: ${refused}` });
         }
@@ -378,7 +377,7 @@ export function lintSource(path: string, ctx: BundleContext): void {
 }
 
 /**
- * A compilation with no executable — a playbook, a standalone file — checks
+ * A compilation with no executable — a standalone file — checks
  * no condition: the checked heads of its source and of the procedures it runs
  * are reported where they stand (an `IF!` warns, an `IF!!` fails).
  */
@@ -480,20 +479,19 @@ export function emitCollectedSections(ctx: BundleContext): string {
   return out;
 }
 
-interface PlaybookHeader {
+interface StandaloneHeader {
   metadata: Map<string, string[]>;
   stripped: string;  // body without ABOUT / WHEN — ready for expandImports
 }
 
 /**
- * Single-pass extraction for playbook sources: ABOUT, all WHEN triggers,
- * and a stripped body produced from the same token stream. Replaces the prior
- * `parsePlaybookHeader + stripPrimitives` double-lex.
+ * Single-pass extraction for standalone sources: ABOUT, all WHEN triggers,
+ * and a stripped body produced from the same token stream.
  *
  * TAGS / APPLIES are file-level metadata like ABOUT — consumed into the map so
- * they never leak into the rendered skill body.
+ * they never leak into the rendered body.
  */
-function parsePlaybookHeader(raw: string): PlaybookHeader {
+function parseStandaloneHeader(raw: string): StandaloneHeader {
   const HEADER_KEYWORDS = new Set(['ABOUT', 'WHEN', 'TAGS', 'APPLIES']);
   const metadata = new Map<string, string[]>();
   const out: string[] = [];
@@ -516,54 +514,6 @@ function parsePlaybookHeader(raw: string): PlaybookHeader {
 }
 
 /**
- * Bundle a single playbook file as a standalone PlaybookBundle.
- * Uses the same pipeline (makeBundleContext + expandImports + emitCollectedSections)
- * as bundleAgentObject.
- */
-export async function buildPlaybookBundle(
-  path: string,
-  config: Config,
-  opts: {
-    extraLibraryRoots?: string[];
-    extraLibraries?: Record<string, string>;
-    adapter?: AdapterPlugin;
-  } = {},
-): Promise<PlaybookBundle> {
-  const absolute = resolve(path);
-  const name = unitNameFromPath(absolute);
-
-  const ctx = makeBundleContext({
-    agentName: name,
-    libraryRoot: config.libraryRoot,
-    libraryRoots: [...libraryRootsOf(config), ...(opts.extraLibraryRoots ?? [])],
-    libraries: { ...librariesAliasMap(config), ...(opts.extraLibraries ?? {}) },
-    renderings: opts.adapter?.renderings,
-  });
-  const header = parsePlaybookHeader(ctx.sources.read(absolute));
-  const whens = header.metadata.get('WHEN') ?? [];
-  lintSource(absolute, ctx);
-
-  let body = await resolveInlineBlocks(header.stripped, ctx, absolute);
-  // A playbook reads no variable — it has no executable yet; its other reads stay as today.
-  ctx.lintErrors.push(...variableUseErrors(ctx, absolute, file => visibleIn(file, ctx.variables, { constants: {}, variables: [] }), () => NO_PLAYBOOK_VARIABLES, false));
-  // Order: declarations first (Templates / Procedures) so every
-  // reference inside the steps is already defined when the LLM reads it,
-  // entry-point body last.
-  body = `${emitCollectedSections(ctx)}# Steps for ${name}\n\n${tidyBlankLines(body)}\n`;
-  body = injectNeutralIfUnclaimed(body, WhenPrimitive, whens, opts.adapter?.name ?? '');
-  noExecutableChecks(absolute, ctx);
-
-  reportLintIssues(ctx, 'Playbook bundle');
-
-  return Object.assign(new PlaybookBundle(), {
-    metadata: header.metadata,
-    name,
-    body: postProcessBody(body, ctx),
-    sourcePath: absolute,
-  });
-}
-
-/**
  * Pure compilation: resolves all directives and returns the compiled context as a string.
  * No file I/O for output — the caller decides what to do with the result.
  */
@@ -572,8 +522,8 @@ export async function bundleAgentToString(opts: BundleOptions): Promise<string> 
 }
 
 /**
- * Compile a standalone .ap file (no playbook scaffolding, no agent metadata)
- * through the same pipeline used by agents and playbooks: imports, force
+ * Compile a standalone .ap file (no agent metadata)
+ * through the same pipeline used by agents: imports, force
  * levels, vars, and the collected primitives (Templates/Procedures).
  * Strips H1 and ABOUT from the source. Used by PROJECT.ap and any other
  * top-level standalone file that compiles to plain markdown.
@@ -593,7 +543,7 @@ export async function bundleStandaloneToString(
     libraries: { ...librariesAliasMap(config), ...(opts.extraLibraries ?? {}) },
     renderings: opts.adapter?.renderings,
   });
-  const header = parsePlaybookHeader(ctx.sources.read(absolute));
+  const header = parseStandaloneHeader(ctx.sources.read(absolute));
   lintSource(absolute, ctx);
 
   let body = await resolveInlineBlocks(header.stripped, ctx, absolute);
@@ -612,6 +562,10 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
   body: string;
   metadata: Map<string, string[]>;
   structure?: ApDocument;
+  /** The block is a SKILL — an agent the adapter writes as a skill. */
+  skill: boolean;
+  /** The agent's file, as resolved. */
+  agentFile: string;
 }> {
   const { agentName, libraryRoot } = opts;
   const libraryRoots = opts.libraryRoots ?? [libraryRoot];
@@ -737,5 +691,8 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     body,
     metadata,
     structure,
+    // A SKILL block is an agent the adapter writes as a skill: only the bundle's kind differs.
+    skill: agentFile.info.skill,
+    agentFile: agentFilePath,
   };
 }

@@ -32,9 +32,9 @@ try {
   //       coding/
   //         scripting/
   //           scaffold.procedure.ap  — TAGS declared
-  //     playbooks/
+  //     skills/
   //       security/
-  //         scan.playbook.ap        — WHEN + APPLIES declared
+  //         scan.ap                 — WHEN + APPLIES declared
   // -----------------------------------------------------------------------
 
   mkdirSync(join(tmp, 'policies'), { recursive: true });
@@ -62,9 +62,9 @@ try {
     'utf-8',
   );
 
-  mkdirSync(join(tmp, 'playbooks', 'security'), { recursive: true });
+  mkdirSync(join(tmp, 'skills', 'security'), { recursive: true });
   writeFileSync(
-    join(tmp, 'playbooks', 'security', 'scan.playbook.ap'),
+    join(tmp, 'skills', 'security', 'scan.ap'),
     [
       '# security-scan',
       'ABOUT  run a security scan',
@@ -133,15 +133,15 @@ try {
   assert.equal(scaffold.applies, null);
 
   // -----------------------------------------------------------------------
-  // security scan playbook — WHEN + APPLIES
+  // security scan skill (a legacy file-as-unit) — WHEN + APPLIES
   // TAGS absent → tags = [] (no namespace-derivation; metadata is read, not synthesized)
   // applies is the raw verbatim string after the APPLIES keyword
   // -----------------------------------------------------------------------
   const scanKey = Object.keys(index.exports).find(k => k.includes('scan') || k.includes('security-scan'));
-  assert.ok(scanKey, 'security-scan playbook appears in modules');
+  assert.ok(scanKey, 'security-scan skill appears in modules');
   const scan = index.exports[scanKey];
 
-  assert.equal(scan.kind, 'playbook');
+  assert.equal(scan.kind, 'skill');
   assert.equal(scan.when, 'a security vulnerability is reported');
   assert.ok(scan.applies !== null, 'APPLIES is present');
   assert.ok(scan.applies.startsWith('requires:security-role'), 'APPLIES raw text preserved verbatim');

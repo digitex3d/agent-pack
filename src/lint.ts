@@ -2,25 +2,25 @@
 // Copyright (c) 2026 Giuseppe Federico
 import { existsSync, readFileSync } from 'fs';
 import { basename } from 'path';
-import { lex, Token, Keyword, KEYWORDS } from './lexer.js';
+import { lex, Token, Keyword, KEYWORDS, isDecorator } from './lexer.js';
 import { ACTION_VERBS } from './actionVerbs.js';
 import { desugar } from './desugar.js';
 import { TAG_RE } from './services/tags.js';
-import { getFamilyBases, getIntroByKeyword, forceLevelBaseOf, forceLevelFamilies, toCanonicalKeyword } from './forceLevelConfig.js';
-import { enumPrimitiveFor } from './primitives.js';
+import { getFamilyBases, getIntroByKeyword, forceLevelBaseOf, forceLevelFamilies, toCanonicalKeyword, parseForceLevel, NON_RULE_FAMILIES } from './forceLevelConfig.js';
+import { enumPrimitiveFor, AGENT_METADATA_KEYWORDS } from './primitives.js';
 import { BLOCK_CONTRACTS, BlockContract, VAR_BLOCK } from './blockContracts.js';
 import { TEAM_FLOWS_FILE } from './services/teamMetadata.js';
 import { parseBlocks, exportedVar, readExportedVar, isExportedVar, type Block, type Node } from './parseBlocks.js';
 import { isExportFile } from './services/text.js';
 import { parseAgentSignature } from './definitionArgs.js';
 import { kindFromDir, unitNameFromPath } from './ingest.js';
-import { BLOCK_TYPES, blockTypeOf, EXPORT_MODIFIER } from './blockTypes.js';
+import { BLOCK_TYPES, blockTypeOf, EXPORT_MODIFIER, AGENT_KEYS } from './blockTypes.js';
 import { COMPUTE_SECTIONS, executorMark, returnShape, splitExecutorMark } from './executor.js';
 import { parseTypeSpec } from './shapeSchema.js';
 import { STORE_LIFETIMES } from './storeTypes/types.js';
 import { stripTrailingColon, buildTree, type Node as TreeNode } from './bundlers/renderTree.js';
 import { condCheckOf, type CheckKind, type CheckSite } from './check.js';
-import { parseVarLine, isVarKeyword, splitBy, splitInto, takesInto, readsOf, NO_PLAYBOOK_VARIABLES } from './vars.js';
+import { parseVarLine, isVarKeyword, splitBy, splitInto, splitWith, takesInto, readsOf } from './vars.js';
 
 export interface LintError {
   file: string;
@@ -107,6 +107,36 @@ function nextSubstantive(tokens: Token[], from: number): number {
     return j;
   }
   return -1;
+}
+
+/**
+ * What is wrong with a `WITH` line — a decorator: one skill, an `AS <template>`
+ * only when the skill is used, and a place that says which work it is for —
+ * the block right below it (a head with lines beneath, or another WITH), or,
+ * first in a body after the metadata, the whole block.
+ */
+function withLineErrors(tokens: Token[], index: number): string[] {
+  const t = tokens[index] as Extract<Token, { kind: 'keyword' }>;
+  const errors: string[] = [];
+  const use = splitWith(t.rest);
+  if (!use) errors.push(`\`${t.raw.trim()}\`: WITH names one skill — \`WITH <skill>\`, or \`WITH <skill> AS <template>\` to shape its answer`);
+  else if (use.template && (parseForceLevel(t.keyword as string)?.level ?? 0) < 0) errors.push(`\`${t.raw.trim()}\`: a skill not used has no answer to shape — drop the AS`);
+  // The very next line — nothing between: a WITH, or a head with lines beneath.
+  const next = tokens[index + 1];
+  const after = nextSubstantive(tokens, index + 2);
+  const decoratesBelow = next !== undefined && next.indent === t.indent
+    && (isDecorator(next) || next.kind === 'blockOpener' || (after !== -1 && tokens[after].indent > t.indent));
+  // First in a body: only WITHs, and the metadata the body opens with, before it.
+  let prev = index - 1;
+  while (prev >= 0 && (['blank', 'comment', 'rawLine'].includes(tokens[prev].kind) || (tokens[prev].indent === t.indent && isDecorator(tokens[prev])))) prev--;
+  const p = prev < 0 ? undefined : tokens[prev];
+  // The file's own top opens no body: a decorator there is for the block below.
+  const opensBody = p !== undefined && (p.indent < t.indent
+    || (p.indent === t.indent && p.kind === 'keyword' && (AGENT_METADATA_KEYWORDS as string[]).includes(p.keyword as string)));
+  if (!decoratesBelow && !opensBody) {
+    errors.push(`\`${t.raw.trim()}\` decorates the block on the very next line, or — first in a body — the whole block: put it right above a block, or at the top of the body`);
+  }
+  return errors;
 }
 
 // ---------------------------------------------------------------------------
@@ -519,38 +549,7 @@ const POLICY_SPEC: LintSpec = {
   },
 };
 
-// Force-level family bases (post-desugar), plus DO. handlerFor() expands each
-// base to all its declensions at lookup time — no enumeration needed here.
-const PLAYBOOK_ACTION_KEYWORDS: Keyword[] = [...ACTION_VERBS, ...getFamilyBases()];
-const PLAYBOOK_FLOW_KEYWORDS: Keyword[] = ['UNTIL', 'RUN', 'IMPORT'];
-
-const PLAYBOOK_SPEC: LintSpec = {
-  topLevelOnly: true,
-  keywords: new Map<Keyword, KeywordHandler>([
-    ['ABOUT',   aboutHandler],
-    ['SCOPE',   passthrough],
-    ['APPLIES', passthrough],
-    ['TAGS',    tagsHandler],
-    ['WHEN',  triggerHandler('WHEN', s => { s.whenCount = ((s.whenCount as number) ?? 0) + 1; })],
-    ['IF',    ifElseHandler],
-    ['ELSE',  ifElseHandler],
-    ...PLAYBOOK_ACTION_KEYWORDS.map(kw => [kw, counts('doCount')] as const),
-    ...PLAYBOOK_FLOW_KEYWORDS.map(kw => [kw, accept] as const),
-    // A playbook takes no VAR yet — it has no executable; the error is checkVocabulary's.
-    ['VAR', passthrough],
-    ...agentOnlyEntries,
-    ...roleIdentityEntries,
-    ...flowOnlyEntries,
-  ]),
-  procRef: (_t, ctx) => { ctx.state.doCount = ((ctx.state.doCount as number) ?? 0) + 1; },
-  unexpected: t => `unexpected line in a playbook (expected WHEN/force-level/DO/IF/ELSE/RUN/@ref or metadata): "${quoteRaw(t)}"`,
-  finalize: (state, errors, file) => {
-    if (!state.whenCount) errors.push({ file, line: 1, message: 'playbook has no WHEN trigger' });
-    if (!state.doCount)   errors.push({ file, line: 1, message: 'playbook has no DO action' });
-  },
-};
-
-// Force-level family bases — the list roles and playbooks admit — plus the
+// Force-level family bases — the list roles admit — plus the
 // action/flow keywords. handlerFor expands each base to all its declensions:
 // `AS <shape>` declares the procedure's output, `NEVER …`/`MUST! …` are its rules.
 const PROCEDURE_FLOW_KEYWORDS: Keyword[] = ['IMPORT', ...ACTION_VERBS, 'VAR', 'UNTIL', 'RUN', ...getFamilyBases()];
@@ -696,13 +695,13 @@ export function lintAgentBlocks(file: string, body: string): LintError[] {
   const forbidden = new Set<string>(contract.identityKeywords ?? []);
 
   for (const block of parseBlocks(body).blocks) {
-    if (block.key !== 'AGENT') continue;
+    if (!AGENT_KEYS.has(block.key)) continue;
 
     // Header signature: `AS <role>` is required.
     if (!parseAgentSignature(block.rest).role) {
       errors.push({
         file, line: block.startLine,
-        message: 'AGENT block requires an `AS <role>` binding on its header line',
+        message: `${block.key} block requires an \`AS <role>\` binding on its header line`,
       });
     }
 
@@ -723,7 +722,7 @@ export function lintAgentBlocks(file: string, body: string): LintError[] {
       // signature, never a body line. Everything else defers to the contract
       // (which expands force-level declensions to their family base internally).
       if (child.keyword === 'AS' || !isAllowedChild(contract, child.keyword as Keyword)) {
-        errors.push({ file, line: child.line, message: notAllowed(child.keyword as Keyword, 'AGENT', contract) });
+        errors.push({ file, line: child.line, message: notAllowed(child.keyword as Keyword, block.key, contract) });
       }
     }
 
@@ -733,7 +732,7 @@ export function lintAgentBlocks(file: string, body: string): LintError[] {
     for (const required of contract.requiresAll ?? []) {
       if (required === 'AS') continue;
       if ((childCounts.get(required) ?? 0) === 0) {
-        errors.push({ file, line: block.startLine, message: `AGENT block requires a ${required}` });
+        errors.push({ file, line: block.startLine, message: `${block.key} block requires a ${required}` });
       }
     }
     for (const u of contract.unique ?? []) {
@@ -742,7 +741,7 @@ export function lintAgentBlocks(file: string, body: string): LintError[] {
       if (count > 1) {
         errors.push({
           file, line: block.startLine,
-          message: `AGENT block has ${count} occurrences of ${u} (expected at most 1)`,
+          message: `${block.key} block has ${count} occurrences of ${u} (expected at most 1)`,
         });
       }
     }
@@ -1040,7 +1039,6 @@ export function lintStore(file: string, body: string, options: LintOptions = {})
 // ---------------------------------------------------------------------------
 
 export const lintPolicy     = (file: string, body: string, options: LintOptions = {}) => runLint(POLICY_SPEC,     file, body, options);
-export const lintPlaybook   = (file: string, body: string, options: LintOptions = {}) => runLint(PLAYBOOK_SPEC,   file, body, options);
 export const lintProcedure  = (file: string, body: string, options: LintOptions = {}) => runLint(PROCEDURE_SPEC,  file, body, options);
 export const lintRole       = (file: string, body: string, options: LintOptions = {}) => runLint(ROLE_SPEC,       file, body, options);
 export const lintTemplate   = (file: string, body: string, options: LintOptions = {}) => runLint(TEMPLATE_SPEC,   file, body, options);
@@ -1083,7 +1081,7 @@ function isAgentOrOrchestration(file: string, body: string): boolean {
   if (ORCHESTRATION_BASENAMES.has(base)) return true;
   if (NON_KIND_SUFFIXES.some(s => base.endsWith(s))) return true;
   if (/^AS\s+\S/m.test(body)) return true;
-  return parseBlocks(body).blocks.some(b => b.key.toUpperCase() === 'AGENT');
+  return parseBlocks(body).blocks.some(b => AGENT_KEYS.has(b.key.toUpperCase()));
 }
 
 // ---------------------------------------------------------------------------
@@ -1160,9 +1158,9 @@ function ownerOf(ancestors: string[], file: string): string {
 /** The lines each body admits — a VAR stands in those whose list holds it. */
 const BODY_KEYWORDS: Record<string, readonly Keyword[]> = {
   AGENT: BLOCK_CONTRACTS.AGENT.allows,
+  SKILL: BLOCK_CONTRACTS.AGENT.allows,
   ROLE: ROLE_RULE_KEYWORDS,
   PROCEDURE: PROCEDURE_FLOW_KEYWORDS,
-  PLAYBOOK: [...PLAYBOOK_ACTION_KEYWORDS, ...PLAYBOOK_FLOW_KEYWORDS],
 };
 const VAR_HOMES = new Set(Object.keys(BODY_KEYWORDS).filter(k => BODY_KEYWORDS[k].includes('VAR')));
 
@@ -1179,9 +1177,7 @@ function varLineErrors(t: Extract<Token, { kind: 'keyword' }>, ancestors: string
   const written = t.raw.trim();
   const errors: string[] = [];
   const owner = ownerOf(ancestors, file);
-  if (owner === 'PLAYBOOK') {
-    errors.push(NO_PLAYBOOK_VARIABLES);
-  } else if (ancestors.includes('VAR')) {
+  if (ancestors.includes('VAR')) {
     errors.push('a VAR block holds no VAR — declare it before the block');
   } else if (ancestors.includes('UNTIL')) {
     errors.push('a VAR inside UNTIL would declare its variable again on every pass — declare it before the loop and reassign it with `DO … INTO`');
@@ -1200,11 +1196,11 @@ function varLineErrors(t: Extract<Token, { kind: 'keyword' }>, ancestors: string
   return errors;
 }
 
-/** What is wrong with a line's trailing `INTO <name>`: only an action line takes one, and never in a playbook. */
-function intoError(t: Extract<Token, { kind: 'keyword' }>, owner: string): string | null {
+/** What is wrong with a line's trailing `INTO <name>`: only an action line takes one. */
+function intoError(t: Extract<Token, { kind: 'keyword' }>): string | null {
   const into = splitInto(t.rest);
   if (!into || isVarKeyword(t.keyword as string)) return null;
-  if (takesInto(t.keyword)) return owner === 'PLAYBOOK' ? NO_PLAYBOOK_VARIABLES : null;
+  if (takesInto(t.keyword)) return null;
   return `INTO ends only a DO, ASK, COMPUTE or RUN line — \`${t.raw.trim().split(/\s/)[0]}\` takes none`;
 }
 
@@ -1275,6 +1271,7 @@ export function checkVocabulary(file: string, body: string): LintError[] {
       if (early) err(t.line, `BY ${early.name} must end the ASK line — write \`ASK … INTO <name> BY ${early.name}\``);
       const base = forceLevelBaseOf(key);
       if (base && getIntroByKeyword(key) === null) err(t.line, unknownLevel(key, base));
+      if (isDecorator(t)) for (const message of withLineErrors(tokens, index)) err(t.line, message);
       const prim = enumPrimitiveFor(key);
       const value = t.rest.trim().replace(/:$/, '');
       if (prim && value && !prim.values[value]) {
@@ -1309,7 +1306,7 @@ export function checkVocabulary(file: string, body: string): LintError[] {
         const deeper = next !== -1 && tokens[next].indent > t.indent;
         for (const message of varLineErrors(t, stack.map(a => a.key), deeper, file)) err(t.line, message);
       }
-      const into = intoError(t, ownerOf(stack.map(a => a.key), file));
+      const into = intoError(t);
       if (into) err(t.line, into);
     } else if (t.kind === 'unknown') {
       const word = t.raw.match(KEYWORD_LIKE_RE)?.[1];
@@ -1329,12 +1326,12 @@ export function checkVocabulary(file: string, body: string): LintError[] {
  * A COMPUTE block's shape (src/executor.ts): ABOUT and rules on top, then
  * REQUIRE:, RETURN AS <template>: and ENSURE:, once each, in this order, none
  * empty. REQUIRE and ENSURE hold rules and IF only; RETURN holds what a program
- * can carry out — DO, COMPUTE, IF, UNTIL and rules — never ASK, RUN, MEM or VAR.
+ * can carry out — DO, COMPUTE, IF, UNTIL and rules — never ASK, RUN, MEM, WITH or VAR.
  */
 function computeBlockErrors(file: string, body: string): LintError[] {
   const errors: LintError[] = [];
   const err = (line: number, message: string) => errors.push({ file, line, message });
-  const isRule = (keyword: string) => forceLevelBaseOf(keyword) !== null && forceLevelBaseOf(keyword) !== 'AS' && forceLevelBaseOf(keyword) !== 'MEM';
+  const isRule = (keyword: string) => forceLevelBaseOf(keyword) !== null && !NON_RULE_FAMILIES.includes(forceLevelBaseOf(keyword)!);
   const RETURN_LINES = new Set(['DO', 'COMPUTE']);
   const RETURN_BLOCKS = new Set(['IF', 'ELSE', 'UNTIL']);
   const check = (nodes: Node[], section: string, name: string): void => {
@@ -1398,7 +1395,7 @@ export function lintFile(file: string, body: string, options: LintOptions = {}):
 
 /** An agent's file or a team's flows.ap: a variable exported there would be no one's — library modules export them. */
 function ownsNoVariable(file: string, body: string): boolean {
-  return basename(file) === TEAM_FLOWS_FILE || parseBlocks(body).blocks.some(b => b.key === 'AGENT');
+  return basename(file) === TEAM_FLOWS_FILE || parseBlocks(body).blocks.some(b => AGENT_KEYS.has(b.key));
 }
 
 /**
@@ -1445,7 +1442,6 @@ function lintByKind(file: string, body: string, options: LintOptions): LintError
   // `kindFromDir` derives this from the one kind registry.
   switch (kindFromDir(file)) {
     case 'policy':    return lintPolicy(file, body, options);
-    case 'playbook':  return lintPlaybook(file, body, options);
     case 'procedure': return lintProcedure(file, body, options);
     case 'role':      return lintRole(file, body, options);
     case 'template':  return lintTemplate(file, body, options);
@@ -1483,8 +1479,8 @@ export function formatErrors(errors: LintError[]): string {
 
 /**
  * The checked heads (`IF!`, `IF!!`, …) of a source no document builder walks —
- * a playbook, the procedures it runs, a team's flows.ap as AGENTS.md renders it
- * — judged by `condCheckOf`, where each stands. Without `agentOf` (a playbook)
+ * a standalone file, the procedures it runs, a team's flows.ap as AGENTS.md renders it
+ * — judged by `condCheckOf`, where each stands. Without `agentOf` (a standalone file)
  * no executable is anywhere. With it (a team's flows.ap, BY lines already
  * resolved to agents): a step's head is its BY agent's, a head between a
  * flow's steps is the flow's, and one in the team's routing has none.

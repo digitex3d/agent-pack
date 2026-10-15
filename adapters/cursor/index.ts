@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
 import { resolve } from 'path';
-import { AdapterPlugin, AgentBundle, PlaybookBundle, Emitter } from '../types.js';
+import { AdapterPlugin, AgentBundle, SkillBundle, Emitter } from '../types.js';
+import { descriptionOf } from '../skill-frontmatter.js';
 
 export interface CursorOptions {
   rulesDir?: string;
@@ -22,19 +23,16 @@ export default function cursorAdapter(opts: CursorOptions = {}): AdapterPlugin {
     content: buildMdc(b.metadata.get('ABOUT')?.[0] ?? `${b.name} agent`, agentsAlwaysActive, b.body),
   }];
 
-  const playbookEmitter: Emitter<PlaybookBundle> = (b, ctx) => [{
+  // A skill is a rule Cursor applies on its own, when the description fits.
+  const skillEmitter: Emitter<SkillBundle> = (b, ctx) => [{
     path: resolve(ctx.projectRoot, rulesDir, `${b.name}.mdc`),
-    content: buildMdc(
-      b.metadata.get('ABOUT')?.[0] ?? b.metadata.get('WHEN')?.[0] ?? b.name,
-      false,
-      b.body,
-    ),
+    content: buildMdc(descriptionOf(b), false, b.body),
   }];
 
   return {
     type: 'adapter',
     apiVersion: 2,
     name: 'cursor',
-    emitters: { agent: agentEmitter, playbook: playbookEmitter },
+    emitters: { agent: agentEmitter, skill: skillEmitter },
   };
 }

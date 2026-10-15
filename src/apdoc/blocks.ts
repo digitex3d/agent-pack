@@ -77,11 +77,11 @@ function restore<T extends ApBlock>(block: T, data: ApBlockData): T {
   return block;
 }
 
-/** policy | procedure | flow | playbook — rule-bearing body, optional output shape. */
+/** policy | procedure | flow | skill — rule-bearing body, optional output shape. */
 export class RuleBlock extends ApBlock {
   /** The id prefixes of the four kinds this class covers. */
   static readonly PREFIXES: Record<string, string> = {
-    policy: 'pol', procedure: 'prc', flow: 'flw', playbook: 'pbk',
+    policy: 'pol', procedure: 'prc', flow: 'flw', skill: 'skl',
   };
   readonly kind: string;
   protected readonly idPrefix: string;
@@ -687,10 +687,11 @@ export const KIND_STRATEGIES: KindStrategy[] = [
     entries: ctx => ctx.procedures, from: RuleBlock.fromDefinition },
   { kind: 'flow', revive: RuleBlock.fromData, folder: 'flows', chapterTitle: FORMULAS.blocks.flow.chapter, prefix: RuleBlock.PREFIXES['flow'],      ref: 'runnables',
     entries: ctx => ctx.flows,      from: RuleBlock.fromDefinition },
+  { kind: 'skill', revive: RuleBlock.fromData, folder: 'skills', chapterTitle: FORMULAS.blocks.skill.chapter, prefix: RuleBlock.PREFIXES['skill'], ref: null,
+    entries: ctx => ctx.skills,     from: RuleBlock.fromDefinition },
   { kind: 'store', revive: StoreBlock.fromData, folder: 'stores', chapterTitle: FORMULAS.blocks.store.chapter, prefix: StoreBlock.PREFIX,               ref: 'stores',
     entries: ctx => ctx.stores,     from: StoreBlock.fromDefinition },
   // Non-chapter kinds — referenceable identities only.
-  { kind: 'playbook', revive: RuleBlock.fromData, folder: 'playbooks',  prefix: RuleBlock.PREFIXES['playbook'],  ref: 'runnables' },
   { kind: 'team', revive: TeamBlock.fromData, folder: 'teams',      prefix: TeamBlock.PREFIX,                ref: null },
   { kind: 'agent', revive: AgentBlock.fromData, folder: 'agents',     prefix: AgentBlock.PREFIX,               ref: null },
   { kind: 'var', revive: VarBlock.fromData, folder: 'vars',         prefix: VarBlock.PREFIX,                 ref: null },
@@ -721,6 +722,7 @@ export function refId(kind: string, namespace: string, name: string): string {
 
 /** The namespace of a collected definition: its library, else `@main.<folder>`. */
 export function namespaceOf(def: Definition, libraryRoots: string[], libraries?: Record<string, string>): string {
+  if (def.namespace) return def.namespace;
   const viaLibrary = buildNamespace(def.path, libraryRoots, libraries);
   if (viaLibrary) return viaLibrary.startsWith('@') ? viaLibrary : `@${viaLibrary}`.replace(/^@library/, 'library');
   // A team's flows live in its flows.ap: one namespace per team, whoever builds them.

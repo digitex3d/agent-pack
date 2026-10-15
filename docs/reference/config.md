@@ -86,7 +86,7 @@ IMPORT security FROM @main.policies
 IMPORT review-report FROM @main.templates.review
 ```
 
-`@main.<kind>[.<folder>…]` points at `<libraryRoot>/<kind>/[<folder>/…]`. The kinds are the plural folder names: `policies`, `roles`, `templates`, `procedures`, `playbooks`, `flows`, `stores`.
+`@main.<kind>[.<folder>…]` points at `<libraryRoot>/<kind>/[<folder>/…]`. The kinds are the plural folder names: `policies`, `roles`, `templates`, `procedures`, `skills`, `flows`, `stores`. `@harness.skills` is reserved: it names the skills the harness provides itself.
 
 A shared library is a local folder reached by an alias of your choice:
 

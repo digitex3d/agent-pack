@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { readdirSync, existsSync } from 'fs';
-import { join } from 'path';
+import { readdirSync, existsSync, statSync } from 'fs';
+import { join, resolve } from 'path';
 
 /**
  * Recursively collect files under `dir` up to `maxDepth` levels deep,
@@ -23,4 +23,16 @@ export function collectFiles(dir: string, maxDepth: number, currentDepth = 1): s
   }
 
   return files.sort();
+}
+
+/** Every `.ap` file under `dir`, recursively; [] when `dir` is no directory. */
+export function apFilesUnder(dir: string): string[] {
+  if (!existsSync(dir) || !statSync(dir).isDirectory()) return [];
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    const abs = resolve(dir, entry.name);
+    if (entry.isDirectory()) out.push(...apFilesUnder(abs));
+    else if (entry.name.endsWith('.ap')) out.push(abs);
+  }
+  return out;
 }

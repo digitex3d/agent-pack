@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { AgentBundle, AdapterPlugin } from '../../adapters/types.js';
+import { AgentBundle, SkillBundle, AdapterPlugin } from '../../adapters/types.js';
 import { Config } from '../config.js';
-import { bundleAgentObjectFromConfig, resolveAgentDir } from '../compiler/index.js';
+import { bundleAgentObjectFromConfig } from '../compiler/index.js';
+import { dirname } from 'path';
 import type { JudgeRun } from '../judge/phase.js';
 
 export interface BuildAgentOptions {
@@ -15,8 +16,8 @@ export async function buildAgentBundle(
   name: string,
   config: Config,
   opts: BuildAgentOptions = {},
-): Promise<AgentBundle> {
-  const { body, metadata, structure } = await bundleAgentObjectFromConfig(name, config, {
+): Promise<AgentBundle | SkillBundle> {
+  const { body, metadata, structure, skill, agentFile } = await bundleAgentObjectFromConfig(name, config, {
     bundleConfig: config.bundle,
     lintConfig: config.lint,
     adapter: opts.adapter,
@@ -24,10 +25,10 @@ export async function buildAgentBundle(
     // The implicit `name`; the constants the agent imports come on top.
     vars: { name },
   });
-  return Object.assign(new AgentBundle(), {
+  return Object.assign(skill ? new SkillBundle() : new AgentBundle(), {
     name,
     body,
-    sourcePath: resolveAgentDir(name, config),
+    sourcePath: dirname(agentFile),
     metadata,
     structure,
   });

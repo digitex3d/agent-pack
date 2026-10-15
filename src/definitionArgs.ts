@@ -7,7 +7,7 @@ import { FORMULAS, fill } from './formulas.js';
  *
  * Some child keywords are not body content but attributes of the enclosing
  * definition — its signature. This mirrors how an AGENT's MANDATE and bound ROLE
- * are the agent's identity (rendered apart from its body), not playbook lines.
+ * are the agent's identity (rendered apart from its body), not body lines.
  *
  * A STEP works the same way: `BY` (executor) and `CONTEXT` (how much upstream
  * context) describe the step, while `DO`/`RUN` are what it does. The renderer

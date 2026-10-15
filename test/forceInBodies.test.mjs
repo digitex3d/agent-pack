@@ -3,7 +3,7 @@
 /**
  * Force-level lines in procedure and step bodies: a PROCEDURE (also under its
  * IF/ELSE and UNTIL), a flow STEP and a STEP's IF/ELSE branch take the same
- * force-level families roles and playbooks take — `NEVER …`, `MUST! …`,
+ * force-level families roles take — `NEVER …`, `MUST! …`,
  * `SHOULD …`, `MAY …` and their aliases — instead of `DO never …`. A rule line
  * is never the step's action: a STEP still needs a DO or RUN. Every consumer
  * carries the lines in source order: the lint, the document (directive nodes

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
 import { lineOfName } from '../lint.js';
-import { readFileSync, existsSync, readdirSync } from 'fs';
-import { resolve as resolvePath, relative as relativeFrom } from 'path';
+import { readFileSync, existsSync } from 'fs';
+import { resolve as resolvePath, relative as relativeFrom, sep } from 'path';
 import { BundleContext } from './types.js';
 import { resolveFile, exportBlocksOf } from './file.js';
 import { resolveRole } from './role.js';
@@ -13,6 +13,21 @@ import { parseNamespace } from '../namespace.js';
 import { parseBlocks, isExportedVar, Block } from '../parseBlocks.js';
 import { KIND_DIRS } from '../ingest.js';
 import { importVariable } from '../exportedVars.js';
+import { apFilesUnder } from '../services/fs.js';
+import { readAgentFile } from '../services/teamMetadata.js';
+import { fill, FORMULAS } from '../formulas.js';
+import { apxCommand } from '../apx/paths.js';
+
+/**
+ * The reserved alias of the skills a harness provides itself: `IMPORT pdf FROM
+ * @harness.skills` names a skill agent-pack neither compiles nor writes — the
+ * adapter only tells the agent how its harness loads it.
+ */
+export const HARNESS_ALIAS = '@harness';
+const SKILLS = KIND_DIRS.skill;
+
+/** Where a skill is imported from — the hint every unknown or misplaced skill is told. */
+export const SKILL_IMPORT_HINT = `IMPORT it FROM @main.${SKILLS}, or FROM ${HARNESS_ALIAS}.${SKILLS} when the harness provides it`;
 
 /**
  * Bare-line module-style import directive:
@@ -99,17 +114,6 @@ function namespaceDirs(
  * One file can hold several exports, so the file basename is irrelevant here —
  * only the block name matters, exactly like `export function` in TypeScript.
  */
-/** Every `.ap` file under `dir`, recursively — so a block resolves regardless of how deep its folder nests. */
-function apFilesUnder(dir: string): string[] {
-  const out: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const abs = resolvePath(dir, entry.name);
-    if (entry.isDirectory()) out.push(...apFilesUnder(abs));
-    else if (entry.name.endsWith('.ap')) out.push(abs);
-  }
-  return out;
-}
-
 function resolveExportUnit(
   namespace: string,
   name: string,
@@ -151,7 +155,7 @@ function resolveExportUnit(
  *   @<alias>.<rest>            → search only inside `libraries[@alias]`
  *
  * After stripping the prefix, `<rest>` is parsed as `<kind>[.<scope...>]`:
- *   <plural-kind>[.X.Y].<name>         where kind ∈ {policies,playbooks,procedures,templates,roles}
+ *   <plural-kind>[.X.Y].<name>         where kind ∈ {policies,skills,procedures,templates,roles}
  *                                      → <root>/<kind>[/X/Y]/<name>.<kind-singular>.ap
  */
 export function resolveTargetWith(
@@ -305,6 +309,16 @@ export async function processImports(body: string, ctx: BundleContext, sourcePat
     const modulePath = m[2];
     let replacement = '';
 
+    if (parseNamespace(modulePath).alias === HARNESS_ALIAS) {
+      for (const name of names) {
+        if (modulePath === `${HARNESS_ALIAS}.${SKILLS}`) collectSkill({ name, about: null, path: sourcePath ?? '<body>', native: true }, ctx);
+        else ctx.lintErrors.push({ ...at(name, t.line), message: `IMPORT ${name} FROM ${modulePath}: ${HARNESS_ALIAS} holds only skills — IMPORT ${name} FROM ${HARNESS_ALIAS}.${SKILLS}` });
+      }
+      i++;
+      if (i < tokens.length && tokens[i].kind === 'blank') i++;
+      continue;
+    }
+
     for (const name of names) {
       const target = resolveTarget(modulePath, name, ctx);
       if (target === null) {
@@ -320,6 +334,23 @@ export async function processImports(body: string, ctx: BundleContext, sourcePat
           ...at(name, t.line),
           message: `IMPORT ${name} FROM ${modulePath}: "${name}" exists in ${target.namespace} but is not exported`,
         });
+        continue;
+      }
+
+      // A skill is an agent of its own: compiled apart, with its apx — the
+      // importer only learns it exists and how to load it. Only the project's
+      // library is built, so a skill comes from there.
+      if (target.kind === SKILLS) {
+        if (!resolvePath(target.absolutePath).startsWith(resolvePath(ctx.libraryRoot) + sep)) {
+          ctx.lintErrors.push({ ...at(name, t.line), message: `IMPORT ${name} FROM ${modulePath}: a skill is built from the project's library only — ${SKILL_IMPORT_HINT}` });
+          continue;
+        }
+        const info = skillInfo(target.absolutePath, ctx);
+        if (!info?.skill || info.name !== name) {
+          ctx.lintErrors.push({ ...at(name, t.line), message: `IMPORT ${name} FROM ${modulePath}: \`${name}\` is no SKILL block` });
+          continue;
+        }
+        collectSkill({ name, about: info.about || null, path: target.absolutePath, native: false }, ctx);
         continue;
       }
 
@@ -351,4 +382,28 @@ export async function processImports(body: string, ctx: BundleContext, sourcePat
     if (i < tokens.length && tokens[i].kind === 'blank') i++;
   }
   return result;
+}
+
+/** The agent metadata of a skill's file — null when it holds no agent block. */
+function skillInfo(path: string, ctx: BundleContext) {
+  try {
+    return readAgentFile(path, ctx.sources).info;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Register a skill the compilation imports, once: its entry is the line that
+ * says how to load it — run its apx, or ask the harness for it — in the
+ * adapter's words when it has its own (renderings.SKILL).
+ */
+function collectSkill(skill: { name: string; about: string | null; path: string; native: boolean }, ctx: BundleContext): void {
+  if (ctx.skills.some(s => s.name === skill.name)) return;
+  const how = skill.native ? 'harness' : 'apx';
+  const line = fill(ctx.renderings?.['SKILL']?.[how] ?? FORMULAS.blocks.skill[how], { name: skill.name, command: apxCommand(skill.name, 'start') });
+  ctx.skills.push({
+    kind: 'skill', name: skill.name, about: skill.about, body: line, path: skill.path, tags: [], breadcrumb: [], breadcrumbSegments: [],
+    ...(skill.native ? { namespace: `${HARNESS_ALIAS}.${SKILLS}` } : {}),
+  });
 }
