@@ -28,7 +28,7 @@ import type { BundleContext } from '../dispatch/types.js';
 import type { Definition } from '../definition.js';
 import { lex, Token } from '../lexer.js';
 import { buildTree, isStructural, splitArgs, stripTrailingColon, rawOf, restOf, Node as WalkNode } from '../bundlers/renderTree.js';
-import { DEFAULT_ROUNDS, condCheckOf, checkedKeyword, checkedVars, questionOf, sugaredHead, type ApCheckSpec, type CheckKind, type CheckLevel, type CheckSite } from '../check.js';
+import { condCheckOf, checkedKeyword, checkedVars, questionOf, sugaredHead, splitMax, maxIssue, type ApCheckSpec, type CheckKind, type CheckLevel, type CheckSite } from '../check.js';
 import { sequencePrimitiveFor } from '../sequencePrimitives.js';
 import { parseTypeSpec, jsonExample, templateClosure } from '../shapeSchema.js';
 import { refName } from '../../adapters/md/phrases.js';
@@ -151,14 +151,14 @@ export class DocumentBuilder implements BlockCx {
   /** What is wrong with the variables: a compile error each, reported by the caller. */
   readonly varErrors: { path: string; name: string; line: number | null; message: string }[] = [];
   /** The checked conditions this agent's apx answers for, in walk order — their questions are built at finish. */
-  private checkSites: { id: string; kind: CheckKind; level: CheckLevel; head: string; condition: string; inStep: boolean; path: string; line: number | null }[] = [];
-  /** The IF! token a `WHEN!` was desugared into, while its WHEN's body is walked — named WHEN! in messages. */
-  private sugared: Token | null = null;
+  private checkSites: { id: string; kind: CheckKind; level: CheckLevel; head: string; condition: string; inStep: boolean; rounds?: number; path: string; line: number | null }[] = [];
+  /** The IF! token a `WHEN!` was desugared into, while its WHEN's body is walked — and the head its messages name (`WHEN!`). */
+  private sugared: { token: Token; head: string } | null = null;
   /** What is wrong with the checked conditions: a compile error each — or a warning — reported by the caller. */
   readonly checkIssues: { path: string; name: string; line: number | null; message: string; severity?: 'warning' }[] = [];
   /** What does not hold in the WITH heads walked — reported by the caller (src/withUse.ts). */
   readonly withProblems: (WithProblem & { path: string; line: number | null })[] = [];
-  /** The skills and policies a positive WITH names — the ones that hold somewhere without a perimeter. */
+  /** The skills, policies and dimensions a positive WITH names — the ones that hold somewhere without a perimeter. */
   readonly withNamed = new Set<string>();
 
   /** The reference index a kind's strategy names — lookup, never a branch. */
@@ -291,8 +291,10 @@ export class DocumentBuilder implements BlockCx {
       }
 
       if (kw === 'IF') {
-        const node = this.at(new IfNode(stripTrailingColon(t.rest), t.indent), t);
-        this.executed('IF', node, t, host) || this.checked('IF', node, t, host, steps);
+        const split = splitMax(stripTrailingColon(t.rest));
+        const node = this.at(new IfNode(split.condition, t.indent), t);
+        const bounded = this.executed('IF', node, t, host) || this.checked('IF', node, t, host, steps);
+        this.roundsIssue('IF', node.condition, t, bounded, split);
         sink.push(node);
         this.visit(n.children, node.then, host, steps);
         i++;
@@ -306,8 +308,10 @@ export class DocumentBuilder implements BlockCx {
         continue;
       }
       if (kw === 'UNTIL') {
-        const node = this.at(new UntilNode(stripTrailingColon(t.rest), t.indent), t);
-        this.executed('UNTIL', node, t, host) || this.checked('UNTIL', node, t, host, steps);
+        const split = splitMax(stripTrailingColon(t.rest));
+        const node = this.at(new UntilNode(split.condition, t.indent, split.max), t);
+        const bounded = this.executed('UNTIL', node, t, host) || this.checked('UNTIL', node, t, host, steps);
+        this.roundsIssue('UNTIL', node.condition, t, bounded, split);
         sink.push(node);
         this.visit(n.children, node.body, host, steps);
         i++;
@@ -343,8 +347,9 @@ export class DocumentBuilder implements BlockCx {
         sink.push(node);
         const first = n.children.find(c => c.token.kind !== 'blank')?.token;
         const prior = this.sugared;
-        this.sugared = first?.kind === 'keyword' && first.keyword === 'IF'
-          && sugaredHead({ keyword: 'WHEN', condition: rest }, true, first.level ?? 0, stripTrailingColon(first.rest)) ? first : null;
+        const head = first?.kind === 'keyword' && first.keyword === 'IF'
+          ? sugaredHead({ keyword: 'WHEN', condition: rest }, true, first.level ?? 0, stripTrailingColon(first.rest)) : null;
+        this.sugared = head && first ? { token: first, head } : null;
         this.visit(n.children, node.body, host, steps);
         this.sugared = prior;
       } else {
@@ -380,25 +385,35 @@ export class DocumentBuilder implements BlockCx {
    * the apx's `meta.checks` keeps it). Where it stands is the builder's to say;
    * what follows from it — the id, a warning, an error — is `condCheckOf`'s.
    */
-  private checked(kind: CheckKind, node: IfNode | UntilNode, t: Token & { kind: 'keyword' }, host: ApBlock | null, steps: ApStepNode[]): void {
+  private checked(kind: CheckKind, node: IfNode | UntilNode, t: Token & { kind: 'keyword' }, host: ApBlock | null, steps: ApStepNode[]): boolean {
+    const judged = (t.level ?? 0) > 0;
     // Inside a PROCEDURE* / PROCEDURE** its executor decides the conditions: a judge cannot stand there.
-    if (host?.executor && (t.level ?? 0) > 0) {
+    if (host?.executor && judged) {
       this.checkIssues.push({ path: this.sourcePath, name: node.condition, line: this.fileLine(t),
         message: `${kind}${'!'.repeat(t.level!)} is not allowed under PROCEDURE${executorMark(host.executor)} \`${host.name}\` — its executor decides its conditions: write ${kind} or ${kind}${executorMark(host.executor)}` });
-      return;
+      return judged;
     }
     const step = steps[steps.length - 1];
     const by = step?.by;
     const site: CheckSite = step ? { at: 'step', agent: by && by.kind === 'agent' && by.resolved !== false ? refName(by) : null }
       : host?.kind === 'flow' ? { at: 'flow' } : { at: 'agent', agent: this.ctx!.agentName };
-    const head = t === this.sugared ? 'WHEN!' : checkedKeyword(kind, t.level ?? 0);
-    const { check, issue } = condCheckOf(kind, t.level ?? 0, node.condition, site, this.ctx?.checks, head);
+    const head = t === this.sugared?.token ? this.sugared.head : checkedKeyword(kind, t.level ?? 0);
+    const rounds = node.type === 'until' ? node.max : undefined;
+    const { check, issue } = condCheckOf(kind, t.level ?? 0, node.condition, site, this.ctx?.checks, head, rounds);
     const at = { path: this.sourcePath, name: node.condition, line: this.fileLine(t) };
     if (issue) this.checkIssues.push({ ...at, ...issue });
-    if (!check) return;
+    if (!check) return judged;
     node.check = check;
-    if (check.agent === this.ctx!.agentName) this.checkSites.push({ ...at, id: check.id, kind, level: check.level, head, condition: node.condition, inStep: !!step });
+    if (check.agent === this.ctx!.agentName) this.checkSites.push({ ...at, id: check.id, kind, level: check.level, head, condition: node.condition, inStep: !!step, ...(rounds ? { rounds } : {}) });
     if (check.level === 2) node.condition = '';
+    return judged;
+  }
+
+  /** The MAX of an IF/UNTIL head judged where it stands (src/check.ts maxIssue): `bounded` when someone other than the agent ends the loop. */
+  private roundsIssue(kind: CheckKind, condition: string, t: Token & { kind: 'keyword' }, bounded: boolean, split: { max?: number; bad?: string }): void {
+    const head = `${kind}${'!'.repeat(Math.max(t.level ?? 0, 0))}${executorMark(t.executor ?? 0)}`;
+    const message = maxIssue(kind, head, bounded, split);
+    if (message) this.checkIssues.push({ path: this.sourcePath, name: condition, line: this.fileLine(t), message });
   }
 
   /**
@@ -423,7 +438,7 @@ export class DocumentBuilder implements BlockCx {
       if (unseen.length === 0 && vars.length === 0) {
         issue(`${head}: a checked condition reads at least one variable — \`{{name}}\`: the judge decides on the state the variables hold, never on the agent's word`);
       }
-      checks[site.id] = { kind: site.kind, level: site.level, question: questionOf(site.condition, name => constantOf(constants, name), fields), vars };
+      checks[site.id] = { kind: site.kind, level: site.level, question: questionOf(site.condition, name => constantOf(constants, name), fields), vars, ...(site.rounds ? { rounds: site.rounds } : {}) };
     }
     if (Object.keys(checks).length > 0) doc.meta.checks = checks;
   }
@@ -773,7 +788,7 @@ export class DocumentBuilder implements BlockCx {
       for (const def of strategy.entries(ctx, opts)) {
         this.sourcePath = def.path;
         const from = strategy.from;
-        const block = this.fromSource(ctx.sources.span(def.path, def.kind, def.name), () => from(def, this));
+        const block = this.fromSource(ctx.sources.span(def.path, def.kind, def.name, ctx.agentName), () => from(def, this));
         out.push(block);
       }
     }
@@ -994,8 +1009,7 @@ export class DocumentBuilder implements BlockCx {
       }
     }
     this.checkSpecs(doc, opts.vars);
-    const executors = executorSpecs(doc, opts.vars ?? {}, this.ctx!.agentName, name => templateClosure(name, this.ctx?.templates ?? []),
-      this.ctx?.checks?.rounds ?? DEFAULT_ROUNDS);
+    const executors = executorSpecs(doc, opts.vars ?? {}, this.ctx!.agentName, name => templateClosure(name, this.ctx?.templates ?? []));
     if (Object.keys(executors).length > 0) doc.meta.executors = executors;
     doc.seal();
     const md = this.buildMdMeta(doc, opts, provenanceMap);

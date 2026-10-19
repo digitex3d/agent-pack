@@ -54,7 +54,7 @@ try {
     '        IF** {{totals}} differ from {{document_total}} by more than {{tolerance}} cent:',
     '            DO  write to the supplier',
     '        VAR dose:', '            RUN  pediatric',
-    '        UNTIL* {{summary}} is short enough:', '            DO  shorten it',
+    '        UNTIL* {{summary}} is short enough MAX 3:', '            DO  shorten it',
     '        ASK  estimate a dose for {{weight_kg}} INTO dose', '',
     'ROLE clerk-role:', '    ABOUT   a clerk', '    ALWAYS  check twice', '',
     'COMPUTE pediatric:', '    REQUIRE:', '        MUST  {{weight_kg}} be between 2 and 80', '    RETURN AS dose-result:', '        DO  mg = {{weight_kg}} × 15', '    ENSURE:', '        MUST  mg be a whole number',
@@ -163,7 +163,7 @@ try {
   assert.equal(r.code, 0, r.out);
   assert.equal(apx(['run', ask]).code, 1, 'a delegate\'s piece has no program');
 
-  // --- an UNTIL*: the loop runs at most checks.rounds rounds (3 by default), its condition asked after each one ---
+  // --- an UNTIL*: the loop runs at most MAX rounds, its condition asked after each one ---
   const [loop] = specs.find(([, s]) => s.site === 'condition' && s.text.includes('short enough'));
   assert.equal(doc.meta.executors[loop].rounds, 3);
   assert.ok(clerkMd.includes(`answer ${loop} -\`; after each round, ask again — at most 3 rounds: at the limit, stop and report that the condition never held`), clerkMd);

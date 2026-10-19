@@ -323,6 +323,7 @@ try {
       r = apx('a', 'set', 'the-verdict', '{"decision":"accept"}');
       assert.equal(r.code, 2);
       assert.match(r.out, /the value is not shaped as `verdict`: reason: required field missing — nothing was written/);
+      assert.match(r.out, /# the JSON `verdict` takes: \{/, 'a refused typed value shows the shape it takes');
       assert.ok(apx('a', 'get', 'the-verdict').out.endsWith('# value: (empty — nothing stored in this session yet)'), 'a refused value writes nothing');
       assert.match(apx('a', 'set', 'the-verdict', 'not json').out, /not valid JSON/);
       const verdict = '{"decision":"reject","reason":"two sources disagree"}';

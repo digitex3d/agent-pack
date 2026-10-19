@@ -21,9 +21,9 @@ import type { LintError } from './lint.js';
 import { lex } from './lexer.js';
 import { EXPORT_MODIFIER } from './blockTypes.js';
 import { readsOf, constantOf } from './vars.js';
-import { DEFAULT_ROUNDS, checkedVars } from './check.js';
+import { checkedVars } from './check.js';
 import { addressName, shortId } from './apdoc/ids.js';
-import { existsSync, readdirSync } from 'fs';
+import { namesMatching } from './services/fs.js';
 import { resolve } from 'path';
 import { DISTILLED_DIR } from './apx/paths.js';
 
@@ -187,7 +187,7 @@ export interface ApExecutorSpec {
   input: { vars: string[]; constants: Record<string, string>; in?: string };
   /** The INTO variable and its template, the procedure's AS template, or `holds` for a condition. */
   output: { into?: string; template?: string; holds?: true };
-  /** An UNTIL's condition: the rounds the loop runs at most (`checks.rounds`). */
+  /** An UNTIL's condition: the rounds the loop runs at most — its head's `MAX <n>`. */
   rounds?: number;
   /**
    * A program's folder under `distilled/` (`dst-…`): a hash of what it carries out and
@@ -206,7 +206,6 @@ export interface ApExecutorSpec {
  */
 export function executorSpecs(
   doc: ApDocument, constants: Record<string, string>, agent: string, templateSources: (name: string) => string[] = () => [],
-  rounds = DEFAULT_ROUNDS,
 ): Record<string, ApExecutorSpec> {
   const specs: Record<string, ApExecutorSpec> = {};
   // A piece's input: the variables it reads (as a checked condition's), and the constants with their values.
@@ -255,7 +254,7 @@ export function executorSpecs(
     } else if (node.type === 'if' || node.type === 'until') {
       add(block, {
         executor: own, site: 'condition', text: node.condition, input: inputOf([node.condition]), output: { holds: true },
-        ...(node.type === 'until' ? { rounds } : {}),
+        ...(node.type === 'until' && node.max ? { rounds: node.max } : {}),
       }, [node.condition], node);
     }
   }
@@ -288,13 +287,15 @@ export function programDir(id: string): string {
  * the next version's author) to review.
  */
 export function orphanPrograms(projectRoot: string, live: ReadonlySet<string>): string[] {
-  return programFolders(projectRoot).filter(f => !live.has(f)).map(programDir);
+  return namesMatching(resolve(projectRoot, DISTILLED_DIR), PROGRAM_FOLDER_RE, live).map(programDir);
 }
+
+/** A program folder's name: `dst-` and eight hex digits. */
+const PROGRAM_FOLDER_RE = /^dst-[0-9a-f]{8}$/;
 
 /** The program folders (`dst-…`) under the project's `distilled/` — none when it does not exist. */
 export function programFolders(projectRoot: string): string[] {
-  const dir = resolve(projectRoot, DISTILLED_DIR);
-  return existsSync(dir) ? readdirSync(dir).filter(f => /^dst-[0-9a-f]{8}$/.test(f)) : [];
+  return namesMatching(resolve(projectRoot, DISTILLED_DIR), PROGRAM_FOLDER_RE);
 }
 
 /** The builtin procedure that tells the agent how to write a program (templates/library/procedures). */

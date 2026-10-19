@@ -158,6 +158,11 @@ export const STRATEGIES: DefinitionStrategy[] = [
   // src/apdoc/builder.ts) — not by adding a renderer here, which would put the
   // same prose in two places again.
   { ...defaults('store'),     afterEmit: propagateRefId },
+  // A dimension is an answer about the code the apx keeps — reached by its name
+  // through the apx, never RUN. Its rendering lives in DimensionBlock (apdoc), and
+  // the store's GAP above does not reach it: a compilation that is no agent's
+  // (standalone, orchestration) fails on a dimension (strayDimensionErrors).
+  { ...defaults('dimension'), afterEmit: propagateRefId },
 ];
 
 /** Lookup strategy by kind. */

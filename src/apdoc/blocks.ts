@@ -28,10 +28,10 @@ import {
 } from '../../adapters/md/phrases.js';
 import { storeTypeOf, storeTypeNames } from '../storeTypes/registry.js';
 import { phraseOf, STORE_LIFETIMES, type StoreDecl, type StoreLifetime } from '../storeTypes/types.js';
-import { parseTemplate } from '../shapeCompiler.js';
+import { parseTemplate, templateLayout, SLOT_NAME } from '../shapeCompiler.js';
 import type { VarScope } from '../vars.js';
-import { extractPrimitive, extractPrimitives } from '../services/text.js';
-import { renderIdentityBlock } from '../primitives.js';
+import { extractPrimitive, extractPrimitives, stripPrimitives } from '../services/text.js';
+import { renderIdentityBlock, renderGlobs } from '../primitives.js';
 import { DirectiveNode, reviveNodes } from './nodes.js';
 import { deslugifyRole } from '../services/role.js';
 import { readFileSync, existsSync } from 'fs';
@@ -46,13 +46,15 @@ import { readTeamMembers, readTeamPurpose, TEAM_FLOWS_FILE } from '../services/t
  * Implemented by the recorder.
  */
 export interface BlockCx {
+  /** Walk a body into `sink`. */
   walk(body: string, sink: ApNode[], host?: ApBlock): void;
   slotType(rawType: string): ApSlotType;
   /** Keyword (or alias) → family base + numeric force — the builder's lexicon. */
   parseForce(keyword: string): { base: string; force: number | null };
   defInit(def: Definition): ApBlockInit;
   walkableBody(def: Definition): string;
-  templateRef(name: string): ApRef;
+  /** A template by name; `report` false leaves an unknown one unresolved without an error. */
+  templateRef(name: string, report?: boolean): ApRef;
   agentRef(name: string): ApRef;
   runnableRef(name: string): ApRef;
   refFromAddress(address: string, expectedKind?: string): ApRef;
@@ -313,6 +315,78 @@ export class StoreBlock extends ApBlock {
   }
 }
 
+/**
+ * A dimension (D43): an answer implicit in a source file — its pseudocode, its
+ * patterns — that an agent works out once and the apx keeps, so other agents
+ * read it instead of reasoning again. ABOUT is the question, FOR the files it
+ * covers, EACH what to translate inside one (verbatim, or a template it names),
+ * AS the template its value is a list of (`shape`); its rules are the walked
+ * body. When it is worth reading is the reader's to say: a dimension is read
+ * where a WITH names it, like a policy or a skill with no perimeter
+ * (src/withUse.ts). The apx never reasons: it hashes files and serves the cache.
+ */
+export class DimensionBlock extends ApBlock {
+  static readonly PREFIX = 'dim';
+  readonly kind = 'dimension';
+  protected readonly idPrefix = DimensionBlock.PREFIX;
+  /** The `FOR` globs — from the project root. */
+  globs: string[] = [];
+  /** The `EACH` text, verbatim — empty when it names a template (`eachRef`). */
+  each = '';
+  /** The template `EACH` names, when its text is exactly one template's name: the reference, never the name, is its content. */
+  eachRef: ApRef | null = null;
+
+  static fromData(data: ApBlockData): DimensionBlock {
+    const block = restore(new DimensionBlock(initOf(data)), data);
+    block.globs = (data.args['for'] as string[] | undefined) ?? [];
+    block.each = (data.args['each'] as string | undefined) ?? '';
+    block.eachRef = (data.args['eachRef'] as ApRef | undefined) ?? null;
+    block.shape = (data.args['shape'] as ApShape | undefined) ?? null;
+    return block;
+  }
+
+  static fromDefinition(def: Definition, cx: BlockCx): DimensionBlock {
+    const block = new DimensionBlock(cx.defInit(def));
+    block.globs = (extractPrimitive(def.body, 'FOR') ?? '').trim().split(/\s+/).filter(Boolean);
+    block.each = (extractPrimitive(def.body, 'EACH') ?? '').trim();
+    if (new RegExp(`^${SLOT_NAME}$`).test(block.each)) {
+      const ref = cx.templateRef(block.each, false);
+      if (ref.resolved !== false) { block.eachRef = ref; block.each = ''; }
+    }
+    // The walk captures the AS line into `shape`; what is left is the rules.
+    cx.walk(stripPrimitives(cx.walkableBody(def), 'FOR', 'EACH'), block.body, block);
+    return block;
+  }
+
+  protected override argsJson(): Record<string, unknown> {
+    return {
+      for: this.globs,
+      ...(this.eachRef ? { eachRef: this.eachRef } : { each: this.each }),
+      ...(this.shape ? { shape: this.shape } : {}),
+    };
+  }
+
+  /** Where it applies (src/withUse.ts), what it covers and its shape, how to read it and write it, then its rules. */
+  override asMdBody(env: MdEnv): string {
+    const D = FORMULAS.blocks.dimension;
+    // A dimension is reached by its id, like every block: `<apx> dimension <dim-id> <verb>`.
+    const command = `${env.apxOf(null)} dimension ${this.id}`;
+    const shape = this.shape?.ref;
+    const each = this.eachRef ? fill(D.eachShape, { name: refName(this.eachRef), ref: env.refOf(this.eachRef.target) }) : this.each;
+    return withScopeLine(this.kind, this.scopes, [
+      fill(D.covers, {
+        globs: renderGlobs(this.globs),
+        each,
+        name: shape ? refName(shape) : '',
+        ref: shape ? env.refOf(shape.target) : '',
+      }),
+      fill(D.read, { command }),
+      fill(D.write, { command }),
+      ...renderNodes(env, this.body),
+    ].join('\n'));
+  }
+}
+
 export class TemplateBlock extends ApBlock {
   static readonly PREFIX = 'tpl';
   readonly kind = 'template';
@@ -402,6 +476,21 @@ export class TemplateBlock extends ApBlock {
     })));
   }
 
+  /** Its BODY layout — or, without one, every slot in order. */
+  layoutText(): string {
+    return templateLayout(this.layout, this.slots ?? []);
+  }
+
+  /** One instance of it, as text: its layout with every `{slot}` replaced by the instance's value — a text as is, any other value as JSON. */
+  instanceText(instance: Record<string, unknown>): string {
+    const slots = new Set((this.slots ?? []).map(s => s.name));
+    return this.layoutText().replace(new RegExp(`\\{(${SLOT_NAME})\\}`, 'g'), (m, name: string) => {
+      if (!slots.has(name)) return m;
+      const v = instance[name];
+      return v === undefined ? '' : typeof v === 'string' ? v : JSON.stringify(v);
+    });
+  }
+
   /** Mirror of the legacy renderTemplate — sourced from the typed fields. */
   override asMdBody(env: MdEnv): string {
     const out: string[] = [];
@@ -409,9 +498,8 @@ export class TemplateBlock extends ApBlock {
       out.push(scalarTemplateLine(this.name, this.scalar.typePhrase, this.scalar.description));
     } else if (this.slots) {
       const T = FORMULAS.blocks.template;
-      const layout = this.layout ?? this.slots.map(s => fill(T.layoutSlot, { name: s.name })).join(T.layoutSeparator);
       out.push(templateScaffoldIntro(this.name));
-      out.push('', layout, '');
+      out.push('', this.layoutText(), '');
       out.push(FIELDS_LABEL);
       for (const s of this.slots) {
         out.push(fill(T.field, {
@@ -694,6 +782,9 @@ export const KIND_STRATEGIES: KindStrategy[] = [
     entries: ctx => ctx.skills,     from: RuleBlock.fromDefinition },
   { kind: 'store', revive: StoreBlock.fromData, folder: 'stores', chapterTitle: FORMULAS.blocks.store.chapter, prefix: StoreBlock.PREFIX,               ref: 'stores',
     entries: ctx => ctx.stores,     from: StoreBlock.fromDefinition },
+  // Reached by its name through the apx, and named by a WITH like a policy: no reference index.
+  { kind: 'dimension', revive: DimensionBlock.fromData, folder: 'dimensions', chapterTitle: FORMULAS.blocks.dimension.chapter, prefix: DimensionBlock.PREFIX, ref: null,
+    entries: ctx => ctx.dimensions, from: DimensionBlock.fromDefinition },
   // Non-chapter kinds — referenceable identities only.
   { kind: 'team', revive: TeamBlock.fromData, folder: 'teams',      prefix: TeamBlock.PREFIX,                ref: null },
   { kind: 'agent', revive: AgentBlock.fromData, folder: 'agents',     prefix: AgentBlock.PREFIX,               ref: null },

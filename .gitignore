@@ -4,6 +4,7 @@ dist/
 .agent-pack/
 *.pdf
 .idea/
+raw/
 
 .agent-pack/apx/
 .agent-pack/reference/

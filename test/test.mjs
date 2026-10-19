@@ -355,4 +355,7 @@ await import('./libraryUnits.test.mjs');
 // --- skills: agents the adapter writes as skills ---
 await import('./skills.test.mjs');
 
+// --- dimensions (D43): answers about the code, kept by the apx — the block, its catalog, the cache and its verbs ---
+await import('./dimensions.test.mjs');
+
 console.log('All tests passed.');

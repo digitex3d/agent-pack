@@ -56,5 +56,12 @@ export function flowScriptFile(id: string, contentHash: string, ext: string): st
  */
 export const STATE_DIR = '.agent-pack/state';
 
+/**
+ * The dimensions' cache — build output's sibling, outside git: one folder per
+ * dimension definition (`<defhash>/`), one file per source file it answers for,
+ * and the read counters apart (`stats/`). What sits inside is apx/dimensions.ts's.
+ */
+export const CACHE_DIR = '.agent-pack/cache';
+
 /** The distilled scripts — written by agents, versioned with the sources. */
 export const DISTILLED_DIR = 'distilled';

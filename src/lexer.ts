@@ -28,6 +28,14 @@ import { VAR_SCOPE_WORDS, isVarKeyword } from './vars.js';
 import { EXPORT_MODIFIER } from './blockTypes.js';
 
 /**
+ * A DIMENSION's own lines — FOR the files it covers, EACH what to translate
+ * inside a file. The one spelling of them: the vocabulary, the block's contract
+ * and the lint's placement check read it here.
+ */
+export const DIMENSION_LINES = ['FOR', 'EACH'] as const;
+export type DimensionLine = typeof DIMENSION_LINES[number];
+
+/**
  * Static (non-force-level) keywords. Force-level families and their aliases
  * are loaded from src/config/force-levels.json at runtime via forceLevelConfig.
  */
@@ -47,6 +55,9 @@ const STATIC_KEYWORDS = [
   // instead of duplicating). The record shape itself reuses the template
   // SLOTS grammar — no second type language.
   'STORE', 'TYPE', 'LASTS', 'KEY',
+  // DIMENSION body: FOR the files it covers (globs from the project root), EACH
+  // what to translate inside a file; its value's shape is its AS template.
+  'DIMENSION', ...DIMENSION_LINES,
   // `IN <store>:` — a block grouping the steps that work in one store. A
   // control-flow head, not a named declaration: it lives inside a runnable.
   'IN',
@@ -95,6 +106,17 @@ export function escapeRegex(s: string): string {
 
 const FORCE_BASES_ALT = FORCE_LEVEL_BASES.map(escapeRegex).join('|');
 
+/** The trigger heads that take a `!` level, never a star: `WHEN` (`WHEN!` sugar for `WHEN` + `IF!`). */
+export const TRIGGER_KINDS = ['WHEN'] as const;
+export type TriggerKind = typeof TRIGGER_KINDS[number];
+/** The trigger every alias is stored as once compiled (`ON-INVOKE` → `WHEN`). */
+export const BASE_TRIGGER: TriggerKind = TRIGGER_KINDS[0];
+
+/** Whether a word is a trigger head (`WHEN`) — without its `!`s. */
+export function isTriggerKind(word: string): word is TriggerKind {
+  return (TRIGGER_KINDS as readonly string[]).includes(word);
+}
+
 // Condition heads with a level: IF / IF! / IF!! (UNTIL alike). The `!`s say how
 // little the agent is trusted with the condition — 0 it judges alone, 1 it sees
 // the condition and a judge decides, 2 the condition is sealed (src/check.ts).
@@ -105,11 +127,11 @@ const FORCE_BASES_ALT = FORCE_LEVEL_BASES.map(escapeRegex).join('|');
 // `WHEN!` is sugar: the desugar pass rewrites it as `WHEN <condition>:` with
 // `IF! <condition>:` beneath (src/desugar.ts). `WHEN!!` and `!WHEN` are lexed
 // with their level only so the vocabulary check rejects them by name; no star.
-const CONTROL_ALT = `!?(?:${CHECK_KINDS.join('|')})(?:!{1,${MAX_CHECK_LEVEL}}\\*{1,2}|\\*{1,2}!{0,${MAX_CHECK_LEVEL}}|!{0,${MAX_CHECK_LEVEL}})|!?WHEN!{0,${MAX_CHECK_LEVEL}}`;
+const CONTROL_ALT = `!?(?:${CHECK_KINDS.join('|')})(?:!{1,${MAX_CHECK_LEVEL}}\\*{1,2}|\\*{1,2}!{0,${MAX_CHECK_LEVEL}}|!{0,${MAX_CHECK_LEVEL}})|!?(?:${TRIGGER_KINDS.join('|')})!{0,${MAX_CHECK_LEVEL}}`;
 
-/** The heads that take a `!` level: the checked kinds and `WHEN` (sugar for `WHEN` + `IF!`). */
-export type ControlKind = CheckKind | 'WHEN';
-const CONTROL_KINDS: readonly string[] = [...CHECK_KINDS, 'WHEN'];
+/** The heads that take a `!` level: the checked kinds and the triggers. */
+export type ControlKind = CheckKind | TriggerKind;
+const CONTROL_KINDS: readonly string[] = [...CHECK_KINDS, ...TRIGGER_KINDS];
 
 /**
  * `IF!!` → `{ keyword: 'IF', level: 2 }`; `!IF` → level -1; `IF**` → executor 2;
@@ -120,7 +142,7 @@ export function splitControl(keyword: string): { keyword: ControlKind; level: nu
   const split = splitBangs(keyword.replace(/\*+/, ''));
   if (!split || !CONTROL_KINDS.includes(split.base)) return null;
   if (split.level < -1 || split.level > MAX_CHECK_LEVEL || stars > 2) return null;
-  if (split.base === 'WHEN' && stars) return null;
+  if (isTriggerKind(split.base) && stars) return null;
   return { keyword: split.base as ControlKind, level: split.level, ...(stars ? { executor: stars } : {}) };
 }
 const ALIAS_ALT = ALIAS_NAMES.map(escapeRegex).join('|');
@@ -204,8 +226,8 @@ function procedureMark(keyword: string): { word: string; executor: number } | nu
 
 /**
  * Raw lexer — emits tokens as written in the source, with no alias resolution.
- * Prefer `lex()` in application code; use `lexRaw()` only in tests that need
- * to inspect pre-desugar token shapes.
+ * Prefer `lex()` in application code; reach for `lexRaw()` only where the
+ * tokens must be read before desugaring — tests inspecting pre-desugar shapes.
  */
 export function lexRaw(source: string): Token[] {
   const out: Token[] = [];

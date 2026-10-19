@@ -256,16 +256,18 @@ export class IfNode extends NodeBase implements ApIfNode {
 export class UntilNode extends NodeBase implements ApUntilNode {
   readonly type = 'until';
   body: ApNode[] = [];
+  max?: number;
   check?: ApCondCheck;
   executor?: number;
   exe?: string;
 
-  constructor(public condition: string, indent?: number) {
+  constructor(public condition: string, indent?: number, max?: number) {
     super(indent);
+    if (max) this.max = max;
   }
 
   static fromData(n: ApUntilNode): UntilNode {
-    const node = new UntilNode(n.condition, n.indent);
+    const node = new UntilNode(n.condition, n.indent, n.max);
     if (n.check) node.check = n.check;
     if (n.executor) node.executor = n.executor;
     if (n.exe) node.exe = n.exe;
@@ -277,6 +279,7 @@ export class UntilNode extends NodeBase implements ApUntilNode {
   toJSON(): ApUntilNode {
     return {
       type: this.type, condition: this.condition,
+      ...(this.max ? { max: this.max } : {}),
       ...(this.check ? { check: this.check } : {}),
       ...(this.executor ? { executor: this.executor } : {}),
       ...(this.exe ? { exe: this.exe } : {}),

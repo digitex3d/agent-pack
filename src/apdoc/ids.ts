@@ -57,3 +57,31 @@ export function blockContentHash(block: ApBlockData): string {
   const { id: _id, contentHash: _ch, ...rest } = block;
   return `sha256:${sha256Hex(JSON.stringify(rest)).slice(0, 16)}`;
 }
+
+/** What names a block rather than says what it is: its identity and its fingerprint. */
+const IDENTITY_KEYS = new Set(['name', 'namespace', 'id', 'contentHash']);
+
+/** A reference (`{ id, target, kind }`): it names another block, which the caller hashes on its own when it counts. */
+function isRef(value: object): boolean {
+  return 'target' in value && 'kind' in value && 'id' in value;
+}
+
+/**
+ * The content of a block with its names left out — `blockContentHash`'s
+ * canonical serialization (same fixed key order) less its identity (name,
+ * namespace, id, content hash), its measures (`chars`, at any depth) and the
+ * names its references carry (a reference keeps only the kind it points at).
+ * A renamed block — or one whose references were renamed — keeps it; an edit
+ * changes it. The input of a fingerprint that must outlive a rename.
+ */
+export function nameFreeContent(block: ApBlockData): unknown {
+  const strip = (value: unknown, top: boolean): unknown => {
+    if (Array.isArray(value)) return value.map(v => strip(v, false));
+    if (!value || typeof value !== 'object') return value;
+    if (!top && isRef(value)) return { kind: (value as { kind: unknown }).kind };
+    return Object.fromEntries(Object.entries(value)
+      .filter(([k]) => k !== 'chars' && !(top && IDENTITY_KEYS.has(k)))
+      .map(([k, v]) => [k, strip(v, false)]));
+  };
+  return strip(JSON.parse(JSON.stringify(block)), true);
+}

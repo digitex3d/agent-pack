@@ -18,6 +18,7 @@ export type IngestKind =
   | 'tool'
   | 'flow'
   | 'store'
+  | 'dimension'
   | 'generic';
 
 /**
@@ -104,6 +105,7 @@ export const KIND_DIRS: Record<Exclude<IngestKind, 'generic' | 'agent'>, string>
   tool: 'tools',
   flow: 'flows',
   store: 'stores',
+  dimension: 'dimensions',
 };
 
 /**
@@ -135,6 +137,8 @@ const STRUCTURAL_KEYWORD: Partial<Record<IngestKind, RegExp>> = {
   // `STORE <name>:` — capture the name only, stopping at whitespace or the
   // block-opener colon.
   store: /^STORE\s+([^\s:]+)/m,
+  // `DIMENSION <name>:` — the name only, like STORE.
+  dimension: /^DIMENSION\s+([^\s:]+)/m,
 };
 
 const H1_RE = /^#\s+(.+)$/m;

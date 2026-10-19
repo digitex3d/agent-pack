@@ -137,6 +137,7 @@ async function collectUnit(
   // `flow` is a first-class kind, so it routes like the rest.
   if (unit.kind === 'flow')        return collect('flow',      ctx.flows      as Collected[]);
   if (unit.kind === 'store')       return collect('store',     ctx.stores     as Collected[]);
+  if (unit.kind === 'dimension')   return collect('dimension', ctx.dimensions as Collected[]);
   if (unit.kind === 'policy')      return collect('policy',    ctx.policies   as Collected[]);
   if (unit.kind === 'procedure')   return collect('procedure', ctx.procedures as Collected[]);
   if (unit.kind === 'template')    return collect('template',  ctx.templates  as Collected[]);

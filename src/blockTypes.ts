@@ -49,6 +49,8 @@ export const BLOCK_TYPES: Record<string, BlockType> = {
   // `COMPUTE <name>:` — a procedure a program carries out (src/executor.ts computeHead).
   COMPUTE:    { key: 'COMPUTE'    },
   STORE:      { key: 'STORE'      },
+  // `DIMENSION <name>:` — an answer about the code, worked out once and kept by the apx.
+  DIMENSION:  { key: 'DIMENSION'  },
   EXPORT:     { key: 'EXPORT', modifier: true },
 };
 

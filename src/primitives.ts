@@ -195,13 +195,17 @@ export function renderIdentityBlock(
   return lines.join('\n');
 }
 
+/** Globs as the md lists them — each quoted as code, comma-separated: an agent's OWNS, a dimension's FOR. */
+export function renderGlobs(globs: readonly string[]): string {
+  return globs.map(glob => fill(FORMULAS.keywords.OWNS.glob, { glob })).join(', ');
+}
+
 export const OwnsPrimitive: PrimitiveStrategy = {
   keyword: 'OWNS',
   renderNeutral: globs => {
     if (globs.length === 0) return '';
-    const O = FORMULAS.keywords.OWNS;
-    const list = globs.map(glob => fill(O.glob, { glob })).join(', ');
-    return [...O.fence.map(line => fill(line, { globs: list })), '', ''].join('\n');
+    const list = renderGlobs(globs);
+    return [...FORMULAS.keywords.OWNS.fence.map(line => fill(line, { globs: list })), '', ''].join('\n');
   },
   contributesFrontmatter: () => null,
 };

@@ -19,7 +19,7 @@
  */
 
 import { lex, Token } from './lexer.js';
-import { blockTypeOf, EXPORT_MODIFIER } from './blockTypes.js';
+import { blockTypeOf, EXPORT_MODIFIER, AGENT_KEYS } from './blockTypes.js';
 import { computeHead, splitExecutorMark } from './executor.js';
 import { parseExportedVar, type VarDecl } from './vars.js';
 
@@ -194,6 +194,17 @@ function resolveExportModifier(rest: string): ExportResolution {
     return { ok: false, error: `EXPORT ${kind} requires a name` };
   }
   return { ok: true, inner: { key: kind, rest: tail, ...(executor ? { executor } : {}) } };
+}
+
+/**
+ * The blocks declared directly in an agent's body (an AGENT or SKILL block of
+ * `blocks`) — of `key` when given — each with the agent that owns it. One level
+ * down only: a block nested deeper (in a PROCEDURE, say) is not the agent's.
+ */
+export function agentNestedBlocks(blocks: readonly Block[], key?: string): { agent: Block; block: Block }[] {
+  return blocks.filter(b => AGENT_KEYS.has(b.key)).flatMap(agent => agent.children
+    .filter((c): c is Block => c.type === 'block' && (key === undefined || c.key === key))
+    .map(block => ({ agent, block })));
 }
 
 export function parseBlocks(source: string): ParseResult {

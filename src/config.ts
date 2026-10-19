@@ -8,7 +8,6 @@ import { AdapterPlugin } from '../adapters/types.js';
 import { resolveAdapter, resolveJudge } from './adapter-registry.js';
 import type { ChecksConfig, JudgeConfig, JudgePlugin } from './judge/types.js';
 import { defaultBundleConfig } from './bundleDefaults.js';
-import { DEFAULT_ROUNDS } from './check.js';
 
 function expandHome(p: string): string {
   if (p === '~') return homedir();
@@ -275,7 +274,6 @@ const JUDGE_DEFAULTS = {
 const CHECKS_DEFAULTS = {
   adapter: 'jev',
   threshold: 0.7,
-  rounds: DEFAULT_ROUNDS,
 } as const;
 
 /** A config key's judge entry resolved — a built-in judge by name, or a judge object — and its threshold checked. */
@@ -308,15 +306,16 @@ function resolveJudgeConfig(raw: unknown, projectRoot: string): JudgeConfig | nu
 /**
  * The `checks` key resolved — the judge of checked conditions while the agent
  * works (`IF!`, `IF!!`), apart from `judge`: a built-in judge by name or a
- * judge object, threshold 0.7 and 3 rounds by default. Absent → null.
+ * judge object, threshold 0.7 by default. Absent → null. A loop's round limit
+ * is no config: each `UNTIL` someone else ends writes its own `MAX <n>`.
  */
 function resolveChecksConfig(raw: unknown): ChecksConfig | null {
   if (raw === undefined || raw === null || raw === false) return null;
   if (!isPlainObject(raw)) throw new Error("checks must be an object, e.g. { adapter: 'jev' }");
   const c = { ...CHECKS_DEFAULTS, ...raw } as Record<string, unknown>;
+  if (c.rounds !== undefined) throw new Error('checks.rounds was removed — write the limit on each loop: `UNTIL!! <condition> MAX <n>:` (UNTIL!, UNTIL*, UNTIL** alike)');
   const adapter = judgeOf('checks', c.adapter, c.threshold);
-  if (!Number.isInteger(c.rounds) || (c.rounds as number) < 1) throw new Error('checks.rounds must be a whole number ≥ 1');
-  return { adapter, threshold: c.threshold as number, rounds: c.rounds as number };
+  return { adapter, threshold: c.threshold as number };
 }
 
 /** The delegate shipped with the package (templates/agents/quick.ap): an ASK without BY goes to it, unless `delegate.default` names another. */

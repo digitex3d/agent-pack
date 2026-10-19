@@ -20,10 +20,11 @@
  * change asks every line again. A diagnostic
  * has the shape of a LintError without its file — the unit names the source.
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync, unlinkSync, writeFileSync } from 'fs';
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'path';
+import { existsSync, readFileSync, unlinkSync } from 'fs';
+import { basename, dirname, join, resolve } from 'path';
 import { isProbability } from './lock.js';
 import { sha256Hex } from '../apdoc/ids.js';
+import { filesUnder, readJsonFile, relativeWithin, removeEmptyDirs, writeFileAtomic } from '../services/fs.js';
 
 /** A judge diagnostic at a line of the source — a LintError less its `file`. */
 export interface UnitDiagnostic {
@@ -66,7 +67,7 @@ export class UnitStore {
    * model (null: none yet, so no verdict is trusted); libraries: alias → root.
    */
   constructor(readonly dir: string, readonly root: string, model: string | null, private readonly libraries: Record<string, string>) {
-    for (const file of unitFiles(dir)) {
+    for (const file of filesUnder(dir, '.json')) {
       let unit = readUnit(file);
       if (!unit) continue; // not a unit (any more): rewritten or pruned like a missing one
       // Another model's verdicts (or any, while no model is pinned) are asked again.
@@ -78,14 +79,14 @@ export class UnitStore {
 
   /** How a source is named in its unit — never by a machine's absolute path. */
   sourceName(file: string): string {
-    return within(this.root, file) ?? this.externalName(file);
+    return relativeWithin(this.root, file) ?? this.externalName(file);
   }
 
   /** A source outside the project: `@alias/<path>` in the library holding it (the deepest), else `<dir hash>/<file>`. */
   private externalName(file: string): string {
     let best: { alias: string; rel: string } | null = null;
     for (const [alias, path] of Object.entries(this.libraries)) {
-      const rel = path ? within(resolve(this.root, path), file) : null;
+      const rel = path ? relativeWithin(resolve(this.root, path), file) : null;
       if (rel !== null && (!best || rel.length < best.rel.length)) best = { alias, rel };
     }
     if (best) return `${best.alias}/${best.rel}`;
@@ -94,7 +95,7 @@ export class UnitStore {
 
   /** The unit file of a source. */
   pathOf(file: string): string {
-    const inside = within(this.root, file);
+    const inside = relativeWithin(this.root, file);
     return inside !== null ? join(this.dir, `${inside}.json`) : join(this.dir, EXTERNAL, `${this.externalName(file)}.json`);
   }
 
@@ -113,14 +114,13 @@ export class UnitStore {
     const path = this.pathOf(file);
     const text = JSON.stringify(unit, null, 2) + '\n';
     if (existsSync(path) && readFileSync(path, 'utf-8') === text) return;
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, text, 'utf-8');
+    writeFileAtomic(path, text);
   }
 
   /** Delete every unit file but those of `seen` sources, then the directories left empty. */
   prune(seen: Iterable<string>): void {
     const keep = new Set([...seen].map(f => this.pathOf(f)));
-    for (const file of unitFiles(this.dir)) if (!keep.has(file)) unlinkSync(file);
+    for (const file of filesUnder(this.dir, '.json')) if (!keep.has(file)) unlinkSync(file);
     removeEmptyDirs(this.dir);
   }
 }
@@ -128,39 +128,12 @@ export class UnitStore {
 /** The directory of the units of sources outside the project. */
 const EXTERNAL = '_external';
 
-/** `file`'s path inside `dir`, `/`-separated — null when it is not inside. */
-function within(dir: string, file: string): string | null {
-  const rel = relative(dir, file);
-  return rel === '' || rel.startsWith('..') || isAbsolute(rel) ? null : rel.split(sep).join('/');
-}
-
-/** Every `.json` under a directory, recursively, in sorted order — none when it does not exist. */
-function unitFiles(dir: string): string[] {
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0).flatMap(e => {
-    const path = join(dir, e.name);
-    return e.isDirectory() ? unitFiles(path) : e.isFile() && e.name.endsWith('.json') ? [path] : [];
-  });
-}
-
 /** A unit file's unit — null when it is not a well-formed version 1 unit. */
 function readUnit(file: string): Unit | null {
-  let unit: Unit;
-  try {
-    unit = JSON.parse(readFileSync(file, 'utf-8'));
-  } catch {
-    return null;
-  }
+  const unit = readJsonFile(file) as Unit | undefined;
   const ok = unit?.version === 1 && typeof unit.hash === 'string' && typeof unit.rules === 'string'
     && typeof unit.verdicts === 'object' && unit.verdicts !== null && Array.isArray(unit.diagnostics)
     && (unit.model === undefined || typeof unit.model === 'string')
     && Object.values(unit.verdicts).every(v => isProbability(v?.p));
   return ok ? unit : null;
-}
-
-/** Remove the empty directories under `dir` (and `dir` itself when it ends up empty). */
-function removeEmptyDirs(dir: string): void {
-  if (!existsSync(dir)) return;
-  for (const e of readdirSync(dir, { withFileTypes: true })) if (e.isDirectory()) removeEmptyDirs(join(dir, e.name));
-  if (readdirSync(dir).length === 0) rmdirSync(dir);
 }

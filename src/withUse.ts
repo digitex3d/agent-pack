@@ -6,13 +6,15 @@
  *   WITH pdf, #policy:decisions:   the lines nested below are under the skill `pdf`
  *       …                          and every policy whose APPLIES line has #decisions
  *   WITH pdf-report AS report:     one skill, its answer shaped as a template
+ *   WITH pseudocode:               the lines nested below read the dimension `pseudocode`
  *   !WITH security, #skill:ocr:    the lines nested below are out of them
  *
- * A name, or a tag with its kind (`#policy:<tag>`, `#skill:<tag>`), resolves
- * among the skills and policies the compilation imports — a tag is expanded
+ * A name resolves among the skills, policies and dimensions the compilation
+ * imports; a tag with its kind (`#policy:<tag>`, `#skill:<tag>`) is expanded
  * here, at compile time, into the names it selects. A policy or a skill holds
  * only where a WITH names it, unless its APPLIES line gives it a perimeter of
- * its own: `universal`, `team:<team>`, `agent:<agent>`.
+ * its own: `universal`, `team:<team>`, `agent:<agent>`; a dimension, which has
+ * no APPLIES line, is read only where a WITH names it.
  *
  * Both renderers (the document's and the standalone one) read a WITH head
  * through `readWithHead`; they differ only in how they print an id.
@@ -20,13 +22,14 @@
 import { isWithHead, type Token } from './lexer.js';
 import { parseForceLevel } from './forceLevelConfig.js';
 import { FORMULAS, fill } from './formulas.js';
-import { PERIMETER_FORMS, SCOPED_KINDS, perimeterOf } from './services/tags.js';
+import { PERIMETER_FORMS, PERIMETER_KINDS, SCOPED_KINDS, perimeterOf } from './services/tags.js';
 import type { Definition } from './definition.js';
 
-/** What a WITH can name — the compilation's imported skills and policies — and the templates an AS may shape with. */
+/** What a WITH can name — the compilation's imported skills, policies and dimensions — and the templates an AS may shape with. */
 export interface WithScope {
   skills: Definition[];
   policies: Definition[];
+  dimensions: Definition[];
   templates: Definition[];
 }
 
@@ -79,7 +82,7 @@ export function readWithHead(t: Token, scope: WithScope): WithHead | null {
     const tag = KIND_TAG_RE.exec(item);
     const found = tag
       ? (tag[1] === 'policy' ? scope.policies : scope.skills).filter(d => d.tags.includes(`#${tag[2]}`))
-      : item.startsWith('#') ? [] : [...scope.skills, ...scope.policies].filter(d => d.name === item);
+      : item.startsWith('#') ? [] : [...scope.skills, ...scope.policies, ...scope.dimensions].filter(d => d.name === item);
     if (found.length === 0 && !withItemError(item)) problems.push({ kind: 'with', name: item });
     for (const d of found) if (!uses.includes(d)) uses.push(d);
   }
@@ -97,32 +100,35 @@ export function unknownWithMessage(item: string): string {
   const tag = KIND_TAG_RE.exec(item);
   return tag
     ? `\`WITH ${item}\`: no imported ${tag[1]} has #${tag[2]} on its APPLIES line`
-    : `unknown skill or policy \`${item}\` — IMPORT it FROM @main.skills or @main.policies, or FROM @harness.skills`;
+    : `unknown skill, policy or dimension \`${item}\` — IMPORT it FROM @main.skills, @main.policies or @main.dimensions, or FROM @harness.skills`;
 }
 
 /** The phrase a WITH head renders: each block it names with its id, joined — the force intro is the renderer's. */
 export function withPhrase(uses: { kind: string; name: string; ref: string }[], shape?: { name: string; ref: string }): string {
   const W = FORMULAS.keywords.WITH;
-  const named = uses.map(u => fill(u.kind === 'policy' ? W.policy : W.skill, { name: u.name, ref: u.ref }));
+  const named = uses.map(u => fill(u.kind === 'policy' ? W.policy : u.kind === 'dimension' ? W.dimension : W.skill, { name: u.name, ref: u.ref }));
   const text = named.length > 1 ? `${named.slice(0, -1).join(', ')}${W.and}${named[named.length - 1]}` : named[0] ?? '';
   return shape ? fill(FORMULAS.keywords.AS.shaped, { text, name: shape.name, ref: shape.ref }) : text;
 }
 
 /**
  * The scoped blocks that hold nowhere: imported, with no perimeter on their
- * APPLIES line, and named by no positive WITH — each a compile error, so a
- * rule or a skill never sits silently unused.
+ * APPLIES line, and named by no positive WITH — an error for a policy or a
+ * skill, so a rule never sits silently unused; a warning for a dimension,
+ * which the apx serves all the same.
  */
 export function unappliedBlocks(blocks: Definition[], named: ReadonlySet<string>): Definition[] {
   return blocks.filter(b => SCOPED_KINDS.includes(b.kind) && b.scopes.length === 0 && !named.has(b.name));
 }
 
-/** What an unapplied policy or skill is told. */
-export function unappliedMessage(block: { kind: string; name: string }): string {
-  return `${block.kind} \`${block.name}\` applies nowhere — name it in a \`WITH ${block.name}:\` block, or give its APPLIES line ${PERIMETER_FORMS}`;
+/** What an unapplied block is told, and how loud: a policy or a skill an error; a dimension — no perimeter to give, served all the same — a warning. */
+export function unappliedIssue(block: { kind: string; name: string }): { message: string; severity?: 'warning' } {
+  const perimeter = PERIMETER_KINDS.includes(block.kind);
+  const or = perimeter ? `, or give its APPLIES line ${PERIMETER_FORMS}` : ' around the lines that read it';
+  return { message: `${block.kind} \`${block.name}\` applies nowhere — name it in a \`WITH ${block.name}:\` block${or}`, ...(perimeter ? {} : { severity: 'warning' as const }) };
 }
 
-/** The line that says where a policy or a skill applies — its perimeter, or only under a WITH that names it. */
+/** The line that says where a policy, a skill or a dimension applies — its perimeter, or only under a WITH that names it. */
 export function scopeLine(scopes: readonly string[]): string {
   const S = FORMULAS.keywords.APPLIES.scope;
   if (scopes.length === 0) return S.with;
@@ -132,7 +138,7 @@ export function scopeLine(scopes: readonly string[]): string {
   }).join(' ');
 }
 
-/** A block's body opened by its scope line, when its kind is scoped (a policy, a skill) — else the body as it is. */
+/** A block's body opened by its scope line, when its kind is scoped (a policy, a skill, a dimension) — else the body as it is. */
 export function withScopeLine(kind: string, scopes: readonly string[], body: string): string {
   return SCOPED_KINDS.includes(kind) ? `${scopeLine(scopes)}\n${body}` : body;
 }

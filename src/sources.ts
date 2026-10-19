@@ -16,7 +16,7 @@
  */
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { parseBlocks, ParseResult, Block } from './parseBlocks.js';
+import { parseBlocks, agentNestedBlocks, ParseResult, Block } from './parseBlocks.js';
 import type { ApPos } from './apdoc/types.js';
 import { splitOnReads } from './vars.js';
 
@@ -73,10 +73,14 @@ export class SourceRegistry {
 
   /**
    * The top-level `<KIND> <name>` block of a file, from its header to the next
-   * top-level block (or EOF). A legacy file without EXPORT blocks is one unit:
-   * the whole file, from line 1. Null when the file or the block is not there.
+   * top-level block (or EOF) — or one declared directly in an agent's body (a
+   * DIMENSION), from its header to the end of that agent's block: the one in
+   * the body of `owner` (the agent being compiled) when several agents of the
+   * file declare one of that name. A legacy file without EXPORT blocks is one
+   * unit: the whole file, from line 1. Null when the file or the block is not
+   * there.
    */
-  span(path: string, kind: string, name: string): SourceSpan | null {
+  span(path: string, kind: string, name: string, owner?: string): SourceSpan | null {
     let text: string;
     try {
       text = this.read(path);
@@ -87,6 +91,12 @@ export class SourceRegistry {
     const key = kind.toUpperCase();
     const block = blocks.find(b => b.key === key && b.name === name);
     if (block) return this.blockSpan(path, block);
+    const named = agentNestedBlocks(blocks, key).filter(n => n.block.name === name);
+    const nested = named.find(n => n.agent.name === owner) ?? named[0];
+    if (nested) {
+      const span = this.blockSpan(path, nested.agent);
+      return { ...span, line: nested.block.startLine, lines: span.lines.filter(l => l.line >= nested.block.startLine) };
+    }
     if (blocks.some(b => b.exported)) return null;
     return { file: resolve(path), line: 1, lines: numbered(text.split(/\r?\n/), 1) };
   }

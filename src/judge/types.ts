@@ -109,6 +109,4 @@ export interface ChecksConfig {
   adapter: JudgePlugin;
   /** A condition answered at or above this probability is open; below, closed. */
   threshold: number;
-  /** How many closed answers in a row a checked UNTIL takes before it stops. */
-  rounds: number;
 }

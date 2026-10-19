@@ -43,5 +43,5 @@ export function apxChecks(config: Config, projectRoot: string): ApxChecks | null
   const checks = config.checks;
   if (!checks) return null;
   const model = JudgeLock.load(config.judge?.lock ?? resolve(projectRoot, JUDGE_LOCK_DEFAULT), checks.adapter.name).model;
-  return { adapter: checks.adapter.name, threshold: checks.threshold, rounds: checks.rounds, ...(model ? { model } : {}) };
+  return { adapter: checks.adapter.name, threshold: checks.threshold, ...(model ? { model } : {}) };
 }

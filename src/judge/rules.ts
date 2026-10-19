@@ -19,6 +19,14 @@ import { DocumentBuilder } from '../apdoc/builder.js';
 import { readsOf, resolveReads } from '../vars.js';
 import { isDirect, type JudgeCheck, type JudgeExample, type JudgeRule } from './types.js';
 import { JUDGE_SCOPES, JUDGE_TAG } from '../services/tags.js';
+import { getFamilyBases, parseForceLevel, toCanonicalKeyword } from '../forceLevelConfig.js';
+import { lifecycleToWhen } from '../lifecycleConfig.js';
+import { BASE_TRIGGER, isTriggerKind, splitControl } from '../lexer.js';
+import { CHECK_KINDS } from '../check.js';
+import { ACTION_VERBS } from '../actionVerbs.js';
+import { AGENT_METADATA_KEYWORDS, FORCE_LEVEL_PRIMITIVES } from '../primitives.js';
+import { SEQUENCE_PRIMITIVES } from '../sequencePrimitives.js';
+import { isVarKeyword } from '../vars.js';
 
 /** The severity a check reports with — from its force; null when the judge does not support it. */
 export function severityOf(check: JudgeCheck): 'error' | 'warning' | null {
@@ -53,9 +61,49 @@ export function judgeState(rule: JudgeRule, text: string): string {
   });
 }
 
+/**
+ * The keywords a body line is stored under — `ApLine.primitive` (src/apdoc/document.ts):
+ * the force-level families and the bullet keywords (a directive's keyword), the
+ * control and sequence heads, and the heads with a node of their own (VAR, IN,
+ * PARALLEL — src/apdoc/nodes.ts). Never a block's metadata: AS is the shape of
+ * its step or block, not a line.
+ */
+const LINE_KEYWORDS: ReadonlySet<string> = new Set([
+  ...getFamilyBases(), ...FORCE_LEVEL_PRIMITIVES.map(p => p.keyword), ...ACTION_VERBS,
+  ...CHECK_KINDS, ...SEQUENCE_PRIMITIVES.map(p => p.keyword), 'VAR', 'IN', 'PARALLEL',
+].filter(k => !(AGENT_METADATA_KEYWORDS as string[]).includes(k)));
+
+/**
+ * The keyword a line written with `word` is stored under: a lifecycle alias
+ * (`ON-INVOKE`) is a WHEN line, a checked or executed head (`IF!`, `UNTIL*`) its control keyword, a scoped declaration (`SESSION VAR`) a VAR line, any form of a
+ * force-level family (`NEVER`, `MUST-NOT`, `!MUST`, `SHOULD!`) the family's base.
+ */
+function storedKeyword(word: string): string {
+  if (lifecycleToWhen(word) !== null) return 'WHEN';
+  const control = splitControl(word);
+  if (control) return isTriggerKind(control.keyword) ? BASE_TRIGGER : control.keyword;
+  if (isVarKeyword(word)) return 'VAR';
+  return parseForceLevel(toCanonicalKeyword(word))?.family ?? word;
+}
+
+/** The primitive a rule's BODY layout names — null when it starts with a slot; a word no line is stored under is a load error. */
+function primitiveOf(template: TemplateBlock): string | null {
+  const word = /^\s*(!*[A-Z][A-Z0-9-]*[!*]*)(?=[\s:{]|$)/.exec(template.layout ?? '')?.[1];
+  if (!word) return null;
+  const stored = storedKeyword(word);
+  const rule = `judge rule \`${template.name}\``;
+  if (!LINE_KEYWORDS.has(stored)) {
+    throw new Error(`${rule}: its BODY starts with \`${word}\`, which never starts a body line — it is a block's metadata or no line keyword, so the rule would judge nothing; start the BODY with the keyword of the lines it judges (e.g. \`DO {action}\`), or lay out \`{line}\` in a rule tagged #executed, #program or #agent`);
+  }
+  if (stored !== word) {
+    throw new Error(`${rule}: its BODY starts with \`${word}\`, but lines written \`${word}\` are stored under \`${stored}\` — start the BODY with \`${stored}\` (the rule then judges every ${stored} line, whatever its force or level)`);
+  }
+  return word;
+}
+
 /** A `#judge` template as a rule — its primitive from the layout, its checks from the slot rules. */
 export function ruleOf(template: TemplateBlock): JudgeRule {
-  const primitive = /^\s*([A-Z][A-Z-]*)\b/.exec(template.layout ?? '')?.[1] ?? null;
+  const primitive = primitiveOf(template);
   const scope = JUDGE_SCOPES.find(s => template.tags.includes(s));
   if (!primitive && !scope) {
     throw new Error(`judge rule \`${template.name}\`: its BODY layout must start with the keyword of the lines it judges (e.g. \`DO {action}\`), or the rule be tagged #executed, #program or #agent`);

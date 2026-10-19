@@ -33,7 +33,7 @@
  * `resolveShapeRefs` turns into `(id)` after emission — reusing the `AS` path.
  */
 
-import { refSuffix } from './formulas.js';
+import { FORMULAS, fill, refSuffix } from './formulas.js';
 import { markVerbatim } from "./services/text.js";
 import { getIntroByKeyword, toCanonicalKeyword } from './forceLevelConfig.js';
 
@@ -82,8 +82,22 @@ export interface ParsedTemplate {
 }
 
 /** Internal marker for `<tpl>` / `LIST <tpl>`; resolved to `(id)` post-emit. */
+/** A slot's name, as a SLOTS line declares it and a layout's `{slot}` reads it. */
+export const SLOT_NAME = '[a-z][\\w-]*';
+
+/** A SLOTS line: its slot's name, `?` when optional, then its type and description. */
+export const SLOT_LINE_RE = new RegExp(`^(${SLOT_NAME})(\\?)?\\s*:\\s*(.+)$`);
+
+/** A template's layout: its BODY as written — or, without one, every slot in order. */
+export function templateLayout(layout: string | null | undefined, slots: readonly { name: string }[]): string {
+  const T = FORMULAS.blocks.template;
+  return layout ?? slots.map(s => fill(T.layoutSlot, { name: s.name })).join(T.layoutSeparator);
+}
+
 const SHAPE_REF_RE = /@shape\(([a-z][a-z0-9_-]*)\)/g;
-const REGION_RE = /^(\s*)(SLOTS|BODY|EXAMPLE):\s*$/;
+/** A template's regions — their lines are the author's literal text, never keywords. The one list. */
+export const VERBATIM_REGIONS: readonly string[] = ['SLOTS', 'BODY', 'EXAMPLE'];
+const REGION_RE = new RegExp(`^(\\s*)(${VERBATIM_REGIONS.join('|')}):\\s*$`);
 /** Author-facing marker in an EXAMPLE body composing another template's EXAMPLE verbatim. */
 const EXAMPLE_REF_RE = /\{([a-z][a-z0-9_-]*)\.EXAMPLE\}/g;
 
@@ -175,7 +189,7 @@ function parseSlots(lines: string[]): Slot[] {
   for (const raw of lines) {
     const t = raw.trim();
     if (t === '' || t.startsWith('#')) continue;
-    const m = t.match(/^([a-z][\w-]*)(\?)?\s*:\s*(.+)$/);
+    const m = t.match(SLOT_LINE_RE);
     if (m) {
       const { typePart, desc } = splitDesc(m[3].trim());
       out.push({ name: m[1], optional: m[2] === '?', typePhrase: typeToPhrase(typePart), rawType: typePart, description: desc, rules: [], rawRules: [] });
@@ -317,7 +331,7 @@ export function renderTemplate(body: string, name: string, templates?: ExampleRe
     const desc = t.scalar.description ? ` — ${t.scalar.description}` : '';
     out.push(`**${name}** — ${t.scalar.typePhrase}${desc}`);
   } else {
-    const layout = t.bodyLayout ?? t.slots.map(s => `{${s.name}}`).join(' | ');
+    const layout = templateLayout(t.bodyLayout, t.slots);
     out.push(`Produce **${name}** by filling this layout — replace every \`{slot}\`, keep the rest verbatim:`);
     out.push('', markVerbatim(layout), '');
     out.push('Fields:');

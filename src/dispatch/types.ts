@@ -19,6 +19,7 @@ export type TemplateEntry  = Definition & { kind: 'template' };
 export type ProcedureEntry = Definition & { kind: 'procedure' };
 export type FlowEntry      = Definition & { kind: 'flow' };
 export type StoreEntry     = Definition & { kind: 'store' };
+export type DimensionEntry = Definition & { kind: 'dimension' };
 export type SkillEntry     = Definition & { kind: 'skill' };
 
 export interface BundleContext {
@@ -42,6 +43,8 @@ export interface BundleContext {
   procedures: ProcedureEntry[];
   flows: FlowEntry[];
   stores: StoreEntry[];
+  /** The dimensions — answers about the code the apx keeps (src/apx/dimensions.ts). */
+  dimensions: DimensionEntry[];
   /** The skills the compilation IMPORTs — FROM a library (its own apx) or FROM `@harness.skills`. */
   skills: SkillEntry[];
   /** The `EXPORT VAR`s the compilation's IMPORTs resolved (src/exportedVars.ts). */

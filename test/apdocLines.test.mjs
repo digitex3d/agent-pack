@@ -48,6 +48,23 @@ const { walk, someNode } = await import('../dist/src/apdoc/nodes.js');
 
   const legacy = new SourceRegistry(() => 'ABOUT  old style\nDO  one\n');
   assert.equal(legacy.span('/virtual/old.ap', 'procedure', 'old').line, 1, 'a file without EXPORT blocks spans from line 1');
+
+  // a dimension declared in an agent's body: two agents of one file, one name — each its own, by its owner
+  const twoAgents = new SourceRegistry(() => [
+    'EXPORT AGENT a AS r:',         // 1
+    '    ABOUT  a',                 // 2
+    '    DIMENSION d:',             // 3
+    '        ABOUT  of a',          // 4
+    '',                             // 5
+    'EXPORT AGENT b AS r:',         // 6
+    '    ABOUT  b',                 // 7
+    '    DIMENSION d:',             // 8
+    '        ABOUT  of b',          // 9
+  ].join('\n'));
+  assert.equal(twoAgents.span('/virtual/ab.ap', 'dimension', 'd', 'b').line, 8, "b's own dimension, not the first of the file");
+  assert.deepEqual(twoAgents.span('/virtual/ab.ap', 'dimension', 'd', 'b').lines.map(l => l.line), [8, 9]);
+  assert.equal(twoAgents.span('/virtual/ab.ap', 'dimension', 'd', 'a').line, 3);
+  assert.equal(twoAgents.span('/virtual/ab.ap', 'dimension', 'd').line, 3, 'no owner given: the first');
 }
 
 // --- a compiled fixture: agent + inline role, library procedures, team flows ---

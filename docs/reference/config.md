@@ -29,14 +29,13 @@ export default {
 | `judge.concurrency` | `8` | requests in flight at most |
 | `checks` | absent | the judge of [checked conditions](/reference/language#checked-conditions) while the agent works — see below; absent, `IF!` reads as `IF` (a warning) and `IF!!` fails |
 | `checks.adapter` | `'jev'` | the judge — a built-in name (`'jev'`) or a judge object `{ type: 'judge', name, ask }` |
-| `checks.threshold` | `0.7` | a condition answered at or above this probability is open; below, closed |
-| `checks.rounds` | `3` | how many closed answers in a row a checked `UNTIL` takes before it stops — an `UNTIL*` or `UNTIL**` too |
+| `checks.threshold` | `0.7` | a condition answered at or above this probability is open; below, closed. A loop's round limit is no config key: each `UNTIL` a judge, a delegate or a program ends writes its own `MAX <n>` ([Rounds](/reference/language#rounds)) |
 | `delegate.default` | `'quick'` | the agent an `ASK` line without `BY` is handed to — see below |
 | `delegate.models` | `{}` | the model each agent runs on, by agent name — see below |
 
 ## Judge
 
-With a `judge` key, `bundle` and `bundle all` run a judge phase: a model checks that the `.ap` code is well written. A rule is a `TEMPLATE` tagged `#judge` — its `BODY` layout names the lines it applies to (`DO {action}` → every `DO` line), each slot rule is a check, `MUST` an error and `SHOULD` a warning. A rule may also be negative — `NEVER`, `MUST-NOT` an error, `SHOULD-NOT` a warning: the judge is asked directly whether the line does it. `YES` and `NO` lines under a slot rule say what a yes and a no mean; `EXAMPLE` lines written `<line> → <verdict>` are reference examples, sent with every line. A tag narrows a rule to the lines of one [executor](/reference/language#executors):
+With a `judge` key, `bundle` and `bundle all` run a judge phase: a model checks that the `.ap` code is well written. A rule is a `TEMPLATE` tagged `#judge` — its `BODY` layout names the lines it applies to (`DO {action}` → every `DO` line), each slot rule is a check, `MUST` an error and `SHOULD` a warning. A rule may also be negative — `NEVER`, `MUST-NOT` an error, `SHOULD-NOT` a warning: the judge is asked directly whether the line does it. `YES` and `NO` lines under a slot rule say what a yes and a no mean; `EXAMPLE` lines written `<line> → <verdict>` are reference examples, sent with every line. The layout starts with the keyword lines are stored under, or the rule fails to load: `ALWAYS {rule}`, not `NEVER {rule}` (a `NEVER` line is an `ALWAYS` line); `WHEN {x}`, not `ON-INVOKE`; never a block's own line such as `ABOUT`, `FOR`, `EACH` or `AS`, which no body line starts with. A tag narrows a rule to the lines of one [executor](/reference/language#executors):
 
 | Tag | The rule judges |
 |---|---|
@@ -46,7 +45,7 @@ With a `judge` key, `bundle` and `bundle all` run a judge phase: a model checks 
 
 A rule tagged `#executed` or `#program` may lay out `{line}` alone: it then judges every line of its scope, whatever its keyword.
 
-The builtin library ships six rules. Three check every `DO` line: `judge-do-line` (exactly one imperative verb), `judge-do-condition` (no condition inside the line — write it as an `IF` with the `DO` under it) and `judge-do-force` (no word of force inside the line — write it with its primitive: `NEVER`, `ALWAYS`, `MUST`, …). Three check who does what: `judge-executed-inputs` (`#executed`, an error — the line relies on no information beyond its inputs and its own words: a delegate or a program receives nothing else), `judge-program-vague` (`#program`, an error — the line leaves the programmer nothing to guess: a rounding without its mode, a limit in words, a tie without a rule) and `judge-compute-suggestion` (`#agent`, a warning — a `DO` line that is a plain calculation is better a `COMPUTE`).
+The builtin library ships six rules. Three check every `DO` line an author wrote: `judge-do-line` (exactly one imperative verb), `judge-do-condition` (no condition inside the line — write it as an `IF` with the `DO` under it) and `judge-do-force` (no word of force inside the line — write it with its primitive: `NEVER`, `ALWAYS`, `MUST`, …). Three check who does what: `judge-executed-inputs` (`#executed`, an error — the line relies on no information beyond its inputs and its own words: a delegate or a program receives nothing else), `judge-program-vague` (`#program`, an error — the line leaves the programmer nothing to guess: a rounding without its mode, a limit in words, a tie without a rule) and `judge-compute-suggestion` (`#agent`, a warning — a `DO` line that is a plain calculation is better a `COMPUTE`).
 
 ```javascript
 export default {
@@ -142,7 +141,7 @@ The `checks` key names the judge of [checked conditions](/reference/language#che
 ```js
 export default {
   adapters: ['claude-code'],
-  checks: { adapter: 'jev', threshold: 0.7, rounds: 3 },
+  checks: { adapter: 'jev', threshold: 0.7 },
 };
 ```
 

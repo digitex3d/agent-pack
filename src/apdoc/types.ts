@@ -142,6 +142,8 @@ export interface ApUntilNode {
   indent?: number;
   /** The condition as written — '' when it is sealed (`UNTIL!!`). */
   condition: string;
+  /** The round limit the head wrote (`MAX <n>`) — on every loop someone other than the agent ends; absent on a plain UNTIL. */
+  max?: number;
   /** `UNTIL!` / `UNTIL!!`: who answers for the condition, and its round limit. Absent on a plain UNTIL. */
   check?: ApCondCheck;
   /** `UNTIL*` / `UNTIL**`: the condition is decided by a delegate (1) or a program (2). */

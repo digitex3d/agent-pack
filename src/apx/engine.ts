@@ -19,7 +19,7 @@ import { spawnSync, type SpawnSyncOptionsWithStringEncoding } from 'child_proces
 import type { ApDocument } from '../apdoc/document.js';
 import type { ApBlock } from '../apdoc/block.js';
 import type { ApRef, ApNode, ApWhenNode, ApRunNode, ApDirectiveNode } from '../apdoc/types.js';
-import { KIND_STRATEGIES, type AgentBlock, type TeamBlock, type StoreBlock, type VarBlock } from '../apdoc/blocks.js';
+import { KIND_STRATEGIES, type AgentBlock, type TeamBlock, type StoreBlock, type VarBlock, type DimensionBlock, type TemplateBlock } from '../apdoc/blocks.js';
 import { mdEnv, renderPreamble, renderEntry, renderMd } from '../../adapters/md/index.js';
 import type { MdEnv } from '../../adapters/md/toolkit.js';
 import { FORMULAS, fill, type QuizQuestion } from '../formulas.js';
@@ -38,6 +38,9 @@ import { CREDIT } from '../credits.js';
 import { validateRecord, slotSpecsOf, formatIssues, jsonExample } from '../shapeSchema.js';
 import { BLOCK_ID_RE, addressName, sha256Hex } from '../apdoc/ids.js';
 import { constantOf, readsOf } from '../vars.js';
+import { DimensionCache, dimensionDefHash, dimensionTemplates, filesNamedIn, CACHE_FORMAT, NONE, type CacheEntry, type EntryState } from './dimensions.js';
+import { relativeWithin } from '../services/fs.js';
+import { matchesAnyGlob } from '../services/glob.js';
 
 /** The exit of an UNTIL*'s answer at its round limit: the loop ends (src/check.ts roundLine). */
 const ROUND_LIMIT = 7;
@@ -58,19 +61,27 @@ export interface ApxBuild {
 
 /**
  * The `checks` config as an apx records it: the judge by name (a built-in one,
- * loaded from the engine itself — judge/builtins.ts), the threshold, the round
- * limit, and the model the judge lock pins for that judge, when it pins one.
+ * loaded from the engine itself — judge/builtins.ts), the threshold, and the
+ * model the judge lock pins for that judge, when it pins one. A loop's round
+ * limit is its own, on its head (`MAX <n>`), kept in its check spec.
  * The judge's key is never recorded: the judge reads it at run time.
  */
 export interface ApxChecks {
   adapter: string;
   threshold: number;
-  rounds: number;
   model?: string;
 }
 
 /** Kinds in reading order: who you are, your team, then the md chapter order. */
 const KIND_ORDER = [...new Set(['agent', 'team', ...KIND_STRATEGIES.map(s => s.kind)])];
+
+/** A dimension write's optional refs — the files its answer also depends on. */
+const DIM_WRITE_REFS = '[refs=<path>;<path>]';
+
+/** A dimension's write command for `file`, after `<apx> <dimension>`: the value on stdin, or none — the one spelling of it. */
+function dimWriteUsage(file = '<file>'): string {
+  return `write ${file} ${DIM_WRITE_REFS} - < value.json  (or: write ${file} none)`;
+}
 
 const HELP: [string, string][] = [
   ['start', 'the entry point: who you are and a short quiz — run it once, at the start'],
@@ -90,6 +101,11 @@ const HELP: [string, string][] = [
   ['check <cnd-id>', 'a checked condition (IF!, IF!!, UNTIL!, UNTIL!!), put to the judge on this session\'s variables: open or closed'],
   ['version', 'agent, build date, agent-pack version, hash, block count'],
   ['<store> <verb> …', 'read or write a store (tabeli verbs: q a s …)'],
+  ['dimension', 'the dimensions of this agent: their id, what each covers, its cache folder and counts'],
+  ['dimension <dim-id> read <file> [json]', "a dimension's answer for a file, kept by the apx: hit (the answer), or miss (why there is none)"],
+  [`dimension <dim-id> write <file> ${DIM_WRITE_REFS} -|none`, 'keep your answer for a file — a JSON list of its template on stdin, or none'],
+  ['dimension <dim-id> find <text>', "every instance a dimension keeps, across its files, whose text holds <text> — fresh entries only"],
+  ['dimension <dim-id> ls|why|clear|gc …', "a dimension's cache: its entries and their state, why one is stale, clear entries, drop those of deleted files"],
   ['help', 'this list'],
 ];
 
@@ -165,6 +181,7 @@ export class ApxEngine {
     input: args => this.input(args),
     answer: args => this.answer(args),
     check: args => this.check(args),
+    dimension: args => this.dimension(args),
     version: () => this.version(),
     help: () => this.help(),
   };
@@ -185,7 +202,7 @@ export class ApxEngine {
     for (const block of doc.all()) this.byId.set(block.id, block);
   }
 
-  /** Dispatch one invocation: a verb, or a store name and a tabeli verb. No verb = start. `check` answers asynchronously. */
+  /** Dispatch one invocation: a verb, or a store name and a tabeli verb — a dimension is reached by its id, after `dimension`. No verb = start. `check` answers asynchronously. */
   run(argv: string[]): number | Promise<number> {
     const [verb = 'start', ...args] = argv;
     if (verb === '-h' || verb === '--help') return this.help();
@@ -304,6 +321,11 @@ export class ApxEngine {
     const stores = this.stores();
     if (stores.length === 0) this.out('  (no stores declared)');
     for (const s of stores) this.out(`  ${this.label(s.block)}  — use: ${this.cmd} ${s.name} <verb> …`);
+    const dimensions = this.dimensions();
+    if (dimensions.length > 0) {
+      this.out(`dimensions:  — answers about the code, kept by the apx; read one before reasoning about a file it covers: ${this.cmd} dimension <dim-id> read <file>`);
+      for (const d of dimensions) this.out(`  ${this.label(d.block)}  — files: ${d.block.globs.join(' ')}`);
+    }
     const variables = this.doc.byKind('var');
     if (variables.length > 0) {
       this.out(`variables:  — read: ${this.cmd} get <name>, store: ${this.cmd} set <name> -`);
@@ -343,7 +365,7 @@ export class ApxEngine {
       this.out(`${kind} (${blocks.length})`);
       if (!count) for (const b of blocks) this.out(`  ${this.lsLine(b)}`);
     }
-    this.out(`# ${hits.length} block${hits.length === 1 ? '' : 's'}${hits.length === 0 && terms.length > 0 ? ' match' : ''}`);
+    this.out(`# ${countOf(hits.length, 'block', 'blocks')}${hits.length === 0 && terms.length > 0 ? ' match' : ''}`);
     return 0;
   }
 
@@ -381,7 +403,7 @@ export class ApxEngine {
       this.out(this.lsLine(block));
       for (const line of lines) this.out(`  > ${line.trim()}`);
     }
-    this.out(`# ${n} block${n === 1 ? '' : 's'}${n === 0 ? ' match' : ''}`);
+    this.out(`# ${countOf(n, 'block', 'blocks')}${n === 0 ? ' match' : ''}`);
     return 0;
   }
 
@@ -522,7 +544,7 @@ export class ApxEngine {
     if (!session || typeof session === 'string') return code;
     const answers = session.answers(id);
     if (answers.at(-1) !== false) return code;
-    const round = roundOf(answers);
+    const round = roundOf(answers, spec.rounds);
     this.out(`# ${roundLine(round, spec.rounds!, FORMULAS.keywords.EXECUTOR.loop)}`);
     // At the limit the loop ends: an exit of its own, so no command chained after it runs another round.
     return round >= spec.rounds! ? ROUND_LIMIT : code;
@@ -680,11 +702,11 @@ export class ApxEngine {
       const verdict = await this.verdict(spec, id, session, judge, config.model);
       const prior = spec.kind === 'UNTIL' ? session.checks(id) : [];
       // This answer's round, counted as closed: it is recorded before the verdict is known.
-      const round = roundOf([...prior.map(r => r.outcome === 'open'), false]);
+      const round = roundOf([...prior.map(r => r.outcome === 'open'), false], spec.kind === 'UNTIL' ? spec.rounds : undefined);
       session.record({ ...verdict.record, cnd: id, level: spec.level, round, threshold: config.threshold, at: new Date().toISOString() });
       if (verdict.open) { answer('open', verdict.why); return 0; }
-      const rounds = spec.kind !== 'UNTIL' ? []
-        : [roundLine(round, config.rounds, FORMULAS.keywords.CHECK.loop)];
+      const rounds = spec.kind !== 'UNTIL' || !spec.rounds ? []
+        : [roundLine(round, spec.rounds, FORMULAS.keywords.CHECK.loop)];
       answer('closed', verdict.why, ...rounds);
       return 1;
     } catch (e) {
@@ -752,14 +774,20 @@ export class ApxEngine {
     return 0;
   }
 
-  /** What is wrong with a JSON text against a contract template — or null when it fits. */
-  private contractIssues(json: string, template: ApRef): string | null {
+  /**
+   * What is wrong with a JSON text against a contract template — or null when
+   * it fits. With `list`, the text is a list of at least `min` instances,
+   * reported under `name`.
+   */
+  private contractIssues(json: string, template: ApRef, list?: { name: string; min: number }): string | null {
     let value: unknown;
     try { value = JSON.parse(json); } catch { return 'not valid JSON'; }
     const slots = this.doc.slotsOf(template);
     if (!slots) return null;
-    const issues = validateRecord(value, slots, this.doc.slotResolver());
-    return issues.length > 0 ? formatIssues(issues).replace(/\n/g, '; ') : null;
+    const issues = list
+      ? validateRecord({ [list.name]: value }, [{ name: list.name, optional: false, spec: { kind: 'list', ref: refName(template), min: list.min } }], this.doc.slotResolver())
+      : validateRecord(value, slots, this.doc.slotResolver());
+    return issuesText(issues);
   }
 
   private version(): number {
@@ -981,7 +1009,12 @@ export class ApxEngine {
     if (!block) return this.fail(1, `no variable \`${name}\` in this agent — the variables: ${this.cmd} ls kind=var; nothing was written`);
     const value = rest.length === 1 && rest[0] === '-' ? readFileSync(0, 'utf-8') : rest.join(' ');
     const failed = this.storeVariable(block, value);
-    if (failed) return this.fail(failed.code, `${failed.reason} — nothing was written`);
+    if (failed) {
+      // A typed value refused: the shape it takes, spelled out, so the next try is the right one.
+      const slots = block.type ? this.doc.slotsOf(block.type) : null;
+      if (slots && failed.code === 2) this.out(`# the JSON \`${refName(block.type!)}\` takes: ${JSON.stringify(jsonExample(slots, this.doc.slotResolver()))}`);
+      return this.fail(failed.code, `${failed.reason} — nothing was written`);
+    }
     this.out(`# ${name} stored for this session — read it: ${this.cmd} get ${name}`);
     return 0;
   }
@@ -994,7 +1027,7 @@ export class ApxEngine {
   private storeVariable(block: VarBlock, value: string): { code: number; reason: string } | null {
     const type = block.type ? refName(block.type) : '';
     if (block.type) {
-      if (!this.doc.slotsOf(block.type)) return { code: 1, reason: `\`${block.name}\` is shaped as \`${type}\`, a template not compiled into this agent` };
+      if (!this.doc.slotsOf(block.type)) return { code: 1, reason: notCompiled(block.name, type) };
       const issues = this.contractIssues(value, block.type);
       if (issues) return { code: 2, reason: `the value is not shaped as \`${type}\`: ${issues}` };
     }
@@ -1061,8 +1094,7 @@ export class ApxEngine {
       record[field] = slot?.type.kind === 'number' && value.trim() !== '' && !Number.isNaN(Number(value)) ? Number(value) : value;
     }
     const slots = slotSpecsOf(store.block.slots, !write.add);
-    const issues = validateRecord(record, slots);
-    return issues.length > 0 ? formatIssues(issues).replace(/\n/g, '; ') : null;
+    return issuesText(validateRecord(record, slots));
   }
 
   /** The stores, each with the table file behind it: beside this file, in `<agent>.state/`. */
@@ -1109,6 +1141,248 @@ export class ApxEngine {
     if (text) this.out(text);
     return run.status ?? 2;
   }
+
+  // ------------------------------------------------------------- dimensions
+
+  /** The dimensions, each with its AS template and its cache at the project root. */
+  private dimensions(): Dimension[] {
+    const root = resolve(projectRootOf(this.exe));
+    return (this.doc.byKind('dimension') as DimensionBlock[]).map(block => {
+      const templates = dimensionTemplates(this.doc, block);
+      return { block, name: block.name, cmd: `${this.cmd} dimension ${block.id}`, template: templates.as as TemplateBlock | null, cache: new DimensionCache(root, dimensionDefHash(block, templates)) };
+    });
+  }
+
+  /** `dimension <dim-id> <verb> …` — a dimension's answers: read and write one, find across files, and keep its cache. */
+  private dimensionVerb(dim: Dimension, args: string[]): number {
+    const [verb, ...rest] = args;
+    switch (verb) {
+      case 'read': return this.dimRead(dim, rest);
+      case 'write': return this.dimWrite(dim, rest);
+      case 'ls': return this.dimLs(dim, rest);
+      case 'find': return this.dimFind(dim, rest);
+      case 'why': return this.dimWhy(dim, rest);
+      case 'clear': return this.dimClear(dim, rest);
+      case 'gc': return this.dimGc(dim);
+    }
+    return this.fail(2, `${verb ? `'${verb}' is no verb of a dimension` : `${dim.name} is a dimension and takes a verb`} — ${dim.cmd} read|write|ls|find|why|clear|gc …, e.g. ${dim.cmd} read <file>`);
+  }
+
+  /**
+   * `<dimension> find <text>` — every instance kept for any file whose text
+   * holds `text` (case aside), each with its file: the one way to look across
+   * files. Only fresh entries answer — a stale one says nothing true any more.
+   */
+  private dimFind(dim: Dimension, args: string[]): number {
+    if (args.length === 0) return this.fail(2, `${dim.name} find needs text — ${dim.cmd} find <text>`);
+    const needle = args.join(' ').toLowerCase();
+    const template = dim.template?.slots ? dim.template : null;
+    let n = 0;
+    for (const { entry, state } of this.dimEntries(dim).entries) {
+      if (state.state !== 'fresh' || !Array.isArray(entry.value)) continue;
+      for (const v of entry.value) {
+        const text = template ? template.instanceText(v as Record<string, unknown>) : JSON.stringify(v);
+        if (!text.toLowerCase().includes(needle)) continue;
+        n++;
+        this.out(`${entry.file}  ${text.replace(/\n/g, ' ')}`);
+      }
+    }
+    this.out(`# ${countOf(n, 'instance', 'instances')} of ${dim.name} hold "${args.join(' ')}" — fresh entries only`);
+    return n > 0 ? 0 : 1;
+  }
+
+  /**
+   * The file a dimension verb names, from the project root — or null after
+   * telling what is wrong: outside the project, or a file the dimension does not cover.
+   */
+  private dimFile(dim: Dimension, verb: string, arg: string | undefined, usage: string): string | null {
+    const refuse = (message: string): null => { this.lastCode = this.fail(2, message); return null; };
+    if (!arg) return refuse(`${dim.name} ${verb} needs a file — ${dim.cmd} ${usage}`);
+    const file = relativeWithin(dim.cache.root, resolve(arg));
+    if (!file) return refuse(`\`${arg}\` lies outside the project — name a file under its root, ${dim.cache.root}`);
+    if (!matchesAnyGlob(file, dim.block.globs)) return refuse(`\`${file}\` is no file ${dim.name} covers — it covers: ${dim.block.globs.join(', ')}`);
+    return file;
+  }
+
+  /**
+   * `<dimension> read <file> [json]` — the answer kept for a file: `hit` and
+   * the answer while the file and every file it depends on are as they were;
+   * `miss` with the reason otherwise, and never the old answer; `gone` when the
+   * file no longer exists. A file moved without an edit takes its old entry along.
+   */
+  private dimRead(dim: Dimension, args: string[]): number {
+    const file = this.dimFile(dim, 'read', args[0], 'read <file> [json]');
+    if (!file) return this.lastCode;
+    const { cache } = dim;
+    const current = cache.fingerprintOf(file);
+    let entry = cache.read(file);
+    if (!entry && current === null) return this.fail(1, `no file \`${file}\` in the project — nothing to read`);
+    entry ??= cache.adopt(file, current!);
+    const state = entry ? cache.state(entry) : null;
+    if (!entry || state!.state !== 'fresh') {
+      cache.count('misses');
+      if (state?.state === 'gone') { this.out(`gone ${dim.name} ${file} — ${state.reason}`); return 1; }
+      this.out(`miss ${dim.name} ${file} — ${state ? state.reason : 'never written'}`);
+      this.out(`# once you have worked the answer out, keep it: ${dim.cmd} ${dimWriteUsage(file)}`);
+      return 1;
+    }
+    cache.count('hits');
+    if (args[1] === 'json') return this.print(JSON.stringify(entry.value));
+    this.out(`hit ${dim.name} ${file} — by ${entry.by}, ${entry.at.slice(0, 10)}`);
+    return this.print(this.dimValueText(dim, entry.value));
+  }
+
+  /** A kept value as text: each instance through its template's layout, or `none`. */
+  private dimValueText(dim: Dimension, value: CacheEntry['value']): string {
+    if (!Array.isArray(value)) return NONE;
+    const template = dim.template;
+    if (!template?.slots) return JSON.stringify(value, null, 1);
+    const texts = value.map(v => template.instanceText(v as Record<string, unknown>));
+    return texts.join(texts.some(t => t.includes('\n')) ? '\n\n' : '\n');
+  }
+
+  /**
+   * A value for a dimension, from its text: `none`, or a JSON list of at least
+   * one instance of its template — checked the way a typed variable is, with
+   * every nested template of the document.
+   */
+  private dimValue(dim: Dimension, text: string): { value: CacheEntry['value'] } | { error: string } {
+    const shape = dim.block.shape?.ref;
+    const name = shape ? refName(shape) : '?';
+    const trimmed = text.trim();
+    if (trimmed === NONE || trimmed === JSON.stringify(NONE)) return { value: NONE };
+    if (!shape || !this.doc.slotsOf(shape)) return { error: notCompiled(dim.name, name) };
+    const issues = this.contractIssues(trimmed, shape, { name: dim.name, min: 1 });
+    if (issues) return { error: `the value is not a list of \`${name}\`: ${issues}` };
+    return { value: JSON.parse(trimmed) as unknown[] };
+  }
+
+  /**
+   * `<dimension> write <file> [refs=<path>;…] -|none` — keep an answer for a
+   * file: a file the dimension covers and that exists, refs that exist, a value
+   * its template accepts. An answer still fresh is never overwritten — another
+   * agent gave it meanwhile (exit 4). Refused: nothing is written.
+   */
+  private dimWrite(dim: Dimension, args: string[]): number {
+    const usage = dimWriteUsage();
+    const file = this.dimFile(dim, 'write', args[0], usage);
+    if (!file) return this.lastCode;
+    const options = args.slice(1);
+    const refsArg = options.filter(a => a.startsWith('refs='));
+    const from = options.filter(a => !a.startsWith('refs='));
+    if (refsArg.length > 1 || from.length !== 1 || (from[0] !== '-' && from[0] !== NONE)) {
+      return this.fail(2, `${dim.name} write takes the value on stdin with -, or none — ${dim.cmd} ${usage}`);
+    }
+    const { cache } = dim;
+    const hash = cache.fingerprintOf(file);
+    if (hash === null) return this.fail(1, `no file \`${file}\` in the project — an answer is for a file that exists; nothing was written`);
+    const refs: Record<string, string> = {};
+    for (const raw of (refsArg[0]?.slice('refs='.length) ?? '').split(';').map(r => r.trim()).filter(Boolean)) {
+      const ref = relativeWithin(cache.root, resolve(raw));
+      const print = ref === null ? null : cache.fingerprintOf(ref);
+      if (ref === null || print === null) return this.fail(1, `refs: \`${raw}\` is no file of the project — name files that exist, separated by ; — nothing was written`);
+      if (ref !== file) refs[ref] = print;
+    }
+    const existing = cache.read(file);
+    if (existing && cache.state(existing).state === 'fresh') {
+      return this.fail(4, `${dim.name} ${file} is already fresh — read it: ${dim.cmd} read ${file}; nothing was written`);
+    }
+    const read = from[0] === NONE ? { value: NONE } as const : this.dimValue(dim, readFileSync(0, 'utf-8'));
+    if ('error' in read) return this.fail(2, `${read.error} — nothing was written`);
+    // The files the answer names are files it depends on.
+    for (const named of filesNamedIn(cache.root, read.value)) if (named !== file && !(named in refs)) refs[named] = cache.fingerprintOf(named)!;
+    cache.write({ format: CACHE_FORMAT, dimension: dim.name, file, hash, refs, value: read.value, by: this.root.name, at: new Date().toISOString() });
+    this.out(`# stored ${dim.name} ${file} — ${cache.entryLocation(file)}`);
+    this.out(`# hash ${hash.slice(0, 12)}  refs: ${Object.keys(refs).join(', ') || '(none)'}`);
+    return 0;
+  }
+
+  /** Each entry kept (those matching `glob`) with its state — and the counts. */
+  private dimEntries(dim: Dimension, glob?: string): { entries: { entry: CacheEntry; state: EntryState }[]; summary: string } {
+    const entries = dim.cache.entries(glob).map(entry => ({ entry, state: dim.cache.state(entry) }));
+    const n = (state: string) => entries.filter(e => e.state.state === state).length;
+    const { hits, misses } = dim.cache.stats();
+    const rate = hits + misses > 0 ? `${Math.round((100 * hits) / (hits + misses))}%` : 'n/a';
+    return {
+      entries,
+      summary: `${countOf(entries.length, 'entry', 'entries')}: ${n('fresh')} fresh, ${n('stale')} stale, ${n('gone')} gone — ${hits} hits, ${misses} misses, hit rate ${rate}`,
+    };
+  }
+
+  /** `<dimension> ls [glob]` — the entries kept, with their state and why, then the counts. */
+  private dimLs(dim: Dimension, args: string[]): number {
+    const { entries, summary } = this.dimEntries(dim, args[0]);
+    for (const { entry, state } of entries) {
+      this.out(`${state.state.padEnd(5)}  ${entry.file}${state.reason ? `  — ${state.reason}` : ''}  (by ${entry.by}, ${entry.at.slice(0, 10)})`);
+    }
+    this.out(`# ${dim.name}  ${dim.cache.location}/  ${summary}`);
+    return 0;
+  }
+
+  /** `<dimension> why <file>` — the state of a file's entry, file by file: the fingerprint kept and the current one. */
+  private dimWhy(dim: Dimension, args: string[]): number {
+    const file = this.dimFile(dim, 'why', args[0], 'why <file>');
+    if (!file) return this.lastCode;
+    const entry = dim.cache.read(file);
+    if (!entry) {
+      this.out(`never written ${dim.name} ${file} — no entry at ${dim.cache.entryLocation(file)}`);
+      return 0;
+    }
+    const state = dim.cache.state(entry);
+    this.out(`${state.state} ${dim.name} ${file}${state.reason ? ` — ${state.reason}` : ''}  (by ${entry.by}, ${entry.at})`);
+    for (const c of state.checks) {
+      const now = c.current === null ? 'gone' : c.current === c.stored ? 'same' : 'changed';
+      this.out(`  ${c.role.padEnd(4)}  ${c.path}  kept ${c.stored.slice(0, 12)}  now ${c.current ? c.current.slice(0, 12) : '(none)'}  ${now}`);
+    }
+    return 0;
+  }
+
+  /** `<dimension> clear [glob] [--by <agent>]` — delete entries: all, those matching a glob, those an agent wrote. */
+  private dimClear(dim: Dimension, args: string[]): number {
+    let glob: string | undefined;
+    let by: string | undefined;
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === '--by' && args[i + 1]) by = args[++i];
+      else if (args[i] !== '--by' && glob === undefined) glob = args[i];
+      else return this.fail(2, `${dim.name} clear takes a glob and --by <agent>, both optional — ${dim.cmd} clear 'src/**' --by <agent>`);
+    }
+    const cleared = dim.cache.entries(glob).filter(e => !by || e.by === by);
+    for (const e of cleared) dim.cache.remove(e.file);
+    this.out(`# cleared ${countOf(cleared.length, 'entry', 'entries')} of ${dim.name}${glob ? ` matching ${glob}` : ''}${by ? ` written by ${by}` : ''}`);
+    return 0;
+  }
+
+  /** `<dimension> gc` — delete the entries of files that no longer exist. */
+  private dimGc(dim: Dimension): number {
+    const orphans = dim.cache.orphans();
+    for (const e of orphans) {
+      dim.cache.remove(e.file);
+      this.out(`removed ${e.file}`);
+    }
+    this.out(`# ${countOf(orphans.length, 'entry', 'entries')} of deleted files removed from ${dim.name}`);
+    return 0;
+  }
+
+  /**
+   * `dimension` — this agent's dimensions, each by its id: what it covers, the
+   * folder of its cache, its counts. `dimension <dim-id> <verb> …` — one of them,
+   * reached by its id like every block, then its verb.
+   */
+  private dimension(args: string[]): number {
+    const dimensions = this.dimensions();
+    const [id, ...rest] = args;
+    if (id) {
+      const dim = dimensions.find(d => d.block.id === id);
+      if (dim) return this.dimensionVerb(dim, rest);
+      const known = dimensions.map(d => `${d.block.id} (${d.name})`).join(', ') || 'none';
+      return this.fail(2, `no dimension \`${id}\` in this agent — its dimensions: ${known}; list them: ${this.cmd} dimension`);
+    }
+    if (dimensions.length === 0) this.out('# this agent has no dimensions');
+    for (const d of dimensions) {
+      this.out(`${d.block.id}  ${d.name}  ${d.cache.defhash}  — files: ${d.block.globs.join(' ')} — ${this.dimEntries(d).summary}  — read: ${d.cmd} read <file>`);
+    }
+    return 0;
+  }
 }
 
 /**
@@ -1125,12 +1399,37 @@ function writeFields(args: string[]): { add: boolean; pairs: string[] } | null {
   return null;
 }
 
+/** A dimension of this agent: its block, its AS template, its cache. */
+interface Dimension {
+  block: DimensionBlock;
+  name: string;
+  /** The command that reaches it: `<apx> dimension <dim-id>`. */
+  cmd: string;
+  template: TemplateBlock | null;
+  cache: DimensionCache;
+}
+
 interface Store {
   block: StoreBlock;
   name: string;
   key: string | null;
   location: string;
   path: string;
+}
+
+/** `1 entry`, `3 entries`. */
+function countOf(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+/** A contract's issues on one line — null when there are none. */
+function issuesText(issues: ReturnType<typeof validateRecord>): string | null {
+  return issues.length > 0 ? formatIssues(issues).replace(/\n/g, '; ') : null;
+}
+
+/** Why a value cannot be checked: what holds it is typed with a template this agent was not compiled with. */
+function notCompiled(what: string, template: string): string {
+  return `\`${what}\` is shaped as \`${template}\`, a template not compiled into this agent`;
 }
 
 function kindRank(kind: string): number {

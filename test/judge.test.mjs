@@ -168,6 +168,32 @@ try {
     const twins = loadJudgeRules({ libraryRoot: twin, sharedLibraries: [], userRoot: '' }).filter(r => r.template.name === 'judge-do-line');
     assert.equal(twins.length, 2, 'both the project and the builtin judge-do-line are loaded');
     assert.notEqual(twins[0].id, twins[1].id, 'two rules of the same name have distinct ids');
+
+    // A BODY must start with a keyword a body line is stored under: block metadata judges nothing,
+    // and a form of another keyword (NEVER is ALWAYS at -1) names the keyword its lines are stored under.
+    const bodyRule = (dir, body, tags = '#judge') => {
+      write(join(dir, 'templates', 'body-rule.ap'), [
+        'EXPORT TEMPLATE body-rule:', '    ABOUT  a rule on some lines', `    APPLIES   ${tags}`, '    SLOTS:',
+        '        x: TEXT  "the line"', '            SHOULD  be short', '    BODY:', `        ${body}`, '',
+      ]);
+      return () => loadJudgeRules({ libraryRoot: dir, sharedLibraries: [], userRoot: '' }).find(r => r.template.name === 'body-rule');
+    };
+    for (const keyword of ['ABOUT', 'APPLIES', 'EXPERTISE', 'FOR', 'EACH', 'TYPE', 'LASTS', 'KEY', 'AS', 'CONTEXT', 'ELSE']) {
+      for (const tags of ['#judge', '#judge #agent']) {
+        assert.throws(bodyRule(join(root, `body-${keyword}-${tags.length}`), `${keyword} {x}`, tags),
+          new RegExp(`body-rule.*BODY starts with \`${keyword}\`, which never starts a body line`), `BODY ${keyword} (${tags}) is a load error`);
+      }
+    }
+    for (const [keyword, stored] of [['NEVER', 'ALWAYS'], ['MUST-NOT', 'MUST'], ['SHOULD-NOT', 'SHOULD'], ['!MUST', 'MUST'], ['MUST!', 'MUST'],
+      ['IF!', 'IF'], ['UNTIL*', 'UNTIL'], ['ON-INVOKE', 'WHEN'], ['SESSION', 'VAR']]) {
+      assert.throws(bodyRule(join(root, `body-${keyword.replace(/[!*]/g, '_')}`), `${keyword} {x}`, '#judge #agent'),
+        new RegExp(`body-rule.*BODY starts with \`${keyword.replace(/[!*]/g, '\\$&')}\`, but lines written .* are stored under \`${stored}\` — start the BODY with \`${stored}\``),
+        `BODY ${keyword} points to ${stored}`);
+    }
+    for (const keyword of ['DO', 'ASK', 'COMPUTE', 'MUST', 'ALWAYS', 'SHOULD', 'MAY', 'MEM', 'WITH', 'RUN', 'VAR', 'IF', 'UNTIL', 'WHEN', 'STEP', 'PARALLEL', 'IN']) {
+      assert.equal(bodyRule(join(root, `body-ok-${keyword}`), `${keyword} {x}`)().primitive, keyword, `BODY ${keyword} names its lines`);
+    }
+    assert.equal(bodyRule(join(root, 'body-ok-line'), '{x}', '#judge #agent')().primitive, null, 'a scoped rule may lay out a slot alone');
   }
 
   // --- the lock: a decision without a p in 0..1 is a load error naming its key ---
@@ -838,6 +864,93 @@ try {
     } finally {
       globalThis.fetch = prevFetch;
       if (prevKey === undefined) delete process.env.TYPESAFE_API_KEY; else process.env.TYPESAFE_API_KEY = prevKey;
+    }
+  }
+
+  // --- a DIMENSION — a library's, or one in an agent's body: its rule lines are judged at their own file:line, its FOR/EACH/AS never ---
+  {
+    const dproj = join(root, 'dim-proj');
+    write(join(dproj, 'agent-pack.config.mjs'), [
+      'export default {', "  libraryRoot: 'library',", "  agentsDir: 'agents',", "  adapters: ['claude-code'],",
+      "  judge: { adapter: { type: 'judge', name: 'fake', ask: (...a) => globalThis.__dimAsk(...a) } },", '};', '',
+    ]);
+    // A test-only rule on the MUST lines the agent keeps itself — a dimension's rules among them.
+    write(join(dproj, 'library', 'templates', 'dim-rule.ap'), [
+      'EXPORT TEMPLATE dim-rule:', '    ABOUT  test rule on MUST lines', '    APPLIES   #judge #agent', '    SLOTS:',
+      '        rule: TEXT  "a rule the agent keeps"', '            SHOULD  name one thing to do', '    BODY:', '        MUST {rule}', '',
+    ]);
+    write(join(dproj, 'library', 'templates', 'pseudo-steps.ap'), [
+      'EXPORT TEMPLATE pseudo-steps:', '    ABOUT  the steps of one function', '    SLOTS:',
+      '        name: TEXT "the function"', '        steps: TEXT "what it does, step by step"', '    BODY:', '        {name}: {steps}', '',
+    ]);
+    write(join(dproj, 'library', 'templates', 'one-unit.ap'), [
+      'EXPORT TEMPLATE one-unit:', '    ABOUT  what to translate', '    SLOTS:', '        what: TEXT "a function"', '',
+    ]);
+    const dimLines = (name, each, rule) => [
+      'IMPORT pseudo-steps FROM @main.templates', 'IMPORT one-unit FROM @main.templates', '',   // 1-3
+      `EXPORT DIMENSION ${name}:`,                                                               // 4
+      '    ABOUT  what each function does, step by step',                                        // 5
+      '    FOR    src/**/*.py',                                                                   // 6
+      `    EACH   ${each}`,                                                                       // 7
+      '    AS     pseudo-steps',                                                                  // 8
+      `    MUST   ${rule}`,                                                                       // 9
+      '',
+    ];
+    // EACH as a text, and EACH naming a template (the block then keeps only its ref).
+    const textDim = write(join(dproj, 'library', 'dimensions', 'pseudocode.ap'), dimLines('pseudocode', 'function', 'write one step per decision'));
+    const refDim = write(join(dproj, 'library', 'dimensions', 'units.ap'), dimLines('units', 'one-unit', 'write one step per branch'));
+    const coder = write(join(dproj, 'agents', 'standalone', 'coder.ap'), [
+      'IMPORT pseudocode FROM @main.dimensions', 'IMPORT units FROM @main.dimensions', 'IMPORT pseudo-steps FROM @main.templates', '',   // 1-4
+      'EXPORT AGENT coder AS coder-role:', '    ABOUT    coder', '    MANDATE  understand the code', '',                                 // 5-8
+      '    DIMENSION helpers:',                                                                                                         // 9
+      '        ABOUT    the helpers each module offers',                                                                                // 10
+      '        FOR      src/**/*.py',                                                                                                   // 11
+      '        EACH     exported function',                                                                                             // 12
+      '        AS       pseudo-steps',                                                                                                  // 13
+      '        MUST     write one entry per helper',                                                                                    // 14
+      '',
+      '    WITH pseudocode, units, helpers:',                                                                                          // 16
+      '        SHOULD   read them before changing a function',                                                                          // 17
+      '',
+      'ROLE coder-role:', '    ABOUT   a reader of code', '    ALWAYS  read before you change', '',
+    ]);
+    const dimAsks = [];
+    globalThis.__dimAsk = async (state, checks, model) => {
+      dimAsks.push({ state: lineOf(state), ids: checks.map(c => c.id) });
+      const fails = id => /^dim-rule\./.test(id);
+      return { model: model ?? 'fake-1.0', answers: Object.fromEntries(checks.map(c => [c.id, fails(c.id) ? 0.1 : 0.95])) };
+    };
+    process.chdir(dproj);
+    try {
+      const dconfig = await loadConfig([]);
+      const lib = join(dproj, 'library');
+      const run = openJudgeRun(dconfig, dproj);
+      await bundleAgentObject({
+        agentName: 'coder', agentFile: join(dproj, 'agents', 'standalone', 'coder.ap'), agentDir: join(dproj, 'agents', 'standalone'),
+        libraryRoot: lib, libraryRoots: [lib], libraries: { '@main': lib }, bundleConfig: { runtime: false }, judge: run,
+      });
+      assert.deepEqual(run.warnings.filter(w => w.code.startsWith('dim-rule.')).map(w => `${w.file}:${w.line}:${w.col} ${w.severity} [${w.code}]`).sort(), [
+        `${textDim}:9:5 warning [dim-rule.rule.1]`,
+        `${refDim}:9:5 warning [dim-rule.rule.1]`,
+        `${coder}:14:9 warning [dim-rule.rule.1]`,
+      ].sort(), 'each dimension\'s MUST line is judged, at its own file:line — in the agent\'s body too');
+      const ruleStates = dimAsks.filter(a => a.ids.some(id => id.startsWith('dim-rule.'))).map(a => a.state).sort();
+      assert.deepEqual(ruleStates, ['write one entry per helper', 'write one step per branch', 'write one step per decision'], 'the MUST rule asks only the dimensions\' rule lines');
+      const asked = new Set(dimAsks.map(a => a.state));
+      for (const text of ['src/**/*.py', 'function', 'one-unit', 'pseudo-steps', 'what each function does, step by step']) {
+        assert.ok(!asked.has(text), `a dimension's ${text} line is never judged: ${[...asked].join(' | ')}`);
+      }
+      const atMeta = run.warnings.filter(w => ((w.file === textDim || w.file === refDim) && w.line !== 9) || (w.file === coder && w.line >= 9 && w.line <= 13));
+      assert.deepEqual(atMeta, [], 'no rule diagnostic lands on a FOR, EACH, AS or ABOUT line');
+      finishJudgeRun(run, { prune: false });
+      // A dimension declared in an agent's body is that agent's file: its verdicts land in the agent's unit.
+      const coderUnit = JSON.parse(readFileSync(join(dproj, '.agent-pack', 'units', 'agents', 'standalone', 'coder.ap.json'), 'utf-8'));
+      const line14 = coderUnit.diagnostics.find(d => d.line === 14 && d.code === 'dim-rule.rule.1');
+      assert.ok(line14, `coder.ap.json holds the line-14 diagnostic: ${JSON.stringify(coderUnit.diagnostics)}`);
+      assert.equal(coderUnit.verdicts[line14.data.key]?.p, 0.1, 'and its verdict');
+    } finally {
+      process.chdir(proj);
+      delete globalThis.__dimAsk;
     }
   }
 

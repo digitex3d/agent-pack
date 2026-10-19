@@ -47,7 +47,7 @@ const fakeJudge = {
     return { model: 'fake-1.0', answers: { [checks[0].id]: reply.p } };
   },
 };
-const CHECKS = { adapter: fakeJudge, threshold: 0.7, rounds: 3 };
+const CHECKS = { adapter: fakeJudge, threshold: 0.7 };
 
 const TAIL = [
   'ROLE a-role:', '    ABOUT   a worker', '    ALWAYS  do the work', '',
@@ -73,7 +73,7 @@ const stderrOf = async run => {
   try { return { result: await run(), stderr: seen.join('\n') }; } finally { console.error = prior; }
 };
 
-const BUILD = { builtAt: '', agentPackVersion: '', hash: '', tabeli: TABELI_ENGINE, checks: { adapter: 'fake', threshold: 0.7, rounds: 3 } };
+const BUILD = { builtAt: '', agentPackVersion: '', hash: '', tabeli: TABELI_ENGINE, checks: { adapter: 'fake', threshold: 0.7 } };
 const project = join(tmp, 'project');
 /** One run of an agent's apx engine, with the fake judge loaded by name. */
 const apx = async (doc, agent, ...args) => {
@@ -122,15 +122,24 @@ try {
     assert.ok(views[2].out.includes(`  ${sealedId}  IF!!  (sealed)`), views[2].out);
   }
 
-  // --- UNTIL!!: repeat until the gate opens, at most the configured rounds ---
+  // --- UNTIL!!: repeat until the gate opens, at most the rounds its head writes — MAX <n> ---
   {
-    const { body, structure } = await compile(['    VAR draft', '    UNTIL!! {{draft}} reads as plain English:', '        DO  rewrite the draft INTO draft'], { checks: { ...CHECKS, rounds: 4 } });
+    const { body, structure } = await compile(['    VAR draft', '    UNTIL!! {{draft}} reads as plain English MAX 4:', '        DO  rewrite the draft INTO draft']);
     const id = idOf(structure);
     assert.ok(body.includes(`Repeat until \`node .agent-pack/apx/a.apx check ${id}\` answers open — run it after each round, at most 4 rounds; at the limit, stop and report that the gate stayed closed:`), body);
     assert.ok(!body.includes('plain English'));
-    const untilOne = await compile(['    VAR draft', '    UNTIL! {{draft}} reads well:', '        DO  rewrite it INTO draft']);
+    assert.equal(structure.meta.checks[id].rounds, 4, 'the limit travels with the check');
+    assert.ok(!body.includes('MAX 4'), 'MAX is the head\'s, never part of the condition');
+    const untilOne = await compile(['    VAR draft', '    UNTIL! {{draft}} reads well MAX 3:', '        DO  rewrite it INTO draft']);
     assert.ok(untilOne.body.includes('reads well — after each round run `node .agent-pack/apx/a.apx check'), untilOne.body);
     assert.ok(untilOne.body.includes('at most 3 rounds'), untilOne.body);
+    // THE rule of MAX: a loop someone else ends writes it; the agent's own loop and an IF take none
+    assert.match(await errorsOf(['    VAR draft', '    UNTIL!! {{draft}} reads as plain English:', '        DO  rewrite it INTO draft']), /UNTIL!! needs its round limit — write `UNTIL!! <condition> MAX <n>:`/);
+    assert.match(await errorsOf(['    VAR draft', '    UNTIL! {{draft}} reads well:', '        DO  rewrite it INTO draft']), /UNTIL! needs its round limit/);
+    assert.match(await errorsOf(['    VAR draft', '    UNTIL! {{draft}} reads well MAX 0:', '        DO  rewrite it INTO draft']), /UNTIL!: MAX takes a whole number of rounds, at least 1 — found `MAX 0`/);
+    assert.match(await errorsOf(['    VAR draft', '    UNTIL! {{draft}} reads well MAX many:', '        DO  rewrite it INTO draft']), /found `MAX many`/);
+    assert.match(await errorsOf(['    UNTIL the draft reads well MAX 3:', '        DO  rewrite it']), /UNTIL takes no MAX — the agent ends this loop; MAX bounds a loop a judge, a delegate or a program ends/);
+    assert.match(await errorsOf(['    VAR draft', '    IF! {{draft}} reads well MAX 3:', '        DO  ship it']), /IF! takes no MAX — only a loop has rounds/);
   }
 
   // --- what a checked condition must read, and how its question is built ---
@@ -181,7 +190,7 @@ try {
   {
     const doc = await docOf(['    VAR report', '    VAR notes', '    IF! {{report}} lists no failing test and {{notes}} agrees:', '        DO  ship']);
     const id = idOf(doc);
-    const until = await docOf(['    VAR draft', '    UNTIL!! {{draft}} reads as plain English:', '        DO  rewrite the draft INTO draft'], { name: 'u' });
+    const until = await docOf(['    VAR draft', '    UNTIL!! {{draft}} reads as plain English MAX 3:', '        DO  rewrite the draft INTO draft'], { name: 'u' });
     const uid = idOf(until);
     const prior = process.env[SESSION];
     const records = agent => queryTable(join(project, STATE_DIR, 'one', 'checks.tbl'), [`agent=${agent}`]);
@@ -251,6 +260,9 @@ try {
         ['closed', 'the gate stayed closed — p=0.3, below 0.7', 'round 2 of 3 — do the next round, then check again'],
         ['closed', 'the gate stayed closed — p=0.3, below 0.7', 'round limit reached (3 of 3): stop and report that the gate stayed closed'],
       ]);
+      // past the limit the loop was left: a later check of the same condition is a new loop — round 1 again, never "4 of 3"
+      r = await apx(until, 'u', 'check', uid);
+      assert.equal(r.lines[2], 'round 1 of 3 — do the next round, then check again', 'after the limit a new loop starts its own count');
       reply.p = 0.95;
       r = await apx(until, 'u', 'check', uid);
       assert.deepEqual([r.code, ...r.lines], [0, 'open', 'the gate opened (p=0.95)']);
@@ -261,7 +273,8 @@ try {
       r = await apx(until, 'u', 'check', uid);
       assert.equal(r.lines[1], 'the gate stayed closed — a variable it reads is empty');
       for (const out of [...rounds, r].map(x => x.out)) assert.ok(!/plain English|draft/.test(out), `a sealed answer never quotes its condition: ${out}`);
-      assert.deepEqual(records('u').map(x => [x.round, x.outcome, x.level]), [['1', 'closed', '2'], ['2', 'closed', '2'], ['3', 'closed', '2'], ['4', 'open', '2'], ['1', 'closed', '2'], ['2', 'closed', '2']]);
+      // the rounds as recorded: three to the limit, then a new loop — its first closed, its open — then a loop closed twice
+      assert.deepEqual(records('u').map(x => [x.round, x.outcome, x.level]), [['1', 'closed', '2'], ['2', 'closed', '2'], ['3', 'closed', '2'], ['1', 'closed', '2'], ['2', 'open', '2'], ['1', 'closed', '2'], ['2', 'closed', '2']]);
     } finally {
       if (prior === undefined) delete process.env[SESSION]; else process.env[SESSION] = prior;
     }
@@ -331,7 +344,7 @@ try {
     assert.match(await stepErrors('lead'), /flows\.ap:9  IF!: a checked condition needs the step's agent: BY must name an agent/);
 
     // a checked condition at the flow's own level: not supported yet
-    flows(['    UNTIL!! {{report}} says clean:', '        STEP fix it:', '            BY builder', '            DO  fix the next failure']);
+    flows(['    UNTIL!! {{report}} says clean MAX 3:', '        STEP fix it:', '            BY builder', '            DO  fix the next failure']);
     assert.match(await stepErrors('lead'), /flows\.ap:7  UNTIL!! at a flow's own level is not supported yet — put it inside a STEP/);    // the routing of the team: no executable — IF! warns and reads as IF, IF!! fails
     const routing = lines => write(join(team, 'flows.ap'), ['IMPORT report FROM @main.vars', 'ABOUT  a crew', 'WHEN asked to ship:', ...lines, '',
       'FLOW ship:', '    STEP judge it:', '        BY builder', '        DO  hand it on']);

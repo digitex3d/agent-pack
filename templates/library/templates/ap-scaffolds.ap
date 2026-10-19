@@ -11,6 +11,7 @@ EXPORT TEMPLATE ap-statement:
       MUST   hand a condition to the judge with IF! / UNTIL! (agent sees it) or IF!! / UNTIL!! (sealed)
       MUST   make a checked condition read at least one variable — the judge sees only stored values
       MUST   hand a condition to a delegate with IF* / UNTIL*, to a program with IF** / UNTIL**
+      MUST   end every UNTIL someone else decides with its limit — `UNTIL!! <condition> MAX <n>:`; a plain UNTIL takes none
       MUST   never put a `!` and a star on one condition — a condition has one judge
       MUST   never write a round limit on a checked or starred UNTIL — the apx counts the rounds
       MUST   open `IN <store>:` to work on a store, `VAR <name>:` to assign a block's final outcome
@@ -220,7 +221,8 @@ EXPORT TEMPLATE ap-block-policy:
     importable?: ENUM[EXPORT]  "prefix EXPORT to import the policy cross-file; omit for local"
     policy-name: TEXT MAX_WORDS 1  "kebab-case policy name"
     about:       TEXT MAX_WORDS 15  "one-line description of what the policy governs"
-    applies?:    TEXT MAX_WORDS 8  "space-separated #tags, plus universal | team:<team> | agent:<agent> where it holds with no WITH; omit if none"
+    applies?:    TEXT MAX_WORDS 8  "space-separated #tags, plus where it holds with no WITH; omit if none"
+      MUST   name where it holds as universal, team:<team> or agent:<agent>
     rules:       LIST <ap-rule> >=1  "one ALWAYS / NEVER directive per line"
       MUST   use only ALWAYS / NEVER force — a policy admits no control flow and no triggers
   BODY:
@@ -261,6 +263,41 @@ EXPORT TEMPLATE ap-block-procedure:
         IF     the bug has no reproduction steps
           DO   move the card to Needs Clarification
         AS     bug-card
+
+EXPORT TEMPLATE ap-block-dimension:
+  ABOUT   scaffold for a DIMENSION — an answer implicit in source files, worked out once and kept by the apx
+  APPLIES #agent-pack #authoring #scaffold #block
+
+  SLOTS:
+    importable?:    ENUM[EXPORT]  "prefix EXPORT for a library dimensions/ folder; omit in the agent's file"
+      MUST   keep a dimension an agent's — in its file, or imported by an agent FROM @main.dimensions
+      MUST   never import a dimension into PROJECT.ap, a skill or a flows.ap
+    dimension-name: TEXT MAX_WORDS 1  "kebab-case dimension name — the apx reaches it by name, a WITH names it"
+      MUST   never name it after an apx verb (dims, get …) nor after a store of the same agent
+      MUST   name it in a `WITH <name>:` block of the agent, above the lines that read it — a dimension no WITH names applies nowhere (a warning)
+    about:          TEXT MAX_WORDS 15  "the question the dimension answers (ABOUT)"
+    globs:          TEXT MAX_WORDS 8  "space-separated globs of the files it answers for (FOR)"
+      MUST   write each glob from the project root — never absolute, never with `..`
+    each:           TEXT MAX_WORDS 6  "what to translate in each file (EACH) — function, class, file, prose, a template"
+    shape:          TEXT MAX_WORDS 1  "the value's template (AS) — a file gets a list of its instances, or none"
+      MUST   name a template with SLOTS, at no force level — the value is always checked
+    rules?:         LIST <ap-rule>  "force-level lines on how the value is produced; omit if none"
+      MUST   write ABOUT, FOR, EACH and AS once each — any other line fails the build
+      MUST   never add a WHEN (line or block), IF, ON-*, UNTIL, an action (DO, ASK, RUN …), MEM or WITH to a dimension — when to read it is the reader's WITH
+  BODY:
+    {importable} DIMENSION {dimension-name}:
+        ABOUT   {about}
+        FOR     {globs}
+        EACH    {each}
+        AS      {shape}
+        {rules}
+  EXAMPLE:
+    EXPORT DIMENSION pseudocode:
+        ABOUT   what each function does, step by step, in plain words
+        FOR     src/**/*.py
+        EACH    function
+        AS      pseudo-steps
+        MUST    write one step per decision the code takes
 
 EXPORT TEMPLATE ap-vars-line:
   ABOUT   one EXPORT VAR line of a library module — a constant, a SESSION hand-off or a private variable

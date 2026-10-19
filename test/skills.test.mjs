@@ -235,7 +235,7 @@ try {
 
     // a name not imported is an unknown name
     user(['WITH xlsx:', '    IF the input is a sheet:', '        MUST read it']);
-    await assert.rejects(() => bundleAndEmit('user', config, claudeCodeAdapter(), ctx), /unknown skill or policy `xlsx`/);
+    await assert.rejects(() => bundleAndEmit('user', config, claudeCodeAdapter(), ctx), /unknown skill, policy or dimension `xlsx`/);
     // a skill not used has no answer to shape
     user(['!WITH pdf AS report:', '    IF the input is a scan:', '        MUST run OCR']);
     await assert.rejects(() => bundleAndEmit('user', config, claudeCodeAdapter(), ctx), /a skill not used has no answer to shape/);
@@ -288,7 +288,7 @@ try {
     // an unknown item of an imported procedure is reported where it was written
     write(join(tmp, 'library', 'procedures', 'broken.ap'), ['EXPORT PROCEDURE broken:', '    ABOUT  broken', '    WITH nosuch:', '        DO  work']);
     project(['ABOUT  project rules', 'IMPORT broken FROM @main.procedures', '', 'WHEN asked:', '  RUN broken']);
-    await assert.rejects(() => bundleStandaloneToString(join(tmp, 'PROJECT.ap'), config), /broken\.ap:3  unknown skill or policy `nosuch`/);
+    await assert.rejects(() => bundleStandaloneToString(join(tmp, 'PROJECT.ap'), config), /broken\.ap:3  unknown skill, policy or dimension `nosuch`/);
     rmSync(join(tmp, 'library', 'procedures', 'broken.ap'));
     // an AS naming no template fails here too
     project(['ABOUT  project rules', 'IMPORT pdf FROM @harness.skills', '', 'PROCEDURE p:', '  ABOUT  p', '  WITH pdf AS nope:', '    DO  read']);

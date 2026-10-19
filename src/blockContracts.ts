@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import type { Keyword } from './lexer.js';
+import { DIMENSION_LINES, type Keyword } from './lexer.js';
 import { ACTION_VERBS } from './actionVerbs.js';
 import { getFamilyBases } from './forceLevelConfig.js';
+import { VERBATIM_REGIONS } from './shapeCompiler.js';
 
 /**
  * The force-level families (MUST, ALWAYS/NEVER, SHOULD, MAY, …) a step admits,
@@ -36,6 +37,12 @@ const AGENT_FAMILIES = familiesWithout(AGENT_EXCLUDED);
  */
 const VAR_EXCLUDED: Partial<Record<Keyword, string>> = {
   AS: "a VAR block's type sits on its head — `VAR <name> AS <template>:`",
+};
+
+/** What a DIMENSION's rules leave out: they say how its value is produced, not what the agent remembers or loads. */
+const DIMENSION_EXCLUDED: Partial<Record<Keyword, string>> = {
+  MEM: "a dimension's rules say how its value is produced; MEM goes in an agent, a role or a procedure",
+  WITH: "a dimension's rules say how its value is produced; WITH goes in an agent, a role or a procedure",
 };
 
 /** Every force-level family base, less those `excluded` names. */
@@ -78,6 +85,12 @@ export interface BlockContract {
    * "not allowed" error, in this block and in its branches.
    */
   excluded?: Partial<Record<Keyword, string>>;
+  /**
+   * The regions it holds — nested blocks of the author's text (a store's
+   * SLOTS: VERBATIM_REGIONS), never read as lines. Any other nested block opens on a line the
+   * contract must allow, and its keyword lines are held to the contract too.
+   */
+  regions?: readonly string[];
 }
 
 /**
@@ -144,6 +157,22 @@ export const BLOCK_CONTRACTS: Record<string, BlockContract> = {
     allows: ['ABOUT', 'APPLIES', 'TYPE', 'LASTS', 'KEY'] as const,
     requiresAll: ['TYPE'] as const,
     unique: ['ABOUT', 'TYPE', 'LASTS', 'KEY'] as const,
+    regions: VERBATIM_REGIONS,
+  },
+  // A dimension is an answer about the code an agent works out once and the apx
+  // keeps: ABOUT the question it answers, FOR the files it covers, EACH what to
+  // translate in a file, AS the template its value is a list of. When it is
+  // worth reading is the reader's to say — a WITH names it (src/withUse.ts).
+  // Its rules are the force-level families — AS among them as the value's
+  // shape, which takes no level (the compiler's check); MEM and WITH are an
+  // agent's, not a rule of how a value is produced. Nothing else: no WHEN, no
+  // action, no prose line, no nested block (IF, UNTIL…) — checked on the parsed
+  // block, at any depth.
+  DIMENSION: {
+    allows: ['ABOUT', ...DIMENSION_LINES, ...familiesWithout(DIMENSION_EXCLUDED)],
+    excluded: DIMENSION_EXCLUDED,
+    requiresAll: ['ABOUT', ...DIMENSION_LINES, 'AS'] as const,
+    unique: ['ABOUT', ...DIMENSION_LINES, 'AS'] as const,
   },
   // First-class `EXPORT AGENT <name> AS <role>:` block. `AS` here is a
   // *signature* argument on the header line (the role binding) — NOT the same

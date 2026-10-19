@@ -86,7 +86,7 @@ try {
       'COMPUTE  group {{lines}} by VAT rate INTO totals',
       'IF** {{totals}} differ from {{document_total}}:',
       '    DO  write to the supplier',
-      'UNTIL* {{risks}} are all reviewed:',
+      'UNTIL* {{risks}} are all reviewed MAX 3:',
       '    DO  review the next risk',
     ]), [], 'ASK, COMPUTE, INTO, BY and starred heads lint clean');
     assert.deepEqual(lint(['IF!* {{totals}} is odd:', '    DO  x']), [
@@ -107,7 +107,7 @@ try {
       'COMPUTE  round the totals',
       'IF** {{totals}} differ from {{document_total}}:',
       '    DO  write to the supplier',
-      'UNTIL* {{risks}} are all reviewed:',
+      'UNTIL* {{risks}} are all reviewed MAX 3:',
       '    DO  review the next risk',
     ));
     const opts = { agentName: 'clerk', agentFile: file, agentDir: dir, libraryRoot: lib, libraryRoots: [lib], libraries: { '@main': lib }, bundleConfig: { runtime: false } };

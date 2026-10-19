@@ -110,7 +110,7 @@ items on the left more.
 ## 3. Primitives
 
 The shared vocabulary of the paradigm. Each primitive has a stable
-identifier (`D1`–`D42`) for external citation as `Agent Pack §D<n>`.
+identifier (`D1`–`D43`) for external citation as `Agent Pack §D<n>`.
 These terms have precise meaning and are not interchangeable.
 
 - **D1 — agent** — an executable unit defined by a mission (what it
@@ -210,7 +210,8 @@ These terms have precise meaning and are not interchangeable.
   type (text with a word limit or a pattern, a number in a range, one
   value of an enum, one or a list of another template), an exact layout
   and an example. A template is the unit of contract between agents,
-  steps and programs.
+  steps and programs, and the shape of a dimension's value (D43).
+  (Amended in 1.2.)
 
 - **D16 — procedure** — a reusable sequence of directives with control
   flow (D27), invoked by name with `RUN` from an agent, a role, another
@@ -230,7 +231,8 @@ These terms have precise meaning and are not interchangeable.
   lasts. The language defines the structure; the backing is chosen
   apart, and the agent reads and writes only through the executable
   (D20), inside `IN <store>:`. A store is never named like a verb of the
-  executable. (Amended in 1.2.)
+  executable, nor like a dimension (D43) of the same agent. (Amended in
+  1.2.)
 
 - **D19 — block id** — the stable identity of every block: a kind prefix
   and a hash of its kind, namespace and name (e.g. `tpl-d82fd6de`),
@@ -244,8 +246,8 @@ These terms have precise meaning and are not interchangeable.
   it holds — each kind defines how it is used — then reads only the
   blocks its task needs, following ids; every reference it prints
   carries the command that fetches it. The apx is also the bridge to the
-  agent's stores (D18) and to the delegates and programs that carry out
-  its executed pieces (D42).
+  agent's stores (D18), to its dimensions (D43), and to the delegates and
+  programs that carry out its executed pieces (D42). (Amended in 1.2.)
 
 - **D21 — memory (`MEM`)** — the directive that tells an agent to
   remember an event, to act on it directly the next time: `MEM <event>`,
@@ -462,10 +464,13 @@ These terms have precise meaning and are not interchangeable.
   sends the whole value with the template's fields as guidance in the
   question. The question is built from the source at compile time, kept
   in the executable and asked through `check <cnd-id>`. The judge is
-  configured under the key `checks` — its adapter, a threshold (0.7 by
-  default) and a number of rounds (3 by default); without it, a `!`
-  condition falls back to an unmarked one with a warning and a `!!`
-  condition fails the compilation. In doubt the condition is closed: a
+  configured under the key `checks` — its adapter and a threshold (0.7
+  by default); without it, a `!` condition falls back to an unmarked one
+  with a warning and a `!!` condition fails the compilation. A checked
+  `UNTIL` writes how many rounds it runs at most — `UNTIL!! <condition>
+  MAX <n>:`, required, a whole number of at least 1 — as every loop
+  someone other than the agent ends does (D40); a plain `UNTIL` and an
+  `IF` take no `MAX`. In doubt the condition is closed: a
   probability below the threshold, an uncertain answer, an unreachable
   judge, a state too large or an empty variable all close it, and a
   checked `UNTIL` stops after its last round with the condition closed.
@@ -527,10 +532,50 @@ These terms have precise meaning and are not interchangeable.
   programs are reported, never deleted. A program that refuses stops the
   procedure; one that times out leaves the piece to the agent, which says
   so; one that is broken or fails its tests is reported. A starred
-  `UNTIL` asks its condition after each round, at most the rounds set
-  under `checks` (D39), and at the limit stops and reports that the
-  condition never held. Every executed piece is recorded in the session.
+  `UNTIL` asks its condition after each round, at most the rounds its
+  head writes (`MAX <n>`, required — D39), and at the limit stops and
+  reports that the condition never held; a round after the limit is a
+  new loop. Every executed piece is recorded in the session.
   (Added in 1.2.)
+
+- **D43 — dimension** — an answer implicit in a source file — its
+  pseudocode, its patterns, a description — that one agent works out
+  once and the executable (D20) keeps, so other agents read it instead
+  of reasoning again. Declared like a store: `ABOUT`, the question it
+  answers; `FOR`, the files it covers, as one or more globs relative to
+  the project root, never absolute nor climbing out with `..`; `EACH`,
+  what to translate inside a file, in prose or as the name of a
+  template, which is then part of the dimension's content; `AS`, a
+  template (D15) with slots, at no force level: the value for a file is
+  a list of its instances, or the literal `none` when there is nothing
+  to report; and rules at a force level (D11) on how the value is
+  produced. When it is worth reading is the reader's to say, never the
+  dimension's: a `WITH` block (D2, D23) names it above the lines that
+  read it, as it names a policy or a skill, and `!WITH` keeps lines out
+  of it. A dimension has no `APPLIES` line (D31), so no perimeter holds
+  it everywhere; one that no `WITH` names draws a warning — the
+  executable serves it all the same, but no line reads it — where a
+  policy named nowhere fails the compilation. A moment the judge decides
+  is a `WHEN!` (D26, D39) with the `WITH` beneath it.
+  Whether the answer read suffices or the code is needed too is the
+  agent's call. `ABOUT`, `FOR`, `EACH` and `AS` are each required,
+  once. The body holds nothing else: a nested block — other
+  than a rule's own text beneath it — or an action fails the
+  compilation, and so does a `WHEN`. A dimension belongs to an agent
+  and is reached only through that agent's executable: imported outside
+  an agent's own compilation, it fails the build. The executable never
+  reasons: it keeps each answer by the dimension's content — its lines
+  and the content of the templates it names, never its name or theirs —
+  and by the file. An answer depends on its file, on the files its
+  writer declares, and on every existing project file its value names
+  literally; it is served while all of them are unchanged — the same
+  content, line endings, trailing whitespace and blank lines aside,
+  indentation counting. The executable refuses a value its template
+  does not accept and never overwrites an answer still fresh. Unlike a
+  program (D42), the answers of a dimension that no longer exists are
+  deleted when the agents are rebuilt: they can be worked out again. The
+  executable reaches a dimension by its id, as every block, after its
+  verb `dimension`. (Added in 1.2.)
 
 ## 4. Citation
 

@@ -8,13 +8,13 @@ import { projectAgentFiles } from '../agentDiscovery.js';
 import { Config, BundleConfig, LintConfig, libraryRoots as libraryRootsOf, librariesAliasMap } from '../config.js';
 import { BundleContext, RoleEntry } from '../dispatch/index.js';
 import { processImports, resolveTargetWith, SKILL_IMPORT_HINT } from '../dispatch/imports.js';
-import { unknownWithMessage, scanWith, unappliedBlocks, unappliedMessage, withScopeLine, type WithProblem } from '../withUse.js';
+import { unknownWithMessage, scanWith, unappliedBlocks, unappliedIssue, withScopeLine, type WithProblem } from '../withUse.js';
 import { resolveBundleDefaults, resolveTeamShared } from '../bundleDefaults.js';
 import { resolveTeamMembership } from '../services/teamMembership.js';
 import { findAgentFiles, readAgentFile, standaloneDir, agentNameOf, teamRootForAgentFile, TEAM_FLOWS_FILE } from '../services/teamMetadata.js';
 import { askTargetErrors, executorErrors, usesPrograms, WRITE_PROGRAM, type AgentIndexEntry } from '../executor.js';
 import { BUILTIN_AGENTS_DIR, resolveDelegateConfig, type DelegateConfig } from '../config.js';
-import { formatErrors, LintError, checkVocabulary, lineOfName, checkedHeadIssues } from '../lint.js';
+import { formatErrors, LintError, checkVocabulary, lineOfName, checkedHeadIssues, dimensionBlockErrors } from '../lint.js';
 import { extractInlineDefinitions } from '../dispatch/inlineBlocks.js';
 import { renderTree } from '../bundlers/renderTree.js';
 import { renderEnumLegend } from '../enumPrimitives.js';
@@ -29,13 +29,14 @@ import { STRATEGIES, strategyFor, type DefinitionStrategy, type Definition } fro
 import { parseNamespace } from '../namespace.js';
 import { DocumentBuilder } from '../apdoc/builder.js';
 import type { ApDocument } from '../apdoc/document.js';
-import type { StoreBlock } from '../apdoc/blocks.js';
+import type { StoreBlock, DimensionBlock, TemplateBlock } from '../apdoc/blocks.js';
 import { SourceRegistry } from '../sources.js';
 import { judgeDocument, type JudgeRun } from '../judge/phase.js';
 import type { ChecksConfig } from '../judge/types.js';
 import { importedVariables, visibleIn } from '../exportedVars.js';
 import { readsOf, constantOf, parseVarLine, splitInto, takesInto } from '../vars.js';
 import { APX_VERBS } from '../apx/verbs.js';
+import { refName } from '../../adapters/md/phrases.js';
 
 
 // --- Public interfaces ---
@@ -175,12 +176,16 @@ function withProblemErrors(problems: (WithProblem & { path: string; line?: numbe
 }
 
 /**
- * The policies and skills the compilation imports that hold nowhere — no
- * perimeter on their APPLIES line and no positive WITH naming them: an error
- * each, so a rule or a skill never sits silently unused (src/withUse.ts).
+ * The policies and skills the compilation imports — and an agent's dimensions —
+ * that hold nowhere: no perimeter on their APPLIES line and no positive WITH
+ * naming them. An error for a policy or a skill, so a rule never sits silently
+ * unused; a warning for a dimension, served by the apx all the same
+ * (src/withUse.ts). A dimension of a compilation that is no agent's is
+ * strayDimensionErrors's: never reported twice.
  */
-function unappliedErrors(ctx: BundleContext, named: ReadonlySet<string>): LintError[] {
-  return unappliedBlocks([...ctx.policies, ...ctx.skills], named).map(b => ({ file: b.path, line: lineOfName(b.path, b.name), message: unappliedMessage(b) }));
+function unappliedErrors(ctx: BundleContext, named: ReadonlySet<string>, dimensions = false): LintError[] {
+  const blocks = [...ctx.policies, ...ctx.skills, ...(dimensions ? ctx.dimensions : [])];
+  return unappliedBlocks(blocks, named).map(b => ({ file: b.path, line: lineOfName(b.path, b.name), ...unappliedIssue(b) }));
 }
 
 /**
@@ -231,6 +236,7 @@ export function makeBundleContext(opts: MakeContextOpts): BundleContext {
     procedures: [],
     flows: [],
     stores: [],
+    dimensions: [],
     skills: [],
     variables: [],
     lintErrors: [],
@@ -306,7 +312,7 @@ function variableUseErrors(
   ctx: BundleContext, sourcePath: string, seen: (file: string) => { constants: Record<string, string>; variables: Set<string> },
   sessionRead: (file: string) => string | null,
 ): LintError[] {
-  const kinds = [ctx.policies, ctx.roles, ctx.templates, ctx.procedures, ctx.flows, ctx.stores] as { path: string }[][];
+  const kinds = [ctx.policies, ctx.roles, ctx.templates, ctx.procedures, ctx.flows, ctx.stores, ctx.dimensions] as { path: string }[][];
   const files = new Set([sourcePath, ...kinds.flat().map(d => d.path)]);
   const errors: LintError[] = [];
   for (const file of files) {
@@ -389,12 +395,69 @@ function storeErrors(doc: ApDocument, ctx: BundleContext, agentFilePath: string)
     const key = store.storeKey && !store.slots.some(sl => sl.name === store.storeKey)
       ? [{ file, line: lineOfName(file, store.storeKey), message: `STORE ${store.name}: KEY \`${store.storeKey}\` is none of its slots (${store.slots.map(sl => sl.name).join(', ')})` }]
       : [];
-    // The apx reads its first word as a verb before a store name: a store named so is unreachable.
-    const verb = (APX_VERBS as readonly string[]).includes(store.name)
-      ? [{ file, line: lineOfName(file, store.name), message: `STORE ${store.name}: \`${store.name}\` is a verb of the apx (${APX_VERBS.join(', ')}) — give the store another name` }]
-      : [];
-    return [...verb, ...key, ...Object.entries(p.rejects).map(([slot, why]) => ({ file, line: lineOfName(file, slot), message: `STORE ${store.name}: ${why}` }))];
+    return [...key, ...Object.entries(p.rejects).map(([slot, why]) => ({ file, line: lineOfName(file, slot), message: `STORE ${store.name}: ${why}` }))];
   });
+}
+
+/** The kinds the apx reaches by their name, where its verbs stand (`<store> <verb>`) — a dimension is reached by its id, after `dimension`. */
+const APX_NAMED_KINDS = ['store'] as const;
+
+/**
+ * The apx reads its first word as a verb, then as the name of a store: a store
+ * named like a verb is unreachable, and two sharing a name reach only the first.
+ */
+function apxNameErrors(doc: ApDocument, ctx: BundleContext, agentFilePath: string): LintError[] {
+  const taken = new Map<string, string>();
+  return APX_NAMED_KINDS.flatMap(kind => doc.byKind(kind).flatMap(block => {
+    const file = strategyFor(kind)!.getEntries(ctx).find(d => d.name === block.name)?.path ?? agentFilePath;
+    const at = { file, line: lineOfName(file, block.name) };
+    const head = `${kind.toUpperCase()} ${block.name}: \`${block.name}\``;
+    const errors: LintError[] = [];
+    if ((APX_VERBS as readonly string[]).includes(block.name)) errors.push({ ...at, message: `${head} is a verb of the apx (${APX_VERBS.join(', ')}) — give the ${kind} another name` });
+    const other = taken.get(block.name);
+    if (other) errors.push({ ...at, message: `${head} names a ${other} of this agent too — the apx reaches both by name: give one of them another name` });
+    else taken.set(block.name, kind);
+    return errors;
+  }));
+}
+
+/**
+ * A dimension keeps its contract wherever it is written — in a library file, in
+ * the agent's own file, exported or not: ABOUT, FOR, EACH and AS once each, its
+ * rules, nothing else; FOR globs from the project root (dimensionBlockErrors,
+ * the lint's own check). Its AS names a template with SLOTS — its value is a
+ * list of instances — at no level.
+ */
+function dimensionErrors(doc: ApDocument, ctx: BundleContext): LintError[] {
+  const files = [...new Set(ctx.dimensions.map(d => d.path))].filter(file => existsSync(file));
+  return [...files.flatMap(file => dimensionBlockErrors(file, ctx.sources.tree(file).blocks)), ...(doc.byKind('dimension') as DimensionBlock[]).flatMap(dim => {
+    const file = ctx.dimensions.find(d => d.name === dim.name)?.path;
+    if (!file || !existsSync(file)) return [];
+    const at = (name: string) => lineOfName(file, name);
+    const errors: LintError[] = [];
+    const shape = dim.shape;
+    if (shape && shape.force !== 0) {
+      errors.push({ file, line: at(refName(shape.ref)), message: `DIMENSION ${dim.name}: AS takes no level — its value is a list of \`${refName(shape.ref)}\`: write \`AS ${refName(shape.ref)}\`` });
+    }
+    const template = shape ? doc.resolve(shape.ref) as TemplateBlock | null : null;
+    if (template && !template.slots) {
+      errors.push({ file, line: at(template.name), message: `DIMENSION ${dim.name}: AS \`${template.name}\` is a template without SLOTS — a dimension's value is a list of its instances, so its template declares their fields` });
+    }
+    return errors;
+  })];
+}
+
+/**
+ * A dimension is an agent's — read and written through that agent's apx. One a
+ * compilation that is no agent's reaches (PROJECT.ap, a standalone skill, a
+ * team's flows.ap), from `from` on in `ctx.dimensions`, fails it at `file`.
+ */
+export function strayDimensionErrors(ctx: BundleContext, file: string, from = 0): LintError[] {
+  return ctx.dimensions.slice(from).map(d => ({
+    file,
+    line: d.path === file ? lineOfName(file, d.name) : lineOfName(file, d.name, 'import'),
+    message: `DIMENSION ${d.name}: a dimension belongs to an agent — it is read and written through that agent's apx, so only an agent's file declares or imports it`,
+  }));
 }
 
 /** Check the words of a source the pipeline reads itself (not through an IMPORT), into `ctx`. */
@@ -579,7 +642,7 @@ export async function bundleStandaloneToString(
   lintSource(absolute, ctx);
 
   let body = await resolveInlineBlocks(header.stripped, ctx, absolute);
-  ctx.lintErrors.push(...standaloneWithErrors(ctx, absolute, body));
+  ctx.lintErrors.push(...standaloneWithErrors(ctx, absolute, body), ...strayDimensionErrors(ctx, absolute));
   body = `${emitCollectedSections(ctx)}${tidyBlankLines(body)}\n`;
   noExecutableChecks(absolute, ctx);
 
@@ -709,8 +772,10 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
   reportIssues([
     ...unresolvedErrors(builder.unresolved),
     ...withProblemErrors(builder.withProblems),
-    ...unappliedErrors(ctx, builder.withNamed),
+    ...unappliedErrors(ctx, builder.withNamed, true),
     ...storeErrors(structure, ctx, agentFilePath),
+    ...apxNameErrors(structure, ctx, agentFilePath),
+    ...dimensionErrors(structure, ctx),
     ...builder.varErrors.map(located),
     ...builder.checkIssues.map(located),
     ...(opts.agentIndex ? askTargetErrors(structure, opts.agentIndex, teamRoot ? basename(teamRoot) : null) : []),

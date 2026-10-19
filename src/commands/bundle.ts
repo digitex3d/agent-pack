@@ -12,6 +12,7 @@ import { ensureOrchestrationSection } from '../orchestrationSection.js';
 import { discoverAgentsByWalk } from '../agentDiscovery.js';
 import { standaloneDir } from '../services/teamMetadata.js';
 import { openJudgeRun, finishJudgeRun, type JudgeRun } from '../judge/phase.js';
+import { documentDefHashes, removeStaleCaches } from '../apx/dimensions.js';
 
 /**
  * CLI command: parse args, build a bundle (agent or skill), optionally
@@ -136,6 +137,8 @@ export async function bundleAllOnce(
     return false;
   }
   const programIds = new Set<string>();
+  /** The defhash of every dimension the build compiles — the cache folders still in use. */
+  const defhashes = new Set<string>();
   /** path → the adapter that wrote it and what: each file is written and listed once. */
   const written = new Map<string, { adapter: string; content: string }>();
   // The agent's own artifacts (.apx, compiled document) are one per agent: the
@@ -151,6 +154,7 @@ export async function bundleAllOnce(
       try {
         const { bundle, files } = await bundleAndEmit(agent.name, config, adapter, ctx, { judge });
         for (const spec of Object.values(bundle.structure?.meta.executors ?? {})) if (spec.program) programIds.add(spec.program);
+        if (bundle.structure) for (const hash of documentDefHashes(bundle.structure)) defhashes.add(hash);
         const delegate = bundle.structure?.meta.delegate;
         if (delegate && !queue.some(a => a.name === delegate)) queue.push({ name: delegate });
         for (const f of files) {
@@ -207,6 +211,10 @@ export async function bundleAllOnce(
   if (totalErrors === 0) {
     for (const orphan of orphanPrograms(ctx.projectRoot, programIds)) {
       console.error(`[agent-pack] ${orphan} is the program of no piece any more (edited or removed) — review it, then delete it`);
+    }
+    // The cache of a dimension edited or removed answers nothing any more: it goes.
+    for (const stale of removeStaleCaches(ctx.projectRoot, defhashes)) {
+      console.error(`[agent-pack] ${stale} removed — the cache of a dimension that no longer exists (edited or removed)`);
     }
   }
 

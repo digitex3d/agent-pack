@@ -222,7 +222,7 @@ console.log('identity cross-kind lint tests passed.');
   // Missing MANDATE → error.
   {
     const errs = lintAgentBlocks('team.ap', 'AGENT impl AS simplifier:\n  ABOUT just an about\n');
-    assert.ok(errs.some(e => /requires a MANDATE/.test(e.message)), 'missing MANDATE rejected');
+    assert.ok(errs.some(e => /AGENT block requires at least one MANDATE/.test(e.message)), 'missing MANDATE rejected');
   }
 
   // Child keyword outside the allowed surface → error.

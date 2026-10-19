@@ -185,6 +185,41 @@ The data an agent keeps, declared like a schema. `TYPE` names the backing (`tabe
 
 Stores are read and written through the agent's [apx](/guide/apx#stores). A store may not be named like one of the [apx's verbs](/guide/apx#reading): the apx reads that word as the verb, so the store could never be reached.
 
+### DIMENSION
+
+```
+EXPORT DIMENSION pseudocode:
+    ABOUT   what each function does, step by step, in plain words
+    FOR     src/**/*.py
+    EACH    function
+    AS      pseudo-steps
+    MUST    write one step per decision the code takes
+```
+
+An answer implicit in a source file — its pseudocode, its design patterns, a description in English — that one agent works out once and the apx keeps, so the next agent reads it instead of reasoning again. The apx never reasons: it hashes files, and serves and checks what agents wrote.
+
+| Line | |
+|---|---|
+| `ABOUT <text>` | the question the dimension answers — shown to the agents that have it |
+| `FOR <glob> [<glob> …]` | the files it answers for: one or more globs relative to the project root (`**` any folders, `*`, `?`, `{a,b}`, `[ab]`); an absolute glob, one with `..`, or a bare `FOR` fails the build; the apx refuses any other file |
+| `EACH <text>` | what to translate inside a file — `function`, `class`, `file`, or prose. A single word naming a template in scope renders as a reference to it, and that template's content is part of the dimension's |
+| `AS <template>` | a template with `SLOTS`: the value for a file is a list of its instances — one per thing `EACH` targets — or the literal `none` when there is nothing to report. No level: the value is always checked |
+| rule lines | `MUST`, `NEVER`, `SHOULD`, … — how the value is produced |
+
+`ABOUT`, `FOR`, `EACH` and `AS` are required, once each; beside them the body holds only rule lines. Any other line fails the build: a `WHEN` (as a line or a block), a nested block (`IF`, `ON-…:`, `UNTIL`, …), an action (`DO`, `ASK`, `COMPUTE`, `RUN`), and `MEM` and `WITH`, which are an agent's. A dimension is declared and imported like a store — `EXPORT DIMENSION` in the library's `dimensions/`, `IMPORT pseudocode FROM @main.dimensions` — or written in the agent's own file. A dimension belongs to an agent and is reached only through that agent's apx: importing it into `PROJECT.ap` or a team's `flows.ap` fails the build. The apx reaches it by its id, like every block — `dimension <dim-id> read <file>` — so its name may be any name.
+
+**When it is worth reading is the reader's to say — with a [`WITH`](#with), like a policy or a skill.** A dimension says what it holds, not when; the agent that has it names it above the lines it is for, and reads it there:
+
+```
+WHEN about to change a function:
+    WITH pseudocode:
+        DO  change it, knowing what it does first
+```
+
+The lines nested under the `WITH` are the ones that read the dimension; `!WITH pseudocode:` keeps lines out of it. A dimension that no `WITH` names applies nowhere: a warning, where a policy gets an error — the apx serves it all the same, but no line reads it; a dimension has no `APPLIES` line, so no perimeter can hold it everywhere. A moment the judge decides is a `WHEN!` with the `WITH` beneath it ([checked conditions](#checked-conditions)). Once it has read the answer, the agent decides whether it also needs the code.
+
+The agent finds its dimensions in its definition, each opening with where it applies, with the commands that read and write them; they are read and written through its [apx](/guide/apx#dimensions). Renaming a dimension or a template it names keeps what was kept; changing any of its lines, or the content of the template `AS` or `EACH` names, starts it over.
+
 ### FLOW
 
 Written in a team's `flows.ap`. See [Teams and flows](/guide/teams-and-flows).
@@ -318,8 +353,8 @@ On a block head, stars say the same:
 | `PROCEDURE <name>:`, `IF`, `UNTIL` | the agent |
 | `PROCEDURE* <name>:` | a delegate carries out the whole procedure |
 | `PROCEDURE** <name>:` | a program carries it out ([`COMPUTE <name>:`](#compute) is one, written as a specification) |
-| `IF* <condition>`, `UNTIL* <condition>` | a delegate decides the condition |
-| `IF** <condition>`, `UNTIL** <condition>` | a program decides it |
+| `IF* <condition>`, `UNTIL* <condition> MAX <n>` | a delegate decides the condition |
+| `IF** <condition>`, `UNTIL** <condition> MAX <n>` | a program decides it |
 
 ```
 VAR pdf_text
@@ -375,7 +410,7 @@ A refusal (exit `1`) stops the procedure: the agent never carries the piece out 
 
 ### Rounds
 
-An `UNTIL*` or `UNTIL**` asks its condition after each round, at most `rounds` times — the [`checks`](/reference/config#checks) key's `rounds`, 3 by default, as for `UNTIL!`. The apx says `round 2 of 3` after each closed answer, and at the limit — exit `7` — to stop and report that the condition never held.
+An `UNTIL*` or `UNTIL**` asks its condition after each round, at most the rounds its head writes: `UNTIL* <condition> MAX <n>:` — as for `UNTIL!` and `UNTIL!!`. `MAX` is required on every loop someone other than the agent ends (a judge, a delegate, a program — an unmarked `UNTIL` under a starred procedure too), takes a whole number of at least 1, and is an error on a plain `UNTIL` or on any `IF`. The apx says `round 2 of 3` after each closed answer, and at the limit — exit `7` — to stop and report that the condition never held; a check made after the limit is a new loop, at round 1.
 
 ## Control flow
 
@@ -384,9 +419,9 @@ An `UNTIL*` or `UNTIL**` asks its condition after each round, at most `rounds` t
 | `WHEN <condition>:` | a workflow: the indented lines apply when the condition holds |
 | `IF <condition>` … `ELSE` | a branch; the indented lines are its body. An `ELSE` must come right after an `IF` in the same body |
 | `UNTIL <condition>` | repeat the indented lines until the condition holds |
-| `IF!` / `IF!!`, `UNTIL!` / `UNTIL!!` | the same, with the condition decided by a judge — see [Checked conditions](#checked-conditions) |
+| `IF!` / `IF!!`, `UNTIL!` / `UNTIL!!` … `MAX <n>` | the same, with the condition decided by a judge — an `UNTIL` writes its round limit — see [Checked conditions](#checked-conditions) |
 | `WHEN! <condition>:` | a trigger whose condition a judge decides — sugar for `WHEN <condition>:` with `IF! <condition>:` beneath — see [Checked conditions](#checked-conditions) |
-| `IF*` / `IF**`, `UNTIL*` / `UNTIL**` | the same, with the condition decided by a delegate or a program — see [Executors](#executors) |
+| `IF*` / `IF**`, `UNTIL*` / `UNTIL**` … `MAX <n>` | the same, with the condition decided by a delegate or a program — an `UNTIL` writes its round limit — see [Executors](#executors) |
 | `RUN <procedure or flow>` | carry out that procedure or flow |
 | `RUN <procedure> INTO <name>` | carry it out, and store its result in a variable |
 | `IN <store>:` | the indented lines work on that store |
@@ -413,7 +448,7 @@ The `!`s after `IF` or `UNTIL` say how little the agent is trusted with the cond
 | `IF! <condition>` | sees the condition | a judge — when they disagree, the judge wins |
 | `IF!! <condition>` | never sees it: the condition is **sealed** — in no prompt, in no view of the apx | a judge; the agent hears only *open* or *closed* |
 
-`UNTIL!` and `UNTIL!!` are the same as a loop head: repeat the lines beneath until the judge opens the gate, at most `rounds` rounds (3 by default); at the limit the agent stops and reports that the gate stayed closed. A gate needs no keyword of its own: it is an `UNTIL` the judge decides, and a branch is an `IF` the judge decides. `ELSE` follows `IF!` and `IF!!` as it follows `IF`. `!IF` is an error.
+`UNTIL!` and `UNTIL!!` are the same as a loop head: repeat the lines beneath until the judge opens the gate, at most the rounds the head writes — `UNTIL!! <condition> MAX <n>:`, required, a whole number of at least 1 (see [Rounds](#rounds)); at the limit the agent stops and reports that the gate stayed closed. A gate needs no keyword of its own: it is an `UNTIL` the judge decides, and a branch is an `IF` the judge decides. `ELSE` follows `IF!` and `IF!!` as it follows `IF`. `!IF` is an error.
 
 **`WHEN!` is sugar.** `WHEN! <condition>:` is rewritten, before anything else reads the source, into `WHEN <condition>:` with `IF! <condition>:` beneath it and the trigger's lines under that — byte-identical to the hand-written pair. The agent still picks the moment, as for every `WHEN`; the judge decides the condition, as for every `IF!`, with the same rules: it reads at least one variable, it needs `checks` configured, it is checked by the agent whose apx answers for it. `WHEN!!` is an error: a sealed condition has no moment the agent could see, so a sealed trigger is written as a prose `WHEN <moment>:` with `IF!! <condition>:` beneath. `!WHEN` and `WHEN*` are errors too.
 
@@ -645,7 +680,7 @@ IMPORT pdf, frontend-design:frontend-design FROM @harness.skills
 
 ### WITH
 
-**`WITH` says which work skills and policies are for.** It is a block: the lines nested below it are under the skills and policies it names — by name, or by a tag with its kind (`#policy:<tag>`, `#skill:<tag>`), comma separated.
+**`WITH` says which work skills, policies and dimensions are for.** It is a block: the lines nested below it are under the skills and policies it names, and read the dimensions it names — by name, or (a skill, a policy) by a tag with its kind (`#policy:<tag>`, `#skill:<tag>`), comma separated.
 
 ```
 EXPORT PROCEDURE reasoning:
@@ -665,11 +700,11 @@ EXPORT PROCEDURE reasoning:
 
 | Head | |
 |---|---|
-| `WITH <name>, #policy:<tag>, #skill:<tag>:` | the lines below are under these skills and policies |
+| `WITH <name>, #policy:<tag>, #skill:<tag>:` | the lines below are under these skills and policies, and read these dimensions |
 | `WITH <skill> AS <template>:` | and the skill's answer is shaped as the template |
 | `!WITH <name>, #policy:<tag>:` | the lines below are out of them |
 
-`#policy:<tag>` selects every imported policy whose `APPLIES` line carries `#<tag>`, `#skill:<tag>` every such skill; the compiler writes their names, each with its id, in place of the tag. A tag without its kind, and a name or a tag that selects nothing, fail the build. `AS` shapes the answer of one skill — named, never a policy or a tag — and never on `!WITH`.
+`#policy:<tag>` selects every imported policy whose `APPLIES` line carries `#<tag>`, `#skill:<tag>` every such skill; the compiler writes their names, each with its id, in place of the tag. A [dimension](#dimension) has no `APPLIES` line: a `WITH` names it by name, and the compiled line carries its id — `get <id>` returns it with the commands that read and write it. A tag without its kind, and a name or a tag that selects nothing, fail the build. `AS` shapes the answer of one skill — named, never a policy, a dimension or a tag — and never on `!WITH`.
 
 `WITH` stands in a body — an agent, a role, a procedure — around the lines it is for; first in a procedure's body, it covers the whole procedure, and whoever imports the procedure gets it with it. Its zone holds lines, never a block, and a flow step takes none — its `BY` agent uses what it imports. It reads the same in `PROJECT.ap`, whose `AGENTS.md` lists the skills it imports in its own *Skills* chapter.
 

@@ -2,25 +2,26 @@
 // Copyright (c) 2026 Giuseppe Federico
 import { existsSync, readFileSync } from 'fs';
 import { basename } from 'path';
-import { lex, Token, Keyword, KEYWORDS, isWithHead, opensBlock } from './lexer.js';
+import { lex, Token, Keyword, KEYWORDS, DIMENSION_LINES, isTriggerKind, isWithHead, opensBlock, type DimensionLine } from './lexer.js';
 import { ACTION_VERBS } from './actionVerbs.js';
 import { desugar } from './desugar.js';
-import { parseApplies, PERIMETER_FORMS, SCOPED_KINDS } from './services/tags.js';
+import { parseApplies, PERIMETER_FORMS, PERIMETER_KINDS } from './services/tags.js';
 import { splitWith, withItemError } from './withUse.js';
-import { getFamilyBases, getIntroByKeyword, forceLevelBaseOf, forceLevelFamilies, toCanonicalKeyword, parseForceLevel, NON_RULE_FAMILIES } from './forceLevelConfig.js';
+import { getFamilyBases, getIntroByKeyword, forceLevelBaseOf, splitBangs, forceLevelFamilies, toCanonicalKeyword, parseForceLevel, NON_RULE_FAMILIES } from './forceLevelConfig.js';
 import { enumPrimitiveFor } from './primitives.js';
 import { BLOCK_CONTRACTS, BlockContract, VAR_BLOCK } from './blockContracts.js';
 import { TEAM_FLOWS_FILE } from './services/teamMetadata.js';
-import { parseBlocks, exportedVar, readExportedVar, isExportedVar, type Block, type Node } from './parseBlocks.js';
+import { parseBlocks, agentNestedBlocks, exportedVar, readExportedVar, isExportedVar, type Block, type Node } from './parseBlocks.js';
 import { isExportFile } from './services/text.js';
 import { parseAgentSignature } from './definitionArgs.js';
 import { kindFromDir, unitNameFromPath } from './ingest.js';
 import { BLOCK_TYPES, blockTypeOf, EXPORT_MODIFIER, AGENT_KEYS } from './blockTypes.js';
 import { COMPUTE_SECTIONS, executorMark, returnShape, splitExecutorMark } from './executor.js';
 import { parseTypeSpec } from './shapeSchema.js';
+import { SLOT_LINE_RE, VERBATIM_REGIONS } from './shapeCompiler.js';
 import { STORE_LIFETIMES } from './storeTypes/types.js';
 import { stripTrailingColon, buildTree, type Node as TreeNode } from './bundlers/renderTree.js';
-import { condCheckOf, checkedKeyword, sugaredHead, type CheckKind, type CheckSite } from './check.js';
+import { condCheckOf, checkedKeyword, sugaredHead, splitMax, maxIssue, type CheckKind, type CheckSite } from './check.js';
 import { parseVarLine, parseParallelHead, isVarKeyword, splitBy, splitInto, takesInto, readsOf } from './vars.js';
 
 export interface LintError {
@@ -105,8 +106,9 @@ function nextSubstantive(tokens: Token[], from: number): number {
 }
 
 /**
- * What is wrong with a `WITH` head — a block (src/withUse.ts): names and kind
- * tags (`#policy:<tag>`, `#skill:<tag>`), comma separated, an `AS <template>`
+ * What is wrong with a `WITH` head — a block (src/withUse.ts): names (a skill,
+ * a policy, a dimension) and kind tags (`#policy:<tag>`, `#skill:<tag>`), comma
+ * separated, an `AS <template>`
  * only on one name that is used, the block colon, lines nested below it — its
  * zone, holding lines, never a block — and a body to stand in.
  */
@@ -115,7 +117,7 @@ function withLineErrors(tokens: Token[], index: number): string[] {
   const head = t.raw.trim();
   const errors: string[] = [];
   const use = splitWith(t.rest);
-  if (!use) errors.push(`\`${head}\`: WITH names skills and policies, by name or kind tag, comma separated — \`WITH <name>, #policy:<tag>:\`, or \`WITH <skill> AS <template>:\` to shape a skill's answer`);
+  if (!use) errors.push(`\`${head}\`: WITH names skills, policies and dimensions by name, and skills and policies by kind tag, comma separated — \`WITH <name>, #policy:<tag>:\`, or \`WITH <skill> AS <template>:\` to shape a skill's answer`);
   else {
     for (const item of use.items) { const e = withItemError(item); if (e) errors.push(e); }
     if (use.template && (parseForceLevel(t.keyword as string)?.level ?? 0) < 0) errors.push(`\`${head}\`: a skill not used has no answer to shape — drop the AS`);
@@ -725,22 +727,7 @@ export function lintAgentBlocks(file: string, body: string): LintError[] {
     // Cardinality is read from the contract — the single source of truth. `AS` is
     // the header signature (handled above), so it is excluded from the child-body
     // cardinality pass even though the contract lists it.
-    for (const required of contract.requiresAll ?? []) {
-      if (required === 'AS') continue;
-      if ((childCounts.get(required) ?? 0) === 0) {
-        errors.push({ file, line: block.startLine, message: `${block.key} block requires a ${required}` });
-      }
-    }
-    for (const u of contract.unique ?? []) {
-      if (u === 'AS') continue;
-      const count = childCounts.get(u) ?? 0;
-      if (count > 1) {
-        errors.push({
-          file, line: block.startLine,
-          message: `${block.key} block has ${count} occurrences of ${u} (expected at most 1)`,
-        });
-      }
-    }
+    errors.push(...cardinalityErrors(file, block.startLine, block.key, contract, childCounts, ['AS']));
   }
 
   return errors;
@@ -789,14 +776,15 @@ function familyBaseOf(keyword: string): string | null {
 }
 
 /**
- * The "not allowed" error for `keyword` under `parent`: the reason the
- * contract's `excluded` gives for its family, when it gives one, and what the
- * block admits instead.
+ * The "not allowed" error under `parent` — the one wording of a contract's
+ * errors: `what` is wrong (by default `keyword`), then the reason the contract
+ * gives for `keyword` — its family's `excluded` one — and what the block
+ * admits instead.
  */
-function notAllowed(keyword: Keyword, parent: string, contract: BlockContract): string {
+function notAllowed(keyword: Keyword, parent: string, contract: BlockContract, what: string = keyword): string {
   const why = contract.excluded?.[(familyBaseOf(keyword) ?? keyword) as Keyword];
   const expected = [...contract.allows, ...(contract.branches?.keywords ?? [])].join(', ');
-  return `${keyword} is not allowed inside ${parent}${why ? ` — ${why}` : ''} (expected one of: ${expected})`;
+  return `${what} is not allowed inside ${parent}${why ? ` — ${why}` : ''} (expected one of: ${expected})`;
 }
 
 /** Whether `keyword` opens a branch (IF/ELSE, UNTIL) of a block under `contract`. */
@@ -804,10 +792,13 @@ function isBranch(contract: BlockContract, keyword: Keyword): boolean {
   return contract.branches?.keywords.includes(keyword) ?? false;
 }
 
+/** The contracts checked line by line — a DIMENSION is checked on its parsed block, wherever it is written (dimensionBlockErrors). */
+const { DIMENSION: _parsed, ...TOKEN_CONTRACTS } = BLOCK_CONTRACTS;
+
 export function validateBlockContracts(
   tokens: ReturnType<typeof lex>,
   file: string,
-  contracts: Record<string, BlockContract> = BLOCK_CONTRACTS,
+  contracts: Record<string, BlockContract> = TOKEN_CONTRACTS,
 ): LintError[] {
   const errors: LintError[] = [];
   const stack: OpenBlock[] = [];
@@ -819,6 +810,8 @@ export function validateBlockContracts(
   };
 
   for (const [index, t] of tokens.entries()) {
+    // A block opener the contracts do not name (`EXPORT DIMENSION d:`, `SLOTS:`) still ends the blocks it is no deeper than.
+    if (t.kind === 'blockOpener') popClosedBlocks(t.indent);
     if (t.kind !== 'keyword') continue;
     popClosedBlocks(t.indent);
 
@@ -865,39 +858,33 @@ export function validateBlockContracts(
 }
 
 function finalizeBlock(block: OpenBlock, errors: LintError[], file: string): void {
-  const c = block.contract;
+  errors.push(...cardinalityErrors(file, block.line, block.keyword, block.contract, block.children));
+}
 
-  for (const required of c.requiresAll ?? []) {
-    if (!block.children.has(required)) {
-      errors.push({
-        file,
-        line: block.line,
-        message: `${block.keyword} block requires at least one ${required}`,
-      });
-    }
+/**
+ * A block's counts held to its contract — every keyword it requires there, one
+ * of those it requires any of, a unique one at most once. The one count check
+ * and its one wording, whichever walk counted: the token contracts, the parsed
+ * block-shaped kinds, an agent's body. `skip`: keywords the contract lists that
+ * the caller checks elsewhere (an AGENT's `AS`, its header signature).
+ */
+function cardinalityErrors(
+  file: string, line: number, key: string, contract: BlockContract,
+  counts: ReadonlyMap<string, number>, skip: readonly string[] = [],
+): LintError[] {
+  const errors: LintError[] = [];
+  const count = (k: string): number => counts.get(k) ?? 0;
+  for (const required of contract.requiresAll ?? []) {
+    if (!skip.includes(required) && count(required) === 0) errors.push({ file, line, message: `${key} block requires at least one ${required}` });
   }
-
-  if (c.requiresAnyOf && c.requiresAnyOf.length > 0) {
-    const hasAny = c.requiresAnyOf.some(k => block.children.has(k));
-    if (!hasAny) {
-      errors.push({
-        file,
-        line: block.line,
-        message: `${block.keyword} block requires at least one of: ${c.requiresAnyOf.join(', ')}`,
-      });
-    }
+  const anyOf = contract.requiresAnyOf ?? [];
+  if (anyOf.length > 0 && !anyOf.some(k => count(k) > 0)) {
+    errors.push({ file, line, message: `${key} block requires at least one of: ${anyOf.join(', ')}` });
   }
-
-  for (const u of c.unique ?? []) {
-    const count = block.children.get(u) ?? 0;
-    if (count > 1) {
-      errors.push({
-        file,
-        line: block.line,
-        message: `${block.keyword} block has ${count} occurrences of ${u} (expected at most 1)`,
-      });
-    }
+  for (const u of contract.unique ?? []) {
+    if (!skip.includes(u) && count(u) > 1) errors.push({ file, line, message: `${key} block has ${count(u)} occurrences of ${u} (expected at most 1)` });
   }
+  return errors;
 }
 
 // ---------------------------------------------------------------------------
@@ -967,37 +954,73 @@ function checkBlockContract(file: string, block: Block, key: string): LintError[
   const errors: LintError[] = [];
   const counts = new Map<string, number>();
 
-  for (const child of block.children) {
-    if (child.type !== 'line') continue;
-    counts.set(child.keyword, (counts.get(child.keyword) ?? 0) + 1);
-    if (!(contract.allows as readonly string[]).includes(child.keyword)) {
-      errors.push({
-        file,
-        line: child.line,
-        message: `${child.keyword} is not allowed inside ${key} (expected one of: ${contract.allows.join(', ')})`,
-      });
+  // Its lines at any depth: a nested block is one of its regions (the author's
+  // text, as written), or a line that opens a block — held to the contract like
+  // any line, and so are the keyword lines beneath it. A line of prose is the
+  // body's only beneath a line it belongs to; one opening with a keyword-like
+  // word (`FOR` alone, `STPE`) is the vocabulary check's.
+  const visit = (children: Node[], top: boolean): void => {
+    for (const child of children) {
+      if (child.type === 'block' && contract.regions?.includes(child.key)) continue;
+      const keyword = child.type === 'block' ? child.key : child.keyword;
+      const line = child.type === 'block' ? child.startLine : child.line;
+      if (child.type === 'line' && keyword === OPAQUE_LINE) {
+        // A starred trigger (`WHEN*`) is no keyword either: the vocabulary check names it.
+        if (top && !KEYWORD_LIKE_RE.test(child.raw) && !starredTrigger(child.raw)) {
+          errors.push({ file, line, message: notAllowed(keyword, key, contract, `a line of prose (\`${child.raw.trim()}\`)`) });
+        }
+        continue;
+      }
+      // A force-level line counts under its family base (`NEVER` → ALWAYS), as the contract lists it.
+      const counted = familyBaseOf(keyword) ?? keyword;
+      if (top) counts.set(counted, (counts.get(counted) ?? 0) + 1);
+      if (!isAllowedChild(contract, keyword as Keyword)) {
+        errors.push({ file, line, message: notAllowed(keyword as Keyword, key, contract) });
+      } else if (child.type === 'block') visit(child.children, false);
     }
-  }
-  for (const required of contract.requiresAll ?? []) {
-    if (!counts.has(required)) {
-      errors.push({ file, line: block.startLine, message: `${key} block requires at least one ${required}` });
-    }
-  }
-  for (const u of contract.unique ?? []) {
-    const count = counts.get(u) ?? 0;
-    if (count > 1) {
-      errors.push({ file, line: block.startLine, message: `${key} block has ${count} occurrences of ${u} (expected at most 1)` });
-    }
-  }
+  };
+  visit(block.children, true);
+  errors.push(...cardinalityErrors(file, block.startLine, key, contract, counts));
   return errors;
 }
 
+/** The keyword parseBlocks gives a line no keyword opens — prose, kept as written. */
+const OPAQUE_LINE = '__opaque__';
+
+/** A glob that leaves the project root: absolute, from a home folder, or through `..`. */
+function leavesRoot(glob: string): boolean {
+  return /^([\\/~]|[A-Za-z]:[\\/])/.test(glob) || glob.split(/[\\/]/).includes('..');
+}
+
 /**
- * Shared skeleton for the single-block kinds (STORE): exactly one block
- * of the kind, its name matching the filename slug, and its declared contract.
+ * Every DIMENSION a file declares — at its top, or in an AGENT's body: its
+ * contract, and its FOR globs, read from the project root. The one check of the
+ * block wherever it is written — the lint of a library file, of an agent's
+ * file, and the compiler's.
+ */
+export function dimensionBlockErrors(file: string, blocks: readonly Block[]): LintError[] {
+  const dimensions = blocks.flatMap(b => (b.key === 'DIMENSION' ? [b] : agentNestedBlocks([b], 'DIMENSION').map(n => n.block)));
+  return dimensions.flatMap(b => [
+    ...checkBlockContract(file, b, 'DIMENSION'),
+    ...b.children.flatMap((c): LintError[] => {
+      if (c.type !== 'line') return [];
+      if (c.keyword === 'FOR') {
+        return c.rest.trim().split(/\s+/).filter(leavesRoot)
+          .map(glob => ({ file, line: c.line, message: `FOR \`${glob}\`: a glob is read from the project root — no absolute path, no \`..\`` }));
+      }
+      return [];
+    }),
+  ]);
+}
+
+/**
+ * Shared skeleton for the single-block kinds (STORE, DIMENSION): exactly one block
+ * of the kind, its name matching the filename slug, and its declared contract —
+ * or the kind's own check of the block, when it has one.
  */
 function lintSingleBlockKind(
   file: string, body: string, key: string, options: LintOptions = {},
+  check: (block: Block) => LintError[] = block => checkBlockContract(file, block, key),
 ): LintError[] {
   const errors: LintError[] = [];
   const kind = key.toLowerCase();
@@ -1024,7 +1047,7 @@ function lintSingleBlockKind(
     });
   }
 
-  errors.push(...checkBlockContract(file, block, key));
+  errors.push(...check(block));
   return errors;
 }
 
@@ -1035,6 +1058,14 @@ function lintSingleBlockKind(
  */
 export function lintStore(file: string, body: string, options: LintOptions = {}): LintError[] {
   return lintSingleBlockKind(file, body, 'STORE', options);
+}
+
+/**
+ * A dimension declares an answer about the code the apx keeps: ABOUT, FOR,
+ * EACH and AS once each, its rules beside them — all from its block contract.
+ */
+export function lintDimension(file: string, body: string, options: LintOptions = {}): LintError[] {
+  return lintSingleBlockKind(file, body, 'DIMENSION', options, block => dimensionBlockErrors(file, [block]));
 }
 
 // ---------------------------------------------------------------------------
@@ -1091,8 +1122,56 @@ function isAgentOrOrchestration(file: string, body: string): boolean {
 // Vocabulary — every line of every file speaks the language
 // ---------------------------------------------------------------------------
 
-/** Template regions whose lines are the author's literal text, never keywords. */
-const VERBATIM_REGIONS = new Set(['SLOTS', 'BODY', 'EXAMPLE']);
+/** The lines only one block holds, and what each is of it: a COMPUTE's sections, a DIMENSION's FOR and EACH. */
+const LINE_OWNERS = new Map<string, { owner: string; what: string }>([
+  ...COMPUTE_SECTIONS.map(s => [s, { owner: 'COMPUTE', what: 'a section' }] as const),
+  ...DIMENSION_LINES.map(k => [k, { owner: 'DIMENSION', what: 'a line' }] as const),
+]);
+
+/** What a keyword written alone on its line lacks — by keyword, else its text. */
+const BARE_NEEDS: Record<string, string> = {
+  FOR: 'at least one glob',
+  EACH: 'what to translate in a file — a text, or a template\'s name',
+  AS: 'the template it names',
+} satisfies Record<DimensionLine | 'AS', string>;
+
+/**
+ * Where a line stands that cannot stand anywhere: a line one block holds
+ * (LINE_OWNERS) directly in that block; a DIMENSION at the file top or directly
+ * in an agent's body — a dimension is an agent's, reached through its apx.
+ */
+function placementError(key: string, parent: string | undefined): string | null {
+  const owned = LINE_OWNERS.get(key);
+  if (owned && parent !== owned.owner) return `${key} is ${owned.what} of a ${owned.owner} block — found inside ${parent || 'the file top'}`;
+  if (key === 'DIMENSION' && parent && !AGENT_KEYS.has(parent)) return `a DIMENSION is declared at the file top or directly in an agent's body — found inside ${parent}`;
+  return null;
+}
+
+/**
+ * What is wrong with a trigger head's mark: `!WHEN` means nothing; `WHEN!!`
+ * has no moment the agent could see — a sealed trigger is written as a prose
+ * WHEN with IF!! beneath; `WHEN*` names an executor, and a trigger is no
+ * condition one carries out. Null for a mark the trigger takes (none; `!` —
+ * `WHEN!` desugared before this check).
+ */
+function triggerLevelError(key: string, level: number, stars = 0): string | null {
+  if (!isTriggerKind(key)) return null;
+  if (stars > 0) return `\`${key}${'*'.repeat(stars)}\` is not allowed — a trigger takes no star: write ${key}, or ${key}! (a judge decides the condition)`;
+  if (level >= 0 && level <= 1) return null;
+  return level < 0
+    ? `\`!${key}\` is not allowed — write ${key}, or ${key}! (a judge decides the condition)`
+    : `\`${key}!!\` is not allowed — a sealed trigger has no moment the agent could see: write \`${key} <moment>:\` with \`IF!! <condition>:\` beneath`;
+}
+
+/**
+ * A line opening with a trigger written with stars (`WHEN*`, `WHEN!**`): the
+ * lexer reads it as no keyword (splitControl), so it would pass for prose.
+ */
+function starredTrigger(raw: string): { key: string; level: number; stars: number } | null {
+  const mark = splitExecutorMark(raw.trim().split(/[\s:]/)[0] ?? '');
+  const split = mark.executor ? splitBangs(mark.word) : null;
+  return split && isTriggerKind(split.base) ? { key: split.base, level: split.level, stars: mark.executor } : null;
+}
 
 /** A line that opens with a keyword-like word: `STPE`, `ON-AGENT-PROMPT`, `MEM!!!`. */
 const KEYWORD_LIKE_RE = /^\s*(!*[A-Z][A-Z0-9-]+!*)(?=[\s:]|$)/;
@@ -1133,9 +1212,9 @@ const SLOT_TYPES = ['TEXT', 'NUMBER', 'ENUM[a b]', '<template>', 'LIST <template
 
 /** A SLOTS line (`name[?]: TYPE … "description"`) whose TYPE is none of the language's. */
 function slotTypeError(raw: string): string | null {
-  const m = raw.trim().match(/^([a-z][\w-]*)\??\s*:\s*(.+)$/);
+  const m = raw.trim().match(SLOT_LINE_RE);
   if (!m) return null;
-  const type = m[2].replace(/\s*".*$/, '').trim();
+  const type = m[3].replace(/\s*".*$/, '').trim();
   if (parseTypeSpec(type).kind !== 'any') return null;
   const word = type.split(/[\s[<]/)[0].toUpperCase();
   return `slot \`${m[1]}\`: unknown type \`${type}\`${didYouMean(word, ['TEXT', 'NUMBER', 'ENUM', 'LIST'])} (types: ${SLOT_TYPES.join(', ')})`;
@@ -1255,20 +1334,15 @@ export function checkVocabulary(file: string, body: string): LintError[] {
         key = mark.word;
         if (key !== 'PROCEDURE') err(t.line, `\`${key}${executorMark(mark.executor)}\`: only a PROCEDURE head takes an executor mark — a delegate (*) or a program (**) carries its body out`);
       }
-      if (VERBATIM_REGIONS.has(key)) { region = t.indent; regionKey = key; continue; }
-      if ((COMPUTE_SECTIONS as readonly string[]).includes(key)) {
-        if (parent?.key !== 'COMPUTE') err(t.line, `${key} is a section of a COMPUTE block — found inside ${parent?.key || 'the file top'}`);
-      } else if (!blockTypeOf(key)) err(t.line, unknownKeyword(key));
+      if (VERBATIM_REGIONS.includes(key)) { region = t.indent; regionKey = key; continue; }
+      if (!LINE_OWNERS.has(key) && !blockTypeOf(key)) err(t.line, unknownKeyword(key));
     } else if (t.kind === 'keyword') {
       key = t.keyword as string;
       // `!IF` / `!UNTIL` mean nothing: the `!`s after the keyword say who decides the condition.
-      // `WHEN!` is sugar for WHEN + IF! (desugared before this check); `WHEN!!` has no moment the
-      // agent could see, so a sealed trigger is written as a prose WHEN with IF!! beneath.
-      if (key === 'WHEN' && (t.level ?? 0) !== 0) {
-        err(t.line, (t.level ?? 0) < 0
-          ? `\`!WHEN\` is not allowed — write WHEN, or WHEN! (a judge decides the condition): "${quoteRaw(t)}"`
-          : `\`WHEN!!\` is not allowed — a sealed trigger has no moment the agent could see: write \`WHEN <moment>:\` with \`IF!! <condition>:\` beneath: "${quoteRaw(t)}"`);
-      } else if ((t.level ?? 0) < 0) err(t.line, `\`!${key}\` is not allowed — write ${key}, ${key}! (a judge decides) or ${key}!! (a sealed gate): "${quoteRaw(t)}"`);
+      // `WHEN!` is sugar for WHEN + IF! (desugared before this check); `WHEN!!` has no moment the agent could see.
+      const trigger = triggerLevelError(key, t.level ?? 0);
+      if (trigger) err(t.line, `${trigger}: "${quoteRaw(t)}"`);
+      else if ((t.level ?? 0) < 0) err(t.line, `\`!${key}\` is not allowed — write ${key}, ${key}! (a judge decides) or ${key}!! (a sealed gate): "${quoteRaw(t)}"`);
       // The stars say who carries the condition out, the `!`s who judges it: a condition has one judge.
       if (t.executor && (t.level ?? 0) > 0) {
         err(t.line, `\`${t.raw.trim().split(/\s/)[0]}\` is not allowed — a condition has one judge: write ${key}! / ${key}!! (a judge decides) or ${key}* / ${key}** (a delegate or a program decides): "${quoteRaw(t)}"`);
@@ -1284,7 +1358,7 @@ export function checkVocabulary(file: string, body: string): LintError[] {
       // A perimeter says where a policy or a skill holds with no WITH: any other block has none to say.
       if (key === 'APPLIES' && parseApplies([t.rest]).scopes.length > 0) {
         const owner = ownerOf(stack.map(s => s.key), file);
-        if (!SCOPED_KINDS.includes(owner.toLowerCase())) err(t.line, `APPLIES: a perimeter (${PERIMETER_FORMS}) goes on a POLICY or a SKILL — found on ${owner}`);
+        if (!PERIMETER_KINDS.includes(owner.toLowerCase())) err(t.line, `APPLIES: a perimeter (${PERIMETER_FORMS}) goes on a POLICY or a SKILL — found on ${owner}`);
       }
       const prim = enumPrimitiveFor(key);
       const value = t.rest.trim().replace(/:$/, '');
@@ -1324,11 +1398,18 @@ export function checkVocabulary(file: string, body: string): LintError[] {
       if (into) err(t.line, into);
     } else if (t.kind === 'unknown') {
       const word = t.raw.match(KEYWORD_LIKE_RE)?.[1];
-      if (word) {
+      const starred = starredTrigger(t.raw);
+      if (starred) {
+        err(t.line, `${triggerLevelError(starred.key, starred.level, starred.stars)}: "${t.raw.trim()}"`);
+      } else if (word) {
         const base = forceLevelBaseOf(word);
-        err(t.line, base ? unknownLevel(word, base) : unknownKeyword(word));
+        // A keyword alone on its line — `FOR`, `EACH`, `MUST` — lacks what it says.
+        if (KEYWORDS.includes(word) || (base && getIntroByKeyword(word) !== null)) err(t.line, `${word} needs ${BARE_NEEDS[base ?? word] ?? 'its text on the same line'}`);
+        else err(t.line, base ? unknownLevel(word, base) : unknownKeyword(word));
       }
     }
+    const placed = placementError(key, parent?.key);
+    if (placed) err(t.line, placed);
     stack.push({ indent: t.indent, key, line: t.line });
   }
 
@@ -1441,7 +1522,7 @@ function lintByKind(file: string, body: string, options: LintOptions): LintError
   // Their FLOW blocks (a team's flows.ap) take the same block contracts as a
   // flow file: FLOW, STEP, PARALLEL and their branches, wherever they live.
   if (isAgentOrOrchestration(file, body)) {
-    return [...lintAgentBlocks(file, body), ...validateBlockContracts(desugar(lex(body)), file)];
+    return [...lintAgentBlocks(file, body), ...validateBlockContracts(desugar(lex(body)), file), ...dimensionBlockErrors(file, parseBlocks(body).blocks)];
   }
 
   // A module's exported variables are its kind lint's no business: they are
@@ -1461,6 +1542,7 @@ function lintByKind(file: string, body: string, options: LintOptions): LintError
     case 'template':  return lintTemplate(file, body, options);
     case 'flow':      return lintFlow(file, body, options);
     case 'store':     return lintStore(file, body, options);
+    case 'dimension': return lintDimension(file, body, options);
   }
   // tool / generic (agents, teams, orchestration): a `.ap` holding an
   // `EXPORT AGENT … AS …` block or the file-top AS/MANDATE form — validated by
@@ -1500,7 +1582,7 @@ export function formatErrors(errors: LintError[]): string {
  * flow's steps is the flow's, and one in the team's routing has none.
  */
 export function checkedHeadIssues(
-  file: string, source: string, checks: { rounds: number } | null | undefined, agentOf?: (by: string) => string | null,
+  file: string, source: string, checks: object | null | undefined, agentOf?: (by: string) => string | null,
 ): LintError[] {
   const issues: LintError[] = [];
   const keyOf = (n: TreeNode): string => (n.token.kind === 'keyword' ? n.token.keyword as string : n.token.kind === 'blockOpener' ? n.token.key : '');
@@ -1510,10 +1592,15 @@ export function checkedHeadIssues(
       const t = n.token;
       const key = keyOf(n);
       if (t.kind === 'keyword' && (key === 'IF' || key === 'UNTIL')) {
-        const condition = stripTrailingColon(t.rest);
+        const split = splitMax(stripTrailingColon(t.rest));
+        const { condition } = split;
         // The IF! of a desugared WHEN! reports as WHEN! — the head the author wrote.
         const head = sugaredHead(parent, n === first, t.level ?? 0, condition) ?? checkedKeyword(key as CheckKind, t.level ?? 0);
-        const { issue } = condCheckOf(key as CheckKind, t.level ?? 0, condition, site, checks, head);
+        // A loop a judge, a delegate or a program ends writes its MAX (src/check.ts maxIssue).
+        const bounded = (t.level ?? 0) > 0 || (t.executor ?? 0) > 0;
+        const max = maxIssue(key as CheckKind, `${head}${executorMark(t.executor ?? 0)}`, bounded, split);
+        if (max) issues.push({ file, line: t.line, message: max });
+        const { issue } = condCheckOf(key as CheckKind, t.level ?? 0, condition, site, checks, head, split.max);
         if (issue) issues.push({ file, line: t.line, ...issue });
       }
       let inner = site;

@@ -12,6 +12,7 @@ import {
   postProcessBody,
   reportLintIssues,
   lintSource,
+  strayDimensionErrors,
 } from './compiler/index.js';
 import { checkedHeadIssues, lineOfName } from './lint.js';
 import { Config } from './config.js';
@@ -248,7 +249,9 @@ async function collectTeams(teamsRoot: string, ctx: BundleContext): Promise<Team
     }
     await hoistLensInTemplates(teamDir, members, ctx);
     ctx.variables = [];
+    const dimensions = ctx.dimensions.length;
     const routingRaw = await resolveInlineBlocks(stripped, ctx, flowsAp);
+    ctx.lintErrors.push(...strayDimensionErrors(ctx, flowsAp, dimensions));
     // What flows.ap imports itself — imports never pass on. A team shares constants
     // and SESSION variables: a private one would be each member's own.
     const variables = ctx.variables.filter(v => v.importers.includes(flowsAp));
