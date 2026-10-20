@@ -28,7 +28,7 @@ import {
 } from '../../adapters/md/phrases.js';
 import { storeTypeOf, storeTypeNames } from '../storeTypes/registry.js';
 import { phraseOf, STORE_LIFETIMES, type StoreDecl, type StoreLifetime } from '../storeTypes/types.js';
-import { parseTemplate, templateLayout, SLOT_NAME } from '../shapeCompiler.js';
+import { parseTemplate, templateLayout, composeExample, SLOT_NAME } from '../shapeCompiler.js';
 import type { VarScope } from '../vars.js';
 import { extractPrimitive, extractPrimitives, stripPrimitives } from '../services/text.js';
 import { renderIdentityBlock, renderGlobs } from '../primitives.js';
@@ -515,7 +515,10 @@ export class TemplateBlock extends ApBlock {
     } else {
       return super.asMdBody(env);
     }
-    if (this.example) out.push('', EXAMPLE_OPEN, this.example, EXAMPLE_CLOSE);
+    if (this.example) {
+      const example = env.exampleOf ? composeExample(this.example, this.name, env.exampleOf) : this.example;
+      out.push('', EXAMPLE_OPEN, example, EXAMPLE_CLOSE);
+    }
     return out.join('\n');
   }
 }

@@ -154,6 +154,8 @@ export class DocumentBuilder implements BlockCx {
   private checkSites: { id: string; kind: CheckKind; level: CheckLevel; head: string; condition: string; inStep: boolean; rounds?: number; path: string; line: number | null }[] = [];
   /** The IF! token a `WHEN!` was desugared into, while its WHEN's body is walked — and the head its messages name (`WHEN!`). */
   private sugared: { token: Token; head: string } | null = null;
+  /** The WHEN whose body is walked, and the bodies an `AS` line shapes it from — its own, and a `WHEN!`'s IF! branch. */
+  private when: { node: WhenNode; bodies: ApNode[][] } | null = null;
   /** What is wrong with the checked conditions: a compile error each — or a warning — reported by the caller. */
   readonly checkIssues: { path: string; name: string; line: number | null; message: string; severity?: 'warning' }[] = [];
   /** What does not hold in the WITH heads walked — reported by the caller (src/withUse.ts). */
@@ -296,6 +298,8 @@ export class DocumentBuilder implements BlockCx {
         const bounded = this.executed('IF', node, t, host) || this.checked('IF', node, t, host, steps);
         this.roundsIssue('IF', node.condition, t, bounded, split);
         sink.push(node);
+        // The IF! a `WHEN!` was desugared into: its lines are the trigger's.
+        if (t === this.sugared?.token) this.when?.bodies.push(node.then);
         this.visit(n.children, node.then, host, steps);
         i++;
         continue;
@@ -347,11 +351,14 @@ export class DocumentBuilder implements BlockCx {
         sink.push(node);
         const first = n.children.find(c => c.token.kind !== 'blank')?.token;
         const prior = this.sugared;
+        const priorWhen = this.when;
         const head = first?.kind === 'keyword' && first.keyword === 'IF'
           ? sugaredHead({ keyword: 'WHEN', condition: rest }, true, first.level ?? 0, stripTrailingColon(first.rest)) : null;
         this.sugared = head && first ? { token: first, head } : null;
+        this.when = { node, bodies: [node.body] };
         this.visit(n.children, node.body, host, steps);
         this.sugared = prior;
+        this.when = priorWhen;
       } else {
         const node = this.at(new DirectiveNode(base, force, rest, t.indent, []), t);
         sink.push(node);
@@ -570,6 +577,8 @@ export class DocumentBuilder implements BlockCx {
     const shape: ApShape = { force, ref: this.templateRef(stripColon(rawName)) };
     const step = steps[steps.length - 1];
     if (step) { step.shape = shape; return; }
+    // Written in a WHEN's body: the shape of that trigger's answer, never the host's.
+    if (this.when?.bodies.includes(sink)) { this.when.node.shape = shape; return; }
     if (host) {
       host.shape = shape;
       // Source position of the AS line, when it sits directly in the host body.

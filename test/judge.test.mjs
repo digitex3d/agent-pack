@@ -91,8 +91,8 @@ try {
     assert.ok(!byId['plain'], 'a template without #judge is no rule');
     assert.ok(rules.some(r => r.template.namespace !== byId['one-action'].template.namespace), 'the builtin library\'s rules join them');
     assert.equal(byId['one-action'].id, byId['one-action'].template.address, 'a rule id is its template\'s address');
-    assert.equal(byId['one-action'].primitive, 'DO', 'the first word of the layout is the primitive');
-    assert.equal(byId['when-rule'].primitive, 'WHEN');
+    assert.deepEqual(byId['one-action'].primitives, ['DO'], 'the first word of the layout is the primitive');
+    assert.deepEqual(byId['when-rule'].primitives, ['WHEN']);
     assert.equal(byId['one-action'].template.name, 'one-action');
     assert.deepEqual(byId['one-action'].checks, [
       { id: 'one-action.action.1', statement: 'name one action', force: { keyword: 'SHOULD', level: 0 } },
@@ -187,13 +187,33 @@ try {
     for (const [keyword, stored] of [['NEVER', 'ALWAYS'], ['MUST-NOT', 'MUST'], ['SHOULD-NOT', 'SHOULD'], ['!MUST', 'MUST'], ['MUST!', 'MUST'],
       ['IF!', 'IF'], ['UNTIL*', 'UNTIL'], ['ON-INVOKE', 'WHEN'], ['SESSION', 'VAR']]) {
       assert.throws(bodyRule(join(root, `body-${keyword.replace(/[!*]/g, '_')}`), `${keyword} {x}`, '#judge #agent'),
-        new RegExp(`body-rule.*BODY starts with \`${keyword.replace(/[!*]/g, '\\$&')}\`, but lines written .* are stored under \`${stored}\` — start the BODY with \`${stored}\``),
+        new RegExp(`body-rule.*BODY starts with \`${keyword.replace(/[!*]/g, '\\$&')}\`, but lines written .* are stored under \`${stored}\` — write \`${stored}\``),
         `BODY ${keyword} points to ${stored}`);
     }
     for (const keyword of ['DO', 'ASK', 'COMPUTE', 'MUST', 'ALWAYS', 'SHOULD', 'MAY', 'MEM', 'WITH', 'RUN', 'VAR', 'IF', 'UNTIL', 'WHEN', 'STEP', 'PARALLEL', 'IN']) {
-      assert.equal(bodyRule(join(root, `body-ok-${keyword}`), `${keyword} {x}`)().primitive, keyword, `BODY ${keyword} names its lines`);
+      assert.deepEqual(bodyRule(join(root, `body-ok-${keyword}`), `${keyword} {x}`)().primitives, [keyword], `BODY ${keyword} names its lines`);
     }
-    assert.equal(bodyRule(join(root, 'body-ok-line'), '{x}', '#judge #agent')().primitive, null, 'a scoped rule may lay out a slot alone');
+    assert.deepEqual(bodyRule(join(root, 'body-ok-line'), '{x}', '#judge #agent')().primitives, [], 'a scoped rule may lay out a slot alone');
+
+    // A BODY opening with an ENUM slot judges the lines of each of its values: one rule, many keywords.
+    const enumRule = (dir, values, keywordRules = []) => {
+      write(join(dir, 'templates', 'enum-rule.ap'), [
+        'EXPORT TEMPLATE enum-rule:', '    ABOUT  a rule on lines of several keywords', '    APPLIES   #judge', '    SLOTS:',
+        `        keyword: ENUM[${values}]  "the keyword of the line"`, ...keywordRules,
+        '        x: TEXT  "the line\'s text"', '            SHOULD  be short', '    BODY:', '        {keyword} {x}', '',
+      ]);
+      return () => loadJudgeRules({ libraryRoot: dir, sharedLibraries: [], userRoot: '' }).find(r => r.template.name === 'enum-rule');
+    };
+    const several = enumRule(join(root, 'enum-ok'), 'DO MUST ALWAYS SHOULD MAY')();
+    assert.deepEqual(several.primitives, ['DO', 'MUST', 'ALWAYS', 'SHOULD', 'MAY'], 'the ENUM values are the primitives');
+    assert.equal(several.role, "the line's text", 'the role is the line slot\'s description, never the keyword slot\'s');
+    assert.deepEqual(several.checks.map(c => c.id), ['enum-rule.x.1'], 'the checks are the line slot\'s rules');
+    assert.throws(enumRule(join(root, 'enum-never'), 'DO NEVER'),
+      /enum-rule.*BODY starts with `\{keyword\}`, whose value `NEVER`, but lines written `NEVER` are stored under `ALWAYS` — write `ALWAYS`/, 'an ENUM value is checked like a BODY word');
+    assert.throws(enumRule(join(root, 'enum-meta'), 'DO ABOUT'),
+      /enum-rule.*BODY starts with `\{keyword\}`, whose value `ABOUT`, which never starts a body line/, 'a value no line is stored under is a load error');
+    assert.throws(enumRule(join(root, 'enum-ruled'), 'DO MUST', ['            SHOULD  be DO']),
+      /enum-rule.*slot `keyword` names the lines the rule judges, so it takes no rule of its own/, 'a rule on the keyword slot is a load error');
   }
 
   // --- the lock: a decision without a p in 0..1 is a load error naming its key ---
@@ -391,10 +411,10 @@ try {
     assert.ok(printed.includes(`warning  ${alphaFile}:7:5  [one-action.action.2] `), printed);
     const summary = printed.split('\n').filter(l => l.startsWith('judge: '));
     assert.equal(summary.length, 1, 'one summary line');
-    const m = /^judge: (\d+) warnings — 3 files, 0 unchanged; (\d+) DO lines, (\d+) rule×line checks: (\d+) from saved verdicts, (\d+) asked, 0 not judged \(fake-1\.0\)$/.exec(summary[0]);
+    const m = /^judge: (\d+) warnings — 3 files, 0 unchanged; (\d+) DO\/MUST\/ALWAYS\/SHOULD\/MAY lines, (\d+) rule×line checks: (\d+) from saved verdicts, (\d+) asked, 0 not judged \(fake-1\.0\)$/.exec(summary[0]);
     assert.ok(m, summary[0]);
     assert.equal(Number(m[1]), run.warnings.length);
-    assert.equal(Number(m[2]), new Set(asks.map(a => lineOf(a.state))).size, 'lines: the distinct DO line texts, not rule×text pairs');
+    assert.equal(Number(m[2]), new Set(asks.map(a => lineOf(a.state))).size, 'lines: the distinct line texts, not rule×text pairs');
     assert.equal(Number(m[3]), asks.length, 'one rule×line check per request');
     assert.ok(Number(m[3]) > Number(m[2]), 'several rules per line');
     assert.equal(Number(m[4]), 0);
@@ -434,7 +454,7 @@ try {
     assert.equal(run.stats.pairs, 0, 'no verdict looked up: every file taken from its unit');
     assert.deepEqual(ours(run).map(where).sort(), firstWarnings.map(where).sort(), 'the same diagnostics, from the units');
     const printed = await captured(() => finishJudgeRun(run, { prune: false }));
-    assert.match(printed, /judge: \d+ warnings — 3 files, 3 unchanged; 0 DO lines, 0 rule×line checks: 0 from saved verdicts, 0 asked, 0 not judged \(fake-1\.0\)/);
+    assert.match(printed, /judge: \d+ warnings — 3 files, 3 unchanged; 0 DO\/MUST\/ALWAYS\/SHOULD\/MAY lines, 0 rule×line checks: 0 from saved verdicts, 0 asked, 0 not judged \(fake-1\.0\)/);
     assert.equal(readFileSync(lockPath, 'utf-8'), lockBefore, 'the lock is never rewritten once the model is pinned');
     assert.equal(statSync(lockPath).mtimeMs, lockTime);
     assert.deepEqual([alphaFile, sharedFile].map(f => readFileSync(unitPath(f), 'utf-8')), unitsBefore, 'the units untouched');
@@ -546,7 +566,7 @@ try {
   {
     const { verdictKey } = await import('../dist/src/judge/lock.js');
     const text = 'sign the release';
-    const keys = loadJudgeRules(config).filter(r => r.primitive === 'DO').flatMap(r => r.checks.map(c => verdictKey(c, judgeState(r, text))));
+    const keys = loadJudgeRules(config).filter(r => r.primitives.includes('DO')).flatMap(r => r.checks.map(c => verdictKey(c, judgeState(r, text))));
     const lock = readLock();
     writeFileSync(lockPath, JSON.stringify({ ...lock, decisions: { ...lock.decisions, ...Object.fromEntries(keys.map(k => [k, { p: 1, by: 'human' }])) } }, null, 2) + '\n');
     write(alphaFile, alphaLines.map(l => l.replace('DO  read the task', `DO  ${text}`)));
@@ -951,6 +971,53 @@ try {
     } finally {
       process.chdir(proj);
       delete globalThis.__dimAsk;
+    }
+  }
+
+  // --- an ENUM rule judges the lines of each of its keywords, whatever their force — and no other line ---
+  {
+    const eproj = join(root, 'enum-proj');
+    write(join(eproj, 'agent-pack.config.mjs'), [
+      'export default {', "  libraryRoot: 'library',", "  agentsDir: 'agents',", "  adapters: ['claude-code'],",
+      "  judge: { adapter: { type: 'judge', name: 'fake', ask: (...a) => globalThis.__enumAsk(...a) } },", '};', '',
+    ]);
+    write(join(eproj, 'library', 'templates', 'one-thing.ap'), [
+      'EXPORT TEMPLATE one-thing:', '    ABOUT  test rule on DO and ALWAYS lines', '    APPLIES   #judge #agent', '    SLOTS:',
+      '        keyword: ENUM[DO ALWAYS]  "the keyword of the line"',
+      '        rule: TEXT  "what the agent does"', '            SHOULD  name one thing', '    BODY:', '        {keyword} {rule}', '',
+    ]);
+    const agent = write(join(eproj, 'agents', 'standalone', 'worker.ap'), [
+      'EXPORT AGENT worker AS worker-role:', '    ABOUT    worker', '    MANDATE  do the work',   // 1-3
+      '    DO      read the task',                                                                // 4
+      '    NEVER   push or open a pull request',                                                  // 5
+      '    MUST    keep the tests green',                                                         // 6
+      '',
+      'ROLE worker-role:', '    ABOUT   a worker', '    ALWAYS  test first', '',
+    ]);
+    const enumAsks = [];
+    globalThis.__enumAsk = async (state, checks, model) => {
+      if (checks.some(c => c.id.startsWith('one-thing.'))) enumAsks.push(lineOf(state));
+      const p = state === 'push or open a pull request' ? 0.1 : 0.95;
+      return { model: model ?? 'fake-1.0', answers: Object.fromEntries(checks.map(c => [c.id, p])) };
+    };
+    process.chdir(eproj);
+    try {
+      const econfig = await loadConfig([]);
+      const lib = join(eproj, 'library');
+      const run = openJudgeRun(econfig, eproj);
+      await bundleAgentObject({
+        agentName: 'worker', agentFile: agent, agentDir: join(eproj, 'agents', 'standalone'),
+        libraryRoot: lib, libraryRoots: [lib], libraries: { '@main': lib }, bundleConfig: { runtime: false }, judge: run,
+      });
+      const asked = new Set(enumAsks);   // the lines the test rule asked about — the builtin rules ask too
+      for (const text of ['read the task', 'push or open a pull request', 'test first']) assert.ok(asked.has(text), `a ${text} line is judged: ${[...asked].join(' | ')}`);
+      assert.ok(!asked.has('keep the tests green'), 'a MUST line is no line of the rule');
+      assert.deepEqual(run.warnings.filter(w => w.code.startsWith('one-thing.')).map(w => `${w.file}:${w.line} ${w.severity} [${w.code}]`),
+        [`${agent}:5 warning [one-thing.rule.1]`], 'a NEVER line is an ALWAYS line: judged and reported at its own line');
+      finishJudgeRun(run, { prune: false });
+    } finally {
+      process.chdir(proj);
+      delete globalThis.__enumAsk;
     }
   }
 

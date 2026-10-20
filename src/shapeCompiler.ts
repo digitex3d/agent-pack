@@ -285,6 +285,9 @@ export interface ExampleRefEntry {
   body: string;
 }
 
+/** A template's EXAMPLE by name: undefined when no such template, null when it has none. */
+export type ExampleOf = (name: string) => string | null | undefined;
+
 /**
  * Resolve `{slug.EXAMPLE}` markers — written by hand in an EXAMPLE region to
  * compose another template's EXAMPLE verbatim instead of hand-copying it
@@ -294,21 +297,25 @@ export interface ExampleRefEntry {
  * since verbatim content is shielded from every post-emit substitution.
  * Throws on an unknown slug, a slug with no EXAMPLE, or a reference cycle.
  */
-function resolveExampleRefs(example: string, templates: ExampleRefEntry[], seen: Set<string>): string {
+function resolveExampleRefs(example: string, exampleOf: ExampleOf, seen: Set<string>): string {
   return example.replace(EXAMPLE_REF_RE, (_m, slug: string) => {
     if (seen.has(slug)) {
       throw new Error(`template EXAMPLE reference "{${slug}.EXAMPLE}" is circular`);
     }
-    const ref = templates.find(t => t.name === slug);
-    if (!ref) {
+    const composed = exampleOf(slug);
+    if (composed === undefined) {
       throw new Error(`template EXAMPLE references unknown shape "${slug}" (no TEMPLATE with this name is imported)`);
     }
-    const parsed = parseTemplate(ref.body);
-    if (!parsed?.example) {
+    if (!composed) {
       throw new Error(`template "${slug}" has no EXAMPLE to compose via "{${slug}.EXAMPLE}"`);
     }
-    return resolveExampleRefs(parsed.example, templates, new Set(seen).add(slug));
+    return resolveExampleRefs(composed, exampleOf, new Set(seen).add(slug));
   });
+}
+
+/** Template `name`'s EXAMPLE with every `{slug.EXAMPLE}` it holds composed in. */
+export function composeExample(example: string, name: string, exampleOf: ExampleOf): string {
+  return resolveExampleRefs(example, exampleOf, new Set([name]));
 }
 
 /**
@@ -344,7 +351,10 @@ export function renderTemplate(body: string, name: string, templates?: ExampleRe
   }
 
   if (t.example) {
-    const example = templates ? resolveExampleRefs(t.example, templates, new Set([name])) : t.example;
+    const example = templates ? composeExample(t.example, name, slug => {
+      const ref = templates.find(e => e.name === slug);
+      return ref ? parseTemplate(ref.body)?.example ?? null : undefined;
+    }) : t.example;
     out.push('', '<example>', markVerbatim(example), '</example>');
   }
   return out.join('\n');

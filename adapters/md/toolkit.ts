@@ -38,6 +38,8 @@ export interface MdEnv {
   exeOf?(target: string): { exe: string; executor: number } | undefined;
   /** An UNTIL condition's contract: the rounds its loop runs at most — else undefined. */
   roundsOf?(exe: string): number | undefined;
+  /** A template's EXAMPLE by name — what a `{slug.EXAMPLE}` composes in (src/shapeCompiler.ts). */
+  exampleOf?(name: string): string | null | undefined;
 }
 
 /** Bullet-group primitives by keyword (DO, BY, WHEN, LOG, …) — RUN excluded. */

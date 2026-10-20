@@ -163,6 +163,14 @@ try {
     const sugar = await compile(['    VAR request', '    WHEN! {{request}} submits one idea:', '        DO  shape the idea']);
     const plain = await compile(['    VAR request', '    WHEN {{request}} submits one idea:', '        IF! {{request}} submits one idea:', '            DO  shape the idea']);
     assert.equal(sugar.body, plain.body, 'WHEN! compiles byte-identical to the hand-written pair');
+    // An AS written in a WHEN! lands under its IF!: it is still the trigger's shape, as in the hand-written pair.
+    const shaped = await compile(['    VAR request', '    WHEN! {{request}} submits one idea:', '        AS  verdict', '        DO  shape the idea']);
+    const shapedPlain = await compile(['    VAR request', '    WHEN {{request}} submits one idea:', '        IF! {{request}} submits one idea:', '            AS  verdict', '            DO  shape the idea']);
+    assert.equal(shaped.body, shapedPlain.body, 'WHEN! with AS compiles byte-identical to the pair');
+    const when = shaped.structure.root().body.find(n => n.type === 'when');
+    assert.equal(when.shape?.ref.target.endsWith('verdict'), true, 'the AS shapes the WHEN');
+    assert.equal(shaped.structure.root().shape, null, "never the agent's own shape");
+    assert.match(shaped.body, /submits one idea:\n {4}Shape your response as `verdict` \(tpl-/);
     assert.deepEqual(sugar.structure.meta.checks, plain.structure.meta.checks);
     const id = idOf(sugar.structure);
     assert.equal(sugar.structure.meta.checks[id].kind, 'IF');

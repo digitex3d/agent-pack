@@ -69,6 +69,7 @@ export function mdEnv(
     apxOf,
     agent: doc.root()?.name ?? '',
     roundsOf: exe => doc.meta.executors?.[exe]?.rounds,
+    exampleOf: name => { const t = doc.templateNamed(name); return t ? t.example : undefined; },
     exeOf: target => {
       const block = doc.block(target);
       return block?.exe && block.executor ? { exe: block.exe, executor: block.executor } : undefined;

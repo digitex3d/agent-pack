@@ -4,7 +4,8 @@
  * The judge's rules: every TEMPLATE tagged `#judge` in the libraries — the
  * project's, the shared ones and the builtin one. The template's BODY layout
  * says which lines it applies to (its first word is the primitive: `DO {action}`
- * → every DO line), its slot rules are the checks. A rule's force gives the
+ * → every DO line; an opening ENUM slot `{keyword} {action}` → every line of
+ * each of its values), its slot rules are the checks. A rule's force gives the
  * severity — MUST an error, SHOULD a warning (SHOULD-NOT too); any other force is a load error.
  */
 import { resolve } from 'path';
@@ -23,6 +24,7 @@ import { getFamilyBases, parseForceLevel, toCanonicalKeyword } from '../forceLev
 import { lifecycleToWhen } from '../lifecycleConfig.js';
 import { BASE_TRIGGER, isTriggerKind, splitControl } from '../lexer.js';
 import { CHECK_KINDS } from '../check.js';
+import { SLOT_NAME } from '../shapeCompiler.js';
 import { ACTION_VERBS } from '../actionVerbs.js';
 import { AGENT_METADATA_KEYWORDS, FORCE_LEVEL_PRIMITIVES } from '../primitives.js';
 import { SEQUENCE_PRIMITIVES } from '../sequencePrimitives.js';
@@ -86,27 +88,46 @@ function storedKeyword(word: string): string {
   return parseForceLevel(toCanonicalKeyword(word))?.family ?? word;
 }
 
-/** The primitive a rule's BODY layout names — null when it starts with a slot; a word no line is stored under is a load error. */
-function primitiveOf(template: TemplateBlock): string | null {
-  const word = /^\s*(!*[A-Z][A-Z0-9-]*[!*]*)(?=[\s:{]|$)/.exec(template.layout ?? '')?.[1];
-  if (!word) return null;
+/** A keyword a rule's BODY names — the word itself; one no line is stored under is a load error. */
+function checkedPrimitive(template: TemplateBlock, word: string, opening: string): string {
   const stored = storedKeyword(word);
   const rule = `judge rule \`${template.name}\``;
   if (!LINE_KEYWORDS.has(stored)) {
-    throw new Error(`${rule}: its BODY starts with \`${word}\`, which never starts a body line — it is a block's metadata or no line keyword, so the rule would judge nothing; start the BODY with the keyword of the lines it judges (e.g. \`DO {action}\`), or lay out \`{line}\` in a rule tagged #executed, #program or #agent`);
+    throw new Error(`${rule}: its BODY starts with ${opening}, which never starts a body line — it is a block's metadata or no line keyword, so the rule would judge nothing; start the BODY with the keyword of the lines it judges (e.g. \`DO {action}\`), or lay out \`{line}\` in a rule tagged #executed, #program or #agent`);
   }
   if (stored !== word) {
-    throw new Error(`${rule}: its BODY starts with \`${word}\`, but lines written \`${word}\` are stored under \`${stored}\` — start the BODY with \`${stored}\` (the rule then judges every ${stored} line, whatever its force or level)`);
+    throw new Error(`${rule}: its BODY starts with ${opening}, but lines written \`${word}\` are stored under \`${stored}\` — write \`${stored}\` (the rule then judges every ${stored} line, whatever its force or level)`);
   }
   return word;
 }
 
-/** A `#judge` template as a rule — its primitive from the layout, its checks from the slot rules. */
+/**
+ * The primitives a rule's BODY layout names: its first word (`DO {action}`), or
+ * the values of the ENUM slot it opens with (`{keyword} {action}`, keyword:
+ * `ENUM[DO MUST]`) — that slot only names the lines, so a rule on it is a load
+ * error. Empty when it opens with any other slot (`{line}`).
+ */
+function primitivesOf(template: TemplateBlock): { primitives: string[]; keywordSlot?: string } {
+  const layout = template.layout ?? '';
+  const opening = new RegExp(`^\\s*\\{(${SLOT_NAME})\\}`).exec(layout)?.[1];
+  if (opening) {
+    const slot = template.slots?.find(s => s.name === opening);
+    if (slot?.type.kind !== 'enum') return { primitives: [] };
+    if (slot.rules.length > 0) {
+      throw new Error(`judge rule \`${template.name}\`: its slot \`${opening}\` names the lines the rule judges, so it takes no rule of its own — write the rule on the slot of the line's text`);
+    }
+    return { primitives: slot.type.values.map(v => checkedPrimitive(template, v, `\`{${opening}}\`, whose value \`${v}\``)), keywordSlot: opening };
+  }
+  const word = /^\s*(!*[A-Z][A-Z0-9-]*[!*]*)(?=[\s:{]|$)/.exec(layout)?.[1];
+  return { primitives: word ? [checkedPrimitive(template, word, `\`${word}\``)] : [] };
+}
+
+/** A `#judge` template as a rule — its primitives from the layout, its checks from the slot rules. */
 export function ruleOf(template: TemplateBlock): JudgeRule {
-  const primitive = primitiveOf(template);
+  const { primitives, keywordSlot } = primitivesOf(template);
   const scope = JUDGE_SCOPES.find(s => template.tags.includes(s));
-  if (!primitive && !scope) {
-    throw new Error(`judge rule \`${template.name}\`: its BODY layout must start with the keyword of the lines it judges (e.g. \`DO {action}\`), or the rule be tagged #executed, #program or #agent`);
+  if (primitives.length === 0 && !scope) {
+    throw new Error(`judge rule \`${template.name}\`: its BODY layout must start with the keyword of the lines it judges (e.g. \`DO {action}\`), or an ENUM slot of those keywords, or the rule be tagged #executed, #program or #agent`);
   }
   const checks = template.asChecks();
   if (checks.length === 0) throw new Error(`judge rule \`${template.name}\`: no slot rule to check`);
@@ -116,8 +137,8 @@ export function ruleOf(template: TemplateBlock): JudgeRule {
       throw new Error(`judge rule \`${template.name}\`: ${what} is not supported — a #judge rule is MUST, SHOULD, NEVER, MUST-NOT or SHOULD-NOT (${check.id})`);
     }
   }
-  const role = template.slots?.[0]?.description;
-  return { id: template.address, primitive, ...(scope ? { scope } : {}), template, checks, ...(role ? { role } : {}), examples: examplesOf(template) };
+  const role = template.slots?.find(s => s.name !== keywordSlot)?.description;
+  return { id: template.address, primitives, ...(scope ? { scope } : {}), template, checks, ...(role ? { role } : {}), examples: examplesOf(template) };
 }
 
 /**

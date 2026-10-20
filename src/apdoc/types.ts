@@ -162,6 +162,8 @@ export interface ApWhenNode {
   /** Source indentation (spaces) within the block body; absent = 0. */
   indent?: number;
   condition: string;
+  /** The `AS <template>` line written in its body: the shape of the answer it gives. */
+  shape?: ApShape;
   chars: number;
   body: ApNode[];
 }

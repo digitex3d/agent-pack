@@ -361,6 +361,7 @@ export class VarNode extends NodeBase implements ApVarNode {
 
 export class WhenNode extends NodeBase implements ApWhenNode {
   readonly type = 'when';
+  shape?: ApShape;
   body: ApNode[] = [];
 
   constructor(public condition: string, indent?: number) {
@@ -369,6 +370,7 @@ export class WhenNode extends NodeBase implements ApWhenNode {
 
   static fromData(n: ApWhenNode): WhenNode {
     const node = new WhenNode(n.condition, n.indent);
+    if (n.shape) node.shape = n.shape;
     node.body = reviveNodes(n.body);
     node.chars = n.chars;
     return node;
@@ -378,14 +380,19 @@ export class WhenNode extends NodeBase implements ApWhenNode {
     return {
       type: this.type, condition: this.condition, chars: this.chars,
       ...(this.indent ? { indent: this.indent } : {}),
+      ...(this.shape ? { shape: this.shape } : {}),
       body: this.body,
     };
   }
 
   asMdLines(env: MdEnv, ordered: boolean): string[] {
+    const body = renderNodes(env, this.body, ordered);
+    // The shape line opens the body, at the body's own indent.
+    const inner = body.find(l => l.trim() !== '')?.match(/^ */)?.[0].length ?? (this.indent ?? 0) + 4;
     return [
       ...indentLines([`${controlHead('WHEN')} ${env.substitute(this.condition)}:`], this.indent ?? 0),
-      ...renderNodes(env, this.body, ordered),
+      ...(this.shape ? indentLines([shapeLine(env, this.shape)], inner) : []),
+      ...body,
     ];
   }
 

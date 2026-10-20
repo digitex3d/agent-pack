@@ -309,7 +309,7 @@ export class ApxEngine {
       this.out(`when:  — the steps: ${this.cmd} get ${root.id}`);
       for (const w of whens) {
         const runs = w.body.filter((c): c is ApRunNode => c.type === 'run').map(c => this.refLabel(c.ref));
-        this.out(`  WHEN ${w.condition}${runs.length ? `  -> ${runs.join(', ')}` : ''}`);
+        this.out(`  WHEN ${w.condition}${runs.length ? `  -> ${runs.join(', ')}` : ''}${w.shape ? `  — as ${this.refLabel(w.shape.ref)}` : ''}`);
       }
     }
     const memories = own.filter((n): n is ApDirectiveNode => n.type === 'directive' && n.keyword === 'MEM' && (n.force ?? 0) >= 0);

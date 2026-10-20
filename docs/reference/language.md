@@ -105,7 +105,7 @@ EXPORT TEMPLATE finding:
         - Paris hosted the 2024 Olympics [high] — https://olympics.com (2024-08-11)
 ```
 
-A typed answer format. `SLOTS` declares the fields — `name?:` makes one optional, rules indented under a slot constrain it; `BODY` is the literal layout, with `{slot}` placeholders; `EXAMPLE` shows a filled instance.
+A typed answer format. `SLOTS` declares the fields — `name?:` makes one optional, rules indented under a slot constrain it; `BODY` is the literal layout, with `{slot}` placeholders; `EXAMPLE` shows a filled instance. In an `EXAMPLE`, `{other.EXAMPLE}` writes in the `EXAMPLE` of template `other` — a list quoting its row template's example instead of copying it; a template the agent does not see, one with no `EXAMPLE`, or a chain that loops back fail the compilation.
 
 | Slot type | |
 |---|---|
@@ -514,7 +514,7 @@ What a check is, and is not:
 | `AS!!` | Shape your response to match exactly |
 | `!AS` | Do not shape your response as |
 
-On an agent, `LENS-OUT` sets the shape of every answer and `LENS-IN` the shape of every request it receives. In a procedure, `AS` is the shape of the procedure's result; in a flow step, of what the step's agent is handed.
+On an agent, `LENS-OUT` sets the shape of every answer and `LENS-IN` the shape of every request it receives. In a procedure, `AS` is the shape of the procedure's result; in a flow step, of what the step's agent is handed. Written directly in a `WHEN <trigger>:` block — an `ON-…` hook or a `WHEN!` too — `AS` is the shape of the answer that moment gives: it opens the trigger's body in the compiled text and never becomes the agent's own shape.
 
 On a `VAR`, `AS <template>` is the variable's type: it takes no force level (`VAR report AS! task-report` is an error), and it shapes — at the strength of `AS!` — every step that fills the variable. See [Variables](#types).
 

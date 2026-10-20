@@ -65,7 +65,7 @@ export function unitsDir(config: Pick<Config, 'outputDir'>): string {
 export class JudgeRun {
   /** rule + text → its verdicts, or why it was not judged — each asked once. */
   private readonly pending = new Map<string, Promise<CheckVerdict[] | NotJudged>>();
-  /** The distinct line texts judged, per primitive. */
+  /** The distinct line texts judged, per keyword. */
   private readonly texts = new Set<string>();
   /** The warnings of the run, once each (an agent compiled for two adapters reports them twice). */
   private readonly found = new Map<string, LintError>();
@@ -127,13 +127,13 @@ export class JudgeRun {
     return judged;
   }
 
-  /** The verdicts of a rule's checks on one line text: decided, saved, or asked — once per run. */
-  verdictsFor(rule: JudgeRule, text: string): Promise<CheckVerdict[] | NotJudged> {
+  /** The verdicts of a rule's checks on one line text (of a `primitive` line): decided, saved, or asked — once per run. */
+  verdictsFor(rule: JudgeRule, primitive: string, text: string): Promise<CheckVerdict[] | NotJudged> {
     const id = `${rule.id}\n${text}`;
     let verdicts = this.pending.get(id);
     if (!verdicts) {
       this.stats.pairs++;
-      const line = `${rule.primitive}\n${text}`;
+      const line = `${primitive}\n${text}`;
       if (!this.texts.has(line)) {
         this.texts.add(line);
         this.stats.lines++;
@@ -254,7 +254,8 @@ export async function judgeDocument(doc: ApDocument, run: JudgeRun, sources: Sou
   const report = (d: LintError): void => { if (d.severity === 'error') errors.push(d); else run.warn(d); };
   const byFile = new Map<string | null, Judged[]>();
   for (const rule of run.rules) {
-    for (const line of doc.lines(rule.primitive ?? undefined)) {
+    for (const line of doc.lines()) {
+      if (rule.primitives.length > 0 && !rule.primitives.includes(line.primitive)) continue;
       if (line.text.trim() === '' || shipped(line.file)) continue;
       if (rule.scope && !inScope(rule.scope, line)) continue;
       const judged = byFile.get(line.file) ?? [];
@@ -282,7 +283,7 @@ export async function judgeDocument(doc: ApDocument, run: JudgeRun, sources: Sou
     }
     if (unit) unit.rejudged = true;
     const verdicts = new Map(await Promise.all(judged.map(async ({ rule, line }) =>
-      [`${rule.id}\n${line.text}`, await run.verdictsFor(rule, line.text)] as const)));
+      [`${rule.id}\n${line.text}`, await run.verdictsFor(rule, line.primitive, line.text)] as const)));
     for (const { rule, line } of judged) {
       const where = file ?? line.block.address;
       const result = verdicts.get(`${rule.id}\n${line.text}`)!;
@@ -353,7 +354,7 @@ export function finishJudgeRun(run: JudgeRun, opts: { prune: boolean }): void {
   if (warnings.length > 0) console.error(formatErrors(warnings));
   if (run.offlineReason) console.error(`[agent-pack] judge ${run.options.adapter.name} unavailable: ${run.offlineReason}`);
   // A #executed / #program rule names no keyword: its lines are counted, not named.
-  const primitives = [...new Set(run.rules.map(r => r.primitive).filter(p => p !== null))].join('/');
+  const primitives = [...new Set(run.rules.flatMap(r => r.primitives))].join('/');
   const { lines, pairs, cached, asked, notJudged } = run.stats;
   const files = [...run.files.values()];
   const rejudged = files.filter(f => f.rejudged).length;

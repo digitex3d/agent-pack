@@ -1,13 +1,15 @@
 # judge-do-line
 
 EXPORT TEMPLATE judge-do-line:
-  ABOUT   judge rule for every DO line — the line tells the agent to do exactly one thing
+  ABOUT   judge rule for every DO and force-level line (MUST, ALWAYS/NEVER, SHOULD, MAY) — one thing per line
   APPLIES #judge #agent
 
   SLOTS:
+    keyword: ENUM[DO MUST ALWAYS SHOULD MAY]  "the keyword that opens the line — DO or a force level"
     action: TEXT  "the action the agent performs — one imperative verb and what it applies to"
       SHOULD write exactly one imperative verb for the agent — a list of objects is fine; subclause verbs don't count
   BODY:
-    DO {action}
+    {keyword} {action}
   EXAMPLE:
     DO run npm test before declaring done
+    MUST commit locally only

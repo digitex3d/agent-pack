@@ -33,18 +33,19 @@ export interface JudgeQuestion {
   question: string;
 }
 
-/** A rule: a TEMPLATE tagged `#judge`, applied to every line of its layout's primitive. */
+/** A rule: a TEMPLATE tagged `#judge`, applied to every line of its layout's primitives. */
 export interface JudgeRule {
   /** The template's address (`<namespace>/<name>`) — unique, even when two libraries share a name. */
   id: string;
   /**
-   * The keyword of the lines it judges — the first word of the layout (`DO {action}` → `DO`);
-   * null when the layout names none (`{line}`): every line of its scope.
+   * The keywords of the lines it judges — the first word of the layout (`DO {action}` → `DO`),
+   * or the values of the ENUM slot it opens with (`{keyword} {action}`, `ENUM[DO MUST]` → `DO`, `MUST`);
+   * empty when the layout names none (`{line}`): every line of its scope.
    */
-  primitive: string | null;
+  primitives: string[];
   /**
    * `#executed`: only the lines a delegate or a program carries out; `#program`: only a
-   * program's; `#agent`: only the agent's own (src/executor.ts). Absent: every line of its primitive.
+   * program's; `#agent`: only the agent's own (src/executor.ts). Absent: every line of its primitives.
    */
   scope?: (typeof JUDGE_SCOPES)[number];
   template: TemplateBlock;
