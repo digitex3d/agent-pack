@@ -23,12 +23,28 @@ export interface ArgumentSpec {
   keyword: string;
   /** Render the argument's value as an inline signature fragment. */
   inline(value: string): string;
+  /** The argument's value, and the body line it also stands for (null when none) — `CONTEXT summary AS! brief`. */
+  split?(value: string): { value: string; line: string | null };
+}
+
+/**
+ * `CONTEXT <mode> AS[!…] <template>` — a step's context mode and the shape of
+ * what it is handed, on one line: the mode, and the `AS` line it stands for
+ * (null when the line holds the mode alone).
+ */
+export function contextShape(rest: string): { mode: string; as: string | null } {
+  // The template may come resolved already: `\`brief\` (tpl-…)`.
+  const m = /^(\S+)\s+(!*AS!*\s+\S.*)$/.exec(rest.trim());
+  return m ? { mode: m[1], as: m[2] } : { mode: rest.trim(), as: null };
 }
 
 export const DEFINITION_ARGS: Record<string, ArgumentSpec[]> = {
   STEP: [
     { keyword: 'BY', inline: v => fill(FORMULAS.keywords.STEP.args.find(a => a.keyword === 'BY')!.formula, { value: v }) },
-    { keyword: 'CONTEXT', inline: v => fill(FORMULAS.keywords.STEP.args.find(a => a.keyword === 'CONTEXT')!.formula, { value: v }) },
+    {
+      keyword: 'CONTEXT', inline: v => fill(FORMULAS.keywords.STEP.args.find(a => a.keyword === 'CONTEXT')!.formula, { value: v }),
+      split: v => { const { mode, as } = contextShape(v); return { value: mode, line: as }; },
+    },
   ],
   // AGENT carries its signature argument on the HEADER line, not as a child:
   // `AGENT <name> AS <role>:`. `AS` binds the agent to the NAME of a role

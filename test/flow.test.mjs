@@ -182,6 +182,23 @@ FLOW bad-mode
 }
 
 // ---------------------------------------------------------------------------
+// 7b. `CONTEXT <mode> AS! <template>` — the mode and the step's input shape on one line
+// ---------------------------------------------------------------------------
+
+{
+  const step = line => checkVocabulary('one-line.flow.ap', ['FLOW one-line', '  STEP review:', '    BY bob', `    ${line}`, '    DO check it', ''].join('\n'))
+    .map(e => `${e.line}: ${e.message}`);
+  assert.deepEqual(step('CONTEXT summary AS! review-brief'), [], 'the mode, then the shape');
+  assert.deepEqual(step('CONTEXT full AS review-brief'), [], 'at any level of AS');
+  assert.deepEqual(step('CONTEXT summery AS! review-brief'), ['4: CONTEXT: unknown value `summery` (allowed: isolated, summary, full, inherited)'],
+    'the mode is checked alone');
+  assert.deepEqual(step('CONTEXT summary AS!!!! review-brief'), ['4: `AS!!!!` is not a level of AS — use !AS, AS, AS!, AS!!'],
+    'the AS level is checked');
+
+  console.log('Flow lint CONTEXT with AS on one line test passed.');
+}
+
+// ---------------------------------------------------------------------------
 // 8. Block contract: FLOW without STEP
 // ---------------------------------------------------------------------------
 
@@ -287,6 +304,10 @@ FLOW bad-flow
   mkdirSync(tmp, { recursive: true });
   mkdirSync(join(tmp, 'agents/standalone'), { recursive: true });
   mkdirSync(join(tmp, 'library/flows'), { recursive: true });
+  mkdirSync(join(tmp, 'library/templates'), { recursive: true });
+  writeFileSync(join(tmp, 'library/templates/brief.ap'), [
+    'EXPORT TEMPLATE brief:', '    ABOUT  what the reviewer is handed', '    SLOTS:', '        plan: TEXT "the plan"', '    BODY:', '        {plan}', '',
+  ].join('\n'), 'utf-8');
 
   writeFileSync(join(tmp, 'agents/standalone/test-agent.ap'), [
     'IMPORT tdd FROM library.flows',
@@ -307,12 +328,17 @@ FLOW bad-flow
     'ABOUT     Test-Driven Development: tester writes failing test, dev implements, tester verifies',
     'APPLIES      #flow #tdd',
     '',
+    'IMPORT brief FROM library.templates',
+    '',
     'FLOW tdd',
     '  STEP tester:',
     '    DO write-failing-test',
     '  STEP developer:',
     '    CONTEXT full',
     '    DO make-test-pass',
+    '  STEP reviewer:',
+    '    CONTEXT summary AS! brief',
+    '    DO review-the-change',
     '  STEP tester:',
     '    DO verify-and-refactor',
     '',
@@ -332,6 +358,9 @@ FLOW bad-flow
   assert.ok(bundle.includes('Test-Driven Development'), 'bundle contains flow ABOUT');
   assert.ok(bundle.includes('write-failing-test'), 'bundle contains first step action');
   assert.ok(bundle.includes('make-test-pass'), 'bundle contains second step action');
+  // `CONTEXT summary AS! brief` reads as `CONTEXT summary` with `AS! brief` beneath.
+  assert.match(bundle, /reviewer — summary context\n +Strictly shape your response as — no deviation: `brief` \(tpl-[0-9a-f]+\)\n +Do review-the-change/,
+    'one-line CONTEXT … AS!: the mode in the signature, the shape opening the step');
 
   process.chdir(prevCwd);
   rmSync(tmp, { recursive: true });

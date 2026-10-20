@@ -13,7 +13,7 @@ import { BLOCK_CONTRACTS, BlockContract, VAR_BLOCK } from './blockContracts.js';
 import { TEAM_FLOWS_FILE } from './services/teamMetadata.js';
 import { parseBlocks, agentNestedBlocks, exportedVar, readExportedVar, isExportedVar, type Block, type Node } from './parseBlocks.js';
 import { isExportFile } from './services/text.js';
-import { parseAgentSignature } from './definitionArgs.js';
+import { parseAgentSignature, contextShape } from './definitionArgs.js';
 import { kindFromDir, unitNameFromPath } from './ingest.js';
 import { BLOCK_TYPES, blockTypeOf, EXPORT_MODIFIER, AGENT_KEYS } from './blockTypes.js';
 import { COMPUTE_SECTIONS, executorMark, returnShape, splitExecutorMark } from './executor.js';
@@ -1361,7 +1361,11 @@ export function checkVocabulary(file: string, body: string): LintError[] {
         if (!PERIMETER_KINDS.includes(owner.toLowerCase())) err(t.line, `APPLIES: a perimeter (${PERIMETER_FORMS}) goes on a POLICY or a SKILL — found on ${owner}`);
       }
       const prim = enumPrimitiveFor(key);
-      const value = t.rest.trim().replace(/:$/, '');
+      // `CONTEXT <mode> AS! <template>`: the mode, then the shape of what the step is handed.
+      const shaped = key === 'CONTEXT' ? contextShape(t.rest.replace(/:\s*$/, '')) : null;
+      const value = shaped ? shaped.mode : t.rest.trim().replace(/:$/, '');
+      const shapeWord = shaped?.as?.split(/\s+/)[0];
+      if (shapeWord && getIntroByKeyword(shapeWord) === null) err(t.line, unknownLevel(shapeWord, 'AS'));
       if (prim && value && !prim.values[value]) {
         err(t.line, `${key}: unknown value \`${value}\` (allowed: ${Object.keys(prim.values).join(', ')})`);
       }

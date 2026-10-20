@@ -309,6 +309,8 @@ await import('./adapterNames.test.mjs');
 await import('./mem.test.mjs');
 await import('./whenShape.test.mjs');
 await import('./exampleCompose.test.mjs');
+await import('./reporter.test.mjs');
+await import('./version.test.mjs');
 
 // --- programs: a COMPUTE / PROCEDURE** / IF** carried out by its program — apx run, tests, refusal, timeout, orphans ---
 await import('./programs.test.mjs');

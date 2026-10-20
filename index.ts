@@ -5,22 +5,26 @@
 import { init } from './src/commands/init.js';
 import { bundle } from './src/commands/bundle.js';
 import { agents } from './src/commands/agents.js';
-import { readFileSync } from 'fs';
 import { CREDIT } from './src/credits.js';
+import { banner, isPreRelease } from './reporters/pretty/logo.js';
+import { packageInfo, packageVersion } from './src/config.js';
 
 const [command, ...rest] = process.argv.slice(2);
 
 const commands: Record<string, (args: string[]) => Promise<void>> = { init, bundle, agents };
 
 if (command === '--version') {
-  const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8')) as { version: string };
-  console.log(`agent-pack ${version}\n${CREDIT}`);
+  const version = packageVersion();
+  console.log(`agent-pack ${version}${isPreRelease(version) ? ' (pre-release)' : ''}\n${CREDIT}`);
   process.exit(0);
 }
 
 if (!command || command === '--help') {
-  console.log(`agent-pack — a programming language to orchestrate agents across every harness
-${CREDIT}
+  // On a terminal the banner opens the help; a pipe or NO_COLOR reads it as text.
+  const header = process.stdout.isTTY && !('NO_COLOR' in process.env)
+    ? `\n${banner(packageInfo(), { links: true, columns: process.stdout.columns }).join('\n')}`
+    : `agent-pack — ${packageInfo().description}\n${CREDIT}`;
+  console.log(`${header}
 
 Commands:
   init                           Write a default agent-pack.config.mjs and the .agent-pack/ dir
@@ -38,6 +42,8 @@ Options:
   --apx-compress    Store the apx data gzipped; --no-apx-compress stores it as JSON (bundle / bundle all)
   --no-judge        Skip the judge phase (bundle / bundle all)
   --judge-strict    A line the judge cannot check yet is an error, not a warning (bundle / bundle all)
+  --plain           One line per message, no colour — the default when the output is no terminal (bundle / bundle all)
+  --verbose         List every file written (bundle / bundle all)
   --help            Show this help
   --version         Show the version
 

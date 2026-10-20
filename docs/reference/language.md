@@ -241,7 +241,7 @@ FLOW complex-task:
 | `STEP <title>:` | one step, in order |
 | `BY <agent or team>` | who carries it out |
 | `CONTEXT isolated \| summary \| full \| inherited` | how much upstream context the step's agent receives |
-| `AS <template>` | the shape of what is handed to the step's agent |
+| `AS <template>` | the shape of what is handed to the step's agent — also written on the `CONTEXT` line: `CONTEXT summary AS! review-brief` reads as `CONTEXT summary` with `AS! review-brief` beneath |
 | `DO` | what to do |
 | `MUST`, `NEVER`, `SHOULD`, … | a [rule](#rules) of the step — `NEVER skip a finding`, not `DO never skip a finding`; never `MEM` |
 | `IF <condition>:` / `ELSE` | the `DO`, `RUN` and rule lines indented under it apply only when the condition holds (or, under `ELSE`, when it does not); `BY`, `CONTEXT` and `AS` stay unconditional |

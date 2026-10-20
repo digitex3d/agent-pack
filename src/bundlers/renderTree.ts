@@ -99,8 +99,12 @@ export function splitArgs(blockKeyword: string, children: Node[]): { signature: 
   const body: Node[] = [];
   for (const c of children) {
     const kw = c.token.kind === 'keyword' ? (c.token.keyword as string) : null;
-    if (kw && c.children.length === 0 && specs.some(s => s.keyword === kw) && !argValue.has(kw)) {
-      argValue.set(kw, restOf(c.token));
+    const spec = kw ? specs.find(s => s.keyword === kw) : undefined;
+    if (kw && spec && c.children.length === 0 && !argValue.has(kw)) {
+      const { value, line } = spec.split ? spec.split(restOf(c.token)) : { value: restOf(c.token), line: null };
+      argValue.set(kw, value);
+      // The line the argument also stands for (`CONTEXT summary AS! brief` → `AS! brief`) joins the body where it was written.
+      if (line) body.push({ token: { ...lex(`${' '.repeat(c.token.indent)}${line}`)[0], line: c.token.line }, children: [] });
     } else {
       body.push(c);
     }

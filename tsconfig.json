@@ -12,6 +12,6 @@
     "sourceMap": false,
     "resolveJsonModule": true
   },
-  "include": ["src/**/*.ts", "adapters/**/*.ts", "index.ts"],
+  "include": ["src/**/*.ts", "adapters/**/*.ts", "reporters/**/*.ts", "index.ts"],
   "exclude": ["node_modules", "dist", "test"]
 }

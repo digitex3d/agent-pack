@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Giuseppe Federico
 import { mkdirSync, writeFileSync } from 'fs';
 import { resolve, dirname, relative, sep } from 'path';
-import { loadConfig, Config, libraryRoots as libraryRootsOf, librariesAliasMap, BUILTIN_LIBRARY_ROOT } from '../config.js';
+import { loadConfig, Config, libraryRoots as libraryRootsOf, librariesAliasMap, BUILTIN_LIBRARY_ROOT, packageInfo } from '../config.js';
 import { AdapterRegistry } from '../adapter-registry.js';
 import { AdapterCtx, AdapterPlugin, EmittedFile } from '../../adapters/types.js';
 import { bundleAndEmit } from '../bundlers/run.js';
@@ -13,6 +13,9 @@ import { discoverAgentsByWalk } from '../agentDiscovery.js';
 import { standaloneDir } from '../services/teamMetadata.js';
 import { openJudgeRun, finishJudgeRun, type JudgeRun } from '../judge/phase.js';
 import { documentDefHashes, removeStaleCaches } from '../apx/dimensions.js';
+import { reporter, useReporter, plainReporter } from '../report.js';
+import { prettyReporter } from '../../reporters/pretty/index.js';
+import { banner } from '../../reporters/pretty/logo.js';
 
 /**
  * CLI command: parse args, build a bundle (agent or skill), optionally
@@ -38,16 +41,18 @@ export async function bundle(args: string[]): Promise<void> {
     else if (args[i] === '--config') i++;
     else if (!args[i].startsWith('--') && !source) source = args[i];
   }
+  useReporter(chooseReporter(args));
+  const report = reporter();
 
   if (!source) {
-    console.error('Usage:');
-    console.error('  agent-pack bundle <name|path> [--adapter <name>] [--out <dir>] [--apx-compress|--no-apx-compress] [--no-judge|--judge-strict]');
-    console.error('  agent-pack bundle all       [--adapter <name>] [--out <dir>] [--watch] [--apx-compress|--no-apx-compress] [--no-judge|--judge-strict]');
+    report.note('Usage:');
+    report.note('  agent-pack bundle <name|path> [--adapter <name>] [--out <dir>] [--apx-compress|--no-apx-compress] [--no-judge|--judge-strict] [--plain] [--verbose]');
+    report.note('  agent-pack bundle all       [--adapter <name>] [--out <dir>] [--watch] [--apx-compress|--no-apx-compress] [--no-judge|--judge-strict] [--plain] [--verbose]');
     process.exit(1);
   }
 
   if (watch && source !== 'all') {
-    console.error('--watch is only supported with `bundle all`.');
+    report.note('--watch is only supported with `bundle all`.');
     process.exit(1);
   }
 
@@ -67,7 +72,7 @@ export async function bundle(args: string[]): Promise<void> {
     try {
       adapter = AdapterRegistry.fromConfig(config).get(adapterName);
     } catch (err) {
-      console.error(err instanceof Error ? err.message : String(err));
+      report.failed(err);
       process.exit(1);
     }
   }
@@ -79,9 +84,9 @@ export async function bundle(args: string[]): Promise<void> {
     const { bundle: built, files } = await bundleAndEmit(source, config, adapter, ctx, { judge });
     writeFiles(files);
     const suffix = adapterName ? ` (adapter: ${adapterName})` : '';
-    console.error(`[agent-pack] ${built.name} bundled${suffix}`);
+    report.info(`${built.name} bundled${suffix}`);
   } catch (err) {
-    console.error(err instanceof Error ? err.message : String(err));
+    report.failed(err);
     failed = true;
   } finally {
     if (judge) finishJudgeRun(judge, { prune: false });
@@ -100,11 +105,11 @@ async function runBundleAll(
     const registry = AdapterRegistry.fromConfig(config);
     adapters = adapterName ? [registry.get(adapterName)] : config.adapters;
   } catch (err) {
-    console.error(err instanceof Error ? err.message : String(err));
+    reporter().failed(err);
     process.exit(1);
   }
   if (adapters.length === 0) {
-    console.error('No adapters registered. Configure `adapters: [...]` in agent-pack.config.mjs or pass --adapter <name>.');
+    reporter().note('No adapters registered. Configure `adapters: [...]` in agent-pack.config.mjs or pass --adapter <name>.');
     process.exit(1);
   }
   const ok = await bundleAllOnce(config, adapters, ctx);
@@ -121,10 +126,11 @@ export async function bundleAllOnce(
   adapters: AdapterPlugin[],
   ctx: AdapterCtx,
 ): Promise<boolean> {
+  const report = reporter();
   // Per S7/S8: agents come exclusively from a filesystem walk.
   const agents = discoverAgentsByWalk(config);
   if (agents.length === 0) {
-    console.error(`[agent-pack] no agents found under ${relative(ctx.projectRoot, config.agentsDir) || '.'}/ — write a .ap file there, or run \`agent-pack init\` to add the examples`);
+    report.info(`no agents found under ${relative(ctx.projectRoot, config.agentsDir) || '.'}/ — write a .ap file there, or run \`agent-pack init\` to add the examples`);
   }
 
   let totalErrors = 0;
@@ -133,7 +139,7 @@ export async function bundleAllOnce(
   try {
     judge = openJudgeRun(config, ctx.projectRoot);
   } catch (err) {
-    console.error(`[agent-pack] judge: ${err instanceof Error ? err.message : err}`);
+    report.info(`judge: ${err instanceof Error ? err.message : err}`);
     return false;
   }
   const programIds = new Set<string>();
@@ -161,7 +167,7 @@ export async function bundleAllOnce(
           const prior = written.get(f.path);
           if (prior?.content === f.content || (prior && f.path.startsWith(shared))) continue;
           if (prior && prior.adapter !== adapter.name) {
-            console.error(`[agent-pack] adapters ${prior.adapter} and ${adapter.name} both write ${f.path} — keep only one of them in the config`);
+            report.info(`adapters ${prior.adapter} and ${adapter.name} both write ${f.path} — keep only one of them in the config`);
             totalErrors++;
             continue;
           }
@@ -169,7 +175,7 @@ export async function bundleAllOnce(
           writeFiles([f]);
         }
       } catch (err) {
-        console.error(`[agent-pack] failed agent ${agent.name} on ${adapter.name}: ${err instanceof Error ? err.message : err}`);
+        report.failed(err, `agent ${agent.name} on ${adapter.name}`);
         totalErrors++;
       }
     }
@@ -179,14 +185,14 @@ export async function bundleAllOnce(
   // harness reads; harnesses with their own instructions file get a pointer to it.
   try {
     if (await emitProjectContext(ctx.projectRoot, config)) {
-      console.error(`[agent-pack] ${PROJECT_SOURCE} → ${AGENTS_MD}`);
+      report.info(`${PROJECT_SOURCE} → ${AGENTS_MD}`);
     }
   } catch (err) {
-    console.error(`[agent-pack] failed ${PROJECT_SOURCE} → ${AGENTS_MD}: ${err instanceof Error ? err.message : err}`);
+    report.failed(err, `${PROJECT_SOURCE} → ${AGENTS_MD}`);
     totalErrors++;
   }
   for (const file of ensureProjectPointers(ctx.projectRoot, adapters)) {
-    console.error(`[agent-pack] ${file} → points at ${AGENTS_MD}`);
+    report.info(`${file} → points at ${AGENTS_MD}`);
   }
 
   try {
@@ -199,10 +205,10 @@ export async function bundleAllOnce(
       config,
     });
     if (orchResult.action !== 'unchanged') {
-      console.error(`[agent-pack] ${AGENTS_MD} orchestration ${orchResult.action} (${orchResult.standalones.length} standalone, ${orchResult.teams.length} team(s))`);
+      report.info(`${AGENTS_MD} orchestration ${orchResult.action} (${orchResult.standalones.length} standalone, ${orchResult.teams.length} team(s))`);
     }
   } catch (err) {
-    console.error(`[agent-pack] failed to update ${AGENTS_MD} orchestration: ${err instanceof Error ? err.message : err}`);
+    report.failed(err, `to update ${AGENTS_MD} orchestration`);
     totalErrors++;
   }
 
@@ -210,18 +216,17 @@ export async function bundleAllOnce(
   // deleted; only after a clean build, when every live contract is known.
   if (totalErrors === 0) {
     for (const orphan of orphanPrograms(ctx.projectRoot, programIds)) {
-      console.error(`[agent-pack] ${orphan} is the program of no piece any more (edited or removed) — review it, then delete it`);
+      report.info(`${orphan} is the program of no piece any more (edited or removed) — review it, then delete it`);
     }
     // The cache of a dimension edited or removed answers nothing any more: it goes.
     for (const stale of removeStaleCaches(ctx.projectRoot, defhashes)) {
-      console.error(`[agent-pack] ${stale} removed — the cache of a dimension that no longer exists (edited or removed)`);
+      report.info(`${stale} removed — the cache of a dimension that no longer exists (edited or removed)`);
     }
   }
 
   if (judge) finishJudgeRun(judge, { prune: totalErrors === 0 });
 
-  const suffix = totalErrors > 0 ? ` (${totalErrors} error(s))` : '';
-  console.error(`[agent-pack] bundled ${queue.length} agent(s) × ${adapters.length} adapter(s) → ${written.size} file(s)${suffix}`);
+  report.done({ agents: queue.length, adapters: adapters.length, files: written.size, failures: totalErrors });
   return totalErrors === 0;
 }
 
@@ -248,7 +253,7 @@ async function runWatchLoop(
   let running = false;
   const triggerRebuild = (event: string, p: string) => {
     if (!p.endsWith('.ap') && !p.endsWith('.yml')) return;
-    console.error(`[watch] ${event} ${p}`);
+    reporter().note(`[watch] ${event} ${p}`);
     if (timer) clearTimeout(timer);
     timer = setTimeout(async () => {
       if (running) return;
@@ -256,7 +261,7 @@ async function runWatchLoop(
       try {
         await bundleAllOnce(config, adapters, ctx);
       } catch (err) {
-        console.error('[watch] error:', err instanceof Error ? err.message : err);
+        reporter().note(`[watch] error: ${err instanceof Error ? err.message : err}`);
       } finally {
         running = false;
       }
@@ -266,7 +271,7 @@ async function runWatchLoop(
   watcher.on('change', (p: string) => triggerRebuild('change', p));
   watcher.on('unlink', (p: string) => triggerRebuild('unlink', p));
 
-  console.error('[watch] watching for .ap changes (Ctrl+C to stop)');
+  reporter().note('[watch] watching for .ap changes (Ctrl+C to stop)');
   process.on('SIGINT', () => {
     watcher.close().then(() => process.exit(0));
   });
@@ -277,6 +282,17 @@ function writeFiles(files: EmittedFile[]): void {
   for (const f of files) {
     mkdirSync(dirname(f.path), { recursive: true });
     writeFileSync(f.path, f.content, 'utf-8');
-    console.log(f.path);
+    reporter().written(f.path);
   }
+}
+
+/**
+ * The reporter of this run: the pretty one on a terminal; the plain one with
+ * `--plain`, `NO_COLOR`, or when stderr is no terminal (a pipe, CI, a test).
+ */
+function chooseReporter(args: string[]) {
+  const plain = args.includes('--plain') || 'NO_COLOR' in process.env || !process.stderr.isTTY;
+  if (plain) return plainReporter;
+  process.stderr.write(`\n${banner(packageInfo(), { columns: process.stderr.columns }).join('\n')}\n\n`);
+  return prettyReporter({ verbose: args.includes('--verbose'), root: process.cwd() });
 }

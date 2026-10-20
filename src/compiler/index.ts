@@ -14,7 +14,8 @@ import { resolveTeamMembership } from '../services/teamMembership.js';
 import { findAgentFiles, readAgentFile, standaloneDir, agentNameOf, teamRootForAgentFile, TEAM_FLOWS_FILE } from '../services/teamMetadata.js';
 import { askTargetErrors, executorErrors, usesPrograms, WRITE_PROGRAM, type AgentIndexEntry } from '../executor.js';
 import { BUILTIN_AGENTS_DIR, resolveDelegateConfig, type DelegateConfig } from '../config.js';
-import { formatErrors, LintError, checkVocabulary, lineOfName, checkedHeadIssues, dimensionBlockErrors } from '../lint.js';
+import { LintError, checkVocabulary, lineOfName, checkedHeadIssues, dimensionBlockErrors } from '../lint.js';
+import { CompileError, reporter } from '../report.js';
 import { extractInlineDefinitions } from '../dispatch/inlineBlocks.js';
 import { renderTree } from '../bundlers/renderTree.js';
 import { renderEnumLegend } from '../enumPrimitives.js';
@@ -481,17 +482,16 @@ export function reportLintIssues(ctx: BundleContext, label: string): void {
   reportIssues(ctx.lintErrors, label);
 }
 
-/** Log the warnings among `issues`, then throw on its errors. */
+/** Report the warnings among `issues`, then throw on its errors. */
 function reportIssues(issues: LintError[], label: string): void {
   const warnings = issues.filter(e => e.severity === 'warning');
-  if (warnings.length > 0) console.error(formatErrors(warnings));
+  if (warnings.length > 0) reporter().diagnostics(warnings);
   failOnErrors(issues.filter(e => e.severity !== 'warning'), label);
 }
 
+/** The errors stop the compilation — they travel as data, for the reporter to show. */
 function failOnErrors(errors: LintError[], label: string): void {
-  if (errors.length > 0) {
-    throw new Error(`${label} failed: ${errors.length} lint error(s):\n${formatErrors(errors)}`);
-  }
+  if (errors.length > 0) throw new CompileError(label, errors);
 }
 
 /** Collapse runs of 3+ blank lines (residue of import expansion) and trim. */

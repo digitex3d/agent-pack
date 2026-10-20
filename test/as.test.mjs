@@ -34,6 +34,12 @@ const subst = (text, templates = []) =>
 }
 
 {
+  // a step's `CONTEXT <mode> AS <slug>` resolves the slug, the mode kept
+  const templates = [{ name: 'spec', refId: 'tpl-2.3' }];
+  assert.equal(subst('    CONTEXT summary AS! spec\n', templates), '    CONTEXT summary AS! `spec` (tpl-2.3)\n', 'CONTEXT … AS! resolved');
+}
+
+{
   // unknown slug → throws
   const templates = [{ name: 'foo', refId: 'tpl-1.1' }];
   assert.throws(() => subst('AS nonexistent\n', templates), /unknown shape "nonexistent"/);

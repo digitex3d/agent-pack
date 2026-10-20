@@ -7,7 +7,7 @@
  */
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { PACKAGE_ROOT, TABELI_ENGINE, JUDGE_LOCK_DEFAULT, type Config } from '../config.js';
+import { PACKAGE_ROOT, TABELI_ENGINE, JUDGE_LOCK_DEFAULT, packageVersion, type Config } from '../config.js';
 import type { EmittedFile } from '../../adapters/types.js';
 import { apxFile } from './payload.js';
 import type { ApxChecks } from './engine.js';
@@ -16,7 +16,6 @@ import { JudgeLock } from '../judge/lock.js';
 import { APX_DIR, apxPath } from './paths.js';
 
 let engine: string | null = null;
-let version: string | null = null;
 
 /**
  * The agent's `.apx` (engine + data), and the `package.json` that makes Node
@@ -25,9 +24,8 @@ let version: string | null = null;
  */
 export function apxFiles(agent: string, document: string, projectRoot: string, compress: boolean, checks: ApxChecks | null = null): EmittedFile[] {
   engine ??= readFileSync(resolve(PACKAGE_ROOT, 'dist/apx-engine.js'), 'utf-8');
-  version ??= (JSON.parse(readFileSync(resolve(PACKAGE_ROOT, 'package.json'), 'utf-8')) as { version: string }).version;
   return [
-    { path: resolve(projectRoot, apxPath(agent)), content: apxFile(engine, document, version, TABELI_ENGINE, compress, checks) },
+    { path: resolve(projectRoot, apxPath(agent)), content: apxFile(engine, document, packageVersion(), TABELI_ENGINE, compress, checks) },
     { path: resolve(projectRoot, APX_DIR, 'package.json'), content: '{ "type": "commonjs" }\n' },
   ];
 }

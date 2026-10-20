@@ -23,7 +23,8 @@ import type { ApDocument } from '../apdoc/document.js';
 import type { ApLine } from '../apdoc/types.js';
 import type { SourceRegistry } from '../sources.js';
 import { resolveLibraryOutputDir } from '../libraryIndex.js';
-import { formatErrors, type LintError } from '../lint.js';
+import { type LintError } from '../lint.js';
+import { reporter } from '../report.js';
 import { judgeState, loadJudgeRules, severityOf } from './rules.js';
 import { AGENT, DELEGATE, PROGRAM, executorOf, scriptRuleLines } from '../executor.js';
 import { JudgeLock, verdictKey } from './lock.js';
@@ -351,23 +352,24 @@ function unitOf(run: JudgeRun, file: string, judged: FileJudgement, rules: strin
  */
 export function finishJudgeRun(run: JudgeRun, opts: { prune: boolean }): void {
   const warnings = run.warnings;
-  if (warnings.length > 0) console.error(formatErrors(warnings));
-  if (run.offlineReason) console.error(`[agent-pack] judge ${run.options.adapter.name} unavailable: ${run.offlineReason}`);
+  const report = reporter();
+  report.diagnostics(warnings);
+  if (run.offlineReason) report.info(`judge ${run.options.adapter.name} unavailable: ${run.offlineReason}`);
   // A #executed / #program rule names no keyword: its lines are counted, not named.
   const primitives = [...new Set(run.rules.flatMap(r => r.primitives))].join('/');
   const { lines, pairs, cached, asked, notJudged } = run.stats;
   const files = [...run.files.values()];
   const rejudged = files.filter(f => f.rejudged).length;
-  console.error(`judge: ${warnings.length} warnings — ${files.length} files, ${files.length - rejudged} unchanged; ${lines} ${primitives} lines, ${pairs} rule×line checks: ${cached} from saved verdicts, ${asked} asked, ${notJudged} not judged (${run.lock.model ?? 'no model yet'})`);
+  report.note(`judge: ${warnings.length} warnings — ${files.length} files, ${files.length - rejudged} unchanged; ${lines} ${primitives} lines, ${pairs} rule×line checks: ${cached} from saved verdicts, ${asked} asked, ${notJudged} not judged (${run.lock.model ?? 'no model yet'})`);
   try {
     run.lock.save();
   } catch (err) {
-    console.error(`[agent-pack] judge: could not save the lock — ${err instanceof Error ? err.message : String(err)}`);
+    report.info(`judge: could not save the lock — ${err instanceof Error ? err.message : String(err)}`);
   }
   if (opts.prune) {
     const orphans = Object.keys(run.lock.decisions).filter(k => !run.usedKeys.has(k)).sort();
     if (orphans.length > 0) {
-      console.error(`[agent-pack] judge: ${orphans.length} decision(s) in the lock match no line any more (rule or line edited or removed) — review them: ${orphans.join(', ')}`);
+      report.info(`judge: ${orphans.length} decision(s) in the lock match no line any more (rule or line edited or removed) — review them: ${orphans.join(', ')}`);
     }
   }
   try {
@@ -378,6 +380,6 @@ export function finishJudgeRun(run: JudgeRun, opts: { prune: boolean }): void {
     }
     if (opts.prune) run.units.prune(run.files.keys());
   } catch (err) {
-    console.error(`[agent-pack] judge: could not save the units — ${err instanceof Error ? err.message : String(err)}`);
+    report.info(`judge: could not save the units — ${err instanceof Error ? err.message : String(err)}`);
   }
 }

@@ -18,6 +18,48 @@ function expandHome(p: string): string {
 // dist/src/config.js -> package root is 2 levels up.
 export const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
+/** What agent-pack says about itself — its package.json, the one place each is written. */
+export interface PackageInfo {
+  version: string;
+  description: string;
+  /** The author's name, without the address. */
+  author: string;
+  license: string;
+  /** The site. */
+  homepage: string;
+  /** The repository's web address. */
+  repository: string;
+  /** Where issues are reported. */
+  issues: string;
+}
+
+let info: PackageInfo | null = null;
+
+/** agent-pack's package.json, as the CLI shows it — read once. */
+export function packageInfo(): PackageInfo {
+  if (!info) {
+    const pkg = JSON.parse(readFileSync(resolve(PACKAGE_ROOT, 'package.json'), 'utf-8')) as {
+      version: string; description: string; author: string; license: string; homepage: string;
+      repository: { url: string }; bugs: { url: string };
+    };
+    info = {
+      version: pkg.version,
+      description: pkg.description,
+      author: pkg.author.replace(/\s*<[^>]*>\s*/, '').trim(),
+      license: pkg.license,
+      homepage: pkg.homepage,
+      repository: pkg.repository.url.replace(/^git\+/, '').replace(/\.git$/, ''),
+      issues: pkg.bugs.url,
+    };
+  }
+  return info;
+}
+
+/** agent-pack's own version. */
+export function packageVersion(): string {
+  return packageInfo().version;
+}
+
 /**
  * The tabeli engine that ships with agent-pack — `npm run build` compiles it
  * from `tabeli/tabeli.c` with tabeli's own Makefile. `bundle all` records its

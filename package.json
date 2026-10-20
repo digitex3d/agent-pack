@@ -1,14 +1,14 @@
 {
   "name": "agent-pack",
   "version": "0.28.0",
-  "description": "A programming language to orchestrate agents across every harness.",
+  "description": "A language for your agents, with imports, types and a compiler that catches mistakes before they run. One source, every harness.",
   "author": "Giuseppe Federico <giuseppefeder@gmail.com>",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/digitex3d/agent-pack.git"
   },
-  "homepage": "https://github.com/digitex3d/agent-pack#readme",
+  "homepage": "https://agent-pack.org",
   "bugs": {
     "url": "https://github.com/digitex3d/agent-pack/issues"
   },
@@ -61,6 +61,7 @@
   ],
   "scripts": {
     "ap": "node dist/index.js",
+    "version": "node scripts/sync-version.mjs && git add CITATION.cff",
     "build": "npm run build:tabeli && tsc && mkdir -p dist/src/config && cp src/config/*.json dist/src/config/ && npm run build:apx",
     "build:tabeli": "make --no-print-directory -C tabeli",
     "test": "npm run build && node test/test.mjs && make --no-print-directory -C tabeli test",

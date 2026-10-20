@@ -247,7 +247,8 @@ export function stripHeaderKeyword(rawBody: string, keyword: Keyword, name: stri
  *   1. `{{name}}`        → `vars[name]`        (variable interpolation)
  *   2. `AS <slug>`       → `AS \`slug\` (id)`  (shape back-reference; keeps the
  *                                              AS keyword so applyForceLevels
- *                                              renders the force-level intro)
+ *                                              renders the force-level intro) —
+ *                                              a step's `CONTEXT <mode> AS <slug>` too
  *
  * `AS` is a force-level family (see force-levels.json): `AS`, `AS!`, `AS!!`,
  * `!AS` modulate intensity. Here we resolve ONLY the slug argument against the
@@ -267,12 +268,12 @@ export interface SubstitutionContext {
 export function applyBodySubstitutions(text: string, ctx: SubstitutionContext): string {
   const shapes = ctx.templates;
   // AS first: a constant's value never becomes an AS line.
-  const shaped = text.replace(/^([ \t]*)(!?AS!*)[ \t]+(\S+)[ \t]*$/gm, (_m, asIndent: string, asKeyword: string, asSlug: string) => {
+  const shaped = text.replace(/^([ \t]*)((?:CONTEXT[ \t]+\S+[ \t]+)?)(!?AS!*)[ \t]+(\S+)[ \t]*$/gm, (_m, asIndent: string, context: string, asKeyword: string, asSlug: string) => {
     const shape = shapes.find(s => s.name === asSlug);
     if (!shape) {
       throw new Error(`AS: unknown shape "${asSlug}" (no TEMPLATE with this name is imported)`);
     }
-    return `${asIndent}${asKeyword} \`${asSlug}\`${refSuffix(shape.refId)}`;
+    return `${asIndent}${context}${asKeyword} \`${asSlug}\`${refSuffix(shape.refId)}`;
   });
   return applyVars(shaped, ctx.vars ?? {});
 }

@@ -47,6 +47,12 @@ const { renderTree } = await import('../dist/src/bundlers/renderTree.js');
   assert.ok(out.includes('1. review — by `bob`, full context'), `BY + CONTEXT signature, got:\n${out}`);
   assert.ok(!out.includes('passes the full upstream context'), `CONTEXT must render terse as an arg, got:\n${out}`);
 
+  // `CONTEXT <mode> AS! <template>` renders as the mode with the AS line beneath it.
+  const oneLine = renderTree(['STEP review:', '  BY bob', '  CONTEXT summary AS! brief', '  DO check it'].join('\n'));
+  const twoLines = renderTree(['STEP review:', '  BY bob', '  CONTEXT summary', '  AS! brief', '  DO check it'].join('\n'));
+  assert.equal(oneLine, twoLines, `one line and two lines render alike, got:\n${oneLine}`);
+  assert.ok(oneLine.includes('1. review — by `bob`, summary context'), oneLine);
+
   console.log('renderTree definition arguments test passed.');
 }
 
