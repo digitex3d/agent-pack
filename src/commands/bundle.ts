@@ -8,6 +8,8 @@ import { AdapterCtx, AdapterPlugin, EmittedFile } from '../../adapters/types.js'
 import { bundleAndEmit } from '../bundlers/run.js';
 import { orphanPrograms } from '../executor.js';
 import { emitProjectContext, ensureProjectPointers, AGENTS_MD, PROJECT_SOURCE } from '../projectContext.js';
+import { createInterface } from 'readline/promises';
+import type { DomainDecider } from '../compiler/index.js';
 import { ensureOrchestrationSection } from '../orchestrationSection.js';
 import { discoverAgentsByWalk } from '../agentDiscovery.js';
 import { standaloneDir } from '../services/teamMetadata.js';
@@ -158,7 +160,7 @@ export async function bundleAllOnce(
     const agent = queue[k];
     for (const adapter of adapters) {
       try {
-        const { bundle, files } = await bundleAndEmit(agent.name, config, adapter, ctx, { judge });
+        const { bundle, files } = await bundleAndEmit(agent.name, config, adapter, ctx, { judge, decide: terminalDecider() });
         for (const spec of Object.values(bundle.structure?.meta.executors ?? {})) if (spec.program) programIds.add(spec.program);
         if (bundle.structure) for (const hash of documentDefHashes(bundle.structure)) defhashes.add(hash);
         const delegate = bundle.structure?.meta.delegate;
@@ -295,4 +297,25 @@ function chooseReporter(args: string[]) {
   if (plain) return plainReporter;
   process.stderr.write(`\n${banner(packageInfo(), { columns: process.stderr.columns }).join('\n')}\n\n`);
   return prettyReporter({ verbose: args.includes('--verbose'), root: process.cwd() });
+}
+
+/**
+ * The developer decides a file's domain the judge left grey — on a terminal.
+ * Not interactive: nobody decides, the build names the file (the lock takes the
+ * decision by hand). The answer is one of the options, by name or by number.
+ */
+function terminalDecider(): DomainDecider | undefined {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) return undefined;
+  return async u => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    try {
+      const listed = u.options.map((o, i) => `${i + 1}) ${o}`).join('  ');
+      const answer = (await rl.question(`domain of ${u.file}? the judge hesitates between ${u.between[0]} (${u.p[0].toFixed(2)}) and ${u.between[1]} (${u.p[1].toFixed(2)})\n  ${listed}  [enter: ${u.between[0]}] `)).trim();
+      if (answer === '') return u.between[0];
+      const byNumber = u.options[Number(answer) - 1];
+      return byNumber ?? (u.options.includes(answer) ? answer : null);
+    } finally {
+      rl.close();
+    }
+  };
 }

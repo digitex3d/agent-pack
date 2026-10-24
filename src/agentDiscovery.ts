@@ -22,7 +22,7 @@ export function projectAgentFiles(config: Config): string[] {
  * `.ap` file holding an `EXPORT AGENT` block. Discovery is the ONE walk shared
  * with name resolution ({@link allAgentFiles} over the same search dirs — a
  * standalone agent under `agents/standalone/` and a team member sibling of a
- * team's `flows.ap` are found identically). The discovered name is the canonical
+ * team's file are found identically). The discovered name is the canonical
  * block name, not the filename. Global agents (the user home) are walked after
  * the project's, and built-ins after both, so precedence mirrors the config
  * cascade: project shadows global shadows built-in.

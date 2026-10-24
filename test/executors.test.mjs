@@ -11,6 +11,7 @@ import { strict as assert } from 'assert';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { teamSource } from './helpers/team.mjs';
 
 const { lexRaw } = await import('../dist/src/lexer.js');
 const { lintFile } = await import('../dist/src/lint.js');
@@ -301,8 +302,8 @@ try {
     ]);
     write(join(proj, 'agent-pack.config.mjs'), ['export default {', "  libraryRoot: 'library',", "  agentsDir: 'agents',", "  adapters: ['claude-code'],", '};']);
     mkdirSync(join(proj, 'library'), { recursive: true });
-    write(join(proj, 'agents', 'teams', 'legal', 'flows.ap'), ['# legal', 'ABOUT  the legal team']);
-    write(join(proj, 'agents', 'teams', 'ops', 'flows.ap'), ['# ops', 'ABOUT  the ops team']);
+    write(join(proj, 'agents', 'teams', 'legal', 'legal.ap'), ['# legal', ...teamSource('legal', ['reader', 'scribe'], ['ABOUT  the legal team'])]);
+    write(join(proj, 'agents', 'teams', 'ops', 'ops.ap'), ['# ops', ...teamSource('ops', ['bot'], ['ABOUT  the ops team'])]);
     const prevCwd = process.cwd();
     process.chdir(proj);
     try {

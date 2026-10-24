@@ -19,7 +19,7 @@ import { spawnSync, type SpawnSyncOptionsWithStringEncoding } from 'child_proces
 import type { ApDocument } from '../apdoc/document.js';
 import type { ApBlock } from '../apdoc/block.js';
 import type { ApRef, ApNode, ApWhenNode, ApRunNode, ApDirectiveNode } from '../apdoc/types.js';
-import { KIND_STRATEGIES, type AgentBlock, type TeamBlock, type StoreBlock, type VarBlock, type DimensionBlock, type TemplateBlock } from '../apdoc/blocks.js';
+import { KIND_STRATEGIES, type AgentBlock, type TeamBlock, type StoreBlock, type VarBlock, type DimensionBlock, type TemplateBlock, type ContractBlock } from '../apdoc/blocks.js';
 import { mdEnv, renderPreamble, renderEntry, renderMd } from '../../adapters/md/index.js';
 import type { MdEnv } from '../../adapters/md/toolkit.js';
 import { FORMULAS, fill, type QuizQuestion } from '../formulas.js';
@@ -36,7 +36,12 @@ import { scopeLabel } from '../withUse.js';
 import { SCOPED_KINDS } from '../services/tags.js';
 import { CREDIT } from '../credits.js';
 import { validateRecord, slotSpecsOf, formatIssues, jsonExample } from '../shapeSchema.js';
-import { BLOCK_ID_RE, addressName, sha256Hex } from '../apdoc/ids.js';
+import { BLOCK_ID_RE, addressName, sha256Hex, shortId } from '../apdoc/ids.js';
+import { ContractTable, CONTRACT_ID_RE, perimeterFiles, scanZones, hasMarks, zoneText, parseZone, expectedFingerprints, type ContractRecord } from './contracts.js';
+import { DOMAIN_QUESTION, domainOptions, domainChoices, domainEntry, domainOf } from '../judge/domainCache.js';
+import { decideChoice } from '../judge/choice.js';
+import { isDistribution } from '../judge/types.js';
+import { fingerprint } from './dimensions.js';
 import { constantOf, readsOf } from '../vars.js';
 import { DimensionCache, dimensionDefHash, dimensionTemplates, filesNamedIn, CACHE_FORMAT, NONE, type CacheEntry, type EntryState } from './dimensions.js';
 import { relativeWithin } from '../services/fs.js';
@@ -69,6 +74,8 @@ export interface ApxBuild {
 export interface ApxChecks {
   adapter: string;
   threshold: number;
+  /** How far ahead the top option of a choice must be (src/judge/choice.ts). */
+  margin?: number;
   model?: string;
 }
 
@@ -106,8 +113,24 @@ const HELP: [string, string][] = [
   [`dimension <dim-id> write <file> ${DIM_WRITE_REFS} -|none`, 'keep your answer for a file — a JSON list of its template on stdin, or none'],
   ['dimension <dim-id> find <text>', "every instance a dimension keeps, across its files, whose text holds <text> — fresh entries only"],
   ['dimension <dim-id> ls|why|clear|gc …', "a dimension's cache: its entries and their state, why one is stale, clear entries, drop those of deleted files"],
+  ['contract list', "the contracts of this session: each instance, its state, who carries it out, its zone"],
+  ['contract get <ctr-id>', 'one instance: its contract, spec, zone, state'],
+  ['contract start <con-id> -', 'lead: take the request you were handed as an instance of the contract that hands it to your team (spec JSON on stdin)'],
+  ['contract new <con-id> [depends=<ctr>,…] [parent=<ctr>] -', 'lead: write one instance of a contract of your team — assigned at once (spec JSON on stdin)'],
+  ['contract dispatch', 'lead: check every new zone and hand the instances out — nothing changes after it'],
+  ['contract deliver <ctr-id>', 'you are done — your zone marks removed, nothing written outside your zone; the instance you were handed: once all its parts are merged'],
+  ['contract block <ctr-id> <reason>', 'member: the contract cannot be honoured as written — say why'],
+  ['contract merge <ctr-id>', 'lead: a delivered instance merged — or a blocked one you carried out — after every instance it depends on'],
   ['help', 'this list'],
 ];
+
+/** What every contract verb works with: the team, the session's table, who leads. */
+interface ContractCx {
+  team: TeamBlock;
+  table: ContractTable;
+  lead: string;
+  session: string;
+}
 
 const FILTER_RE = /^(kind|tag|name|about)(=|~)(.+)$/;
 
@@ -182,6 +205,7 @@ export class ApxEngine {
     answer: args => this.answer(args),
     check: args => this.check(args),
     dimension: args => this.dimension(args),
+    contract: args => this.contract(args),
     version: () => this.version(),
     help: () => this.help(),
   };
@@ -733,7 +757,7 @@ export class ApxEngine {
     if (limit !== undefined && state.length > limit) {
       return closed(`the state is too large for the judge (${state.length} characters, at most ${limit}) — it was not sent`, 'its state is too large for the judge', { fingerprint });
     }
-    let answered: { model: string; answers: Record<string, number> };
+    let answered: Awaited<ReturnType<JudgePlugin['ask']>>;
     try {
       answered = await judge.ask(state, [{ id, question: spec.question }], model);
     } catch (e) {
@@ -1076,6 +1100,320 @@ export class ApxEngine {
       : !id ? `variables need the harness session id, and ${env} is not set`
         : !SESSION_ID_RE.test(id) ? `${env} holds no usable session id (letters, digits, . _ - only)` : null;
     return refused ?? openSessionVars(resolve(projectRootOf(this.exe)), id!, this.root.name, this.build.tabeli);
+  }
+
+  // -------------------------------------------------------------- contracts
+
+  /** The session id the harness gives — or why there is none (the same rule the variables follow). */
+  private sessionIdOrReason(): { id: string } | { reason: string } {
+    const env = this.doc.meta.sessionEnv;
+    const id = env ? process.env[env] : undefined;
+    if (!env) return { reason: 'contracts need the harness session id, and this agent was compiled without an adapter that names where it is' };
+    if (!id) return { reason: `contracts need the harness session id, and ${env} is not set` };
+    if (!SESSION_ID_RE.test(id)) return { reason: `${env} holds no usable session id (letters, digits, . _ - only)` };
+    return { id };
+  }
+
+  /** `contract <verb> …` — the instances of a team of contracts (D44). */
+  private async contract(args: string[]): Promise<number> {
+    const [verb, ...rest] = args;
+    const team = this.doc.byKind('team')[0] as TeamBlock | undefined;
+    if (!team || team.strategy !== 'contracts') return this.fail(2, `${this.root.name} is in no team with \`STRATEGY contracts\` — it has no contracts`);
+    const session = this.sessionIdOrReason();
+    if ('reason' in session) return this.fail(2, `${session.reason} — nothing was read or written`);
+    const table = ContractTable.open(resolve(projectRootOf(this.exe)), session.id, this.build.tabeli);
+    if (typeof table === 'string') return this.fail(2, `${table} — nothing was read or written`);
+    const cx: ContractCx = { team, table, lead: team.lead ? refName(team.lead) : '', session: session.id };
+    try {
+      switch (verb) {
+        case 'list': return this.contractList(cx);
+        case 'get': return this.contractGet(cx, rest);
+        case 'start': return this.contractStart(cx, rest);
+        case 'new': return this.contractNew(cx, rest);
+        case 'dispatch': return await this.contractDispatch(cx);
+        case 'deliver': return this.contractDeliver(cx, rest);
+        case 'block': return this.contractBlock(cx, rest);
+        case 'merge': return this.contractMerge(cx, rest);
+      }
+    } catch (e) {
+      return this.fail(2, `the contracts could not be read or written: ${e instanceof Error ? e.message : e}`);
+    }
+    return this.fail(2, `${verb ? `'${verb}' is no verb of contract` : 'contract takes a verb'} — ${this.cmd} contract list|get|start|new|dispatch|deliver|block|merge`);
+  }
+
+  /** A contract block of this document by its id, or by its name — or null after saying why. */
+  private contractBlock_(id: string | undefined, usage: string): ContractBlock | null {
+    const named = id ? this.doc.byKind('contract').filter(b => b.name === id) : [];
+    const block = id ? this.byId.get(id) ?? (named.length === 1 ? named[0] : undefined) : undefined;
+    if (!block || block.kind !== 'contract') {
+      this.lastCode = this.fail(2, `${id ? `${id} is no contract of this agent` : 'a contract id is needed'} — ${this.cmd} contract ${usage}; the contracts: ${this.cmd} ls kind=contract`);
+      return null;
+    }
+    return block as ContractBlock;
+  }
+
+  /** An instance by its id — or null after saying why. */
+  private instance(cx: ContractCx, id: string | undefined, usage: string): ContractRecord | null {
+    if (!id || !CONTRACT_ID_RE.test(id)) { this.lastCode = this.fail(2, `an instance id is needed (ctr-…) — ${this.cmd} contract ${usage}`); return null; }
+    const r = cx.table.get(id);
+    if (!r) { this.lastCode = this.fail(1, `no instance ${id} in this session — ${this.cmd} contract list`); return null; }
+    return r;
+  }
+
+  /** The name of a contract block by id, for the eye. */
+  private contractName(id: string): string {
+    return this.byId.get(id)?.name ?? id;
+  }
+
+  /** The lead is waiting: some dispatched instance is still being worked on. */
+  private frozen(cx: ContractCx): ContractRecord[] {
+    return cx.table.all().filter(r => r.dispatched_at && r.state === 'assigned' && r.assignee !== cx.lead);
+  }
+
+  /** Read a spec on stdin and check it against the contract's form — the JSON text, or null after saying why (exit 6). */
+  private specOf(block: ContractBlock): string | null {
+    const text = readFileSync(0, 'utf-8').trim();
+    if (!block.shape) return text;
+    const issues = this.contractIssues(text, block.shape.ref);
+    if (issues) {
+      const slots = this.doc.slotsOf(block.shape.ref);
+      const example = slots ? ` — a spec is JSON shaped like ${JSON.stringify(jsonExample(slots, this.doc.slotResolver()))}` : '';
+      this.lastCode = this.fail(6, `the spec breaks the form of ${block.name} (${refName(block.shape.ref)}): ${issues}${example}; nothing was written`);
+      return null;
+    }
+    return JSON.stringify(JSON.parse(text));
+  }
+
+  private contractList(cx: ContractCx): number {
+    const all = cx.table.all();
+    for (const r of all) {
+      this.out(`${r.ctr}  ${this.contractName(r.contract)}  ${r.state}  → ${r.assignee}${r.zone ? `  ${r.zone}` : ''}${r.depends ? `  depends: ${r.depends}` : ''}${r.reason ? `  — ${r.reason}` : ''}`);
+    }
+    this.out(`# ${countOf(all.length, 'instance', 'instances')} in this session — one: ${this.cmd} contract get <ctr-id>`);
+    return 0;
+  }
+
+  private contractGet(cx: ContractCx, args: string[]): number {
+    const r = this.instance(cx, args[0], 'get <ctr-id>');
+    if (!r) return this.lastCode;
+    const block = this.byId.get(r.contract) as ContractBlock | undefined;
+    this.out(`contract ${r.ctr} — ${this.contractName(r.contract)} — ${r.state} — assigned to ${r.assignee}`);
+    if (block?.domain) this.out(`domain: ${block.domain}`);
+    this.out(`zone: ${r.zone || '(not dispatched yet)'}`);
+    if (r.depends) this.out(`depends on: ${r.depends.split(',').map(d => `${d} (${cx.table.get(d)?.state ?? '?'})`).join(', ')}`);
+    if (r.parent) this.out(`part of: ${r.parent}`);
+    if (r.reason) this.out(`blocked: ${r.reason}`);
+    this.out('spec:');
+    this.print(JSON.stringify(JSON.parse(r.spec || '{}'), null, 2));
+    if (r.assignee === this.root.name && r.state === 'assigned') {
+      this.out(`# when done: ${this.cmd} contract deliver ${r.ctr}`);
+      this.out(`# if it cannot be honoured as written: ${this.cmd} contract block ${r.ctr} "<why>"`);
+    }
+    return 0;
+  }
+
+  /** A new instance id: the session, the contract, the count of its instances, the spec. */
+  private instanceId(cx: ContractCx, contract: string, spec: string): string {
+    return shortId('ctr', JSON.stringify([cx.session, contract, cx.table.all().filter(r => r.contract === contract).length, spec]));
+  }
+
+  private contractStart(cx: ContractCx, args: string[]): number {
+    if (cx.lead !== this.root.name) return this.fail(2, `only the lead (${cx.lead}) starts the team's work`);
+    const block = this.contractBlock_(args[0], 'start <con-id> -');
+    if (!block) return this.lastCode;
+    if (args[1] !== '-') return this.fail(2, `the spec comes on stdin — ${this.cmd} contract start ${block.id} - < spec.json`);
+    if (!block.byTeam || addressName(block.byTeam.target) !== cx.team.name) return this.fail(2, `${block.name} is not handed to ${cx.team.name} — start takes the contract that hands the request to your team`);
+    const mine = cx.table.all().filter(r => r.assignee === this.root.name && r.state === 'assigned');
+    if (mine.length) return this.fail(2, `you already work on ${mine.map(r => r.ctr).join(', ')} — finish it before starting another`);
+    const spec = this.specOf(block);
+    if (spec === null) return this.lastCode;
+    const ctr = this.instanceId(cx, block.id, spec);
+    cx.table.add({ ctr, contract: block.id, spec, assignee: this.root.name, depends: '', parent: '', zone: '', state: 'assigned', reason: '', dispatched_at: '', delivered_hash: '', author: this.root.name });
+    this.out(`${ctr}  ${block.name}  assigned  → ${this.root.name}`);
+    return 0;
+  }
+
+  private contractNew(cx: ContractCx, args: string[]): number {
+    if (cx.lead !== this.root.name) return this.fail(2, `only the lead (${cx.lead}) writes contracts`);
+    const usage = 'new <con-id> [depends=<ctr>,…] [parent=<ctr>] -';
+    const block = this.contractBlock_(args[0], usage);
+    if (!block) return this.lastCode;
+    if (!cx.team.contracts.some(r => r.id === block.id)) return this.fail(2, `${block.name} is no contract of ${cx.team.name} — the team's: ${cx.team.contracts.map(r => refName(r)).join(', ')}`);
+    const opts = args.slice(1);
+    if (opts[opts.length - 1] !== '-') return this.fail(2, `the spec comes on stdin — ${this.cmd} contract ${usage}`);
+    const frozen = this.frozen(cx);
+    if (frozen.length) return this.fail(2, `the work is handed out: wait until ${frozen.map(r => r.ctr).join(', ')} ${frozen.length > 1 ? 'are' : 'is'} delivered or blocked — meanwhile only list and get`);
+    const all = cx.table.all();
+    const depends = (opts.find(o => o.startsWith('depends='))?.slice(8) ?? '').split(',').map(s => s.trim()).filter(Boolean);
+    for (const d of depends) if (!all.some(r => r.ctr === d)) return this.fail(1, `depends: no instance ${d} in this session — nothing was written`);
+    const mine = all.filter(r => r.assignee === this.root.name && r.state === 'assigned');
+    let parent = opts.find(o => o.startsWith('parent='))?.slice(7) ?? '';
+    if (!parent) {
+      if (mine.length !== 1) return this.fail(2, `${mine.length ? `you work on ${mine.map(r => r.ctr).join(', ')}` : 'you work on no instance yet'} — say which this is part of: parent=<ctr>${mine.length ? '' : ` (or start one: ${this.cmd} contract start <con-id> -)`}`);
+      parent = mine[0].ctr;
+    } else if (!mine.some(r => r.ctr === parent)) return this.fail(1, `parent: ${parent} is no instance you work on`);
+    if (block.by.length === 0) return this.fail(2, `${block.name} names no one to carry it out`);
+    const spec = this.specOf(block);
+    if (spec === null) return this.lastCode;
+    // Several agents in BY: each new instance to the next, in the order written.
+    const assignee = refName(block.by[all.filter(r => r.contract === block.id).length % block.by.length]);
+    const ctr = this.instanceId(cx, block.id, spec);
+    cx.table.add({ ctr, contract: block.id, spec, assignee, depends: depends.join(','), parent, zone: '', state: 'assigned', reason: '', dispatched_at: '', delivered_hash: '', author: this.root.name });
+    this.out(`${ctr}  ${block.name}  assigned  → ${assignee}`);
+    this.out(`# mark its zone in one file: \`agent-pack ${ctr}\` where the work starts, \`agent-pack end ${ctr}\` where it ends, each inside a comment — then ${this.cmd} contract dispatch`);
+    return 0;
+  }
+
+  /** The DOMAINS dimension of the team, with its cache and options — or null after saying why. */
+  private domainsOf(cx: ContractCx): { dim: DimensionBlock; cache: DimensionCache; slot: string; values: string[]; choices: Record<string, string> } | null {
+    const dim = this.dimensions().find(d => d.name === cx.team.domains);
+    const options = dim ? domainOptions(this.doc, dim.block) : null;
+    if (!dim || !options) { this.lastCode = this.fail(2, `the DOMAINS dimension ${cx.team.domains ?? ''} is not in this document — compile the lead again`); return null; }
+    return { dim: dim.block, cache: dim.cache, slot: options.slot, values: options.values, choices: domainChoices(options) };
+  }
+
+  /**
+   * `dispatch` — the lead hands the work out. Every new instance needs its zone,
+   * in one file; a file holds the zones of one assignee; the file's domain is
+   * the contract's (a file no domain was given gets one from the judge now). On
+   * success the zones are recorded, the perimeter fingerprinted, and nothing the
+   * lead wrote may change any more.
+   */
+  private async contractDispatch(cx: ContractCx): Promise<number> {
+    if (cx.lead !== this.root.name) return this.fail(2, `only the lead (${cx.lead}) hands the work out`);
+    const frozen = this.frozen(cx);
+    if (frozen.length) return this.fail(2, `the work is handed out already — wait until ${frozen.map(r => r.ctr).join(', ')} ${frozen.length > 1 ? 'are' : 'is'} delivered or blocked`);
+    const pending = cx.table.all().filter(r => r.state === 'assigned' && !r.dispatched_at && r.assignee !== this.root.name);
+    if (pending.length === 0) return this.fail(1, `no instance to hand out — write them first: ${this.cmd} contract new <con-id> -`);
+    const domains = this.domainsOf(cx);
+    if (!domains) return this.lastCode;
+    const root = resolve(projectRootOf(this.exe));
+    const files = perimeterFiles(root, domains.dim.globs);
+    const { zones, problems } = scanZones(root, files, pending.map(r => r.ctr));
+    const refusals: string[] = [...problems].map(([ctr, why]) => `${ctr}: ${why}`);
+    // One assignee per file.
+    const byFile = new Map<string, Set<string>>();
+    for (const r of pending) { const z = zones.get(r.ctr); if (z) byFile.set(z.file, (byFile.get(z.file) ?? new Set()).add(r.assignee)); }
+    for (const [file, who] of byFile) if (who.size > 1) refusals.push(`${file} holds the zones of ${[...who].join(' and ')} — a file is one agent's while the work runs`);
+    // The file's domain is the contract's — a file with none gets one from the judge.
+    for (const r of pending) {
+      const z = zones.get(r.ctr);
+      const block = this.byId.get(r.contract) as ContractBlock | undefined;
+      if (!z || !block?.domain) continue;
+      const domain = await this.fileDomain(domains, root, z.file);
+      if ('refused' in domain) { refusals.push(`${r.ctr}: ${domain.refused}`); continue; }
+      if (domain.domain !== block.domain) refusals.push(`${r.ctr}: ${z.file} is of the domain \`${domain.domain}\`, and ${block.name} is of \`${block.domain}\` — put the zone in a file of its domain, or write it as another contract`);
+    }
+    if (refusals.length) {
+      for (const line of refusals) this.out(`refused: ${line}`);
+      return this.fail(3, `nothing was handed out — fix the ${countOf(refusals.length, 'zone', 'zones')} above and dispatch again`);
+    }
+    const at = new Date().toISOString();
+    for (const r of pending) cx.table.set(r.ctr, { zone: zoneText(zones.get(r.ctr)!), dispatched_at: at });
+    const skeleton = cx.table.writeSkeleton(root, domains.dim.globs);
+    for (const r of pending) this.out(`${r.ctr}  ${this.contractName(r.contract)}  ${zoneText(zones.get(r.ctr)!)}  → ${r.assignee}`);
+    this.out(`# ${countOf(pending.length, 'instance', 'instances')} handed out, ${countOf(Object.keys(skeleton.files).length, 'file', 'files')} fingerprinted — now only list and get until each is delivered or blocked`);
+    return 0;
+  }
+
+  /** A file's domain: the one the cache keeps for it (fresh or edited since), else the judge's, kept in the cache — or why there is none. */
+  private async fileDomain(d: { dim: DimensionBlock; cache: DimensionCache; slot: string; values: string[]; choices: Record<string, string> }, root: string, file: string): Promise<{ domain: string } | { refused: string }> {
+    const hash = d.cache.fingerprintOf(file);
+    if (hash === null) return { refused: `${file} does not exist` };
+    // A file keeps the domain it was given when it is edited — the lead's zone marks, a member's work: a domain is no fact a comment changes.
+    const kept = domainOf(d.cache.read(file), d.slot);
+    if (kept) return { domain: kept };
+    const checks = this.build.checks;
+    if (!checks) return { refused: `${file} has no domain yet, and this agent has no judge to give it one — add checks: { adapter: 'jev' } and compile again, or run agent-pack bundle all` };
+    let judge: JudgePlugin;
+    try { judge = this.judgeNamed(checks.adapter); } catch (e) { return { refused: `the judge \`${checks.adapter}\` cannot be loaded (${e instanceof Error ? e.message : e})` }; }
+    let answer: Awaited<ReturnType<JudgePlugin['ask']>>;
+    try { answer = await judge.ask(readFileSync(join(root, file), 'utf-8'), [{ id: 'domain', question: DOMAIN_QUESTION, options: d.choices }], checks.model); } catch (e) {
+      return { refused: `the judge could not give ${file} its domain (${e instanceof Error ? e.message : e})` };
+    }
+    const dist = answer.answers['domain'];
+    if (!isDistribution(dist)) return { refused: `the judge gave ${file} no probability per domain` };
+    const verdict = decideChoice(dist, checks.threshold, checks.margin ?? 0.2);
+    if ('grey' in verdict) return { refused: `${file}: the judge hesitates between ${verdict.grey[0]} (${verdict.p[0].toFixed(2)}) and ${verdict.grey[1]} (${verdict.p[1].toFixed(2)}) — run agent-pack bundle all on a terminal to decide` };
+    d.cache.write(domainEntry(d.dim, file, hash, d.slot, verdict.choice, `judge:${checks.adapter}`));
+    return { domain: verdict.choice };
+  }
+
+  /**
+   * `deliver` — the assignee is done: its zone's marks are gone, and no file of
+   * the perimeter other than its zone's changed since the dispatch (a new file
+   * counts as a change).
+   */
+  private contractDeliver(cx: ContractCx, args: string[]): number {
+    const r = this.instance(cx, args[0], 'deliver <ctr-id>');
+    if (!r) return this.lastCode;
+    if (r.assignee !== this.root.name) return this.fail(2, `${r.ctr} is ${r.assignee}'s — only its assignee delivers it`);
+    if (r.state !== 'assigned') return this.fail(2, `${r.ctr} is ${r.state} — only an assigned instance is delivered`);
+    // The parts of an instance (those written with it as parent) are done first: merged, or blocked and carried out by its assignee.
+    const open = cx.table.all().filter(p => p.parent === r.ctr && (p.state === 'assigned' || p.state === 'delivered'));
+    if (open.length) return this.fail(3, `${r.ctr} still has parts to finish: ${open.map(p => `${p.ctr} (${p.state})`).join(', ')} — merge them first`);
+    // The instance a lead was handed has no zone of its own: done when its parts are.
+    if (!r.zone) {
+      if (!cx.table.transition(r.ctr, 'assigned', 'delivered')) return this.fail(4, `${r.ctr} changed meanwhile — read it: ${this.cmd} contract get ${r.ctr}`);
+      this.out(`${r.ctr}  delivered`);
+      return 0;
+    }
+    const zone = parseZone(r.zone);
+    const skeleton = cx.table.skeleton();
+    if (!r.dispatched_at || !zone || !skeleton) return this.fail(2, `${r.ctr} was not handed out yet — wait for the lead's dispatch`);
+    const root = resolve(projectRootOf(this.exe));
+    const refusals: string[] = [];
+    const zoneText_ = existsSync(join(root, zone.file)) ? readFileSync(join(root, zone.file), 'utf-8') : '';
+    if (hasMarks(zoneText_, r.ctr)) refusals.push(`the marks of ${r.ctr} are still in ${zone.file} — remove both when the work is done`);
+    const now = perimeterFiles(root, skeleton.globs);
+    const all = cx.table.all();
+    const expected = expectedFingerprints(skeleton, all);
+    // The files other members are still working on change legitimately: theirs, not an overreach.
+    const busy = new Set(all
+      .filter(o => o.ctr !== r.ctr && o.state === 'assigned' && o.dispatched_at && o.zone)
+      .map(o => parseZone(o.zone)?.file)
+      .filter((f): f is string => !!f));
+    for (const file of now) {
+      if (file === zone.file || busy.has(file)) continue;
+      const before = expected[file];
+      if (before === undefined) refusals.push(`${file} is new — your zone is ${zone.file} alone`);
+      else if (fingerprint(readFileSync(join(root, file), 'utf-8')) !== before) refusals.push(`${file} changed — your zone is ${zone.file} alone`);
+    }
+    for (const file of Object.keys(skeleton.files)) if (file !== zone.file && !now.includes(file)) refusals.push(`${file} is gone — your zone is ${zone.file} alone`);
+    if (refusals.length) {
+      for (const line of refusals) this.out(`refused: ${line}`);
+      return this.fail(3, `${r.ctr} was not delivered — undo what lies outside your zone, or block it: ${this.cmd} contract block ${r.ctr} "<why>"`);
+    }
+    const delivered = existsSync(join(root, zone.file)) ? fingerprint(readFileSync(join(root, zone.file), 'utf-8')) : '';
+    if (!cx.table.transition(r.ctr, 'assigned', 'delivered', { delivered_hash: delivered })) return this.fail(4, `${r.ctr} changed meanwhile — read it: ${this.cmd} contract get ${r.ctr}`);
+    this.out(`${r.ctr}  delivered`);
+    return 0;
+  }
+
+  private contractBlock(cx: ContractCx, args: string[]): number {
+    const r = this.instance(cx, args[0], 'block <ctr-id> <reason>');
+    if (!r) return this.lastCode;
+    const reason = args.slice(1).join(' ').trim();
+    if (!reason) return this.fail(2, `say why ${r.ctr} cannot be honoured — ${this.cmd} contract block ${r.ctr} "<why>"`);
+    if (r.assignee !== this.root.name) return this.fail(2, `${r.ctr} is ${r.assignee}'s — only its assignee blocks it`);
+    if (!cx.table.transition(r.ctr, 'assigned', 'blocked', { reason: reason.replace(/\s+/g, ' ') })) return this.fail(4, `${r.ctr} is no longer assigned — read it: ${this.cmd} contract get ${r.ctr}`);
+    this.out(`${r.ctr}  blocked — the lead takes it over`);
+    return 0;
+  }
+
+  private contractMerge(cx: ContractCx, args: string[]): number {
+    if (cx.lead !== this.root.name) return this.fail(2, `only the lead (${cx.lead}) merges`);
+    const r = this.instance(cx, args[0], 'merge <ctr-id>');
+    if (!r) return this.lastCode;
+    const frozen = this.frozen(cx);
+    if (frozen.length) return this.fail(2, `the work is still running — wait until ${frozen.map(f => f.ctr).join(', ')} ${frozen.length > 1 ? 'are' : 'is'} delivered or blocked`);
+    // A blocked instance is the lead's to carry out: merging it says the lead did.
+    if (r.state !== 'delivered' && r.state !== 'blocked') return this.fail(2, `${r.ctr} is ${r.state} — only a delivered instance is merged, or a blocked one you carried out yourself`);
+    const waiting = r.depends.split(',').filter(Boolean).filter(d => cx.table.get(d)?.state !== 'merged');
+    if (waiting.length) return this.fail(3, `${r.ctr} depends on ${waiting.map(d => `${d} (${cx.table.get(d)?.state ?? '?'})`).join(', ')} — merge ${waiting.length > 1 ? 'those' : 'that'} first`);
+    if (!cx.table.transition(r.ctr, r.state, 'merged')) return this.fail(4, `${r.ctr} changed meanwhile — read it: ${this.cmd} contract get ${r.ctr}`);
+    this.out(`${r.ctr}  merged`);
+    return 0;
   }
 
   // ----------------------------------------------------------------- stores

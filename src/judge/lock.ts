@@ -18,9 +18,10 @@ import { dirname } from 'path';
 import type { JudgeCheck } from './types.js';
 import { sha256Hex } from '../apdoc/ids.js';
 
-/** A human decision on one check of one line text. */
+/** A human decision: a probability on one check of one line text — or the option chosen on a choice (a file's domain). */
 export interface Decision {
-  p: number;
+  p?: number;
+  choice?: string;
   by?: 'human';
 }
 
@@ -46,6 +47,9 @@ export function isProbability(p: unknown): p is number {
 }
 
 export class JudgeLock {
+  /** A decision was added in this run: the lock is written at the end. */
+  private dirty = false;
+
   private constructor(private readonly path: string, private readonly data: LockData, private readonly pinnedOnLoad: boolean) {}
 
   /** Read the lock — no model and no decision when it does not exist yet. */
@@ -61,8 +65,10 @@ export class JudgeLock {
       throw new Error(`The judge lock ${path} is not a version 1 judge lock`);
     }
     for (const [key, v] of Object.entries(data.decisions)) {
-      if (!isProbability((v as Decision | null)?.p)) {
-        throw new Error(`The judge lock ${path}: the decision "${key}" has no p between 0 and 1`);
+      const d = v as Decision | null;
+      const choice = typeof d?.choice === 'string' && d.choice !== '';
+      if (!choice && !isProbability(d?.p)) {
+        throw new Error(`The judge lock ${path}: the decision "${key}" has neither a p between 0 and 1 nor a choice`);
       }
     }
     // Another judge's pinned model is not this judge's: it is pinned again.
@@ -94,9 +100,15 @@ export class JudgeLock {
     return this.data.decisions[key] ?? null;
   }
 
-  /** Write the lock when this run pinned its model — the only write the judge ever makes to it. */
+  /** Record the developer's choice for a key — a file's domain the judge left grey. */
+  decide(key: string, choice: string): void {
+    this.data.decisions[key] = { choice, by: 'human' };
+    this.dirty = true;
+  }
+
+  /** Write the lock when this run pinned its model, or took a decision for the developer — the only writes the judge ever makes to it. */
   save(): void {
-    if (this.pinnedOnLoad || this.data.model === null) return;
+    if (!this.dirty && (this.pinnedOnLoad || this.data.model === null)) return;
     const keys = Object.keys(this.data.decisions).sort();
     const out = {
       version: 1,

@@ -11,10 +11,10 @@ import { FORMULAS, fill } from '../formulas.js';
  * within the team, what it owns, and which siblings share the work.
  *
  * Generated from the same `.ap` source the orchestration section reads (team
- * purpose = `flows.ap` ABOUT, members = agent files sibling of `flows.ap`), via
+ * purpose = the TEAM block's ABOUT, members = its MEMBER lines), via
  * the shared {@link readTeamMembers} / {@link readTeamPurpose} reader — no
  * second parser. Always-on for team members; a standalone agent (no sibling
- * `flows.ap`) gets nothing.
+ * team file) gets nothing.
  */
 
 const TEAM = FORMULAS.blocks.team;
@@ -26,7 +26,7 @@ function fellowLine(member: AgentInfo): string {
 
 /**
  * Compose the `# Your team` membership section for one agent, given its `.ap`
- * file path. Returns '' for a standalone agent (no sibling `flows.ap`) — the
+ * file path. Returns '' for a standalone agent (no sibling team file) — the
  * section is injected only into agents that belong to a team.
  *
  * The agent itself is excluded from the fellow-members list; when it is the

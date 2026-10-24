@@ -174,6 +174,30 @@ export const BLOCK_CONTRACTS: Record<string, BlockContract> = {
     requiresAll: ['ABOUT', ...DIMENSION_LINES, 'AS'] as const,
     unique: ['ABOUT', ...DIMENSION_LINES, 'AS'] as const,
   },
+  // A team is its `EXPORT TEAM <name>:` block: ABOUT, the MEMBER lines that
+  // name its agents (several add up), `LENS-IN <agent> <template>` overrides,
+  // its routing (`WHEN …:` with `RUN <flow>` beneath — a lifecycle `ON-…:` is a
+  // WHEN once desugared) and its FLOW blocks. The WHEN and FLOW blocks are its
+  // regions: a flow takes the FLOW/STEP contracts line by line as it does in a
+  // flow file, and a routing WHEN holds what a WHEN holds. Checked on the
+  // parsed block (teamBlockErrors): the EXPORT form is not the token pass's.
+  // Under `STRATEGY contracts` the team declares a LEAD, the DOMAINS dimension
+  // and CONTRACT blocks instead of MEMBER, WHEN and FLOW — which of the two sets
+  // holds is the lint's (teamBlockErrors); the contract admits both.
+  TEAM: {
+    allows: ['ABOUT', 'MEMBER', 'LENS-IN', 'WHEN', 'FLOW', 'STRATEGY', 'LEAD', 'DOMAINS', 'CONTRACT'] as const,
+    requiresAll: ['ABOUT'] as const,
+    unique: ['ABOUT', 'STRATEGY', 'LEAD', 'DOMAINS'] as const,
+    regions: ['WHEN', 'FLOW', 'CONTRACT'] as const,
+  },
+  // A contract: ABOUT and DOMAIN, what the lead reads to pick it for a zone; AS,
+  // the template of the spec it fills; BY, the agents that carry it out, or the
+  // one team it is handed to. Checked on the parsed block (contractBlockErrors).
+  CONTRACT: {
+    allows: ['ABOUT', 'DOMAIN', 'AS', 'BY'] as const,
+    requiresAll: ['ABOUT', 'AS', 'BY'] as const,
+    unique: ['ABOUT', 'DOMAIN', 'AS', 'BY'] as const,
+  },
   // First-class `EXPORT AGENT <name> AS <role>:` block. `AS` here is a
   // *signature* argument on the header line (the role binding) — NOT the same
   // `AS` as a STEP child (which declares a response shape). An AGENT block binds
@@ -181,7 +205,7 @@ export const BLOCK_CONTRACTS: Record<string, BlockContract> = {
   // (force-level lines of every family + WHEN workflows); EXPERTISE stays exclusive to the ROLE,
   // so it is deliberately absent from `allows` and the lint emits a HARD error
   // pointing back to the role. `LENS-IN` is admitted as the agent's own default
-  // input shape — the team-side `LENS-IN <agent> <template>` override in flows.ap
+  // input shape — the team-side `LENS-IN <agent> <template>` override in the TEAM block
   // stays authoritative and is a separate grammar.
   // `requiresAll` + `unique` both name MANDATE so the contract declares the full
   // "exactly 1 MANDATE" rule in one place; `lintAgentBlocks` reads these instead

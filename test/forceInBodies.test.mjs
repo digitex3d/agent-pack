@@ -14,6 +14,7 @@ import { strict as assert } from 'assert';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { teamSource } from './helpers/team.mjs';
 
 const { lintFile, lintFlow } = await import('../dist/src/lint.js');
 const { bundleAgentObject } = await import('../dist/src/compiler/index.js');
@@ -56,8 +57,8 @@ const team = join(tmp, 'teams', 'crew');
 mkdirSync(lib, { recursive: true });
 mkdirSync(team, { recursive: true });
 const write = (file, lines) => { writeFileSync(file, lines.join('\n') + '\n'); return file; };
-const flowsBody = ['ABOUT  a crew', '', 'WHEN asked to ship:', '    RUN ship', '', ...FLOW];
-const flowsFile = write(join(team, 'flows.ap'), flowsBody);
+const flowsBody = teamSource('crew', ['builder'], ['ABOUT  a crew', '', 'WHEN asked to ship:', '    RUN ship', '', ...FLOW]);
+const flowsFile = write(join(team, 'crew.ap'), flowsBody);
 const agentBody = [
   'EXPORT AGENT builder AS builder-role:',             // 1
   '    ABOUT    builds things',                        // 2
@@ -91,7 +92,7 @@ try {
     ['`ALWAYS!` is not a level of ALWAYS — use !ALWAYS, ALWAYS', 'unexpected line in a procedure: "ALWAYS!  push a tag by hand"']);
 
   // --- lint: a step and its branches take force lines; a rule line is no action ---
-  assert.deepEqual(lintFile(flowsFile, flowsBody.join('\n') + '\n'), [], 'a team flows.ap lints clean');
+  assert.deepEqual(lintFile(flowsFile, flowsBody.join('\n') + '\n'), [], 'a team file lints clean');
   const flowFile = join(tmp, 'flows', 'ship.ap');
   const lintShip = (...lines) => lintFlow(flowFile, ['# ship', '', 'ABOUT  ship it', '', 'FLOW ship', ...lines, ''].join('\n'));
   assert.deepEqual(lintShip(...FLOW.slice(1)), [], 'a flow file lints clean');
@@ -121,10 +122,10 @@ try {
 
   const pos = l => [l.line, l.col, l.primitive, l.force, l.text, l.containers.map(c => c.type).join('>')];
   const mine = p => structure.lines(p).filter(l => l.file === flowsFile || (l.file === agentFile && l.line > 10)).map(pos);
-  assert.deepEqual(mine('ALWAYS'), [[14, 5, 'ALWAYS', -1, 'push a tag by hand', ''], [9, 9, 'ALWAYS', -1, 'skip a finding', 'step']]);
-  assert.deepEqual(mine('MUST'), [[16, 9, 'MUST', -1, 'release', 'if'], [11, 9, 'MUST', 1, 'cite the line', 'step']]);
-  assert.deepEqual(mine('SHOULD'), [[20, 9, 'SHOULD', 0, 'rerun the full suite', 'until'], [13, 13, 'SHOULD', 0, 'say why', 'step>if']]);
-  assert.deepEqual(mine('MAY'), [[17, 13, 'MAY', 0, 'add a note', 'step>if']]);
+  assert.deepEqual(mine('ALWAYS'), [[14, 5, 'ALWAYS', -1, 'push a tag by hand', ''], [11, 13, 'ALWAYS', -1, 'skip a finding', 'step']]);
+  assert.deepEqual(mine('MUST'), [[16, 9, 'MUST', -1, 'release', 'if'], [13, 13, 'MUST', 1, 'cite the line', 'step']]);
+  assert.deepEqual(mine('SHOULD'), [[20, 9, 'SHOULD', 0, 'rerun the full suite', 'until'], [15, 17, 'SHOULD', 0, 'say why', 'step>if']]);
+  assert.deepEqual(mine('MAY'), [[19, 17, 'MAY', 0, 'add a note', 'step>if']]);
 
   // --- the md, `apx flow`, `apx get` and the Workflow script keep the order ---
   const doc = ApDocument.fromJson(structure.asJson());

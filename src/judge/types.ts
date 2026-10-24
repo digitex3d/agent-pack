@@ -27,10 +27,24 @@ export interface JudgeExample {
   verdict: string;
 }
 
-/** A question asked as is — a checked condition's (`IF!`), built at compile time. */
+/**
+ * A question asked as is — a checked condition's (`IF!`), built at compile
+ * time; or, with `options`, a choice: the judge picks one option, each with what
+ * it means, and answers a probability per option.
+ */
 export interface JudgeQuestion {
   id: string;
   question: string;
+  /** A choice question: option → what it means. */
+  options?: Record<string, string>;
+}
+
+/** What a judge answers per question: a probability for a yes/no question, a distribution over the options for a choice. */
+export type JudgeAnswer = number | Record<string, number>;
+
+/** Whether an answer is a distribution over options (a choice question's). */
+export function isDistribution(answer: JudgeAnswer | undefined): answer is Record<string, number> {
+  return typeof answer === 'object' && answer !== null;
 }
 
 /** A rule: a TEMPLATE tagged `#judge`, applied to every line of its layout's primitives. */
@@ -65,7 +79,7 @@ export interface JudgeRule {
 export interface JudgePlugin {
   type: 'judge';
   name: string;
-  ask(state: string, checks: (JudgeCheck | JudgeQuestion)[], model?: string): Promise<{ model: string; answers: Record<string, number> }>;
+  ask(state: string, checks: (JudgeCheck | JudgeQuestion)[], model?: string): Promise<{ model: string; answers: Record<string, JudgeAnswer> }>;
   /** The largest state, in characters, the judge reads — a larger one is never sent. Absent: no limit. */
   maxStateChars?: number;
 }
@@ -93,6 +107,8 @@ export interface JudgeConfig {
   adapter: JudgePlugin;
   /** A check answered below this probability is reported. */
   threshold: number;
+  /** A choice is decided when its top option is at or above the threshold AND ahead of the next by this much; else it is the developer's. */
+  margin: number;
   offline: JudgeOffline;
   /** Absolute path of the judge lock. */
   lock: string;
@@ -110,4 +126,6 @@ export interface ChecksConfig {
   adapter: JudgePlugin;
   /** A condition answered at or above this probability is open; below, closed. */
   threshold: number;
+  /** A choice is decided when its top option is at or above the threshold AND ahead of the next by this much. */
+  margin: number;
 }

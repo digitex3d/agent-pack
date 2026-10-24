@@ -11,10 +11,11 @@ import { processImports, resolveTargetWith, SKILL_IMPORT_HINT } from '../dispatc
 import { unknownWithMessage, scanWith, unappliedBlocks, unappliedIssue, withScopeLine, type WithProblem } from '../withUse.js';
 import { resolveBundleDefaults, resolveTeamShared } from '../bundleDefaults.js';
 import { resolveTeamMembership } from '../services/teamMembership.js';
-import { findAgentFiles, readAgentFile, standaloneDir, agentNameOf, teamRootForAgentFile, TEAM_FLOWS_FILE } from '../services/teamMetadata.js';
+import { findAgentFiles, readAgentFile, standaloneDir, agentNameOf, teamRootForAgentFile, readTeamFile, teamRosterIssues, legacyTeamIssue, buildContractIndex, readContractBlocks, projectContractIssues, withoutBlocks, CONTRACTS_STRATEGY, type ContractIndex, type TeamFile } from '../services/teamMetadata.js';
 import { askTargetErrors, executorErrors, usesPrograms, WRITE_PROGRAM, type AgentIndexEntry } from '../executor.js';
-import { BUILTIN_AGENTS_DIR, resolveDelegateConfig, type DelegateConfig } from '../config.js';
-import { LintError, checkVocabulary, lineOfName, checkedHeadIssues, dimensionBlockErrors } from '../lint.js';
+import { BUILTIN_AGENTS_DIR, resolveDelegateConfig, PROJECT_SOURCE, type DelegateConfig } from '../config.js';
+import { LintError, checkVocabulary, lineOfName, checkedHeadIssues, dimensionBlockErrors, teamBlockErrors, contractBlockErrors } from '../lint.js';
+import { tagDomains, decideDomain, undecidedMessage, type UndecidedDomain } from '../judge/domains.js';
 import { CompileError, reporter } from '../report.js';
 import { extractInlineDefinitions } from '../dispatch/inlineBlocks.js';
 import { renderTree } from '../bundlers/renderTree.js';
@@ -30,7 +31,7 @@ import { STRATEGIES, strategyFor, type DefinitionStrategy, type Definition } fro
 import { parseNamespace } from '../namespace.js';
 import { DocumentBuilder } from '../apdoc/builder.js';
 import type { ApDocument } from '../apdoc/document.js';
-import type { StoreBlock, DimensionBlock, TemplateBlock } from '../apdoc/blocks.js';
+import type { StoreBlock, DimensionBlock, TemplateBlock, TeamBlock } from '../apdoc/blocks.js';
 import { SourceRegistry } from '../sources.js';
 import { judgeDocument, type JudgeRun } from '../judge/phase.js';
 import type { ChecksConfig } from '../judge/types.js';
@@ -61,10 +62,14 @@ export interface BundleOptions {
   sources?: SourceRegistry;
   /** The command's judge run — the judge phase runs when present. */
   judge?: JudgeRun | null;
+  /** Who decides a file's domain the judge left grey (DOMAINS of a team of contracts). Absent: nobody. */
+  decide?: DomainDecider;
   /** The judge of checked conditions (`checks` config key) — absent: none. */
   checks?: ChecksConfig | null;
   /** Every agent of the project and its team — what `ASK … BY` may name. Absent: not checked. */
   agentIndex?: AgentIndexEntry[];
+  /** The project's contracts and teams — what a `BY <team>` resolves against, and whether some contract hands work to the agent's team. Absent: not checked. */
+  contractIndex?: ContractIndex | null;
   /** The `delegate` config key: the default delegate and the agents' models. */
   delegate?: DelegateConfig;
 }
@@ -115,7 +120,11 @@ export interface BundleFromConfigOverrides {
   vars?: Record<string, string>;
   adapter?: AdapterPlugin;
   judge?: JudgeRun | null;
+  decide?: DomainDecider;
 }
+
+/** Who decides a file's domain the judge left grey: the chosen option, or null to leave it undecided (an error). */
+export type DomainDecider = (undecided: UndecidedDomain) => Promise<string | null>;
 
 /**
  * Compose a bundle from a Config, deriving libraryRoot and agentDir from it.
@@ -160,10 +169,17 @@ function buildBundleOpts(
     vars: overrides.vars,
     adapter: overrides.adapter,
     judge: overrides.judge,
+    decide: overrides.decide,
     checks: config.checks ?? null,
     agentIndex: agentIndexOf(config),
+    contractIndex: contractIndexOf(config, overrides.projectRoot),
     ...(config.delegate ? { delegate: config.delegate } : {}),
   };
+}
+
+/** The project's contracts: the teams under the config's teams folder and the CONTRACT blocks of its PROJECT.ap. */
+function contractIndexOf(config: Config, projectRoot = process.cwd()): ContractIndex {
+  return buildContractIndex(config.teamsDir, resolve(projectRoot, PROJECT_SOURCE));
 }
 
 /** A name that resolves to no block fails the compilation (D30): what is missing, and how to bring it in. */
@@ -449,9 +465,67 @@ function dimensionErrors(doc: ApDocument, ctx: BundleContext): LintError[] {
 }
 
 /**
+ * The domains of the files a team of contracts works on (src/judge/domains.ts):
+ * tagged by the judge at build time; a grey file is the developer's, through
+ * `decide` — without a decider, or a judge, the build fails naming the files.
+ */
+async function domainErrors(doc: ApDocument, dim: DimensionBlock, team: TeamFile, opts: BundleOptions): Promise<LintError[]> {
+  const line = lineOfName(team.path, dim.name);
+  if (!opts.judge) return [{ file: team.path, line, message: `DOMAINS ${dim.name}: a team of contracts needs the judge to give every file its domain — add \`judge: { adapter: 'jev' }\` to agent-pack.config.mjs` }];
+  const root = opts.projectRoot ?? process.cwd();
+  const tagging = await tagDomains(doc, dim, team.path, opts.judge, root);
+  const errors = [...tagging.errors];
+  for (const u of tagging.undecided) {
+    const choice = (await opts.decide?.(u)) ?? null;
+    if (choice && u.options.includes(choice)) decideDomain(doc, dim, opts.judge, root, u, choice);
+    else errors.push({ file: team.path, line, message: undecidedMessage(dim, u) });
+  }
+  for (const w of tagging.warnings) opts.judge.warn({ ...w, severity: 'warning' });
+  return errors;
+}
+
+/**
+ * Under `STRATEGY contracts`: the lead's document holds the DOMAINS dimension —
+ * its template has one ENUM slot, and every CONTRACT's DOMAIN is one of its
+ * values; a member some BY names declares `WHEN handed <contract>:` for each
+ * such contract, and no LENS-IN — its input is the contract it is handed.
+ */
+function contractErrors(doc: ApDocument, team: TeamFile, agentName: string, lensInFile: string | null): LintError[] {
+  if (team.strategy?.name !== CONTRACTS_STRATEGY) return [];
+  const errors: LintError[] = [];
+  const at = (line: number | null, message: string) => errors.push({ file: team.path, line: line ?? team.block.startLine, message });
+  if (team.lead?.name === agentName && team.domains) {
+    const dim = doc.byKind('dimension').find(d => d.name === team.domains!.name) as DimensionBlock | undefined;
+    if (!dim) {
+      at(team.domains.line, `DOMAINS ${team.domains.name}: no dimension of that name in the lead's document — declare it in \`${basename(team.lead.name)}.ap\` or IMPORT it there`);
+    } else {
+      const slots = dim.shape ? doc.slotsOf(dim.shape.ref) ?? [] : [];
+      const values = slots.length === 1 && slots[0].spec.kind === 'enum' ? slots[0].spec.values : null;
+      if (!values) {
+        at(team.domains.line, `DOMAINS ${team.domains.name}: its template has one slot, an \`ENUM[...]\` of the domains — one domain per file`);
+      } else {
+        for (const c of team.contracts) {
+          if (c.domain !== null && !values.includes(c.domain)) at(c.domainLine, `CONTRACT ${c.name}: DOMAIN \`${c.domain}\` is none of the domains — ${values.join(', ')}`);
+        }
+      }
+    }
+  }
+  const handed = team.contracts.filter(c => c.by.includes(agentName));
+  if (handed.length > 0) {
+    const root = doc.root();
+    const inputs = new Set(doc.nodes().filter(n => n.block === root && n.node.type === 'when').map(n => (n.node as { input?: { target: string } }).input?.target.split('/').pop()).filter(Boolean));
+    for (const c of handed) {
+      if (!inputs.has(c.name)) at(c.byLine, `BY ${agentName}: \`${agentName}\` declares no \`WHEN handed ${c.name}:\` — the trigger a member starts a contract from`);
+    }
+    if (lensInFile) errors.push({ file: lensInFile, line: lineOfName(lensInFile, 'LENS-IN'), message: `LENS-IN is not written in a team of contracts — the member's input is the contract it is handed (\`WHEN handed <contract>:\`)` });
+  }
+  return errors;
+}
+
+/**
  * A dimension is an agent's — read and written through that agent's apx. One a
  * compilation that is no agent's reaches (PROJECT.ap, a standalone skill, a
- * team's flows.ap), from `from` on in `ctx.dimensions`, fails it at `file`.
+ * team's file), from `from` on in `ctx.dimensions`, fails it at `file`.
  */
 export function strayDimensionErrors(ctx: BundleContext, file: string, from = 0): LintError[] {
   return ctx.dimensions.slice(from).map(d => ({
@@ -638,10 +712,17 @@ export async function bundleStandaloneToString(
     libraries: { ...librariesAliasMap(config), ...(opts.extraLibraries ?? {}) },
     renderings: opts.adapter?.renderings,
   });
-  const header = parseStandaloneHeader(ctx.sources.read(absolute));
+  // The file's CONTRACT blocks hand a request to a team: checked here, held by the apx, never rendered.
+  const source = ctx.sources.read(absolute);
+  const contractBlocks = ctx.sources.tree(absolute).blocks.filter(b => b.key === 'CONTRACT');
+  const header = parseStandaloneHeader(contractBlocks.length ? withoutBlocks(source, contractBlocks) : source);
   lintSource(absolute, ctx);
 
   let body = await resolveInlineBlocks(header.stripped, ctx, absolute);
+  if (contractBlocks.length) {
+    const index = contractIndexOf(config, dirname(absolute));
+    ctx.lintErrors.push(...contractBlockErrors(absolute, contractBlocks), ...projectContractIssues(absolute, readContractBlocks(contractBlocks), index, new Set(ctx.templates.map(t => t.name))));
+  }
   ctx.lintErrors.push(...standaloneWithErrors(ctx, absolute, body), ...strayDimensionErrors(ctx, absolute));
   body = `${emitCollectedSections(ctx)}${tidyBlankLines(body)}\n`;
   noExecutableChecks(absolute, ctx);
@@ -688,7 +769,7 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
   // its team — foundational context, so first), then the team's shared block
   // (team.ap, when the agent is a team member), then the framework runtime
   // defaults. All are prepended before the agent's own identity and rules.
-  // Team root is resolved from the agent's flat file (its sibling flows.ap).
+  // Team root is resolved from the agent's flat file (its sibling team file).
   const bootstrap =
     resolveTeamMembership(agentFilePath) +
     resolveTeamShared(agentFilePath) +
@@ -699,17 +780,27 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
   // `ROLE <name>:` block, then the agent body. partitionMetadata does extract +
   // strip in a single lex pass; the adapter later obtains frontmatter via
   // collectFrontmatter(metadata, …).
-  // The words of the agent's own file and of its team's flows.ap are checked
-  // like every import's.
+  // The words of the agent's own file and of its team's file are checked
+  // like every import's. A `flows.ap` beside the agent is the retired team file.
   lintSource(agentFilePath, ctx);
+  const legacy = legacyTeamIssue(dirname(agentFilePath));
+  if (legacy) ctx.lintErrors.push(legacy);
   const teamRoot = teamRootForAgentFile(agentFilePath);
-  const flowsPath = teamRoot ? resolve(teamRoot, TEAM_FLOWS_FILE) : null;
-  if (flowsPath && existsSync(flowsPath)) {
-    lintSource(flowsPath, ctx);
+  const teamFile = teamRoot ? readTeamFile(teamRoot, ctx.sources) : null;
+  if (teamFile) {
+    lintSource(teamFile.path, ctx);
+    // The block's own contract (ABOUT, MEMBER, what a team holds) and its roster against the folder.
+    ctx.lintErrors.push(...teamBlockErrors(teamFile.path, ctx.sources.tree(teamFile.path).blocks), ...teamRosterIssues(teamFile, opts.contractIndex ?? null));
     // The team's flows travel in every member's document; so do the blocks
-    // flows.ap imports (a step's AS template), or their ids would lead nowhere.
-    const imports = ctx.sources.read(flowsPath).split(/\r?\n/).filter(l => /^IMPORT\s/.test(l)).join('\n');
-    if (imports) await expandImports(imports, ctx, flowsPath);
+    // the team file imports (a step's AS template), or their ids would lead nowhere.
+    const imports = teamFile.source.split(/\r?\n/).filter(l => /^IMPORT\s/.test(l)).join('\n');
+    if (imports) await expandImports(imports, ctx, teamFile.path);
+    // A contract handed to the team from outside brings its form along: the template its file imports.
+    if (teamFile.strategy?.name === CONTRACTS_STRATEGY && opts.contractIndex) {
+      for (const c of opts.contractIndex.contracts.filter(c => c.team !== teamFile.name && c.by.includes(teamFile.name))) {
+        if (c.asImport && !ctx.templates.some(t => t.name === c.as)) await expandImports(c.asImport, ctx, c.file);
+      }
+    }
   }
 
   const metadata = new Map<string, string[]>();
@@ -758,6 +849,7 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     vars: variables.constants,
     declaredVars: variables.variables,
     ownsInBody,
+    contractIndex: opts.contractIndex ?? null,
   });
   // An ASK without BY goes to the default delegate; the config may set this agent's model.
   const delegate = opts.delegate ?? resolveDelegateConfig(undefined);
@@ -776,6 +868,7 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     ...storeErrors(structure, ctx, agentFilePath),
     ...apxNameErrors(structure, ctx, agentFilePath),
     ...dimensionErrors(structure, ctx),
+    ...(teamFile ? contractErrors(structure, teamFile, agentName, agentFile.info.lensIn ? agentFilePath : null) : []),
     ...builder.varErrors.map(located),
     ...builder.checkIssues.map(located),
     ...(opts.agentIndex ? askTargetErrors(structure, opts.agentIndex, teamRoot ? basename(teamRoot) : null) : []),
@@ -785,6 +878,11 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
   ], 'Bundle');
   // The judge phase: a well-formed document's lines checked by the judge.
   if (opts.judge) failOnErrors(await judgeDocument(structure, opts.judge, ctx.sources), 'Bundle');
+  // The lead of a team of contracts: every file of its DOMAINS gets its domain, by the judge or the developer.
+  if (teamFile?.strategy?.name === CONTRACTS_STRATEGY && teamFile.lead?.name === agentName && teamFile.domains) {
+    const dim = structure.byKind('dimension').find(d => d.name === teamFile.domains!.name) as DimensionBlock | undefined;
+    if (dim) failOnErrors(await domainErrors(structure, dim, teamFile, opts), 'Bundle');
+  }
   const body = renderMd(structure) + await emitTools(ctx);
 
   return {

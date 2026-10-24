@@ -10,8 +10,8 @@ import { splitWith, withItemError } from './withUse.js';
 import { getFamilyBases, getIntroByKeyword, forceLevelBaseOf, splitBangs, forceLevelFamilies, toCanonicalKeyword, parseForceLevel, NON_RULE_FAMILIES } from './forceLevelConfig.js';
 import { enumPrimitiveFor } from './primitives.js';
 import { BLOCK_CONTRACTS, BlockContract, VAR_BLOCK } from './blockContracts.js';
-import { TEAM_FLOWS_FILE } from './services/teamMetadata.js';
-import { parseBlocks, agentNestedBlocks, exportedVar, readExportedVar, isExportedVar, type Block, type Node } from './parseBlocks.js';
+import { TEAM_KEY } from './services/teamMetadata.js';
+import { parseBlocks, agentNestedBlocks, exportedVar, readExportedVar, isExportedVar, type Block, type Node, type Line } from './parseBlocks.js';
 import { isExportFile } from './services/text.js';
 import { parseAgentSignature, contextShape } from './definitionArgs.js';
 import { kindFromDir, unitNameFromPath } from './ingest.js';
@@ -792,8 +792,8 @@ function isBranch(contract: BlockContract, keyword: Keyword): boolean {
   return contract.branches?.keywords.includes(keyword) ?? false;
 }
 
-/** The contracts checked line by line — a DIMENSION is checked on its parsed block, wherever it is written (dimensionBlockErrors). */
-const { DIMENSION: _parsed, ...TOKEN_CONTRACTS } = BLOCK_CONTRACTS;
+/** The contracts checked line by line — a DIMENSION and a TEAM are checked on their parsed block (dimensionBlockErrors, teamBlockErrors). */
+const { DIMENSION: _parsed, TEAM: _team, CONTRACT: _contract, ...TOKEN_CONTRACTS } = BLOCK_CONTRACTS;
 
 export function validateBlockContracts(
   tokens: ReturnType<typeof lex>,
@@ -1014,6 +1014,76 @@ export function dimensionBlockErrors(file: string, blocks: readonly Block[]): Li
 }
 
 /**
+ * Every `EXPORT TEAM` block of a file against its contract: ABOUT and at least
+ * one MEMBER, nothing a team does not hold. Its WHEN and FLOW blocks are its
+ * regions — the token pass checks the flows, and a WHEN is a WHEN. One team per
+ * file, exported, at the top: a second one, or one indented, is an error here.
+ */
+export function teamBlockErrors(file: string, blocks: readonly Block[]): LintError[] {
+  const teams = blocks.filter(b => b.key === TEAM_KEY);
+  const errors = teams.flatMap(b => [
+    ...(b.exported ? [] : [{ file, line: b.startLine, message: `TEAM ${b.name ?? ''}: a team is exported — write \`EXPORT TEAM ${b.name ?? '<name>'}:\`` }]),
+    ...checkBlockContract(file, b, TEAM_KEY),
+    ...strategyErrors(file, b),
+    ...contractBlockErrors(file, b.children.filter((c): c is Block => c.type === 'block')),
+  ]);
+  if (teams.length > 1) errors.push({ file, line: teams[1].startLine, message: `a file declares one team — found ${teams.length} TEAM blocks` });
+  return errors;
+}
+
+/**
+ * The two shapes of a team: with `STRATEGY contracts` it declares a LEAD and
+ * CONTRACT blocks and leaves MEMBER, WHEN, FLOW and LENS-IN out (the strategy
+ * runs it, the roster is the lead and the BY lines); without one it declares
+ * MEMBER and may hold WHEN and FLOW, and none of LEAD, DOMAINS, CONTRACT.
+ */
+function strategyErrors(file: string, team: Block): LintError[] {
+  const errors: LintError[] = [];
+  const lines = team.children.filter((c): c is Line => c.type === 'line');
+  const blocks = team.children.filter((c): c is Block => c.type === 'block');
+  const strategy = lines.find(l => l.keyword === 'STRATEGY');
+  const name = team.name ?? '';
+  if (strategy) {
+    const value = strategy.rest.trim();
+    if (!STRATEGY_VALUES.includes(value)) return errors; // the vocabulary check names the unknown value
+    for (const l of lines.filter(l => ['MEMBER', 'LENS-IN'].includes(l.keyword))) {
+      errors.push({ file, line: l.line, message: `${l.keyword} is not written under STRATEGY ${value} — ${l.keyword === 'MEMBER' ? 'the members are the LEAD and the agents the CONTRACT blocks name in BY' : "a member's input is the contract it is handed"}` });
+    }
+    for (const b of blocks.filter(b => b.key === 'WHEN' || b.key === 'FLOW')) {
+      errors.push({ file, line: b.startLine, message: `${b.key} is not written under STRATEGY ${value} — the strategy says how the team runs` });
+    }
+    if (!lines.some(l => l.keyword === 'LEAD')) errors.push({ file, line: team.startLine, message: `TEAM ${name}: STRATEGY ${value} needs a LEAD — the agent that prepares the work` });
+    if (!lines.some(l => l.keyword === 'DOMAINS')) errors.push({ file, line: team.startLine, message: `TEAM ${name}: STRATEGY ${value} needs DOMAINS <dimension> — the lead's dimension that gives every file its domain` });
+    if (!blocks.some(b => b.key === 'CONTRACT')) errors.push({ file, line: team.startLine, message: `TEAM ${name}: STRATEGY ${value} needs at least one CONTRACT block` });
+  } else {
+    if (!lines.some(l => l.keyword === 'MEMBER')) errors.push({ file, line: team.startLine, message: `TEAM block requires at least one MEMBER` });
+    for (const l of lines.filter(l => ['LEAD', 'DOMAINS'].includes(l.keyword))) {
+      errors.push({ file, line: l.line, message: `${l.keyword} is a line of a team with a STRATEGY — write \`STRATEGY contracts\` first` });
+    }
+    for (const b of blocks.filter(b => b.key === 'CONTRACT')) {
+      errors.push({ file, line: b.startLine, message: `CONTRACT ${b.name ?? ''}: a contract belongs to a team with \`STRATEGY contracts\` — or to the project file, where it hands a request to such a team` });
+    }
+  }
+  return errors;
+}
+
+/** The STRATEGY values the language knows — the enum primitive's. */
+const STRATEGY_VALUES = Object.keys(enumPrimitiveFor('STRATEGY')?.values ?? {});
+
+/**
+ * Every CONTRACT block of `blocks` against its contract: ABOUT, AS and BY once
+ * each, DOMAIN at most once, nothing else; its AS at no level — a contract's
+ * form is a template, not a rule.
+ */
+export function contractBlockErrors(file: string, blocks: readonly Block[]): LintError[] {
+  return blocks.filter(b => b.key === 'CONTRACT').flatMap(b => [
+    ...checkBlockContract(file, b, 'CONTRACT'),
+    ...b.children.flatMap((c): LintError[] => (c.type === 'line' && /^!?AS!{1,2}$|^!AS$/.test(c.keyword)
+      ? [{ file, line: c.line, message: `CONTRACT ${b.name ?? ''}: AS takes no level — its form is the template: write \`AS ${c.rest.trim()}\`` }] : [])),
+  ]);
+}
+
+/**
  * Shared skeleton for the single-block kinds (STORE, DIMENSION): exactly one block
  * of the kind, its name matching the filename slug, and its declared contract —
  * or the kind's own check of the block, when it has one.
@@ -1087,11 +1157,11 @@ const LEGACY_AGENT_DIR_RE = /(^|[/\\])definitions[/\\][^/\\]+[/\\]agent\.ap$/;
 
 /**
  * Structural files that are never single-kind units: a team's routing
- * (`flows.ap`) and roster (`team.ap`), a folder-per-agent body (`agent.ap`), an
+ * (an `EXPORT TEAM` block) and shared context (`team.ap`), a folder-per-agent body (`agent.ap`), an
  * import list (`imports.ap`), and a scope index (`index.ap`). Validated by
  * `lintAgentBlocks` like the original suffix dispatch did for any non-kind name.
  */
-const ORCHESTRATION_BASENAMES = new Set(['flows.ap', 'team.ap', 'imports.ap', 'index.ap']);
+const ORCHESTRATION_BASENAMES = new Set(['team.ap', 'imports.ap', 'index.ap']);
 
 /**
  * Runtime/scaffold files that carry their own non-kind suffix and are NEVER
@@ -1105,7 +1175,7 @@ const NON_KIND_SUFFIXES = ['.phase.ap'];
  * An agent / orchestration / runtime file — validated by `lintAgentBlocks`,
  * never by a single-kind linter. Recognised by content or its non-kind suffix,
  * not by directory: a file-top `AS <role>` binding or an `AGENT` block marks an
- * agent; `flows.ap`/`team.ap` mark a team's orchestration; `.phase.ap`
+ * agent; a TEAM block or `team.ap` marks a team's orchestration; `.phase.ap`
  * are scaffold files. These must escape the dir-folder switch because a
  * built-in scaffold lives at `templates/agents/<name>/agent.ap`, whose ancestor build-output `templates/`
  * directory would otherwise be read as a kind-folder.
@@ -1115,7 +1185,7 @@ function isAgentOrOrchestration(file: string, body: string): boolean {
   if (ORCHESTRATION_BASENAMES.has(base)) return true;
   if (NON_KIND_SUFFIXES.some(s => base.endsWith(s))) return true;
   if (/^AS\s+\S/m.test(body)) return true;
-  return parseBlocks(body).blocks.some(b => AGENT_KEYS.has(b.key.toUpperCase()));
+  return parseBlocks(body).blocks.some(b => AGENT_KEYS.has(b.key.toUpperCase()) || b.key.toUpperCase() === TEAM_KEY);
 }
 
 // ---------------------------------------------------------------------------
@@ -1126,6 +1196,11 @@ function isAgentOrOrchestration(file: string, body: string): boolean {
 const LINE_OWNERS = new Map<string, { owner: string; what: string }>([
   ...COMPUTE_SECTIONS.map(s => [s, { owner: 'COMPUTE', what: 'a section' }] as const),
   ...DIMENSION_LINES.map(k => [k, { owner: 'DIMENSION', what: 'a line' }] as const),
+  ['MEMBER', { owner: TEAM_KEY, what: 'a line' }],
+  ['STRATEGY', { owner: TEAM_KEY, what: 'a line' }],
+  ['LEAD', { owner: TEAM_KEY, what: 'a line' }],
+  ['DOMAINS', { owner: TEAM_KEY, what: 'a line' }],
+  ['DOMAIN', { owner: 'CONTRACT', what: 'a line' }],
 ]);
 
 /** What a keyword written alone on its line lacks — by keyword, else its text. */
@@ -1144,6 +1219,7 @@ function placementError(key: string, parent: string | undefined): string | null 
   const owned = LINE_OWNERS.get(key);
   if (owned && parent !== owned.owner) return `${key} is ${owned.what} of a ${owned.owner} block — found inside ${parent || 'the file top'}`;
   if (key === 'DIMENSION' && parent && !AGENT_KEYS.has(parent)) return `a DIMENSION is declared at the file top or directly in an agent's body — found inside ${parent}`;
+  if (key === 'CONTRACT' && parent && parent !== TEAM_KEY) return `a CONTRACT is declared in a TEAM block, or at the top of the project file — found inside ${parent}`;
   return null;
 }
 
@@ -1384,7 +1460,7 @@ export function checkVocabulary(file: string, body: string): LintError[] {
         const decl = readExportedVar(exported);
         if ('error' in decl) err(t.line, decl.error);
         else if (exportsNoVariable ??= ownsNoVariable(file, body)) {
-          err(t.line, `\`EXPORT ${exported.rest}\`: a library module exports variables — an agent's file or a team's flows.ap declares one in a body (\`VAR ${decl.name}\`), or IMPORTs it`);
+          err(t.line, `\`EXPORT ${exported.rest}\`: a library module exports variables — an agent's file or a team's file declares one in a body (\`VAR ${decl.name}\`), or IMPORTs it`);
         } else {
           const first = exportedVars.get(decl.name);
           if (first !== undefined) err(t.line, `\`${decl.name}\` is exported twice in this module — first at line ${first}`);
@@ -1492,9 +1568,9 @@ export function lintFile(file: string, body: string, options: LintOptions = {}):
   return [...checkVocabulary(file, body), ...lintByKind(file, body, options)];
 }
 
-/** An agent's file or a team's flows.ap: a variable exported there would be no one's — library modules export them. */
-function ownsNoVariable(file: string, body: string): boolean {
-  return basename(file) === TEAM_FLOWS_FILE || parseBlocks(body).blocks.some(b => AGENT_KEYS.has(b.key));
+/** An agent's file or a team's file: a variable exported there would be no one's — library modules export them. */
+function ownsNoVariable(_file: string, body: string): boolean {
+  return parseBlocks(body).blocks.some(b => AGENT_KEYS.has(b.key) || b.key === TEAM_KEY);
 }
 
 /**
@@ -1523,10 +1599,11 @@ function lintByKind(file: string, body: string, options: LintOptions): LintError
   // recognised by content, ahead of the dir switch, because they carry FLOW/ROLE
   // blocks that are NOT the file's kind and may sit under a build-output
   // `templates/` ancestor that the dir switch would misread.
-  // Their FLOW blocks (a team's flows.ap) take the same block contracts as a
+  // Their FLOW blocks (a team's file) take the same block contracts as a
   // flow file: FLOW, STEP, PARALLEL and their branches, wherever they live.
   if (isAgentOrOrchestration(file, body)) {
-    return [...lintAgentBlocks(file, body), ...validateBlockContracts(desugar(lex(body)), file), ...dimensionBlockErrors(file, parseBlocks(body).blocks)];
+    const blocks = parseBlocks(body).blocks;
+    return [...lintAgentBlocks(file, body), ...validateBlockContracts(desugar(lex(body)), file), ...dimensionBlockErrors(file, blocks), ...teamBlockErrors(file, blocks), ...contractBlockErrors(file, blocks)];
   }
 
   // A module's exported variables are its kind lint's no business: they are
@@ -1579,9 +1656,9 @@ export function formatErrors(errors: LintError[]): string {
 
 /**
  * The checked heads (`IF!`, `IF!!`, …) of a source no document builder walks —
- * a standalone file, the procedures it runs, a team's flows.ap as AGENTS.md renders it
+ * a standalone file, the procedures it runs, a team's file as AGENTS.md renders it
  * — judged by `condCheckOf`, where each stands. Without `agentOf` (a standalone file)
- * no executable is anywhere. With it (a team's flows.ap, BY lines already
+ * no executable is anywhere. With it (a team's file, BY lines already
  * resolved to agents): a step's head is its BY agent's, a head between a
  * flow's steps is the flow's, and one in the team's routing has none.
  */

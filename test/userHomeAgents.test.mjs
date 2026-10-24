@@ -4,6 +4,7 @@ import { strict as assert } from 'assert';
 import { writeFileSync, mkdtempSync, mkdirSync, rmSync } from 'fs';
 import { join, resolve } from 'path';
 import { tmpdir } from 'os';
+import { teamSource } from './helpers/team.mjs';
 
 const { loadConfig } = await import('../dist/src/config.js');
 const { resolveAgentFile, bundleAgentFromConfig } = await import('../dist/src/compiler/index.js');
@@ -49,7 +50,7 @@ function agentSource(name, about) {
   mkdirSync(join(userHome, 'agents'), { recursive: true });
   writeFileSync(join(userHome, 'agents', 'global-pm.ap'), agentSource('global-pm', 'Global product manager'));
   mkdirSync(join(userHome, 'teams', 'forge'), { recursive: true });
-  writeFileSync(join(userHome, 'teams', 'forge', 'flows.ap'), '# forge\n\nABOUT a global team\n');
+  writeFileSync(join(userHome, 'teams', 'forge', 'forge.ap'), ['# forge', '', ...teamSource('forge', ['scout'], ['ABOUT a global team']), ''].join('\n'));
   writeFileSync(join(userHome, 'teams', 'forge', 'scout.ap'), agentSource('scout', 'Global team member'));
 
   await withUserHomeAndProject(userHome, projectDir, async () => {

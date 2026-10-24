@@ -1,0 +1,163 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Giuseppe Federico
+/**
+ * The team block — `EXPORT TEAM <name>:` in `<team>.ap`, replacing `flows.ap`.
+ *
+ *   - a member's document carries the team: its ABOUT, its MEMBER roster (lines
+ *     add up), its routing and its flows, each with its position in the file
+ *   - the roster is authoritative: a MEMBER with no agent file, an agent file
+ *     not listed, a MEMBER listed twice, a block named unlike its folder
+ *   - a `flows.ap` left in the folder is an error naming its replacement; a
+ *     TEAM that is not exported, or a second one, is an error too
+ *   - the orchestration reads the same file: purpose, members, routing, flows
+ */
+
+import { strict as assert } from 'assert';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
+import { teamSource } from './helpers/team.mjs';
+
+const { bundleAgentObject } = await import('../dist/src/compiler/index.js');
+const { buildOrchestrationContent } = await import('../dist/src/orchestrationSection.js');
+const { lintFile } = await import('../dist/src/lint.js');
+const { readTeamFile, teamRootForAgentFile, readTeamMembers, readTeamPurpose } = await import('../dist/src/services/teamMetadata.js');
+
+const tmp = mkdtempSync(join(tmpdir(), 'ap-team-'));
+const lib = join(tmp, 'library');
+const teams = join(tmp, 'teams');
+const team = join(teams, 'crew');
+mkdirSync(join(lib, 'templates'), { recursive: true });
+mkdirSync(team, { recursive: true });
+const write = (file, lines) => { writeFileSync(file, lines.join('\n') + '\n'); return file; };
+
+write(join(lib, 'templates', 'report.ap'), ['EXPORT TEMPLATE report:', '    ABOUT  a report', '    SLOTS:', '        text: TEXT  "the text"', '    BODY:', '        {text}']);
+const member = (name, about = 'a member') => write(join(team, `${name}.ap`), [
+  `EXPORT AGENT ${name} AS ${name}-role:`, `    ABOUT    ${about}`, '    MANDATE  do the work', '',
+  `ROLE ${name}-role:`, '    ABOUT   a worker', '    ALWAYS  do the work',
+]);
+const builder = member('builder', 'builds things');
+member('checker', 'checks things');
+
+const TEAM_BODY = [
+  'IMPORT report FROM @main.templates',
+  'ABOUT  a crew that ships',
+  '',
+  'WHEN asked to ship:',
+  '    RUN ship',
+  '',
+  'FLOW ship:',
+  '    STEP build it:',
+  '        BY builder',
+  '        DO  compile the code',
+  '    STEP check it:',
+  '        BY checker',
+  '        AS report',
+  '        DO  run the checks',
+];
+const teamFile = join(team, 'crew.ap');
+const writeTeam = (lines, members = ['builder', 'checker']) => write(teamFile, teamSource('crew', members, lines));
+
+const compile = (name = 'builder') => bundleAgentObject({
+  agentName: name, agentFile: join(team, `${name}.ap`), agentDir: team, libraryRoot: lib, libraryRoots: [lib],
+  libraries: { '@main': lib }, bundleConfig: { runtime: false },
+});
+const orchestration = () => buildOrchestrationContent({
+  cwd: tmp, standaloneAgentsDir: join(tmp, 'standalone'), teamsDir: teams, libraryRoots: [lib], libraries: { '@main': lib },
+});
+
+try {
+  // --- the file, read once: block, roster, purpose, the unit the pipeline reads ---
+  writeTeam(TEAM_BODY);
+  const read = readTeamFile(team);
+  assert.equal(read.name, 'crew');
+  assert.equal(read.about, 'a crew that ships');
+  assert.deepEqual(read.members.map(m => m.name), ['builder', 'checker']);
+  assert.equal(teamRootForAgentFile(builder), team, 'the folder with a team file is the team root');
+  assert.equal(readTeamPurpose(team), 'a crew that ships');
+  assert.deepEqual(readTeamMembers(team).map(m => m.name), ['builder', 'checker'], 'members in MEMBER order');
+  const unit = read.unit.split('\n');
+  assert.equal(unit.length, read.source.split('\n').length, 'the unit keeps every line number');
+  assert.equal(unit[0], 'IMPORT report FROM @main.templates', 'the prologue stays');
+  assert.equal(unit[2], '', 'the opener is blanked');
+  assert.equal(unit[3], '', 'the MEMBER line is blanked');
+  assert.equal(unit[4], 'ABOUT  a crew that ships', "the block's lines stand at the top");
+  assert.equal(unit[9], 'FLOW ship:');
+  assert.equal(unit[10], '    STEP build it:');
+  assert.deepEqual(lintFile(teamFile, read.source), [], 'a team file lints clean');
+
+  // --- a member's document carries the team ---
+  const { structure } = await compile();
+  const crew = structure.byKind('team')[0];
+  assert.equal(crew.name, 'crew');
+  assert.equal(crew.about, 'a crew that ships');
+  assert.deepEqual(crew.members.map(r => r.target.split('/').pop()), ['builder', 'checker']);
+  assert.deepEqual(crew.routing.map(r => r.when), ['asked to ship']);
+  assert.deepEqual(crew.source, { file: teamFile, line: 3, col: 1 }, 'the team is its EXPORT TEAM block');
+  const ship = structure.byKind('flow').find(b => b.name === 'ship');
+  assert.ok(ship, "the team's flow travels in the member's document");
+  assert.deepEqual(ship.source, { file: teamFile, line: 10, col: 5 }, 'the flow is where it is written');
+  assert.deepEqual(ship.body.map(s => s.title), ['build it', 'check it']);
+  assert.equal(ship.body[1].shape?.ref?.target?.split('/').pop(), 'report', "a step's AS resolves through the prologue's IMPORT");
+  assert.deepEqual(structure.lines('DO').filter(l => l.file === teamFile).map(l => [l.line, l.col, l.text]),
+    [[13, 13, 'compile the code'], [17, 13, 'run the checks']]);
+
+  // --- MEMBER lines add up ---
+  write(teamFile, ['EXPORT TEAM crew:', '    MEMBER  builder', '    MEMBER  checker', '    ABOUT   a crew']);
+  assert.deepEqual(readTeamFile(team).members.map(m => m.name), ['builder', 'checker']);
+  assert.deepEqual((await compile()).structure.byKind('team')[0].members.length, 2);
+
+  // --- the roster is authoritative ---
+  writeTeam(TEAM_BODY, ['builder']);
+  await assert.rejects(compile(), /crew\.ap:3  TEAM crew: the agent `checker` \(checker\.ap\) is in the folder but not among its MEMBER lines/);
+  writeTeam(TEAM_BODY, ['builder', 'checker', 'ghost']);
+  await assert.rejects(compile(), /crew\.ap:4  MEMBER ghost: no agent file in `crew\/` declares `EXPORT AGENT ghost`/);
+  writeTeam(TEAM_BODY, ['builder', 'checker', 'builder']);
+  await assert.rejects(compile(), /crew\.ap:4  MEMBER builder: listed twice/);
+  write(teamFile, teamSource('squad', ['builder', 'checker'], TEAM_BODY));
+  await assert.rejects(compile(), /crew\.ap:3  TEAM squad: a team is named like its folder — `crew`/);
+  await assert.rejects(orchestration(), /TEAM squad: a team is named like its folder/);
+
+  // --- the block's own contract ---
+  write(teamFile, ['EXPORT TEAM crew:', '    MEMBER  builder, checker']);
+  await assert.rejects(compile(), /crew\.ap:1  TEAM block requires at least one ABOUT/);
+  write(teamFile, ['EXPORT TEAM crew:', '    ABOUT   a crew']);
+  await assert.rejects(compile(), /crew\.ap:1  TEAM block requires at least one MEMBER/);
+  write(teamFile, ['EXPORT TEAM crew:', '    ABOUT   a crew', '    MEMBER  builder, checker', '    MANDATE ship']);
+  await assert.rejects(compile(), /crew\.ap:4  MANDATE is not allowed inside TEAM/);
+  write(teamFile, ['TEAM crew:', '    ABOUT   a crew', '    MEMBER  builder, checker']);
+  assert.ok(lintFile(teamFile, 'TEAM crew:\n    ABOUT   a crew\n    MEMBER  builder, checker\n').some(e => /a team is exported — write `EXPORT TEAM crew:`/.test(e.message)));
+  assert.ok(lintFile(teamFile, ['EXPORT TEAM crew:', '    ABOUT   a', '    MEMBER  builder', 'EXPORT TEAM crew:', '    ABOUT   b', '    MEMBER  checker', ''].join('\n'))
+    .some(e => e.line === 4 && /a file declares one team — found 2 TEAM blocks/.test(e.message)));
+  assert.ok(lintFile(join(tmp, 'x.ap'), 'EXPORT AGENT x AS r:\n    ABOUT  x\n    MANDATE  y\n    MEMBER  z\n').some(e => /MEMBER is a line of a TEAM block — found inside AGENT/.test(e.message)));
+
+  // --- a flows.ap left behind is the error that names its replacement ---
+  writeTeam(TEAM_BODY);
+  write(join(team, 'flows.ap'), ['ABOUT  the old way']);
+  await assert.rejects(compile(), /flows\.ap:1  flows\.ap was replaced by `EXPORT TEAM crew:` in `crew\.ap`/);
+  await assert.rejects(orchestration(), /flows\.ap:1  flows\.ap was replaced by `EXPORT TEAM crew:`/);
+  rmSync(join(team, 'flows.ap'));
+  // a folder with only a flows.ap is no team any more: its agents compile standalone, and the error still names the file
+  const old = join(teams, 'old');
+  mkdirSync(old);
+  write(join(old, 'flows.ap'), ['ABOUT  the old way']);
+  write(join(old, 'lone.ap'), ['EXPORT AGENT lone AS lone-role:', '    ABOUT  alone', '    MANDATE  work', '', 'ROLE lone-role:', '    ABOUT  a', '    ALWAYS  b']);
+  assert.equal(teamRootForAgentFile(join(old, 'lone.ap')), null);
+  await assert.rejects(bundleAgentObject({ agentName: 'lone', agentFile: join(old, 'lone.ap'), agentDir: old, libraryRoot: lib, libraryRoots: [lib], libraries: { '@main': lib }, bundleConfig: { runtime: false } }),
+    /flows\.ap:1  flows\.ap was replaced by `EXPORT TEAM old:` in `old\.ap`/);
+  rmSync(old, { recursive: true });
+
+  // --- the orchestration reads the same file ---
+  writeTeam(TEAM_BODY);
+  const { content, teams: names } = await orchestration();
+  assert.deepEqual(names, ['crew']);
+  assert.ok(content.includes('`purpose`: a crew that ships'), content);
+  assert.ok(content.includes('- `builder` — builds things') && content.includes('- `checker` — checks things'), content);
+  assert.ok(content.includes('When asked to ship:'), content);
+  assert.ok(content.includes('## `ship`'), content);
+  assert.ok(!content.includes('MEMBER'), 'the MEMBER lines are not prose');
+
+  console.log('team block tests passed.');
+} finally {
+  rmSync(tmp, { recursive: true, force: true });
+}

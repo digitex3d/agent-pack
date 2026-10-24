@@ -11,6 +11,7 @@ import { strict as assert } from 'assert';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { teamSource } from './helpers/team.mjs';
 
 const { lintFile, lintFlow } = await import('../dist/src/lint.js');
 const { bundleAgentObject } = await import('../dist/src/compiler/index.js');
@@ -40,14 +41,15 @@ const team = join(tmp, 'teams', 'crew');
 mkdirSync(lib, { recursive: true });
 mkdirSync(team, { recursive: true });
 const write = (file, lines) => { writeFileSync(file, lines.join('\n') + '\n'); return file; };
-const flowsFile = write(join(team, 'flows.ap'), [
+const crew = lines => teamSource('crew', ['builder'], lines);
+const flowsFile = write(join(team, 'crew.ap'), crew([
   'ABOUT  a crew',                                     // 1
   '',                                                  // 2
   'WHEN asked to ship:',                               // 3
   '    RUN ship',                                      // 4
   '',                                                  // 5
   ...FLOW,
-]);
+]));
 const agentFile = write(join(team, 'builder.ap'), [
   'EXPORT AGENT builder AS builder-role:',
   '    ABOUT    builds things',
@@ -60,7 +62,7 @@ const agentFile = write(join(team, 'builder.ap'), [
 
 try {
   // --- lint: the team file and a flow file both take the IF/ELSE ---
-  assert.deepEqual(lintFile(flowsFile, `ABOUT  a crew\n\n${FLOW.join('\n')}\n`), [], 'a team flows.ap lints clean');
+  assert.deepEqual(lintFile(flowsFile, crew(['ABOUT  a crew', '', ...FLOW]).join('\n') + '\n'), [], 'a team file lints clean');
   const flowFile = join(tmp, 'flows', 'ship.ap');
   const lintShip = (...lines) => lintFlow(flowFile, ['# ship', '', 'ABOUT  ship it', '', 'FLOW ship', ...lines, ''].join('\n'));
   assert.deepEqual(lintShip(...FLOW.slice(1)), [], 'a flow file lints clean — a step whose DO all sit under an IF included');
@@ -120,8 +122,8 @@ try {
     '        RUN ship',                                  // 24
   ];
   assert.deepEqual(lintShip(...FLOW_BRANCHES), [], 'flow-level IF/ELSE and UNTIL lint clean in a flow file');
-  assert.deepEqual(lintFile(flowsFile, ['ABOUT  a crew', '', 'FLOW ship:', ...FLOW_BRANCHES, ''].join('\n')), [],
-    'flow-level IF/ELSE and UNTIL lint clean in a team flows.ap');
+  assert.deepEqual(lintFile(flowsFile, crew(['ABOUT  a crew', '', 'FLOW ship:', ...FLOW_BRANCHES, '']).join('\n')), [],
+    'flow-level IF/ELSE and UNTIL lint clean in a team file');
   // The branch is transparent: a flow whose only STEP sits under an UNTIL still has one; RUN alone is no STEP.
   assert.deepEqual(lintShip('    UNTIL done:', '        IF a:', '            STEP s:', '                DO  x'), []);
   assert.deepEqual(lintShip('    IF a:', '        RUN ship').map(e => [e.line, e.message]), [[5, 'FLOW block requires at least one STEP']]);
@@ -133,9 +135,9 @@ try {
     [10, `BY is not allowed inside UNTIL (${flowBranchWants})`],
     [12, `CONTEXT is not allowed inside IF (${flowBranchWants})`],
   ]);
-  assert.deepEqual(lintFile(flowsFile, ['ABOUT  a crew', '', 'FLOW ship:', '    STEP s:', '        DO  x',
-    '    IF a:', '        DO  y', ''].join('\n')).map(e => [e.line, e.message]), [[7, `DO is not allowed inside IF (${flowBranchWants})`]],
-    'a wrong child under a flow-level IF in a team flows.ap');
+  assert.deepEqual(lintFile(flowsFile, crew(['ABOUT  a crew', '', 'FLOW ship:', '    STEP s:', '        DO  x',
+    '    IF a:', '        DO  y', '']).join('\n')).map(e => [e.line, e.message]), [[9, `DO is not allowed inside IF (${flowBranchWants})`]],
+    'a wrong child under a flow-level IF in a team file');
   // An UNTIL needs a body and a valid condition; an ELSE right after an UNTIL has no IF.
   assert.deepEqual(lintShip('    STEP s:', '        DO  x', '    UNTIL done:', '    STEP t:', '        DO  y').map(e => [e.line, e.message]),
     [[8, 'UNTIL block body must be indented (Python-style): "UNTIL done:"']]);
@@ -144,13 +146,13 @@ try {
   assert.deepEqual(lintShip('    UNTIL done:', '        STEP s:', '            DO  x', '    ELSE', '        STEP t:', '            DO  y')
     .map(e => [e.line, e.message]), [[9, 'ELSE must follow an IF in the same body']], 'an ELSE right after an UNTIL');
 
-  // --- lint: a team flows.ap takes the STEP contract like a flow file ---
-  assert.deepEqual(lintFile(flowsFile, ['ABOUT  a crew', '', 'FLOW ship:', '    STEP s:', '        BY builder',
-    '        NEVER skip the tests', ''].join('\n')).map(e => [e.line, e.message]),
-  [[4, 'STEP block requires at least one of: DO, ASK, COMPUTE, RUN']], 'a team step with only BY and a rule has no action');
-  assert.deepEqual(lintFile(flowsFile, ['ABOUT  a crew', '', 'FLOW ship:', '    STEP s:', '        IF a:',
-    '            AS idea-verdict', '            DO  x', ''].join('\n')).map(e => [e.line, e.message]),
-  [[6, 'AS is not allowed inside IF (expected one of: DO, ASK, COMPUTE, RUN, MUST, ALWAYS, SHOULD, MAY)']], 'AS under a step IF in a team flows.ap');
+  // --- lint: a team file takes the STEP contract like a flow file ---
+  assert.deepEqual(lintFile(flowsFile, crew(['ABOUT  a crew', '', 'FLOW ship:', '    STEP s:', '        BY builder',
+    '        NEVER skip the tests', '']).join('\n')).map(e => [e.line, e.message]),
+  [[6, 'STEP block requires at least one of: DO, ASK, COMPUTE, RUN']], 'a team step with only BY and a rule has no action');
+  assert.deepEqual(lintFile(flowsFile, crew(['ABOUT  a crew', '', 'FLOW ship:', '    STEP s:', '        IF a:',
+    '            AS idea-verdict', '            DO  x', '']).join('\n')).map(e => [e.line, e.message]),
+  [[8, 'AS is not allowed inside IF (expected one of: DO, ASK, COMPUTE, RUN, MUST, ALWAYS, SHOULD, MAY)']], 'AS under a step IF in a team file');
 
   // --- lint: MEM is no line of a step, nor of its branches; it stays legal in a procedure ---
   const memWhy = "a step's BY agent may have no memory in its harness; MEM goes in an agent, a role or a procedure";
@@ -180,16 +182,16 @@ try {
 
   const pos = l => [l.line, l.col, l.text, l.containers.map(c => c.type).join('>')];
   assert.deepEqual(structure.lines('DO').filter(l => l.file === flowsFile).map(pos), [
-    [9, 9, 'read the report', 'step'],
-    [11, 13, 'end the flow', 'step>if'],
-    [13, 13, 'hand the report on', 'step>if'],
-    [17, 13, 'tag the release', 'step>if'],
+    [11, 13, 'read the report', 'step'],
+    [13, 17, 'end the flow', 'step>if'],
+    [15, 17, 'hand the report on', 'step>if'],
+    [19, 17, 'tag the release', 'step>if'],
   ]);
   assert.deepEqual(structure.lines('IF').filter(l => l.file === flowsFile).map(pos), [
-    [10, 9, 'the report says replan', 'step'],
-    [16, 9, 'the audit passed', 'step'],
+    [12, 13, 'the report says replan', 'step'],
+    [18, 13, 'the audit passed', 'step'],
   ]);
-  assert.equal(structure.lineAt(flowsFile, 11).containers[1], judge.body[1], 'the container is the IF node itself');
+  assert.equal(structure.lineAt(flowsFile, 13).containers[1], judge.body[1], 'the container is the IF node itself');
 
   // --- the md, `apx flow` and the Workflow script carry the branch ---
   const doc = ApDocument.fromJson(structure.asJson());

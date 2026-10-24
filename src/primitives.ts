@@ -131,7 +131,7 @@ export const LensOutPrimitive: PrimitiveStrategy = {
  * carries the template definition (it must be declared inline or imported)
  * plus an explicit contract line after Identity. The orchestration section
  * also reads it for the team members list (`talk to it as …`); a team-level
- * `LENS-IN <agent> <template>` in flows.ap overrides it, and a flow step's
+ * `LENS-IN <agent> <template>` in the TEAM block overrides it, and a flow step's
  * own shape contract overrides both.
  */
 export const LensInPrimitive: PrimitiveStrategy = {
@@ -489,6 +489,13 @@ export const ENUM_PRIMITIVES: EnumPrimitive[] = [
       inherited: () => "runs as a fork of the caller — natively inherits the caller's full conversation context",
     },
     legendIntro: "Context modes — when a step's signature names one, pass upstream context exactly so:",
+  },
+  // `STRATEGY <name>` in a TEAM: the builtin way the team organises its work.
+  {
+    keyword: 'STRATEGY',
+    values: {
+      contracts: () => 'the lead prepares the work and hands each piece out as a contract; the members carry the pieces out in parallel; the lead merges',
+    },
   },
 ];
 

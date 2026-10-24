@@ -45,9 +45,16 @@ import { ENUM_PRIMITIVES, FORCE_LEVEL_PRIMITIVES, enumPrimitiveFor } from '../pr
 import { validateEnumValue } from '../enumPrimitives.js';
 import {
   readTeamMembers,
+  readTeamFile,
   teamRootForAgentFile,
-  TEAM_FLOWS_FILE,
+  contractsTeamOf,
+  CONTRACTS_STRATEGY,
+  type ContractIndex,
+  type ContractDecl,
+  type TeamFile,
 } from '../services/teamMetadata.js';
+import { parseBlocks, type Block } from '../parseBlocks.js';
+import { contractsFlowSource, contractWorkers } from '../services/contractsFlow.js';
 import type { ApNode, ApRef, ApShape, ApSlotType, ApStepNode, ApIfNode, ApDocumentMeta, ApStoreProjection } from './types.js';
 import { parseVarLine, parallelEachOf, readsOf, splitBy, splitInto, takesInto, constantOf, type VarScope } from '../vars.js';
 import type { PlacedVariable } from '../exportedVars.js';
@@ -68,7 +75,7 @@ function stripColon(s: string): string {
 }
 import { ApBlock, ApBlockInit } from './block.js';
 import {
-  BlockCx, RuleBlock, TeamBlock, AgentBlock, VarBlock,
+  BlockCx, RuleBlock, TeamBlock, AgentBlock, VarBlock, ContractBlock,
   TemplateBlock, TeamScan, KIND_STRATEGIES, strategyOf, kindOfFolder, refId, namespaceOf, RefClass,
 } from './blocks.js';
 import { ApDocument, BlockProvenance } from './document.js';
@@ -102,6 +109,8 @@ export interface RecorderFinishOpts {
   declaredVars: PlacedVariable[];
   /** Whether the OWNS fence renders in the body (adapter did not claim it). */
   ownsInBody: boolean;
+  /** The project's contracts and teams — what a `BY <team>` resolves against, and which contracts hand work to the agent's team. Absent: not known. */
+  contractIndex?: ContractIndex | null;
 }
 
 /** A variable's declaration: its name, scope, template, and where it was written. */
@@ -128,6 +137,11 @@ export class DocumentBuilder implements BlockCx {
   private goals = new Map<string, IndexedBlock>();
   private stores = new Map<string, IndexedBlock>();
   private agents = new Map<string, IndexedBlock>();
+  /** The contracts the agent's team holds, and those handed to it from outside. */
+  private contracts = new Map<string, IndexedBlock>();
+  /** The contracts handed to the agent's team from outside it (the project file, another team), with the team each was written in. */
+  private handedIn: ContractIndex['contracts'] = [];
+  private contractIndex: ContractIndex | null = null;
 
   private team: TeamScan | null = null;
   /** The team's roles, each bound to the member that takes it — `BY <role>` names that member, as in AGENTS.md. */
@@ -348,6 +362,9 @@ export class DocumentBuilder implements BlockCx {
         this.visit(n.children, node.body!, host, steps);
       } else if (base === 'WHEN') {
         const node = this.at(new WhenNode(rest, t.indent), t);
+        // `WHEN handed <contract>:` in a team of contracts — the instance of that contract is the trigger's input.
+        const handed = this.team?.file.strategy?.name === CONTRACTS_STRATEGY ? rest.match(/^handed\s+(\S+)$/) : null;
+        if (handed) node.input = this.contractRef(handed[1]);
         sink.push(node);
         const first = n.children.find(c => c.token.kind !== 'blank')?.token;
         const prior = this.sugared;
@@ -667,6 +684,10 @@ export class DocumentBuilder implements BlockCx {
     return this.ref(this.agents.get(agent), agent, 'agent');
   }
 
+  contractRef(name: string): ApRef {
+    return this.ref(this.contracts.get(name), name, 'contract');
+  }
+
   agentRef(name: string): ApRef {
     return this.ref(this.agents.get(name), name, 'agent');
   }
@@ -723,7 +744,7 @@ export class DocumentBuilder implements BlockCx {
 
   /**
    * Index the `IMPORT a, b FROM @ns` declarations of a source that never
-   * reaches the agent's BundleContext (a team's flows.ap, the log recipe).
+   * reaches the agent's BundleContext (a team's file, the log recipe).
    * The FROM namespace makes the address — and therefore the stable id —
    * fully derivable without resolving the module body.
    */
@@ -743,21 +764,35 @@ export class DocumentBuilder implements BlockCx {
     }
   }
 
-  /** Read the agent's team ONCE: members, flows source, parsed blocks, flow slices. */
+  /** Read the agent's team ONCE: its file, the blocks of its TEAM block, its flow slices. */
   private scanTeam(agentFilePath: string): TeamScan | null {
     const root = teamRootForAgentFile(agentFilePath);
     if (!root) return null;
-    const name = basename(root);
-    const flowsPath = resolve(root, TEAM_FLOWS_FILE);
     const sources = this.ctx!.sources;
-    const flowsSource = existsSync(flowsPath) ? sources.read(flowsPath) : '';
-    const topBlocks = flowsSource ? sources.tree(flowsPath).blocks : [];
-    // A FLOW's body runs from the line after its header to the next TOP-LEVEL
-    // block (any kind — a WHEN can sit between two FLOWs), or to EOF.
-    const flows = topBlocks
+    const file = readTeamFile(root, sources);
+    if (!file) return null;
+    const written = file.block.children.filter((c): c is Block => c.type === 'block');
+    // A FLOW's body runs from the line after its header to its next sibling in
+    // the TEAM block (a WHEN can sit between two FLOWs), de-indented by the
+    // block's indent — the text a flow file would hold.
+    const flows: TeamScan['flows'] = written
       .filter(b => b.key === 'FLOW' && b.name !== null)
-      .map(b => ({ name: b.name!, body: sources.blockSpan(flowsPath, b).lines.slice(1).map(l => l.text).join('\n') }));
-    return { root, name, flowsSource, topBlocks, flows };
+      .map(b => ({ name: b.name!, block: b, body: sources.nestedSpan(file.path, file.block, b).lines.slice(1).map(l => l.text.slice(file.childIndent)).join('\n') }));
+    // Under STRATEGY contracts the routing and the flow are the strategy's (src/services/contractsFlow.ts).
+    const synthetic = file.strategy?.name === CONTRACTS_STRATEGY && file.lead
+      ? strategySource(file, name => contractsTeamOf(this.contractIndex, name)?.lead ?? null) : null;
+    const synthBlocks = synthetic ? parseBlocks(synthetic).blocks : [];
+    if (synthetic) {
+      const lines = synthetic.split('\n');
+      for (const b of synthBlocks.filter(b => b.key === 'FLOW' && b.name !== null)) {
+        const end = synthBlocks.find(n => n.startLine > b.startLine)?.startLine ?? lines.length + 1;
+        flows.push({ name: b.name!, block: null, body: lines.slice(b.startLine, end - 1).join('\n') });
+      }
+    }
+    const blocks = [...written, ...synthBlocks];
+    // A BY may hand a contract to a team: that team is no member of this one.
+    const members = file.members.map(m => m.name).filter(name => !contractsTeamOf(this.contractIndex, name));
+    return { root, name: file.name, file, members, blocks, flows };
   }
 
   private buildRefIndex(ctx: BundleContext, opts: RecorderFinishOpts): void {
@@ -772,13 +807,41 @@ export class DocumentBuilder implements BlockCx {
         this.agents.set(member.name, { kind: 'agent', name: member.name, namespace: AgentBlock.NAMESPACE });
       }
       // The same role index the orchestration resolves `BY <role>` with: the team's inline blocks and its members' bindings.
-      this.roles = buildRoleIndex({ blocks: this.team.topBlocks, anchor: 'directory' },
+      this.roles = buildRoleIndex({ blocks: this.team.blocks, anchor: 'directory' },
         { bindings: members.filter(m => m.role).map(m => ({ name: m.name, role: m.role! })), anchor: 'directory' });
-      this.indexImportLines(this.team.flowsSource);
+      this.indexImportLines(this.team.file.source);
       for (const f of this.team.flows) {
         this.runnables.set(f.name, { kind: 'flow', name: f.name, namespace: TeamBlock.flowsNamespace(this.team.name) });
       }
+      // The team's contracts, and those handed to it from outside: each lead of a team handed one is an agent of the document too.
+      const own = TeamBlock.contractsNamespace(this.team.name);
+      for (const c of this.team.file.contracts) {
+        this.contracts.set(c.name, { kind: 'contract', name: c.name, namespace: own });
+        for (const name of c.by) {
+          const lead = contractsTeamOf(this.contractIndex, name)?.lead;
+          if (lead) this.agents.set(lead, { kind: 'agent', name: lead, namespace: AgentBlock.NAMESPACE });
+        }
+      }
+      // The DOMAINS dimension is read by the strategy itself: the lead names it there, as a WITH would.
+      if (this.team.file.strategy?.name === CONTRACTS_STRATEGY && this.team.file.domains && this.team.file.lead?.name === ctx.agentName) {
+        this.withNamed.add(this.team.file.domains.name);
+      }
+      if (this.team.file.strategy?.name === CONTRACTS_STRATEGY && this.contractIndex) {
+        const team = this.team.name;
+        this.handedIn = this.contractIndex.contracts.filter(c => c.team !== team && c.by.includes(team));
+        for (const c of this.handedIn) {
+          this.contracts.set(c.name, { kind: 'contract', name: c.name, namespace: c.team ? TeamBlock.contractsNamespace(c.team) : ContractBlock.PROJECT_NAMESPACE });
+        }
+      }
     }
+  }
+
+  /** A contract block from its declaration: its BY agents, or the lead of the team it is handed to. */
+  private contractBlock(decl: ContractDecl, namespace: string): ContractBlock {
+    const handed = decl.by.length === 1 ? contractsTeamOf(this.contractIndex, decl.by[0]) : null;
+    const byTeam = handed ? { id: refId('team', TeamBlock.NAMESPACE, handed.name), target: `${TeamBlock.NAMESPACE}/${handed.name}`, kind: 'team' } : null;
+    const by = handed ? (handed.lead ? [this.agentRef(handed.lead)] : []) : decl.by.map(name => this.agentRef(name));
+    return ContractBlock.fromDecl(decl, namespace, by, byTeam, this);
   }
 
   // ------------------------------------------------------ producers (pass 2)
@@ -809,14 +872,31 @@ export class DocumentBuilder implements BlockCx {
     if (!this.team) return [];
     const team = this.team;
     const sources = this.ctx!.sources;
-    const flowsPath = resolve(team.root, TEAM_FLOWS_FILE);
-    this.sourcePath = flowsPath;
+    const path = team.file.path;
+    this.sourcePath = path;
     const flowsNs = TeamBlock.flowsNamespace(team.name);
     return [
-      ...team.flows.map(f => this.fromSource(sources.span(flowsPath, 'flow', f.name), () => RuleBlock.fromBody('flow', { name: f.name, namespace: flowsNs }, f.body, this))),
-      // The team is its flows.ap as a whole: no TEAM block there, so the file from line 1.
-      this.fromSource(sources.span(flowsPath, 'team', team.name), () => TeamBlock.fromScan(team, this)),
+      ...team.flows.map(f => this.fromSource(f.block ? sources.nestedSpan(path, team.file.block, f.block) : null, () => RuleBlock.fromBody('flow', { name: f.name, namespace: flowsNs }, f.body, this))),
+      // The team is its EXPORT TEAM block.
+      this.fromSource(sources.blockSpan(path, team.file.block), () => TeamBlock.fromScan(team, this)),
     ];
+  }
+
+  /** The team's contracts, where they are written; then those handed to it from outside, from their file. */
+  private contractBlocks(): ApBlock[] {
+    if (!this.team) return [];
+    const team = this.team;
+    const sources = this.ctx!.sources;
+    const path = team.file.path;
+    const contractBlocks = team.file.block.children.filter((c): c is Block => c.type === 'block' && c.key === 'CONTRACT');
+    const own = TeamBlock.contractsNamespace(team.name);
+    this.sourcePath = path;
+    const ownBlocks = team.file.contracts.map((c, i) => this.fromSource(sources.nestedSpan(path, team.file.block, contractBlocks[i]), () => this.contractBlock(c, own)));
+    const handed = this.handedIn.map(c => {
+      this.sourcePath = c.file;
+      return this.fromSource(sources.span(c.file, 'contract', c.name), () => this.contractBlock(c, c.team ? TeamBlock.contractsNamespace(c.team) : ContractBlock.PROJECT_NAMESPACE));
+    });
+    return [...ownBlocks, ...handed];
   }
 
   /** The agent root block — built by its class from the pipeline's state. */
@@ -999,12 +1079,15 @@ export class DocumentBuilder implements BlockCx {
    */
   finish(ctx: BundleContext, opts: RecorderFinishOpts): ApDocument {
     this.ctx = ctx;
+    this.contractIndex = opts.contractIndex ?? null;
     this.team = this.scanTeam(opts.agentFilePath);
     this.buildRefIndex(ctx, opts);
 
     const doc = new ApDocument(this.buildMeta(ctx));
     const producers: [BlockProvenance, () => ApBlock[]][] = [
       ['definition', () => this.definitionBlocks(ctx, opts)],
+      // The team's contracts read as a chapter of the definition: the lead picks among them, a member starts from one.
+      ['definition', () => this.contractBlocks()],
       ['team',       () => this.teamBlocks()],
       ['agent',      () => [this.agentBlock(ctx, opts)]],
       // Last: a variable's type may come from any procedure the others hold.
@@ -1028,4 +1111,9 @@ export class DocumentBuilder implements BlockCx {
     if (Object.keys(stores).length > 0) md.stores = stores;
     return doc;
   }
+}
+
+/** The routing and flow a team of contracts runs, as source — its workers the agents its BY lines hand work to. */
+function strategySource(file: TeamFile, leadOf: (name: string) => string | null): string {
+  return contractsFlowSource(file.name, file.lead!.name, contractWorkers(file, leadOf));
 }

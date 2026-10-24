@@ -30,7 +30,7 @@ export interface Formulas {
       run: Text; IF: Record<'1' | '2', Text>; UNTIL: Record<'1' | '2', Text>; nextRound: Text; limit: Text; loop: RoundWords;
       question: Text; shapedRead: Text; field: Text; fieldSeparator: Text; state: Text; stateSeparator: Text;
     };
-    WHEN: { head: Text };
+    WHEN: { head: Text; handed: Text };
     PARALLEL: { head: Text; each: Text };
     IN: { head: Text; store: Text; unresolved: Text };
     /** `args` is a list: the order the signature fragments read in is data too. */
@@ -64,6 +64,11 @@ export interface Formulas {
     store: {
       chapter: Text; home: Text; lasts: Record<'project' | 'session', Text>; field: Text; key: Text;
       reject: Text; create: Text; usage: Text; noType: Text; unknownType: Text;
+    } & KindGuide;
+    contract: {
+      chapter: Text; domain: Text; form: Text; by: Text; byTeam: Text;
+      flow: { when: Text; prepare: Text; prepareDo: Text[]; work: Text; workDo: Text[]; merge: Text; mergeDo: Text[] };
+      team: { strategy: Text; contracts: Text; entry: Text; domain: Text };
     } & KindGuide;
     dimension: { chapter: Text; covers: Text; eachShape: Text; read: Text; write: Text } & KindGuide;
     team: { heading: Text; member: Text; handles: Text; fellows: Text; fellow: Text; undescribed: Text; closing: Text } & KindGuide;

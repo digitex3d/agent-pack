@@ -12,6 +12,7 @@ import { strict as assert } from 'assert';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { teamSource } from './helpers/team.mjs';
 
 const { parseParallelHead } = await import('../dist/src/vars.js');
 const { lintFile } = await import('../dist/src/lint.js');
@@ -45,7 +46,7 @@ write(join(lib, 'vars', 'parts.ap'), ['IMPORT  part-list, note  FROM @main.templ
 const agentFile = write(join(team, 'builder.ap'), ['EXPORT AGENT builder AS builder-role:', '    ABOUT    builds things', '    MANDATE  ship working code',
   '', 'ROLE builder-role:', '    ABOUT   a careful builder', '    ALWAYS  test first']);
 
-const flowsAp = (...parallel) => [
+const flowsAp = (...parallel) => teamSource('crew', ['builder'], [
   'ABOUT  a crew',                                     // 1
   '',                                                  // 2
   'IMPORT  parts, notes, loose FROM @main.vars',       // 3
@@ -61,11 +62,11 @@ const flowsAp = (...parallel) => [
   '    STEP merge:',
   '        BY builder',
   '        DO  merge every report',
-];
+]);
 const WORK = ['        STEP work:', '            BY builder', '            CONTEXT inherited', '            DO  work only on {{part}}'];
-const lint = (...parallel) => lintFile(join(team, 'flows.ap'), flowsAp(...parallel).join('\n') + '\n').map(e => [e.line, e.message]);
+const lint = (...parallel) => lintFile(join(team, 'crew.ap'), flowsAp(...parallel).join('\n') + '\n').map(e => [e.line, e.message]);
 const compile = async (...parallel) => {
-  write(join(team, 'flows.ap'), flowsAp(...parallel));
+  write(join(team, 'crew.ap'), flowsAp(...parallel));
   return bundleAgentObject({ agentName: 'builder', agentFile, agentDir: team, libraryRoot: lib, libraryRoots: [lib],
     libraries: { '@main': lib }, bundleConfig: { runtime: false } });
 };
@@ -77,23 +78,23 @@ try {
 
   // --- lint: a malformed head, a missing or bad bound, more than one step ---
   assert.deepEqual(lint('    PARALLEL EACH part IN parts:', ...WORK),
-    [[12, '`PARALLEL EACH part IN parts`: write the bound — `PARALLEL EACH part IN parts MAX <n>`']]);
+    [[15, '`PARALLEL EACH part IN parts`: write the bound — `PARALLEL EACH part IN parts MAX <n>`']]);
   assert.deepEqual(lint('    PARALLEL EACH part IN parts MAX 0:', ...WORK),
-    [[12, '`PARALLEL EACH part IN parts MAX 0`: MAX takes a whole number of runs, at least 1']]);
-  assert.deepEqual(lint('    PARALLEL now', ...WORK), [[12, '`PARALLEL now`: PARALLEL takes nothing, or `EACH <item> IN <list> MAX <n>`']]);
+    [[15, '`PARALLEL EACH part IN parts MAX 0`: MAX takes a whole number of runs, at least 1']]);
+  assert.deepEqual(lint('    PARALLEL now', ...WORK), [[15, '`PARALLEL now`: PARALLEL takes nothing, or `EACH <item> IN <list> MAX <n>`']]);
   assert.deepEqual(lint('    PARALLEL EACH part IN parts MAX 3:', ...WORK, '        STEP more:', '            DO  more'),
-    [[12, 'PARALLEL EACH block has 2 occurrences of STEP (expected at most 1)']]);
+    [[15, 'PARALLEL EACH block has 2 occurrences of STEP (expected at most 1)']]);
   assert.deepEqual(lint('    PARALLEL EACH part IN parts MAX 3:', '        RUN ship'), [
-    [13, 'RUN is not allowed inside PARALLEL EACH (expected one of: STEP)'],
-    [12, 'PARALLEL EACH block requires at least one STEP'],
+    [16, 'RUN is not allowed inside PARALLEL EACH (expected one of: STEP)'],
+    [15, 'PARALLEL EACH block requires at least one STEP'],
   ]);
 
   // --- the compiler: the list is a declared variable, typed, with one LIST slot ---
   const fails = async (re, ...parallel) => assert.rejects(() => compile(...parallel), re);
-  await fails(/flows\.ap:12  PARALLEL EACH part IN nope: no variable `nope` — IMPORT the module that exports it/, '    PARALLEL EACH part IN nope MAX 3:', ...WORK);
-  await fails(/flows\.ap:12  PARALLEL EACH part IN loose: `loose` has no type — declare it `AS <template>`, a template with one LIST slot/,
+  await fails(/crew\.ap:15  PARALLEL EACH part IN nope: no variable `nope` — IMPORT the module that exports it/, '    PARALLEL EACH part IN nope MAX 3:', ...WORK);
+  await fails(/crew\.ap:15  PARALLEL EACH part IN loose: `loose` has no type — declare it `AS <template>`, a template with one LIST slot/,
     '    PARALLEL EACH part IN loose MAX 3:', ...WORK);
-  await fails(/flows\.ap:12  PARALLEL EACH part IN notes: `note` has 0 LIST slots — the list to run over is its one LIST slot/,
+  await fails(/crew\.ap:15  PARALLEL EACH part IN notes: `note` has 0 LIST slots — the list to run over is its one LIST slot/,
     '    PARALLEL EACH part IN notes MAX 3:', ...WORK);
 
   // --- the document: the node carries its head, the step its body ---
@@ -105,7 +106,7 @@ try {
   assert.deepEqual(parallel.steps.map(s => s.title), ['work']);
   const doc = ApDocument.fromJson(structure.asJson());
   assert.deepEqual(doc.block(flow.address).body[1].each, parallel.each, 'the head survives the JSON round trip');
-  assert.equal(structure.lines('PARALLEL').find(l => l.file === join(team, 'flows.ap')).text, 'EACH part IN parts MAX 5');
+  assert.equal(structure.lines('PARALLEL').find(l => l.file === join(team, 'crew.ap')).text, 'EACH part IN parts MAX 5');
 
   // --- AGENTS.md and `apx get` say how the runs go ---
   const head = (read) => `In parallel, one run of the step below for each element of \`parts\` (read its value: \`${read}\`), at most 5 runs — `

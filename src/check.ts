@@ -165,7 +165,7 @@ export function sugaredHead(parent: { keyword: string; condition: string } | nul
  * `checks` is the configured judge (only its presence matters here); `rounds`
  * an UNTIL's limit, from its head's `MAX <n>`. Every producer of a head — the
  * document builder, the md of AGENTS.md and standalone files, the source scan
- * of flows.ap and standalone files — asks this function.
+ * of team files and standalone files — asks this function.
  */
 export function condCheckOf(
   kind: CheckKind, level: number, condition: string, site: CheckSite, checks: object | null | undefined,

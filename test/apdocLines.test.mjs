@@ -12,6 +12,7 @@ import { strict as assert } from 'assert';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'fs';
 import { join, basename } from 'path';
 import { tmpdir } from 'os';
+import { teamSource } from './helpers/team.mjs';
 
 const { SourceRegistry, align } = await import('../dist/src/sources.js');
 const { bundleAgentObject } = await import('../dist/src/compiler/index.js');
@@ -102,7 +103,7 @@ const outFile = write(join(lib, 'templates', 'out.ap'), [
   '        {count}',
   '',
 ]);
-const flowsFile = write(join(team, 'flows.ap'), [
+const flowsFile = write(join(team, 'crew.ap'), teamSource('crew', ['builder'], [
   'ABOUT  a crew',                     // 1
   '',                                  // 2
   'WHEN asked to ship:',               // 3
@@ -117,7 +118,7 @@ const flowsFile = write(join(team, 'flows.ap'), [
   '        DO  run the checks',        // 12
   '        DO  sign off',              // 13
   '',
-]);
+]));
 const agentFile = write(join(team, 'builder.ap'), [
   'IMPORT tally-out FROM @main.templates',        // 1
   'IMPORT verify, tidy FROM @main.procedures',    // 2
@@ -174,8 +175,8 @@ try {
   assert.deepEqual(byName('verify').source, { file: checksFile, line: 3, col: 1 });
   assert.deepEqual(byName('tidy').source, { file: checksFile, line: 12, col: 1 });
   assert.deepEqual(byName('tally-out').source, { file: outFile, line: 1, col: 1 });
-  assert.deepEqual(byName('ship').source, { file: flowsFile, line: 6, col: 1 });
-  assert.deepEqual(byName('crew').source, { file: flowsFile, line: 1, col: 1 }, 'the team is its flows.ap');
+  assert.deepEqual(byName('ship').source, { file: flowsFile, line: 8, col: 5 });
+  assert.deepEqual(byName('crew').source, { file: flowsFile, line: 1, col: 1 }, 'the team is its EXPORT TEAM block');
 
   // --- lines('DO'): every DO, at every depth, with its exact position ---
   const at = l => `${basename(l.file)}:${l.line}:${l.col}-${l.endCol} ${l.text}`;
@@ -189,9 +190,9 @@ try {
     'checks.ap:9:13-29 fix the code',
     'checks.ap:10:5-26 report the result',
     'checks.ap:14:5-33 remove the scratch files',
-    'flows.ap:9:9-29 compile the code',
-    'flows.ap:12:9-27 run the checks',
-    'flows.ap:13:9-21 sign off',
+    'crew.ap:11:13-33 compile the code',
+    'crew.ap:14:13-31 run the checks',
+    'crew.ap:15:13-25 sign off',
   ].sort());
   assert.ok(doc.lines('DO').every(l => l.primitive === 'DO' && l.force === null));
 
@@ -200,7 +201,7 @@ try {
   assert.equal(fix.block.name, 'verify');
   assert.deepEqual(fix.containers.map(c => c.type), ['if', 'until']);
   assert.equal(fix.containers[0].condition, 'the tests fail');
-  const compile = doc.lineAt(flowsFile, 9);
+  const compile = doc.lineAt(flowsFile, 11);
   assert.deepEqual(compile.containers.map(c => c.type), ['step']);
   assert.equal(compile.containers[0].title, 'build it');
   const reproduce = doc.lineAt(agentFile, 10);
@@ -209,8 +210,8 @@ try {
   assert.deepEqual(reproduce.containers.map(c => c.type), ['when', 'if']);
 
   // --- the other primitives answer with their own head ---
-  const step = doc.lineAt(flowsFile, 10);
-  assert.deepEqual([step.primitive, step.text, step.col], ['STEP', 'check it', 5]);
+  const step = doc.lineAt(flowsFile, 12);
+  assert.deepEqual([step.primitive, step.text, step.col], ['STEP', 'check it', 9]);
   const cond = doc.lineAt(checksFile, 8);
   assert.deepEqual([cond.primitive, cond.text], ['UNTIL', 'they pass']);
   const run = doc.lineAt(agentFile, 11);

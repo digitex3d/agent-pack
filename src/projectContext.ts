@@ -2,16 +2,12 @@
 // Copyright (c) 2026 Giuseppe Federico
 import { existsSync } from 'fs';
 import { resolve } from 'path';
-import { Config } from './config.js';
+import { Config, AGENTS_MD, PROJECT_SOURCE } from './config.js';
 import { bundleStandaloneToString } from './compiler/index.js';
 import { ensureMdBlock } from './services/mdBlock.js';
 import { AdapterPlugin } from '../adapters/types.js';
 
-/** The project-level instructions file every harness reads: the open AGENTS.md standard. */
-export const AGENTS_MD = 'AGENTS.md';
-
-/** The project's always-on context, compiled into AGENTS.md. */
-export const PROJECT_SOURCE = 'PROJECT.ap';
+export { AGENTS_MD, PROJECT_SOURCE };
 
 /**
  * Compile `PROJECT.ap` into the `project` managed block of AGENTS.md — the

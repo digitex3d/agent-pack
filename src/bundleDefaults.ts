@@ -61,7 +61,7 @@ function isCommentOnly(content: string): boolean {
 
 /**
  * Resolve the shared block injected into every member of an agent's team: the
- * optional `team.ap` file at the team root, sibling of `flows.ap`. The content
+ * optional `team.ap` file at the team root, sibling of the team file. The content
  * is injected verbatim (a leading ABOUT line stripped, no section header) — the
  * same shape the project-wide shared block used to take, now scoped to one
  * team. Markdown headings the author writes (e.g. `# Mission`) are preserved.
@@ -74,7 +74,7 @@ function isCommentOnly(content: string): boolean {
  * block; a future project scope would be a second resolution appended here.
  *
  * Takes the agent's `.ap` FILE path: its team root is the file's own directory
- * when that holds a `flows.ap`, else the agent is standalone.
+ * when that holds a team file (an `EXPORT TEAM` block), else the agent is standalone.
  */
 export function resolveTeamShared(agentFilePath: string): string {
   const teamRoot = teamRootForAgentFile(agentFilePath);

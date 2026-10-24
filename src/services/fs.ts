@@ -6,7 +6,7 @@
  * whole, reading a JSON file and pruning what is left empty. Node's `fs` and
  * `path` only: the apx bundle imports it.
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync, statSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync, statSync, writeFileSync, type Dirent } from 'fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'path';
 
 /**
@@ -22,6 +22,31 @@ export function filesUnder(dir: string, ext: string): string[] {
     if (entry.isDirectory()) out.push(...filesUnder(abs, ext));
     else if (entry.name.endsWith(ext)) out.push(abs);
   }
+  return out;
+}
+
+/** The folders a walk of a project never enters: its history, its dependencies, its own build output. */
+const SKIPPED_DIRS = new Set(['.git', 'node_modules', '.agent-pack']);
+
+/**
+ * Every file under `root` whose `/`-separated relative path `keep` admits, in
+ * path order — the project's own files: `.git`, `node_modules` and `.agent-pack`
+ * are never entered, nor is a symbolic link to a folder followed.
+ */
+export function projectFiles(root: string, keep: (rel: string) => boolean): string[] {
+  const out: string[] = [];
+  const walk = (dir: string): void => {
+    let entries: Dirent[];
+    try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      const abs = resolve(dir, entry.name);
+      if (entry.isDirectory()) { if (!SKIPPED_DIRS.has(entry.name)) walk(abs); continue; }
+      if (!entry.isFile()) continue;
+      const rel = relativeWithin(root, abs);
+      if (rel && keep(rel)) out.push(rel);
+    }
+  };
+  walk(root);
   return out;
 }
 

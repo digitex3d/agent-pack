@@ -17,6 +17,7 @@
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { parseBlocks, agentNestedBlocks, ParseResult, Block } from './parseBlocks.js';
+import { TEAM_KEY } from './blockTypes.js';
 import type { ApPos } from './apdoc/types.js';
 import { splitOnReads } from './vars.js';
 
@@ -97,8 +98,21 @@ export class SourceRegistry {
       const span = this.blockSpan(path, nested.agent);
       return { ...span, line: nested.block.startLine, lines: span.lines.filter(l => l.line >= nested.block.startLine) };
     }
+    // A block declared inside a team (a FLOW of its routing): its header to its next sibling.
+    for (const team of blocks.filter(b => b.key === TEAM_KEY)) {
+      const child = team.children.find((c): c is Block => c.type === 'block' && c.key === key && c.name === name);
+      if (child) return this.nestedSpan(path, team, child);
+    }
     if (blocks.some(b => b.exported)) return null;
     return { file: resolve(path), line: 1, lines: numbered(text.split(/\r?\n/), 1) };
+  }
+
+  /** A block nested in another: its header to the line before its next sibling (a line or a block), or to the end of the parent's span. */
+  nestedSpan(path: string, parent: Block, child: Block): SourceSpan {
+    const span = this.blockSpan(path, parent);
+    const next = parent.children[parent.children.indexOf(child) + 1];
+    const end = next ? (next.type === 'line' ? next.line : next.startLine) : span.line + span.lines.length;
+    return { file: span.file, line: child.startLine, lines: span.lines.filter(l => l.line >= child.startLine && l.line < end) };
   }
 
   /** One top-level block of a file: its header to the line before the next top-level block (any kind), or EOF. */

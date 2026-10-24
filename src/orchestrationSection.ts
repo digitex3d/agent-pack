@@ -14,8 +14,9 @@ import {
   lintSource,
   strayDimensionErrors,
 } from './compiler/index.js';
-import { checkedHeadIssues, lineOfName } from './lint.js';
-import { Config } from './config.js';
+import { checkedHeadIssues, lineOfName, teamBlockErrors } from './lint.js';
+import { Config, PROJECT_SOURCE } from './config.js';
+import { contractsFlowSource, contractWorkers } from './services/contractsFlow.js';
 import { AGENTS_MD } from './projectContext.js';
 import { apxCommand } from './apx/paths.js';
 import { resolveReads, constantOf } from './vars.js';
@@ -27,7 +28,15 @@ import { buildRoleIndex, resolveRole, RoleIndex } from './roleIndex.js';
 import {
   AgentInfo,
   readTeamMembers,
-  readTeamPurpose,
+  readTeamFile,
+  teamRosterIssues,
+  legacyTeamIssue,
+  buildContractIndex,
+  contractsTeamOf,
+  CONTRACTS_STRATEGY,
+  type TeamIssue,
+  type ContractIndex,
+  type TeamFile,
   readAgentInfos,
   findAgentFiles,
   agentNameOf,
@@ -47,7 +56,7 @@ const ABOUT_LINE_RE = /^ABOUT[ \t]+(.+?)[ \t]*$/m;
  *   - The `team` kind introduction (formulas.json) goes through the same
  *     pipeline as an agent body.
  *
- *   - Per-team `flows.ap` bodies go through the same pipeline so `IF/ELSE`
+ *   - Per-team TEAM-block bodies go through the same pipeline so `IF/ELSE`
  *     and `BY` are processed identically.
  *
  *   - The composed result lives in a single `<!-- agent-pack:orchestration -->`
@@ -55,7 +64,7 @@ const ABOUT_LINE_RE = /^ABOUT[ \t]+(.+?)[ \t]*$/m;
  *
  * Discovery is by filesystem walk (per S8):
  *   - `agents/standalone/<name>.ap`        → standalone agents (EXPORT AGENT)
- *   - `agents/teams/<X>/flows.ap`          → team purpose + routing
+ *   - `agents/teams/<X>/<X>.ap` (EXPORT TEAM) → team purpose + routing
  *   - `agents/teams/<X>/<name>.ap`         → team members (EXPORT AGENT)
  */
 
@@ -67,9 +76,9 @@ export interface OrchestrationSectionOptions {
   teamsDir?: string;
   /** Output file. Defaults to `<cwd>/AGENTS.md`. */
   filePath?: string;
-  /** Extra library roots searched for IMPORTs declared in flows.ap (project libraries). */
+  /** Extra library roots searched for IMPORTs declared in a team's file (project libraries). */
   libraryRoots?: string[];
-  /** Named library aliases (e.g. `@main`) for IMPORTs declared in flows.ap. */
+  /** Named library aliases (e.g. `@main`) for IMPORTs declared in a team's file. */
   libraries?: Record<string, string>;
   /** Project config. */
   config?: Config;
@@ -93,6 +102,8 @@ interface TeamInfo {
   about: string;
   members: AgentInfo[];
   routingBody: string;
+  /** Under `STRATEGY contracts`: its lines in AGENTS.md (strategy, contracts) — null otherwise. */
+  strategy: string | null;
 }
 
 /** Build a fresh `BundleContext` for the orchestration section, over the project libraries. */
@@ -122,43 +133,56 @@ interface TeamRaw {
   members: AgentInfo[];
   /** Routing body (WHEN/RUN) with FLOW definitions already stripped into the shared ctx. */
   routingRaw: string;
-  /** The team's `flows.ap` — where its flows, and the variables they import, come from. */
-  flowsAp: string;
-  /** The variables its flows.ap imports — the team's own. */
+  /** The team's file — where its flows, and the variables they import, come from. */
+  teamPath: string;
+  /** The variables its file imports — the team's own. */
   variables: ImportedVariable[];
+  team: TeamFile;
 }
 
-/** A team's `flows.ap`, read and parsed exactly once. */
-interface TeamFile {
+/** A team's file, read and parsed exactly once. */
+interface TeamSource {
   teamName: string;
   teamDir: string;
-  flowsAp: string;
+  teamPath: string;
+  about: string;
+  /** The team as the pipeline reads it (TeamFile.unit): its block's lines at the top, numbers kept. */
   source: string;
-  /** Top-level blocks parsed from `source` — fed to the RoleIndex. */
+  /** The blocks of `source` — fed to the RoleIndex. */
   blocks: ReturnType<typeof parseBlocks>['blocks'];
+  /** The team file, read once. */
+  team: TeamFile;
 }
 
 /**
- * Walk `teamsRoot` once, reading and parsing each team's `flows.ap` a single
- * time. The parsed blocks feed the role→agent RoleIndex; the raw source
- * feeds routing collection. One walk, one read, one parse per file.
+ * Walk `teamsRoot` once, reading and parsing each team's file a single time.
+ * The parsed blocks feed the role→agent RoleIndex; the unit source feeds
+ * routing collection. One walk, one read, one parse per file. A folder with a
+ * retired `flows.ap`, or a roster that does not match its agent files, is an
+ * issue handed to `fail`.
  */
-function readTeamFiles(teamsRoot: string): TeamFile[] {
+function readTeamFiles(teamsRoot: string, fail: (issue: TeamIssue) => void, index: ContractIndex): TeamSource[] {
   if (!existsSync(teamsRoot)) return [];
-  const out: TeamFile[] = [];
+  const out: TeamSource[] = [];
   for (const teamName of readdirSync(teamsRoot).sort()) {
     const teamDir = resolve(teamsRoot, teamName);
     if (!statSync(teamDir).isDirectory()) continue;
-    const flowsAp = resolve(teamDir, 'flows.ap');
-    if (!existsSync(flowsAp)) continue;
-    const source = readFileSync(flowsAp, 'utf-8');
-    out.push({ teamName, teamDir, flowsAp, source, blocks: parseBlocks(source).blocks });
+    const legacy = legacyTeamIssue(teamDir);
+    if (legacy) fail(legacy);
+    const team = readTeamFile(teamDir);
+    if (!team) continue;
+    for (const issue of [...teamBlockErrors(team.path, parseBlocks(team.source).blocks), ...teamRosterIssues(team, index)]) fail(issue);
+    // Under STRATEGY contracts the routing and the flow are the strategy's, read after the file's own lines.
+    const source = team.strategy?.name === CONTRACTS_STRATEGY && team.lead
+      ? `${team.unit}\n${contractsFlowSource(team.name, team.lead.name, contractWorkers(team, name => contractsTeamOf(index, name)?.lead ?? null))}`
+      : team.unit;
+    out.push({ teamName, teamDir, teamPath: team.path, about: team.about, source, blocks: parseBlocks(source).blocks, team });
   }
   return out;
 }
 
 /**
- * A team's `{{…}}` reads as AGENTS.md renders them — the variables its flows.ap
+ * A team's `{{…}}` reads as AGENTS.md renders them — the variables its file
  * imports, which its members compile with: a constant's read is its value, a
  * variable's how to read it with a member's apx (a SESSION variable reads the
  * same from every member). Any other read stays as written. Applied to the
@@ -188,7 +212,7 @@ function renderFlowReads(chapters: string, ctx: BundleContext, readsOf: Map<stri
 }
 
 /**
- * Collect every team's `flows.ap` into the SHARED orchestration context. Each
+ * Collect every team's file into the SHARED orchestration context. Each
  * file's top-level FLOW blocks are extracted into `ctx.flows` (so they render
  * once, numbered, in the single shared Flows chapter — like procedures and
  * templates), and the remaining routing body (WHEN/RUN) is returned raw. It is
@@ -197,11 +221,11 @@ function renderFlowReads(chapters: string, ctx: BundleContext, readsOf: Map<stri
  *
  * Builds the role→agent RoleIndex from the already-parsed blocks of the same
  * files, so `BY <role>` resolves with one walk/read/parse per file. The
- * variables a team's flows.ap imports are that team's alone: each team's
+ * variables a team's file imports are that team's alone: each team's
  * imports register in a list of its own.
  */
-async function collectTeams(teamsRoot: string, ctx: BundleContext): Promise<TeamRaw[]> {
-  const files = readTeamFiles(teamsRoot);
+async function collectTeams(teamsRoot: string, ctx: BundleContext, projectFile: string): Promise<TeamRaw[]> {
+  const files = readTeamFiles(teamsRoot, issue => ctx.lintErrors.push(issue), buildContractIndex(teamsRoot, projectFile));
 
   // Walk every team's members up front so their directory-anchored `AS <role>`
   // bindings feed the RoleIndex — that is what lets `BY <role>` resolve to a
@@ -220,23 +244,23 @@ async function collectTeams(teamsRoot: string, ctx: BundleContext): Promise<Team
   const agentNames = new Set([...membersByTeam.values()].flat().map(a => a.name));
 
   const out: TeamRaw[] = [];
-  for (const { teamName, teamDir, flowsAp, source } of files) {
-    lintSource(flowsAp, ctx);
+  for (const { teamName, teamDir, teamPath, about, source, team } of files) {
+    lintSource(teamPath, ctx);
     const raw = resolveByLines(
       source,
       roleIndex,
       agentNames,
-      (msg, line) => ctx.lintErrors.push({ file: flowsAp, line, message: msg }),
+      (msg, line) => ctx.lintErrors.push({ file: teamPath, line, message: msg }),
     );
     // Its checked heads as AGENTS.md renders them: a step's is its BY agent's, the routing's no one's.
-    ctx.lintErrors.push(...checkedHeadIssues(flowsAp, raw, ctx.checks, by => (agentNames.has(by) ? by : null)));
+    ctx.lintErrors.push(...checkedHeadIssues(teamPath, raw, ctx.checks, by => (agentNames.has(by) ? by : null)));
     // `LENS-IN <agent> <template>` — the member's default input shape, declared
     // team-side and rendered into the members list for orchestrator discovery.
     const { metadata: lensMeta, stripped: noLensIn } = partitionMetadata(raw, ['LENS-IN']);
     const lensIn = new Map<string, string>();
     for (const decl of lensMeta.get('LENS-IN') ?? []) {
       const m = decl.trim().match(/^(\S+)\s+(\S+)$/);
-      if (!m) throw new Error(`${flowsAp}: malformed LENS-IN "${decl}" — expected \`LENS-IN <agent> <template>\``);
+      if (!m) throw new Error(`${teamPath}: malformed LENS-IN "${decl}" — expected \`LENS-IN <agent> <template>\``);
       lensIn.set(m[1], m[2]);
     }
     const stripped = noLensIn.replace(H1_LINE_RE, '').replace(ABOUT_LINE_RE, '').replace(/^\n+/, '');
@@ -244,23 +268,23 @@ async function collectTeams(teamsRoot: string, ctx: BundleContext): Promise<Team
       .map(a => ({ ...a, lensIn: lensIn.get(a.name) ?? a.lensIn }));
     for (const name of lensIn.keys()) {
       if (!members.some(a => a.name === name)) {
-        throw new Error(`${flowsAp}: LENS-IN names unknown member "${name}"`);
+        throw new Error(`${teamPath}: LENS-IN names unknown member "${name}"`);
       }
     }
     await hoistLensInTemplates(teamDir, members, ctx);
     ctx.variables = [];
     const dimensions = ctx.dimensions.length;
-    const routingRaw = await resolveInlineBlocks(stripped, ctx, flowsAp);
-    ctx.lintErrors.push(...strayDimensionErrors(ctx, flowsAp, dimensions));
-    // What flows.ap imports itself — imports never pass on. A team shares constants
+    const routingRaw = await resolveInlineBlocks(stripped, ctx, teamPath);
+    ctx.lintErrors.push(...strayDimensionErrors(ctx, teamPath, dimensions));
+    // What the team file imports itself — imports never pass on. A team shares constants
     // and SESSION variables: a private one would be each member's own.
-    const variables = ctx.variables.filter(v => v.importers.includes(flowsAp));
+    const variables = ctx.variables.filter(v => v.importers.includes(teamPath));
     for (const v of variables) {
       if (v.decl.form === 'variable' && v.decl.scope === 'private') {
-        ctx.lintErrors.push({ file: flowsAp, line: lineOfName(flowsAp, v.name, 'import'), message: `IMPORT ${v.name}: \`${v.name}\` is a private variable — each member would have its own; a team's flows.ap imports constants and SESSION variables` });
+        ctx.lintErrors.push({ file: teamPath, line: lineOfName(teamPath, v.name, 'import'), message: `IMPORT ${v.name}: \`${v.name}\` is a private variable — each member would have its own; a team's file imports constants and SESSION variables` });
       }
     }
-    out.push({ name: teamName, about: readTeamPurpose(teamDir), members, routingRaw, flowsAp, variables });
+    out.push({ name: teamName, about, members, routingRaw, teamPath, variables, team });
   }
   ctx.variables = [];
   return out;
@@ -278,7 +302,7 @@ function memberFile(teamDir: string, name: string): string | null {
  * there, or from the library when the member file imports it, together with
  * the closure of templates it references via `<tpl>` / `LIST <tpl>` slots, and
  * nothing else. Templates already present in the context (e.g. defined in
- * flows.ap) win. The member's own lint errors are its bundle's to report.
+ * the team file) win. The member's own lint errors are its bundle's to report.
  */
 async function hoistLensInTemplates(teamDir: string, members: AgentInfo[], ctx: BundleContext): Promise<void> {
   for (const m of members) {
@@ -362,6 +386,7 @@ function renderTeam(team: TeamInfo, ctx: BundleContext): string {
     '',
     `\`purpose\`: ${purpose}`,
     '',
+    ...(team.strategy ? [team.strategy, ''] : []),
     `\`members\`:`,
     members,
     '',
@@ -388,9 +413,9 @@ export async function buildOrchestrationContent(opts: OrchestrationSectionOption
 
   // Phase 1: collect every team's FLOWs into the shared ctx (routing kept raw,
   // with `BY <role>` resolved against the RoleIndex built from the same
-  // single walk/read/parse of each team's flows.ap).
-  const teamRaws = await collectTeams(teamsDir, ctx);
-  const readsOf = new Map(teamRaws.map(t => [t.flowsAp, teamReads(t)]));
+  // single walk/read/parse of each team's file).
+  const teamRaws = await collectTeams(teamsDir, ctx, resolve(opts.cwd, PROJECT_SOURCE));
+  const readsOf = new Map(teamRaws.map(t => [t.teamPath, teamReads(t)]));
 
   reportLintIssues(ctx, 'Orchestration section');
 
@@ -407,9 +432,9 @@ export async function buildOrchestrationContent(opts: OrchestrationSectionOption
   const teams: TeamInfo[] = teamRaws.map(t => {
     const member = t.members[0]?.name;
     ctx.flowCommand = member ? id => apxCommand(member, 'flow', id) : undefined;
-    const routingBody = readsOf.get(t.flowsAp)!(postProcessBody(t.routingRaw, ctx)).trim().replace(/\n{3,}/g, '\n\n');
+    const routingBody = readsOf.get(t.teamPath)!(postProcessBody(t.routingRaw, ctx)).trim().replace(/\n{3,}/g, '\n\n');
     ctx.flowCommand = undefined;
-    return { name: t.name, about: t.about, members: t.members, routingBody };
+    return { name: t.name, about: t.about, members: t.members, routingBody, strategy: strategyLines(t.team) };
   });
 
   const parts: string[] = [
@@ -431,4 +456,20 @@ export async function ensureOrchestrationSection(opts: OrchestrationSectionOptio
   const filePath = opts.filePath ?? resolve(opts.cwd, AGENTS_MD);
   const result = ensureMdBlock({ filePath, key: 'orchestration', content });
   return { ...result, standalones, teams };
+}
+
+/** A team of contracts in AGENTS.md: the strategy line and its contracts — null for a team without a strategy. */
+function strategyLines(team: TeamFile): string | null {
+  if (team.strategy?.name !== CONTRACTS_STRATEGY || !team.lead) return null;
+  const T = FORMULAS.blocks.contract.team;
+  return [
+    fill(T.strategy, { lead: team.lead.name }),
+    '',
+    T.contracts,
+    ...team.contracts.map(c => fill(T.entry, {
+      name: c.name, about: c.about || '(no description)',
+      domain: c.domain ? fill(T.domain, { domain: c.domain }) : '',
+      by: c.by.map(b => `\`${b}\``).join(', '),
+    })),
+  ].join('\n');
 }

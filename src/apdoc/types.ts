@@ -164,6 +164,8 @@ export interface ApWhenNode {
   condition: string;
   /** The `AS <template>` line written in its body: the shape of the answer it gives. */
   shape?: ApShape;
+  /** `WHEN handed <contract>:` — the contract whose instance is the input of this trigger. */
+  input?: ApRef;
   chars: number;
   body: ApNode[];
 }

@@ -9,6 +9,7 @@ import { strict as assert } from 'assert';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { teamSource } from './helpers/team.mjs';
 
 const { lintProcedure, lintRole } = await import('../dist/src/lint.js');
 const { bundleAgentObject } = await import('../dist/src/compiler/index.js');
@@ -59,10 +60,10 @@ try {
   // --- A team's flows render its constants and variables in AGENTS.md ---
   const team = join(tmp, 'teams', 't');
   write(join(lib, 'vars', 't.ap'), ['EXPORT VAR source-url = https://example.org/data', 'EXPORT SESSION VAR notes']);
-  write(join(team, 'flows.ap'), [
+  write(join(team, 't.ap'), teamSource('t', ['m'], [
     'IMPORT source-url, notes FROM @main.vars', '', 'ABOUT  a team', '', 'WHEN asked to fetch:', '    RUN fetch', '',
     'FLOW fetch:', '    STEP fetch the source:', '        BY m', '        DO download {{source-url}} into {{notes}}',
-  ]);
+  ]));
   write(join(team, 'm.ap'), ['EXPORT AGENT m AS mr:', '    ABOUT  a member', '', 'ROLE mr:', '    ABOUT   a member', '    ALWAYS  be exact']);
   const { content } = await buildOrchestrationContent({
     cwd: tmp, standaloneAgentsDir: join(tmp, 'standalone'), teamsDir: join(tmp, 'teams'), libraryRoots: [lib], libraries: { '@main': lib },
@@ -74,10 +75,10 @@ try {
   // --- Each team's imports are its own: two teams, one name, two modules — no collision ---
   const other = join(tmp, 'teams', 'u');
   write(join(lib, 'more', 'u.ap'), ['EXPORT SESSION VAR notes']);
-  write(join(other, 'flows.ap'), [
+  write(join(other, 'u.ap'), teamSource('u', ['n'], [
     'IMPORT notes FROM @main.more', '', 'ABOUT  another team', '', 'WHEN asked to note:', '    RUN note', '',
     'FLOW note:', '    STEP note it:', '        BY n', '        DO keep {{notes}}',
-  ]);
+  ]));
   write(join(other, 'n.ap'), ['EXPORT AGENT n AS nr:', '    ABOUT  a member', '', 'ROLE nr:', '    ABOUT   a member', '    ALWAYS  be exact']);
   const both = (await buildOrchestrationContent({
     cwd: tmp, standaloneAgentsDir: join(tmp, 'standalone'), teamsDir: join(tmp, 'teams'), libraryRoots: [lib], libraries: { '@main': lib },
@@ -87,11 +88,11 @@ try {
 
   // --- A team shares constants and SESSION variables: a private one would be each member's own ---
   write(join(lib, 'more', 'own.ap'), ['EXPORT VAR mine']);
-  write(join(other, 'flows.ap'), ['IMPORT notes FROM @main.more', 'IMPORT mine FROM @main.more', '', 'ABOUT  another team', '', 'WHEN asked to note:', '    RUN note', '',
-    'FLOW note:', '    STEP note it:', '        BY n', '        DO keep {{notes}}']);
+  write(join(other, 'u.ap'), teamSource('u', ['n'], ['IMPORT notes FROM @main.more', 'IMPORT mine FROM @main.more', '', 'ABOUT  another team', '', 'WHEN asked to note:', '    RUN note', '',
+    'FLOW note:', '    STEP note it:', '        BY n', '        DO keep {{notes}}']));
   await assert.rejects(buildOrchestrationContent({
     cwd: tmp, standaloneAgentsDir: join(tmp, 'standalone'), teamsDir: join(tmp, 'teams'), libraryRoots: [lib], libraries: { '@main': lib },
-  }), /flows\.ap:2  IMPORT mine: `mine` is a private variable — each member would have its own/);
+  }), /u\.ap:2  IMPORT mine: `mine` is a private variable — each member would have its own/);
 
   console.log('Library unit tests passed.');
 } finally {

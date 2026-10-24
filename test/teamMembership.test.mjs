@@ -19,6 +19,7 @@ import { strict as assert } from 'assert';
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { teamSource } from './helpers/team.mjs';
 
 const { resolveTeamMembership } = await import('../dist/src/services/teamMembership.js');
 
@@ -35,11 +36,11 @@ function makeTeamMember(root, team, agent, about) {
   return file;
 }
 
-/** Write the team's flows.ap so the team purpose (its ABOUT) is discoverable. */
-function writeTeamFlows(root, team, purpose) {
+/** Write the team's file so the team purpose (its ABOUT) and its roster are discoverable. */
+function writeTeamFlows(root, team, purpose, members) {
   writeFileSync(
-    join(root, 'teams', team, 'flows.ap'),
-    [`# ${team}`, `ABOUT  ${purpose}`, ''].join('\n'),
+    join(root, 'teams', team, `${team}.ap`),
+    [`# ${team}`, ...teamSource(team, members, [`ABOUT  ${purpose}`]), ''].join('\n'),
     'utf-8',
   );
 }
@@ -54,7 +55,7 @@ function writeTeamFlows(root, team, purpose) {
     const selfDir = makeTeamMember(tmp, 'dev', 'senior-typescript', 'owns the agent-pack core');
     makeTeamMember(tmp, 'dev', 'architect', 'maintains the architecture diagrams');
     makeTeamMember(tmp, 'dev', 'dry-keeper', 'post-implementation DRY review');
-    writeTeamFlows(tmp, 'dev', 'agent-pack core development team');
+    writeTeamFlows(tmp, 'dev', 'agent-pack core development team', ['senior-typescript', 'architect', 'dry-keeper']);
 
     const section = resolveTeamMembership(selfDir);
 
@@ -91,7 +92,7 @@ function writeTeamFlows(root, team, purpose) {
   const tmp = mkdtempSync(join(tmpdir(), 'ap-membership-solo-'));
   try {
     const selfDir = makeTeamMember(tmp, 'solo', 'only-one', 'the sole member');
-    writeTeamFlows(tmp, 'solo', 'a one-person team');
+    writeTeamFlows(tmp, 'solo', 'a one-person team', ['only-one']);
 
     const section = resolveTeamMembership(selfDir);
 
@@ -114,7 +115,7 @@ function writeTeamFlows(root, team, purpose) {
     const file = join(dir, 'lonely.ap');
     writeFileSync(file, ['EXPORT AGENT lonely AS lonely-role:', '  ABOUT  a lone agent', '  MANDATE  go solo', '', 'ROLE lonely-role:', '  ABOUT  a loner', '  ALWAYS go solo', ''].join('\n'), 'utf-8');
 
-    assert.equal(resolveTeamMembership(file), '', 'standalone agent (no sibling flows.ap) receives no membership section');
+    assert.equal(resolveTeamMembership(file), '', 'standalone agent (no sibling team file) receives no membership section');
   } finally {
     rmSync(tmp, { recursive: true });
   }
@@ -135,7 +136,7 @@ console.log('resolveTeamMembership tests passed.');
     try {
       const agentFile = makeTeamMember(tmp, 'dev', 'coder', 'ships the change');
       makeTeamMember(tmp, 'dev', 'reviewer', 'reviews the change');
-      writeTeamFlows(tmp, 'dev', 'the dev team');
+      writeTeamFlows(tmp, 'dev', 'the dev team', ['coder', 'reviewer']);
       const libraryRoot = join(tmp, 'library');
       mkdirSync(libraryRoot);
 

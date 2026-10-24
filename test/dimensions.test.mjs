@@ -16,6 +16,7 @@ import { join, resolve, dirname } from 'path';
 import { tmpdir } from 'os';
 import { spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
+import { teamSource } from './helpers/team.mjs';
 
 const { bundleAgentObject } = await import('../dist/src/compiler/index.js');
 const { documentDefHashes, fingerprint } = await import('../dist/src/apx/dimensions.js');
@@ -188,8 +189,8 @@ try {
   // --- N8: a block opener the token contracts do not name still closes the blocks it is no deeper than ---
   {
     const team = join(root, 'teams', 'crew');
-    const flows = join(team, 'flows.ap');
-    const errors = lintFile(flows, ['ABOUT  a crew', '', 'FLOW ship:', '    STEP build:', '        BY builder', '        DO  build it', '',
+    const flows = join(team, 'crew.ap');
+    const errors = lintFile(flows, [...teamSource('crew', ['builder'], ['ABOUT  a crew', '', 'FLOW ship:', '    STEP build:', '        BY builder', '        DO  build it']), '',
       'POLICY careful:', '    ABOUT   be careful', '    ALWAYS  test first', ''].join('\n')).map(e => e.message);
     assert.ok(!errors.some(m => /ALWAYS is not allowed inside (FLOW|STEP)/.test(m)), `the POLICY's lines are not the FLOW's:\n${errors.join('\n')}`);
   }
@@ -467,7 +468,7 @@ try {
     has(apx(['dimension', DIM, 'read', 'src/moved.py']).out, 'miss pseudocode src/moved.py — never written');
   }
 
-  // --- B6: a dimension is an agent's — PROJECT.ap or a team's flows.ap that imports one fails the build ---
+  // --- B6: a dimension is an agent's — PROJECT.ap or a team's file that imports one fails the build ---
   {
     const { bundleStandaloneToString } = await import('../dist/src/compiler/index.js');
     const { buildOrchestrationContent } = await import('../dist/src/orchestrationSection.js');
@@ -480,9 +481,9 @@ try {
     rmSync(project);
     const team = join(proj, 'agents', 'teams', 'crew');
     write(join(team, 'builder.ap'), ['EXPORT AGENT builder AS builder-role:', '    ABOUT    builds', '    MANDATE  ship', '', 'ROLE builder-role:', '    ABOUT   a builder', '    ALWAYS  test first']);
-    write(join(team, 'flows.ap'), ['ABOUT  a crew', '', 'IMPORT pseudocode FROM @main.dimensions', '', 'WHEN asked to ship:', '    DO  ship it']);
+    write(join(team, 'crew.ap'), teamSource('crew', ['builder'], ['ABOUT  a crew', '', 'IMPORT pseudocode FROM @main.dimensions', '', 'WHEN asked to ship:', '    DO  ship it']));
     await assert.rejects(buildOrchestrationContent({ cwd: proj, standaloneAgentsDir: join(proj, 'agents', 'standalone'), teamsDir: join(proj, 'agents', 'teams'), libraryRoots: [library], libraries: { '@main': library } }),
-      /flows\.ap:3  DIMENSION pseudocode: a dimension belongs to an agent/);
+      /crew\.ap:1  DIMENSION pseudocode: a dimension belongs to an agent/);
     rmSync(join(proj, 'agents', 'teams'), { recursive: true });
   }
 

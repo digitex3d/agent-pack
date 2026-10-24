@@ -12,6 +12,7 @@ import { strict as assert } from 'assert';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
 import { join, dirname } from 'path';
 import { tmpdir } from 'os';
+import { teamSource } from './helpers/team.mjs';
 
 const { bundleAgentObject } = await import('../dist/src/compiler/index.js');
 const { checkVocabulary } = await import('../dist/src/lint.js');
@@ -293,7 +294,7 @@ try {
   {
     const team = join(tmp, 'teams', 'crew');
     write(join(lib, 'vars', 'crew.ap'), ['EXPORT SESSION VAR report']);
-    const flows = lines => write(join(team, 'flows.ap'), ['IMPORT report FROM @main.vars', 'ABOUT  a crew', 'WHEN asked to ship:', '    RUN ship', '', 'FLOW ship:', ...lines]);
+    const flows = lines => write(join(team, 'crew.ap'), teamSource('crew', ['builder', 'lead'], ['IMPORT report FROM @main.vars', 'ABOUT  a crew', 'WHEN asked to ship:', '    RUN ship', '', 'FLOW ship:', ...lines]));
     const member = name => write(join(team, `${name}.ap`), [
       `EXPORT AGENT ${name} AS ${name}-role:`, '    ABOUT    a member', '    MANDATE  ship', '',
       `ROLE ${name}-role:`, '    ABOUT   a member', '    ALWAYS  test first',
@@ -345,30 +346,30 @@ try {
 
     // a variable the BY agent does not see
     flows(['    STEP judge it:', '        BY builder', '        IF! {{verdict}} says clean:', '            DO  hand it on']);
-    assert.match(await stepErrors('builder'), /flows\.ap:9  IF!: `\{\{verdict\}\}` is no variable the step's agent sees/);
+    assert.match(await stepErrors('builder'), /crew\.ap:12  IF!: `\{\{verdict\}\}` is no variable the step's agent sees/);
 
     // BY names a team: no one agent to answer for the check
     flows(['    STEP judge it:', '        BY crew', '        IF! {{report}} says clean:', '            DO  hand it on']);
-    assert.match(await stepErrors('lead'), /flows\.ap:9  IF!: a checked condition needs the step's agent: BY must name an agent/);
+    assert.match(await stepErrors('lead'), /crew\.ap:12  IF!: a checked condition needs the step's agent: BY must name an agent/);
 
     // a checked condition at the flow's own level: not supported yet
     flows(['    UNTIL!! {{report}} says clean MAX 3:', '        STEP fix it:', '            BY builder', '            DO  fix the next failure']);
-    assert.match(await stepErrors('lead'), /flows\.ap:7  UNTIL!! at a flow's own level is not supported yet — put it inside a STEP/);    // the routing of the team: no executable — IF! warns and reads as IF, IF!! fails
-    const routing = lines => write(join(team, 'flows.ap'), ['IMPORT report FROM @main.vars', 'ABOUT  a crew', 'WHEN asked to ship:', ...lines, '',
-      'FLOW ship:', '    STEP judge it:', '        BY builder', '        DO  hand it on']);
+    assert.match(await stepErrors('lead'), /crew\.ap:10  UNTIL!! at a flow's own level is not supported yet — put it inside a STEP/);    // the routing of the team: no executable — IF! warns and reads as IF, IF!! fails
+    const routing = lines => write(join(team, 'crew.ap'), teamSource('crew', ['builder', 'lead'], ['IMPORT report FROM @main.vars', 'ABOUT  a crew', 'WHEN asked to ship:', ...lines, '',
+      'FLOW ship:', '    STEP judge it:', '        BY builder', '        DO  hand it on']));
     routing(['    IF! the request is urgent:', '        RUN ship']);
     const routed = await stderrOf(orchestration);
-    assert.match(routed.stderr, /flows\.ap:4  IF!: no executable here — the condition is the agent's: it reads as IF; checks run in an agent's body, a procedure an agent runs, or a flow step whose BY is an agent/);
+    assert.match(routed.stderr, /crew\.ap:7  IF!: no executable here — the condition is the agent's: it reads as IF; checks run in an agent's body, a procedure an agent runs, or a flow step whose BY is an agent/);
     assert.ok(routed.result.includes('If the request is urgent:'), routed.result);
     // WHEN! in the routing: the same pair, the same fallback, at the WHEN! line
-    const routingWhen = lines => write(join(team, 'flows.ap'), ['IMPORT report FROM @main.vars', 'ABOUT  a crew', ...lines, '',
-      'FLOW ship:', '    STEP judge it:', '        BY builder', '        DO  hand it on']);
+    const routingWhen = lines => write(join(team, 'crew.ap'), teamSource('crew', ['builder', 'lead'], ['IMPORT report FROM @main.vars', 'ABOUT  a crew', ...lines, '',
+      'FLOW ship:', '    STEP judge it:', '        BY builder', '        DO  hand it on']));
     routingWhen(['WHEN! {{report}} says the request is urgent:', '    RUN ship']);
     const sugared = await stderrOf(orchestration);
-    assert.match(sugared.stderr, /flows\.ap:3  WHEN!: no executable here — the condition is the agent's: it reads as WHEN/);
+    assert.match(sugared.stderr, /crew\.ap:6  WHEN!: no executable here — the condition is the agent's: it reads as WHEN/);
     assert.ok(sugared.result.includes('When `report` (read its value: `node .agent-pack/apx/builder.apx get report`) says the request is urgent:\n    If `report`'), sugared.result);
     routing(['    IF!! the request is urgent:', '        RUN ship']);
-    await assert.rejects(orchestration, /flows\.ap:4  IF!!: no executable here — a sealed condition can never be checked here/);
+    await assert.rejects(orchestration, /crew\.ap:7  IF!!: no executable here — a sealed condition can never be checked here/);
 
     // BY written as the role its member takes: AGENTS.md and the member's apx resolve the same agent, the same id
     flows(['    STEP judge it:', '        BY builder-role', '        IF!! {{report}} shows no regression:', '            DO  hand it on']);

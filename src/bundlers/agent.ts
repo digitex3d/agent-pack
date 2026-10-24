@@ -5,11 +5,14 @@ import { Config } from '../config.js';
 import { bundleAgentObjectFromConfig } from '../compiler/index.js';
 import { dirname } from 'path';
 import type { JudgeRun } from '../judge/phase.js';
+import type { DomainDecider } from '../compiler/index.js';
 
 export interface BuildAgentOptions {
   adapter?: AdapterPlugin;
   /** The command's judge run, shared by every agent it compiles. */
   judge?: JudgeRun | null;
+  /** Who decides a file's domain the judge left grey — the developer on a terminal; absent: nobody, an error. */
+  decide?: DomainDecider;
 }
 
 export async function buildAgentBundle(
@@ -22,6 +25,7 @@ export async function buildAgentBundle(
     lintConfig: config.lint,
     adapter: opts.adapter,
     judge: opts.judge,
+    decide: opts.decide,
     // The implicit `name`; the constants the agent imports come on top.
     vars: { name },
   });

@@ -50,6 +50,11 @@ const STATIC_KEYWORDS = [
   ...VAR_SCOPE_WORDS,
   'ROLE', 'EXPERTISE', 'MANDATE', 'LENS-OUT', 'LENS-IN',
   'FLOW', 'STEP', 'PARALLEL', 'CONTEXT', 'BY',
+  // TEAM body: MEMBER names the agents of the team (`MEMBER a, b`; lines add up);
+  // STRATEGY the builtin strategy it runs by, LEAD the agent that prepares the
+  // work, DOMAINS the lead's dimension that gives each file its domain. A
+  // CONTRACT block's DOMAIN is the domain the lead picks it for.
+  'MEMBER', 'STRATEGY', 'LEAD', 'DOMAINS', 'DOMAIN',
   // STORE body: TYPE names the backing plugin, LASTS its lifetime, KEY the
   // field that identifies a record (so re-ingesting the same thing updates it
   // instead of duplicating). The record shape itself reuses the template

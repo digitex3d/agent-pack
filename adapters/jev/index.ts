@@ -3,13 +3,14 @@
 import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 import { homedir } from 'os';
-import { JudgeError, isDirect, type JudgeCheck, type JudgeQuestion, type JudgePlugin } from '../../src/judge/types.js';
+import { JudgeError, isDirect, type JudgeCheck, type JudgeQuestion, type JudgePlugin, type JudgeAnswer } from '../../src/judge/types.js';
 
 /**
  * Jev (TypeSafe AI) as the judge — the only place that knows Jev.
  *
  * One request per line: `POST /v1/systemone` with the line as `state` and one
  * yes/no (`noul`) question per check; the answer is the probability of "yes".
+ * A question with options is a `choice`: the answer is a probability per option.
  * The model is `jev-latest` until the caller pins the version Jev reported
  * (e.g. `jev-1.13.0`), which the direct API accepts as `model`.
  *
@@ -57,8 +58,8 @@ function scrub(text: string, key: string): string {
  * asked directly about the state's `line` ("Does `line` x?"), with what yes and
  * no mean when the rule says it; any other rule's statement in Jev's wording.
  */
-function questionOf(check: JudgeCheck | JudgeQuestion): { type: 'noul'; instructions: string; criteria?: Record<string, string> } {
-  if ('question' in check) return { type: 'noul', instructions: check.question };
+function questionOf(check: JudgeCheck | JudgeQuestion): { type: 'noul' | 'choice'; instructions: string; criteria?: Record<string, string> } {
+  if ('question' in check) return check.options ? { type: 'choice', instructions: check.question, criteria: check.options } : { type: 'noul', instructions: check.question };
   if (!isDirect(check)) return { type: 'noul', instructions: `Does the line satisfy this rule: "${check.statement}"?` };
   const { yes, no } = check.criteria ?? {};
   const criteria = { ...(yes ? { true: yes } : {}), ...(no ? { false: no } : {}) };
@@ -99,15 +100,25 @@ export default function jevJudge(opts: JevOptions = {}): JudgePlugin {
         const kind = res.status === 401 || res.status === 403 ? 'offline' : 'line';
         throw new JudgeError(kind, `jev: HTTP ${res.status} — ${scrub(text, key).slice(0, 300)}`);
       }
-      let body: { model?: unknown; answers?: Record<string, { noul?: unknown }> };
+      let body: { model?: unknown; answers?: Record<string, { noul?: unknown; probabilities?: unknown }> };
       try {
         body = JSON.parse(text);
       } catch {
         throw new JudgeError('line', `jev: the answer is not JSON — ${scrub(text, key).slice(0, 300)}`);
       }
-      const answers: Record<string, number> = {};
+      const answers: Record<string, JudgeAnswer> = {};
       checks.forEach((c, i) => {
-        const p = body.answers?.[`q${i + 1}`]?.noul;
+        const answer = body.answers?.[`q${i + 1}`];
+        if ('question' in c && c.options) {
+          // A choice: one probability per option, as the question listed them.
+          const dist = answer?.probabilities;
+          if (typeof dist !== 'object' || dist === null || Object.keys(c.options).some(o => typeof (dist as Record<string, unknown>)[o] !== 'number')) {
+            throw new JudgeError('line', `jev: the answer has no probability per option for question q${i + 1} (${c.id})`);
+          }
+          answers[c.id] = Object.fromEntries(Object.keys(c.options).map(o => [o, (dist as Record<string, number>)[o]]));
+          return;
+        }
+        const p = answer?.noul;
         if (typeof p !== 'number' || p < 0 || p > 1) throw new JudgeError('line', `jev: the answer has no probability for question q${i + 1} (${c.id})`);
         // A direct question answers whether the line breaks the rule: the check holds on a no.
         answers[c.id] = isDirect(c) ? 1 - p : p;

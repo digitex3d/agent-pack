@@ -67,6 +67,12 @@ export function packageVersion(): string {
  */
 export const TABELI_ENGINE = resolve(PACKAGE_ROOT, 'tabeli/tabeli');
 
+/** The project-level instructions file every harness reads: the open AGENTS.md standard. */
+export const AGENTS_MD = 'AGENTS.md';
+
+/** The project's always-on context, compiled into AGENTS.md — and where a CONTRACT hands a request to a team. */
+export const PROJECT_SOURCE = 'PROJECT.ap';
+
 /**
  * The default library shipped inside the agent-pack package. Always reachable
  * from every project as the reserved `@builtin` alias — never copied into the
@@ -305,9 +311,13 @@ const LINT_DEFAULTS: LintConfig = {
 /** The judge lock's default path, from the project root. */
 export const JUDGE_LOCK_DEFAULT = 'agent-pack.judge.lock';
 
+/** How far ahead of the runner-up the top option of a choice must be, by default. */
+const MARGIN_DEFAULT = 0.2;
+
 const JUDGE_DEFAULTS = {
   adapter: 'jev',
   threshold: 0.5,
+  margin: MARGIN_DEFAULT,
   offline: 'warn',
   lock: JUDGE_LOCK_DEFAULT,
   concurrency: 8,
@@ -316,7 +326,14 @@ const JUDGE_DEFAULTS = {
 const CHECKS_DEFAULTS = {
   adapter: 'jev',
   threshold: 0.7,
+  margin: MARGIN_DEFAULT,
 } as const;
+
+/** A `margin` entry checked: a number between 0 and 1. */
+function marginOf(key: string, margin: unknown): number {
+  if (typeof margin !== 'number' || !(margin >= 0 && margin <= 1)) throw new Error(`${key}.margin must be a number between 0 and 1`);
+  return margin;
+}
 
 /** A config key's judge entry resolved — a built-in judge by name, or a judge object — and its threshold checked. */
 function judgeOf(key: string, entry: unknown, threshold: unknown): JudgePlugin {
@@ -339,10 +356,11 @@ function resolveJudgeConfig(raw: unknown, projectRoot: string): JudgeConfig | nu
   const j = { ...JUDGE_DEFAULTS, ...raw } as Record<string, unknown>;
   const { threshold, offline, lock, concurrency } = j;
   const adapter = judgeOf('judge', j.adapter, threshold);
+  const margin = marginOf('judge', j.margin);
   if (offline !== 'warn' && offline !== 'error') throw new Error("judge.offline must be 'warn' or 'error'");
   if (typeof lock !== 'string' || lock.trim() === '') throw new Error('judge.lock must be a file path');
   if (!Number.isInteger(concurrency) || (concurrency as number) < 1) throw new Error('judge.concurrency must be a whole number ≥ 1');
-  return { adapter, threshold: threshold as number, offline, lock: resolve(projectRoot, expandHome(lock)), concurrency: concurrency as number };
+  return { adapter, threshold: threshold as number, margin, offline, lock: resolve(projectRoot, expandHome(lock)), concurrency: concurrency as number };
 }
 
 /**
@@ -357,7 +375,7 @@ function resolveChecksConfig(raw: unknown): ChecksConfig | null {
   const c = { ...CHECKS_DEFAULTS, ...raw } as Record<string, unknown>;
   if (c.rounds !== undefined) throw new Error('checks.rounds was removed — write the limit on each loop: `UNTIL!! <condition> MAX <n>:` (UNTIL!, UNTIL*, UNTIL** alike)');
   const adapter = judgeOf('checks', c.adapter, c.threshold);
-  return { adapter, threshold: c.threshold as number };
+  return { adapter, threshold: c.threshold as number, margin: marginOf('checks', c.margin) };
 }
 
 /** The delegate shipped with the package (templates/agents/quick.ap): an ASK without BY goes to it, unless `delegate.default` names another. */

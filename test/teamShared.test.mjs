@@ -14,14 +14,14 @@ import { strict as assert } from 'assert';
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { teamSource } from './helpers/team.mjs';
 
 const { resolveTeamShared, TEAM_SHARED_FILE } = await import('../dist/src/bundleDefaults.js');
-const { TEAM_FLOWS_FILE } = await import('../dist/src/services/teamMetadata.js');
 
 /**
  * Build a flat team member `<root>/teams/<team>/<agent>.ap` and return its path.
- * Writes a `flows.ap` sibling so the directory is a genuine team —
- * `resolveTeamShared` gates on a sibling `flows.ap` to tell a real team apart
+ * Writes a team file sibling so the directory is a genuine team —
+ * `resolveTeamShared` gates on a sibling `EXPORT TEAM` to tell a real team apart
  * from a standalone agent.
  */
 function makeTeamMember(root, team, agent) {
@@ -29,7 +29,7 @@ function makeTeamMember(root, team, agent) {
   mkdirSync(teamDir, { recursive: true });
   const file = join(teamDir, `${agent}.ap`);
   writeFileSync(file, [`EXPORT AGENT ${agent} AS ${agent}-role:`, '  ABOUT a flat agent', '  MANDATE ship the change', '', `ROLE ${agent}-role:`, '  ABOUT a worker', '  ALWAYS ship the change', ''].join('\n'), 'utf-8');
-  writeFileSync(join(teamDir, TEAM_FLOWS_FILE), 'ABOUT a test team\n', 'utf-8');
+  writeFileSync(join(teamDir, `${team}.ap`), teamSource(team, [agent], ['ABOUT a test team']).join('\n') + '\n', 'utf-8');
   return file;
 }
 
@@ -85,8 +85,8 @@ function teamRootOf(root, team) {
 }
 
 {
-  // Standalone agent (flat file with no sibling flows.ap) → never gets a shared block,
-  // even when a stray team.ap sits beside it. The flows.ap gate, not a stray team.ap,
+  // Standalone agent (flat file with no sibling team file) → never gets a shared block,
+  // even when a stray team.ap sits beside it. The EXPORT TEAM gate, not a stray team.ap,
   // defines a team.
   const tmp = mkdtempSync(join(tmpdir(), 'ap-team-standalone-'));
   try {
@@ -95,7 +95,7 @@ function teamRootOf(root, team) {
     const file = join(dir, 'lonely.ap');
     writeFileSync(file, ['EXPORT AGENT lonely AS lonely-role:', '  ABOUT a lone agent', '  MANDATE go solo', ''].join('\n'), 'utf-8');
     writeFileSync(join(dir, TEAM_SHARED_FILE), '# stray\nshould not leak\n', 'utf-8');
-    assert.equal(resolveTeamShared(file), '', 'standalone agent (no sibling flows.ap) receives no shared block');
+    assert.equal(resolveTeamShared(file), '', 'standalone agent (no sibling team file) receives no shared block');
   } finally {
     rmSync(tmp, { recursive: true });
   }

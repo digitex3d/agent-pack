@@ -36,6 +36,9 @@ export interface BlockType {
   modifier?: boolean;
 }
 
+/** The block that declares a team — `EXPORT TEAM <name>:` (src/services/teamMetadata.ts reads it). */
+export const TEAM_KEY = 'TEAM';
+
 export const BLOCK_TYPES: Record<string, BlockType> = {
   AGENT:      { key: 'AGENT'      },
   POLICY:     { key: 'POLICY'     },
@@ -51,6 +54,10 @@ export const BLOCK_TYPES: Record<string, BlockType> = {
   STORE:      { key: 'STORE'      },
   // `DIMENSION <name>:` — an answer about the code, worked out once and kept by the apx.
   DIMENSION:  { key: 'DIMENSION'  },
+  // `EXPORT TEAM <name>:` — a team: its ABOUT, MEMBER lines, routing and FLOW blocks (src/services/teamMetadata.ts).
+  TEAM:       { key: 'TEAM'       },
+  // `CONTRACT <name>:` — a piece of work a lead hands out: its form (AS), who carries it out (BY), its DOMAIN.
+  CONTRACT:   { key: 'CONTRACT'   },
   EXPORT:     { key: 'EXPORT', modifier: true },
 };
 

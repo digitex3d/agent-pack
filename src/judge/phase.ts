@@ -29,7 +29,7 @@ import { judgeState, loadJudgeRules, severityOf } from './rules.js';
 import { AGENT, DELEGATE, PROGRAM, executorOf, scriptRuleLines } from '../executor.js';
 import { JudgeLock, verdictKey } from './lock.js';
 import { sha256, UnitStore, type Unit, type UnitDiagnostic } from './units.js';
-import { JudgeError, isDirect, type JudgeCheck, type JudgeConfig, type JudgeRule } from './types.js';
+import { JudgeError, isDirect, isDistribution, type JudgeCheck, type JudgeConfig, type JudgeRule } from './types.js';
 
 /** One check's verdict on one line text: the one that counts, and the judge's own when known. */
 interface CheckVerdict {
@@ -178,9 +178,32 @@ export class JudgeRun {
     this.stats.asked++;
     this.lock.pin(answer.model);
     return rule.checks.map((check, i) => {
-      const machine = answer!.answers[check.id];
+      // A rule's check is a yes/no question: its answer is a probability (checked above).
+      const machine = answer!.answers[check.id] as number;
       return { check, p: known[i].decision ?? machine, key: keys[i], machine };
     });
+  }
+
+  /**
+   * Ask the judge to pick one option for a state — a file's domain. The
+   * distribution over the options, or why there is none: the judge offline (no
+   * request follows in this run) or failed on this one state.
+   */
+  async askChoice(state: string, question: string, options: Record<string, string>): Promise<{ distribution: Record<string, number> } | { offline: string } | { failed: string }> {
+    const judge = this.options.adapter;
+    if (this.offlineReason) return { offline: this.offlineReason };
+    try {
+      const answer = await this.limit(() => judge.ask(state, [{ id: 'choice', question, options }], this.lock.model ?? undefined));
+      const distribution = answer.answers['choice'];
+      if (!isDistribution(distribution)) throw new JudgeError('line', `${judge.name} gave no probability per option`);
+      this.lock.pin(answer.model);
+      return { distribution };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if ((err as Partial<JudgeError> | null)?.kind === 'line') return { failed: message };
+      this.offlineReason ??= message;
+      return { offline: message };
+    }
   }
 
   /** Run `ask` with at most `judge.concurrency` requests in flight. */
@@ -257,7 +280,8 @@ export async function judgeDocument(doc: ApDocument, run: JudgeRun, sources: Sou
   for (const rule of run.rules) {
     for (const line of doc.lines()) {
       if (rule.primitives.length > 0 && !rule.primitives.includes(line.primitive)) continue;
-      if (line.text.trim() === '' || shipped(line.file)) continue;
+      // A line no file holds is agent-pack's own (the flow a strategy runs): there is nothing of the developer's to judge.
+      if (line.text.trim() === '' || line.file === null || shipped(line.file)) continue;
       if (rule.scope && !inScope(rule.scope, line)) continue;
       const judged = byFile.get(line.file) ?? [];
       judged.push({ rule, line });

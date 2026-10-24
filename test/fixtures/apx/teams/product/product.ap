@@ -1,0 +1,13 @@
+# team — product
+
+EXPORT TEAM product:
+    ABOUT  the product team
+    MEMBER pm, scout
+
+    WHEN asked to evaluate an idea:
+        RUN shape-idea
+
+    FLOW shape-idea:
+        STEP evaluate the idea:
+            BY scout
+            DO score the idea

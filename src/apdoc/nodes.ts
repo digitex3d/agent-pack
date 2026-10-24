@@ -22,6 +22,7 @@ import type {
   ApPos, ApLine,
 } from './types.js';
 import { checkHead, type ApCondCheck, type CheckKind } from '../check.js';
+import { FORMULAS, fill } from '../formulas.js';
 import {
   MdEnv, renderNodes, renderDirectiveGroup, directiveText, executorHow, indentLines, runIntoLines, shapeLine, storeVarLine,
 } from '../../adapters/md/toolkit.js';
@@ -362,6 +363,7 @@ export class VarNode extends NodeBase implements ApVarNode {
 export class WhenNode extends NodeBase implements ApWhenNode {
   readonly type = 'when';
   shape?: ApShape;
+  input?: ApRef;
   body: ApNode[] = [];
 
   constructor(public condition: string, indent?: number) {
@@ -371,6 +373,7 @@ export class WhenNode extends NodeBase implements ApWhenNode {
   static fromData(n: ApWhenNode): WhenNode {
     const node = new WhenNode(n.condition, n.indent);
     if (n.shape) node.shape = n.shape;
+    if (n.input) node.input = n.input;
     node.body = reviveNodes(n.body);
     node.chars = n.chars;
     return node;
@@ -381,16 +384,18 @@ export class WhenNode extends NodeBase implements ApWhenNode {
       type: this.type, condition: this.condition, chars: this.chars,
       ...(this.indent ? { indent: this.indent } : {}),
       ...(this.shape ? { shape: this.shape } : {}),
+      ...(this.input ? { input: this.input } : {}),
       body: this.body,
     };
   }
 
   asMdLines(env: MdEnv, ordered: boolean): string[] {
     const body = renderNodes(env, this.body, ordered);
-    // The shape line opens the body, at the body's own indent.
+    // The input and shape lines open the body, at the body's own indent.
     const inner = body.find(l => l.trim() !== '')?.match(/^ */)?.[0].length ?? (this.indent ?? 0) + 4;
     return [
       ...indentLines([`${controlHead('WHEN')} ${env.substitute(this.condition)}:`], this.indent ?? 0),
+      ...(this.input ? indentLines([fill(FORMULAS.keywords.WHEN.handed, { name: refName(this.input), ref: env.refOf(this.input.target) })], inner) : []),
       ...(this.shape ? indentLines([shapeLine(env, this.shape)], inner) : []),
       ...body,
     ];
