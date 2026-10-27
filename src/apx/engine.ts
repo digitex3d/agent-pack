@@ -14,9 +14,9 @@
  * first line, `open` (exit 0) or `closed` (exit 1, or 2 on a usage or config error).
  */
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'fs';
-import { dirname, join, basename, resolve } from 'path';
+import { dirname, join, resolve } from 'path';
 import { spawnSync, type SpawnSyncOptionsWithStringEncoding } from 'child_process';
-import type { ApDocument } from '../apdoc/document.js';
+import { ApDocument as ApDocumentClass, type ApDocument } from '../apdoc/document.js';
 import type { ApBlock } from '../apdoc/block.js';
 import type { ApRef, ApNode, ApWhenNode, ApRunNode, ApDirectiveNode } from '../apdoc/types.js';
 import { KIND_STRATEGIES, type AgentBlock, type TeamBlock, type StoreBlock, type VarBlock, type DimensionBlock, type TemplateBlock, type ContractBlock } from '../apdoc/blocks.js';
@@ -25,7 +25,6 @@ import type { MdEnv } from '../../adapters/md/toolkit.js';
 import { FORMULAS, fill, type QuizQuestion } from '../formulas.js';
 import { DISTILLED_DIR, FLOWS_DIR, flowScriptStem, projectRootOf, projectStoreDir } from './paths.js';
 import { type ApxVerb } from './verbs.js';
-import { openTable, runTable, upsertBy } from './tabeli.js';
 import { openSessionVars, type SessionVars, type CheckRecord, type ExecutorRecord } from './sessionVars.js';
 import { checkedKeyword, roundLine, roundOf, stateOf, type ApCheckSpec } from '../check.js';
 import { PROGRAM, WRITE_PROGRAM, executorKey, programDir, programFolders, type ApExecutorSpec } from '../executor.js';
@@ -35,17 +34,21 @@ import { refName } from '../../adapters/md/phrases.js';
 import { scopeLabel } from '../withUse.js';
 import { SCOPED_KINDS } from '../services/tags.js';
 import { CREDIT } from '../credits.js';
-import { validateRecord, slotSpecsOf, formatIssues, jsonExample } from '../shapeSchema.js';
+import { validateRecord, formatIssues, jsonExample } from '../shapeSchema.js';
 import { BLOCK_ID_RE, addressName, sha256Hex, shortId } from '../apdoc/ids.js';
-import { ContractTable, CONTRACT_ID_RE, perimeterFiles, scanZones, hasMarks, zoneText, parseZone, expectedFingerprints, type ContractRecord } from './contracts.js';
-import { DOMAIN_QUESTION, domainOptions, domainChoices, domainEntry, domainOf } from '../judge/domainCache.js';
-import { decideChoice } from '../judge/choice.js';
-import { isDistribution } from '../judge/types.js';
+import { ContractTable, CONTRACT_ID_RE, perimeterFiles, scanZones, zoneMarks, zonesText, parseZones, type ContractRecord } from './contracts.js';
+import { parsePayload } from './payload.js';
+import { resolveWorkspace } from '../workspace/registry.js';
+import type { Allowed, Perimeter, WorkspaceSession } from '../workspace/types.js';
+import type { ContractLimit } from '../services/teamMetadata.js';
+import { splitList } from '../lists.js';
 import { fingerprint } from './dimensions.js';
 import { constantOf, readsOf } from '../vars.js';
-import { DimensionCache, dimensionDefHash, dimensionTemplates, filesNamedIn, CACHE_FORMAT, NONE, type CacheEntry, type EntryState } from './dimensions.js';
-import { relativeWithin } from '../services/fs.js';
-import { matchesAnyGlob } from '../services/glob.js';
+import { dimensionDefHash, dimensionTemplates } from './dimensions.js';
+import { APX_SERVICES, serviceOf } from './services/registry.js';
+import { countOf } from './service.js';
+import { enumPrimitiveFor } from '../primitives.js';
+import { globRegExp, matchesAnyGlob } from '../services/glob.js';
 
 /** The exit of an UNTIL*'s answer at its round limit: the loop ends (src/check.ts roundLine). */
 const ROUND_LIMIT = 7;
@@ -74,8 +77,6 @@ export interface ApxBuild {
 export interface ApxChecks {
   adapter: string;
   threshold: number;
-  /** How far ahead the top option of a choice must be (src/judge/choice.ts). */
-  margin?: number;
   model?: string;
 }
 
@@ -83,12 +84,7 @@ export interface ApxChecks {
 const KIND_ORDER = [...new Set(['agent', 'team', ...KIND_STRATEGIES.map(s => s.kind)])];
 
 /** A dimension write's optional refs — the files its answer also depends on. */
-const DIM_WRITE_REFS = '[refs=<path>;<path>]';
 
-/** A dimension's write command for `file`, after `<apx> <dimension>`: the value on stdin, or none — the one spelling of it. */
-function dimWriteUsage(file = '<file>'): string {
-  return `write ${file} ${DIM_WRITE_REFS} - < value.json  (or: write ${file} none)`;
-}
 
 const HELP: [string, string][] = [
   ['start', 'the entry point: who you are and a short quiz — run it once, at the start'],
@@ -102,34 +98,36 @@ const HELP: [string, string][] = [
   ['find <text>', 'the blocks containing the text, with the matching lines'],
   ['md', 'the whole prompt at once'],
   ['flow <flw-id>', 'how to run a flow: by the harness, from its compiled script — or its steps, to carry out in order'],
-  ['input <exe-id>', 'what a delegate or a program receives: the JSON of the variables and constants it reads'],
-  ['answer <exe-id> - [--into <var>]', "store a delegate's answer (on stdin): checked against its contract, kept in its INTO variable"],
   ['run <exe-id> [in-json] [--into <var>]', 'run a program: its tests when it is new, then the program on its input — its answer back, or kept in <var>'],
   ['check <cnd-id>', 'a checked condition (IF!, IF!!, UNTIL!, UNTIL!!), put to the judge on this session\'s variables: open or closed'],
   ['version', 'agent, build date, agent-pack version, hash, block count'],
-  ['<store> <verb> …', 'read or write a store (tabeli verbs: q a s …)'],
-  ['dimension', 'the dimensions of this agent: their id, what each covers, its cache folder and counts'],
-  ['dimension <dim-id> read <file> [json]', "a dimension's answer for a file, kept by the apx: hit (the answer), or miss (why there is none)"],
-  [`dimension <dim-id> write <file> ${DIM_WRITE_REFS} -|none`, 'keep your answer for a file — a JSON list of its template on stdin, or none'],
-  ['dimension <dim-id> find <text>', "every instance a dimension keeps, across its files, whose text holds <text> — fresh entries only"],
-  ['dimension <dim-id> ls|why|clear|gc …', "a dimension's cache: its entries and their state, why one is stale, clear entries, drop those of deleted files"],
-  ['contract list', "the contracts of this session: each instance, its state, who carries it out, its zone"],
-  ['contract get <ctr-id>', 'one instance: its contract, spec, zone, state'],
-  ['contract start <con-id> -', 'lead: take the request you were handed as an instance of the contract that hands it to your team (spec JSON on stdin)'],
-  ['contract new <con-id> [depends=<ctr>,…] [parent=<ctr>] -', 'lead: write one instance of a contract of your team — assigned at once (spec JSON on stdin)'],
-  ['contract dispatch', 'lead: check every new zone and hand the instances out — nothing changes after it'],
-  ['contract deliver <ctr-id>', 'you are done — your zone marks removed, nothing written outside your zone; the instance you were handed: once all its parts are merged'],
-  ['contract block <ctr-id> <reason>', 'member: the contract cannot be honoured as written — say why'],
-  ['contract merge <ctr-id>', 'lead: a delivered instance merged — or a blocked one you carried out — after every instance it depends on'],
-  ['help', 'this list'],
 ];
 
 /** What every contract verb works with: the team, the session's table, who leads. */
 interface ContractCx {
   team: TeamBlock;
   table: ContractTable;
+  /** The project root — where the copies live. */
+  root: string;
   lead: string;
   session: string;
+  /** The session's copies, opened on first use. */
+  ws: () => WorkspaceSession;
+}
+
+/** The workspace engine the copies run on — one ships; a second one is a registry entry and a config key (src/workspace/registry.ts). */
+const CONTRACT_WORKSPACE = 'git';
+
+/** The value of `--flag <value>` among args, or undefined. */
+function flagValue(args: string[], flag: string): string | undefined {
+  const at = args.indexOf(flag);
+  return at >= 0 ? args.slice(at + 1).join(' ').trim() || undefined : undefined;
+}
+
+/** Whether some of `globs` admits every file `glob` does — by its folders before the first wildcard (`src/actors/**` under `src/**`). */
+function coversGlob(globs: string[], glob: string): boolean {
+  const prefix = glob.split('/').filter((part, i, all) => !/[*?[{]/.test(part) && all.slice(0, i).every(p => !/[*?[{]/.test(p))).join('/');
+  return globs.some(g => globRegExp(g).test(glob) || (prefix !== '' && globRegExp(g).test(`${prefix}/x`)));
 }
 
 const FILTER_RE = /^(kind|tag|name|about)(=|~)(.+)$/;
@@ -184,10 +182,12 @@ export const APX_BUDGET: ApxBudget = { whole: 12000, block: 600 };
 
 export class ApxEngine {
   /** The command prefix every printed command starts with. */
-  private readonly cmd: string;
+  readonly cmd: string;
+  /** The project root this apx lives in. */
+  get projectRoot(): string { return resolve(projectRootOf(this.exe)); }
   /** The md environment with references in the apx form. */
   private readonly env: MdEnv;
-  private readonly root: AgentBlock;
+  readonly root: AgentBlock;
   private readonly byId = new Map<string, ApBlock>();
   /** Every verb, by name — the table APX_VERBS lists. */
   private readonly verbs: Record<ApxVerb, (args: string[]) => number | Promise<number>> = {
@@ -201,20 +201,17 @@ export class ApxEngine {
     md: () => this.print(renderMd(this.doc)),
     flow: args => this.flow(args),
     run: args => this.runProgram(args),
-    input: args => this.input(args),
-    answer: args => this.answer(args),
     check: args => this.check(args),
-    dimension: args => this.dimension(args),
     contract: args => this.contract(args),
     version: () => this.version(),
     help: () => this.help(),
   };
 
   constructor(
-    private readonly doc: ApDocument,
-    private readonly build: ApxBuild,
+    readonly doc: ApDocument,
+    readonly build: ApxBuild,
     /** The path the harness invoked this file by — printed commands reuse it. */
-    private readonly exe: string,
+    readonly exe: string,
     private readonly write: (line: string) => void,
     private readonly budget: ApxBudget = APX_BUDGET,
     /** The judge a check asks, by the name the apx records — a built-in one. */
@@ -226,13 +223,13 @@ export class ApxEngine {
     for (const block of doc.all()) this.byId.set(block.id, block);
   }
 
-  /** Dispatch one invocation: a verb, or a store name and a tabeli verb — a dimension is reached by its id, after `dimension`. No verb = start. `check` answers asynchronously. */
+  /** Dispatch one invocation: a verb of the engine, or a served kind and its operation (`<kind> <op> [<id>] …`). No verb = start. `check` answers asynchronously. */
   run(argv: string[]): number | Promise<number> {
     const [verb = 'start', ...args] = argv;
     if (verb === '-h' || verb === '--help') return this.help();
     if (Object.hasOwn(this.verbs, verb)) return this.verbs[verb as ApxVerb](args);
-    const store = this.stores().find(s => s.name === verb);
-    if (store) return this.storeVerb(store, args);
+    const service = serviceOf(verb);
+    if (service) return service.serve(this, args[0], args.slice(1));
     return this.fail(2, `unknown verb '${verb}' — the verbs: ${this.cmd} help`);
   }
 
@@ -312,8 +309,8 @@ export class ApxEngine {
     this.out(this.headLine(root));
     this.out(`you:  ${this.label(root)}  — your definition, complete`);
     if (root.mandate) this.out(`mandate: ${root.mandate}`);
-    const owns = this.doc.owns();
-    if (owns) this.out(`perimeter: you write only ${owns} — read whatever you need`);
+    const perimeter = this.doc.perimeter();
+    if (perimeter) this.out(`perimeter: you write only ${perimeter.writes.join(', ') || 'nothing'} — ${perimeter.reads ? `you read only ${perimeter.reads.join(', ')}` : 'read whatever you need'}`);
     const role = root.role ? this.doc.resolve(root.role) : null;
     if (role) this.out(`role: ${this.label(role)}`);
     const team = this.doc.byKind('team')[0] as TeamBlock | undefined;
@@ -342,13 +339,13 @@ export class ApxEngine {
       for (const m of memories) this.out(`  ${m.text}${m.shape ? `  — as ${this.refLabel(m.shape.ref)}` : ''}`);
     }
     this.out('write to:');
-    const stores = this.stores();
+    const stores = this.doc.byKind('store');
     if (stores.length === 0) this.out('  (no stores declared)');
-    for (const s of stores) this.out(`  ${this.label(s.block)}  — use: ${this.cmd} ${s.name} <verb> …`);
-    const dimensions = this.dimensions();
+    for (const s of stores) this.out(`  ${this.label(s)}  — use: ${this.cmd} store <op> ${s.id} …`);
+    const dimensions = this.doc.byKind('dimension') as DimensionBlock[];
     if (dimensions.length > 0) {
-      this.out(`dimensions:  — answers about the code, kept by the apx; read one before reasoning about a file it covers: ${this.cmd} dimension <dim-id> read <file>`);
-      for (const d of dimensions) this.out(`  ${this.label(d.block)}  — files: ${d.block.globs.join(' ')}`);
+      this.out(`dimensions:  — answers about the code, kept by the apx; read one before reasoning about a file it covers: ${this.cmd} dimension read <dim-id> <file>`);
+      for (const d of dimensions) this.out(`  ${this.label(d)}  — files: ${d.globs.join(', ')}`);
     }
     const variables = this.doc.byKind('var');
     if (variables.length > 0) {
@@ -448,7 +445,7 @@ export class ApxEngine {
   }
 
   /** A contract of this agent by id, or null after telling where its contracts are. */
-  private executorArg(verb: string, id: string | undefined): ApExecutorSpec | null {
+  executorArg(verb: string, id: string | undefined): ApExecutorSpec | null {
     const spec = id ? this.doc.meta.executors?.[id] : undefined;
     if (!spec) this.lastCode = this.fail(2, `${verb} needs a contract id of this agent (exe-…) — the line that asks for it names it; all of them: ${this.cmd} scope`);
     return spec ?? null;
@@ -459,7 +456,7 @@ export class ApxEngine {
    * session stores it, parsed when it is JSON — and per constant, with its
    * value. An empty variable fails: the piece cannot be carried out yet.
    */
-  private inputJson(spec: ApExecutorSpec, extra: Record<string, unknown> = {}): Record<string, unknown> | null {
+  inputJson(spec: ApExecutorSpec, extra: Record<string, unknown> = {}): Record<string, unknown> | null {
     const input: Record<string, unknown> = {};
     const parsed = (text: string): unknown => { try { return JSON.parse(text); } catch { return text; } };
     for (const [name, value] of Object.entries(spec.input.constants)) input[name] = parsed(value);
@@ -481,7 +478,7 @@ export class ApxEngine {
    * `--into x`): the result is stored in it, as an INTO line's. The arguments
    * without the option; null after telling what is wrong.
    */
-  private intoArg(spec: ApExecutorSpec, id: string, args: string[]): { spec: ApExecutorSpec; args: string[] } | null {
+  intoArg(spec: ApExecutorSpec, id: string, args: string[]): { spec: ApExecutorSpec; args: string[] } | null {
     const at = args.indexOf('--into');
     if (at < 0) return { spec, args };
     const name = args[at + 1];
@@ -491,28 +488,8 @@ export class ApxEngine {
     return { spec: { ...spec, output: { ...spec.output, into: name } }, args: rest };
   }
 
-  /**
-   * `input <exe-id>` — what a delegate is handed: the JSON it receives, and
-   * nothing else, then the shape its answer takes — `{"holds": …}` for a
-   * condition, `AS <template>` with an example, or plain text.
-   */
-  private input(args: string[]): number {
-    const spec = this.executorArg('input', args[0]);
-    if (!spec) return this.lastCode;
-    const input = this.inputJson(spec);
-    if (!input) return this.lastCode;
-    this.out(JSON.stringify(input, null, 1));
-    const A = FORMULAS.keywords.EXECUTOR.answer;
-    const shape = this.answerShape(spec);
-    if (spec.output.holds) return this.print(A.holds);
-    if (!shape) return this.print(A.text);
-    const slots = this.doc.slotsOf(shape);
-    this.out(fill(A.shaped, { name: refName(shape) }));
-    return this.print(JSON.stringify(slots ? jsonExample(slots, this.doc.slotResolver()) : {}));
-  }
-
   /** The template a contract's answer is shaped as: its INTO variable's type, or its procedure's AS — null when none. */
-  private answerShape(spec: ApExecutorSpec): ApRef | null {
+  answerShape(spec: ApExecutorSpec): ApRef | null {
     if (spec.output.into) return this.variable(spec.output.into)?.type ?? null;
     const template = spec.output.template ? this.doc.byKind('template').find(b => b.name === spec.output.template) : undefined;
     return template ? ({ id: template.id, target: template.address, kind: 'template' } as ApRef) : null;
@@ -523,7 +500,7 @@ export class ApxEngine {
    * condition, its INTO variable's template (then stored in it), its procedure's
    * AS template — and recorded in the session. Null when it breaks the contract.
    */
-  private deliver(id: string, spec: ApExecutorSpec, text: string, outcome: ExecutorRecord['outcome'], fingerprint: string): string | null {
+  deliver(id: string, spec: ApExecutorSpec, text: string, outcome: ExecutorRecord['outcome'], fingerprint: string): string | null {
     // Only a condition or a shaped answer is JSON; any other answer is text — stored as is, or only recorded.
     const shape = this.answerShape(spec);
     let value: unknown;
@@ -558,7 +535,7 @@ export class ApxEngine {
    * outcome — and, for an UNTIL's, the round its loop is at, or the limit —
    * or where the answer went.
    */
-  private delivered(id: string, spec: ApExecutorSpec, text: string): number {
+  delivered(id: string, spec: ApExecutorSpec, text: string): number {
     if (spec.output.into) {
       this.out(`# stored as \`${spec.output.into}\` for this session — read it: ${this.cmd} get ${spec.output.into}`);
       return 0;
@@ -572,23 +549,6 @@ export class ApxEngine {
     this.out(`# ${roundLine(round, spec.rounds!, FORMULAS.keywords.EXECUTOR.loop)}`);
     // At the limit the loop ends: an exit of its own, so no command chained after it runs another round.
     return round >= spec.rounds! ? ROUND_LIMIT : code;
-  }
-
-  /** `answer <exe-id> -` — a delegate's answer, checked against its contract, stored and recorded. */
-  private answer(argv: string[]): number {
-    const id = argv[0];
-    const found = this.executorArg('answer', id);
-    const into = found && this.intoArg(found, id, argv);
-    if (!into) return this.lastCode;
-    const { spec, args } = into;
-    const from = args[1];
-    if (spec.executor !== 1) return this.fail(1, `a program carries out ${id}, not a delegate: ${this.cmd} run ${id}`);
-    const text = from === '-' || from === undefined ? readFileSync(0, 'utf-8') : args.slice(1).join(' ');
-    const input = this.inputJson(spec);
-    if (!input) return this.lastCode;
-    const broken = this.deliver(id!, spec, text, 'answered', sha256Hex(JSON.stringify(input)));
-    if (broken) return this.fail(6, `the delegate's answer breaks the contract of ${id}: ${broken} — hand it over again, with the same input; nothing was stored`);
-    return this.delivered(id!, spec, text);
   }
 
   /** A program's files: its folder, its manifest and its script — or null while it has none. */
@@ -803,7 +763,7 @@ export class ApxEngine {
    * it fits. With `list`, the text is a list of at least `min` instances,
    * reported under `name`.
    */
-  private contractIssues(json: string, template: ApRef, list?: { name: string; min: number }): string | null {
+  contractIssues(json: string, template: ApRef, list?: { name: string; min: number }): string | null {
     let value: unknown;
     try { value = JSON.parse(json); } catch { return 'not valid JSON'; }
     const slots = this.doc.slotsOf(template);
@@ -822,8 +782,9 @@ export class ApxEngine {
   }
 
   private help(): number {
-    const width = Math.max(...HELP.map(([v]) => v.length));
-    for (const [verb, what] of HELP) this.out(`${this.cmd} ${verb.padEnd(width)}  ${what}`);
+    const rows: [string, string][] = [...HELP, ...APX_SERVICES.flatMap(s => s.operations.map(o => [`${s.kind} ${o.op} ${o.args}`.trim(), o.about] as [string, string]))];
+    const width = Math.max(...rows.map(([v]) => v.length));
+    for (const [verb, what] of rows) this.out(`${this.cmd} ${verb.padEnd(width)}  ${what}`);
     return 0;
   }
 
@@ -944,7 +905,7 @@ export class ApxEngine {
   }
 
   /** The block named by a verb's id argument, or null after printing the error. */
-  private lastCode = 0;
+  lastCode = 0;
   private blockArg(verb: string, args: string[]): ApBlock | null {
     const id = args[0];
     if (!id) {
@@ -966,17 +927,17 @@ export class ApxEngine {
     return this.fail(1, `no block with id '${name}' and no variable named so — list them: ${this.cmd} ls`);
   }
 
-  private out(line: string): void {
+  out(line: string): void {
     this.write(line);
   }
 
   /** Print a multi-line text as it is (one trailing newline trimmed). */
-  private print(text: string): number {
+  print(text: string): number {
     this.write(text.replace(/\n$/, ''));
     return 0;
   }
 
-  private fail(code: number, message: string): number {
+  fail(code: number, message: string): number {
     this.write(`# error: ${message}`);
     return code;
   }
@@ -1048,7 +1009,7 @@ export class ApxEngine {
    * (compiled into this agent) accepts. Null once stored; else why not, and the
    * exit code to fail with — `set`, and an answer or a run stored `INTO` it.
    */
-  private storeVariable(block: VarBlock, value: string): { code: number; reason: string } | null {
+  storeVariable(block: VarBlock, value: string): { code: number; reason: string } | null {
     const type = block.type ? refName(block.type) : '';
     if (block.type) {
       if (!this.doc.slotsOf(block.type)) return { code: 1, reason: notCompiled(block.name, type) };
@@ -1074,7 +1035,7 @@ export class ApxEngine {
   }
 
   /** A variable of this agent, by name. */
-  private variable(name: string): VarBlock | null {
+  variable(name: string): VarBlock | null {
     return (this.doc.byKind('var') as VarBlock[]).find(v => v.name === name) ?? null;
   }
 
@@ -1092,7 +1053,7 @@ export class ApxEngine {
   }
 
   /** This session's variables — or why there are none. */
-  private openSession(): SessionVars | string {
+  openSession(): SessionVars | string {
     const env = this.doc.meta.sessionEnv;
     const id = env ? process.env[env] : undefined;
     const refused = !env
@@ -1121,24 +1082,32 @@ export class ApxEngine {
     if (!team || team.strategy !== 'contracts') return this.fail(2, `${this.root.name} is in no team with \`STRATEGY contracts\` — it has no contracts`);
     const session = this.sessionIdOrReason();
     if ('reason' in session) return this.fail(2, `${session.reason} — nothing was read or written`);
-    const table = ContractTable.open(resolve(projectRootOf(this.exe)), session.id, this.build.tabeli);
+    const root = resolve(projectRootOf(this.exe));
+    const table = ContractTable.open(root, session.id, this.build.tabeli);
     if (typeof table === 'string') return this.fail(2, `${table} — nothing was read or written`);
-    const cx: ContractCx = { team, table, lead: team.lead ? refName(team.lead) : '', session: session.id };
+    let ws: WorkspaceSession | null = null;
+    const cx: ContractCx = {
+      team, table, root, lead: team.lead ? refName(team.lead) : '', session: session.id,
+      // The copies: opened on the first verb that needs them — a project outside git fails there, with the way out.
+      ws: () => ws ??= resolveWorkspace(CONTRACT_WORKSPACE).session(root, session.id),
+    };
     try {
       switch (verb) {
         case 'list': return this.contractList(cx);
         case 'get': return this.contractGet(cx, rest);
         case 'start': return this.contractStart(cx, rest);
         case 'new': return this.contractNew(cx, rest);
-        case 'dispatch': return await this.contractDispatch(cx);
+        case 'dispatch': return this.contractDispatch(cx);
+        case 'within': return this.contractWithin(cx, rest);
         case 'deliver': return this.contractDeliver(cx, rest);
         case 'block': return this.contractBlock(cx, rest);
+        case 'take': return this.contractTake(cx, rest);
         case 'merge': return this.contractMerge(cx, rest);
       }
     } catch (e) {
       return this.fail(2, `the contracts could not be read or written: ${e instanceof Error ? e.message : e}`);
     }
-    return this.fail(2, `${verb ? `'${verb}' is no verb of contract` : 'contract takes a verb'} — ${this.cmd} contract list|get|start|new|dispatch|deliver|block|merge`);
+    return this.fail(2, `${verb ? `'${verb}' is no verb of contract` : 'contract takes a verb'} — ${this.cmd} contract list|get|start|new|dispatch|within|deliver|block|take|merge`);
   }
 
   /** A contract block of this document by its id, or by its name — or null after saying why. */
@@ -1165,9 +1134,26 @@ export class ApxEngine {
     return this.byId.get(id)?.name ?? id;
   }
 
-  /** The lead is waiting: some dispatched instance is still being worked on. */
-  private frozen(cx: ContractCx): ContractRecord[] {
-    return cx.table.all().filter(r => r.dispatched_at && r.state === 'assigned' && r.assignee !== cx.lead);
+  /** How far an instance's contract lets it write — `domain` when its block is not in this document. */
+  private limitOf(r: ContractRecord): ContractLimit {
+    return (this.byId.get(r.contract) as ContractBlock | undefined)?.within ?? 'domain';
+  }
+
+  /** An agent's perimeter, from its own apx beside this one — null when it has none, or no apx. */
+  private perimeterOf(agent: string): Perimeter | null {
+    if (agent === this.root.name) return this.doc.perimeter();
+    const file = join(dirname(this.exe), `${agent}.apx`);
+    if (!existsSync(file)) return null;
+    return ApDocumentClass.fromJson(parsePayload(readFileSync(file, 'utf-8')).document).perimeter();
+  }
+
+  /** What an instance's delivery may keep: its WITHIN, read on its zones and on the globs its assignee wrote at dispatch. */
+  private allowedOf(r: ContractRecord): Allowed {
+    const zones = parseZones(r.zone);
+    const files = [...new Set(zones.map(z => z.file))];
+    const limit = this.limitOf(r);
+    const marks = files.length ? { ...zoneMarks(r.ctr), files, only: limit === 'zone' } : undefined;
+    return { globs: limit === 'domain' ? r.writes.split(',').filter(Boolean) : files, ...(marks ? { marks } : {}) };
   }
 
   /** Read a spec on stdin and check it against the contract's form — the JSON text, or null after saying why (exit 6). */
@@ -1187,7 +1173,7 @@ export class ApxEngine {
   private contractList(cx: ContractCx): number {
     const all = cx.table.all();
     for (const r of all) {
-      this.out(`${r.ctr}  ${this.contractName(r.contract)}  ${r.state}  → ${r.assignee}${r.zone ? `  ${r.zone}` : ''}${r.depends ? `  depends: ${r.depends}` : ''}${r.reason ? `  — ${r.reason}` : ''}`);
+      this.out(`${r.ctr}  ${this.contractName(r.contract)}  ${r.state}  → ${r.assignee}${r.zone ? `  ${r.zone}` : ''}${r.depends ? `  depends: ${r.depends}` : ''}${r.left_out ? `  left out: ${r.left_out}` : ''}${r.reason ? `  — ${r.reason}` : ''}`);
     }
     this.out(`# ${countOf(all.length, 'instance', 'instances')} in this session — one: ${this.cmd} contract get <ctr-id>`);
     return 0;
@@ -1197,15 +1183,23 @@ export class ApxEngine {
     const r = this.instance(cx, args[0], 'get <ctr-id>');
     if (!r) return this.lastCode;
     const block = this.byId.get(r.contract) as ContractBlock | undefined;
+    const limit = this.limitOf(r);
     this.out(`contract ${r.ctr} — ${this.contractName(r.contract)} — ${r.state} — assigned to ${r.assignee}`);
     if (block?.domain) this.out(`domain: ${block.domain}`);
-    this.out(`zone: ${r.zone || '(not dispatched yet)'}`);
+    this.out(`within: ${limit} — write ${enumPrimitiveFor('WITHIN')!.values[limit]()}`);
+    this.out(`zones: ${r.zone ? r.zone.split(';').join(', ') : r.dispatched_at ? 'none — new code' : '(not dispatched yet)'}`);
+    if (r.dispatched_at) this.out(`copy: ${cx.ws().path(r.ctr)}`);
     if (r.depends) this.out(`depends on: ${r.depends.split(',').map(d => `${d} (${cx.table.get(d)?.state ?? '?'})`).join(', ')}`);
     if (r.parent) this.out(`part of: ${r.parent}`);
     if (r.reason) this.out(`blocked: ${r.reason}`);
+    if (r.left_out) {
+      this.out(`left out: ${r.left_out} — why: ${r.why}`);
+      this.out(`# read them in its copy: ${r.left_out.split('; ').map(e => join(cx.ws().path(r.ctr), e.replace(/ \(.*\)$/, ''))).join(', ')}`);
+    }
     this.out('spec:');
     this.print(JSON.stringify(JSON.parse(r.spec || '{}'), null, 2));
-    if (r.assignee === this.root.name && r.state === 'assigned') {
+    if (r.assignee === this.root.name && r.state === 'assigned' && r.dispatched_at) {
+      this.out(`# work in your copy: cd ${cx.ws().path(r.ctr)} — read and write only there${r.zone ? '; leave the marks where they are, the delivery drops them' : ''}`);
       this.out(`# when done: ${this.cmd} contract deliver ${r.ctr}`);
       this.out(`# if it cannot be honoured as written: ${this.cmd} contract block ${r.ctr} "<why>"`);
     }
@@ -1215,6 +1209,11 @@ export class ApxEngine {
   /** A new instance id: the session, the contract, the count of its instances, the spec. */
   private instanceId(cx: ContractCx, contract: string, spec: string): string {
     return shortId('ctr', JSON.stringify([cx.session, contract, cx.table.all().filter(r => r.contract === contract).length, spec]));
+  }
+
+  /** A record's empty fields — every field is text: tabeli is flat. */
+  private freshRecord(fields: Pick<ContractRecord, 'ctr' | 'contract' | 'spec' | 'assignee' | 'depends' | 'parent'>): ContractRecord {
+    return { ...fields, zone: '', state: 'assigned', reason: '', dispatched_at: '', writes: '', left_out: '', why: '', author: this.root.name };
   }
 
   private contractStart(cx: ContractCx, args: string[]): number {
@@ -1228,7 +1227,7 @@ export class ApxEngine {
     const spec = this.specOf(block);
     if (spec === null) return this.lastCode;
     const ctr = this.instanceId(cx, block.id, spec);
-    cx.table.add({ ctr, contract: block.id, spec, assignee: this.root.name, depends: '', parent: '', zone: '', state: 'assigned', reason: '', dispatched_at: '', delivered_hash: '', author: this.root.name });
+    cx.table.add(this.freshRecord({ ctr, contract: block.id, spec, assignee: this.root.name, depends: '', parent: '' }));
     this.out(`${ctr}  ${block.name}  assigned  → ${this.root.name}`);
     return 0;
   }
@@ -1241,12 +1240,10 @@ export class ApxEngine {
     if (!cx.team.contracts.some(r => r.id === block.id)) return this.fail(2, `${block.name} is no contract of ${cx.team.name} — the team's: ${cx.team.contracts.map(r => refName(r)).join(', ')}`);
     const opts = args.slice(1);
     if (opts[opts.length - 1] !== '-') return this.fail(2, `the spec comes on stdin — ${this.cmd} contract ${usage}`);
-    const frozen = this.frozen(cx);
-    if (frozen.length) return this.fail(2, `the work is handed out: wait until ${frozen.map(r => r.ctr).join(', ')} ${frozen.length > 1 ? 'are' : 'is'} delivered or blocked — meanwhile only list and get`);
     const all = cx.table.all();
-    const depends = (opts.find(o => o.startsWith('depends='))?.slice(8) ?? '').split(',').map(s => s.trim()).filter(Boolean);
+    const depends = splitList(opts.find(o => o.startsWith('depends='))?.slice(8) ?? '');
     for (const d of depends) if (!all.some(r => r.ctr === d)) return this.fail(1, `depends: no instance ${d} in this session — nothing was written`);
-    const mine = all.filter(r => r.assignee === this.root.name && r.state === 'assigned');
+    const mine = all.filter(r => r.assignee === this.root.name && r.state === 'assigned' && !r.dispatched_at);
     let parent = opts.find(o => o.startsWith('parent='))?.slice(7) ?? '';
     if (!parent) {
       if (mine.length !== 1) return this.fail(2, `${mine.length ? `you work on ${mine.map(r => r.ctr).join(', ')}` : 'you work on no instance yet'} — say which this is part of: parent=<ctr>${mine.length ? '' : ` (or start one: ${this.cmd} contract start <con-id> -)`}`);
@@ -1258,135 +1255,120 @@ export class ApxEngine {
     // Several agents in BY: each new instance to the next, in the order written.
     const assignee = refName(block.by[all.filter(r => r.contract === block.id).length % block.by.length]);
     const ctr = this.instanceId(cx, block.id, spec);
-    cx.table.add({ ctr, contract: block.id, spec, assignee, depends: depends.join(','), parent, zone: '', state: 'assigned', reason: '', dispatched_at: '', delivered_hash: '', author: this.root.name });
+    cx.table.add(this.freshRecord({ ctr, contract: block.id, spec, assignee, depends: depends.join(','), parent }));
     this.out(`${ctr}  ${block.name}  assigned  → ${assignee}`);
-    this.out(`# mark its zone in one file: \`agent-pack ${ctr}\` where the work starts, \`agent-pack end ${ctr}\` where it ends, each inside a comment — then ${this.cmd} contract dispatch`);
+    const marks = zoneMarks(ctr);
+    this.out(block.within === 'domain'
+      ? `# to point it at code that exists, mark the zones: \`${marks.open}\` where one starts, \`${marks.close}\` where it ends, inside comments — then ${this.cmd} contract dispatch`
+      : `# WITHIN ${block.within}: mark its zones — \`${marks.open}\` where one starts, \`${marks.close}\` where it ends, inside comments, in any files — then ${this.cmd} contract dispatch`);
     return 0;
   }
 
-  /** The DOMAINS dimension of the team, with its cache and options — or null after saying why. */
-  private domainsOf(cx: ContractCx): { dim: DimensionBlock; cache: DimensionCache; slot: string; values: string[]; choices: Record<string, string> } | null {
-    const dim = this.dimensions().find(d => d.name === cx.team.domains);
-    const options = dim ? domainOptions(this.doc, dim.block) : null;
-    if (!dim || !options) { this.lastCode = this.fail(2, `the DOMAINS dimension ${cx.team.domains ?? ''} is not in this document — compile the lead again`); return null; }
-    return { dim: dim.block, cache: dim.cache, slot: options.slot, values: options.values, choices: domainChoices(options) };
-  }
-
   /**
-   * `dispatch` — the lead hands the work out. Every new instance needs its zone,
-   * in one file; a file holds the zones of one assignee; the file's domain is
-   * the contract's (a file no domain was given gets one from the judge now). On
-   * success the zones are recorded, the perimeter fingerprinted, and nothing the
-   * lead wrote may change any more.
+   * `dispatch` — the lead hands the work out. Each new instance's zones are
+   * looked for in what the lead writes: marks in order, every zone in a file
+   * its assignee writes; a WITHIN zone or file instance needs one at least.
+   * What was merged since the last round lands first; then each instance gets
+   * its copy, from the working folder as it is.
    */
-  private async contractDispatch(cx: ContractCx): Promise<number> {
+  private contractDispatch(cx: ContractCx): number {
     if (cx.lead !== this.root.name) return this.fail(2, `only the lead (${cx.lead}) hands the work out`);
-    const frozen = this.frozen(cx);
-    if (frozen.length) return this.fail(2, `the work is handed out already — wait until ${frozen.map(r => r.ctr).join(', ')} ${frozen.length > 1 ? 'are' : 'is'} delivered or blocked`);
     const pending = cx.table.all().filter(r => r.state === 'assigned' && !r.dispatched_at && r.assignee !== this.root.name);
     if (pending.length === 0) return this.fail(1, `no instance to hand out — write them first: ${this.cmd} contract new <con-id> -`);
-    const domains = this.domainsOf(cx);
-    if (!domains) return this.lastCode;
-    const root = resolve(projectRootOf(this.exe));
-    const files = perimeterFiles(root, domains.dim.globs);
-    const { zones, problems } = scanZones(root, files, pending.map(r => r.ctr));
+    const globs = this.doc.perimeter()?.writes ?? [];
+    if (globs.length === 0) return this.fail(2, `${this.root.name} writes no domain — the zones are marked in the files the lead writes: give it \`WRITES <domain>\``);
+    const { zones, problems } = scanZones(cx.root, perimeterFiles(cx.root, globs), pending.map(r => r.ctr));
     const refusals: string[] = [...problems].map(([ctr, why]) => `${ctr}: ${why}`);
-    // One assignee per file.
-    const byFile = new Map<string, Set<string>>();
-    for (const r of pending) { const z = zones.get(r.ctr); if (z) byFile.set(z.file, (byFile.get(z.file) ?? new Set()).add(r.assignee)); }
-    for (const [file, who] of byFile) if (who.size > 1) refusals.push(`${file} holds the zones of ${[...who].join(' and ')} — a file is one agent's while the work runs`);
-    // The file's domain is the contract's — a file with none gets one from the judge.
+    const perimeters = new Map<string, Perimeter>();
     for (const r of pending) {
-      const z = zones.get(r.ctr);
-      const block = this.byId.get(r.contract) as ContractBlock | undefined;
-      if (!z || !block?.domain) continue;
-      const domain = await this.fileDomain(domains, root, z.file);
-      if ('refused' in domain) { refusals.push(`${r.ctr}: ${domain.refused}`); continue; }
-      if (domain.domain !== block.domain) refusals.push(`${r.ctr}: ${z.file} is of the domain \`${domain.domain}\`, and ${block.name} is of \`${block.domain}\` — put the zone in a file of its domain, or write it as another contract`);
+      const limit = this.limitOf(r);
+      const zs = zones.get(r.ctr) ?? [];
+      if (limit !== 'domain' && zs.length === 0 && !problems.has(r.ctr)) refusals.push(`${r.ctr}: WITHIN ${limit} needs a zone — mark it: \`${zoneMarks(r.ctr).open}\` … \`${zoneMarks(r.ctr).close}\`, inside comments`);
+      const p = this.perimeterOf(r.assignee);
+      if (!p || p.writes.length === 0) { refusals.push(`${r.ctr}: ${r.assignee} writes no domain — it has nothing to deliver; compile it with \`WRITES <domain>\``); continue; }
+      perimeters.set(r.ctr, p);
+      for (const z of zs) if (!matchesAnyGlob(z.file, p.writes)) refusals.push(`${r.ctr}: ${z.file} holds a zone of it, and ${r.assignee} does not write that file`);
     }
     if (refusals.length) {
       for (const line of refusals) this.out(`refused: ${line}`);
-      return this.fail(3, `nothing was handed out — fix the ${countOf(refusals.length, 'zone', 'zones')} above and dispatch again`);
+      return this.fail(3, `nothing was handed out — fix the ${countOf(refusals.length, 'instance', 'instances')} above and dispatch again`);
     }
+    const landing = cx.ws().land();
+    if ('conflicts' in landing) return this.fail(3, `what was merged conflicts with the working folder: ${landing.conflicts.join(', ')} — make them agree there, then dispatch again`);
+    if (landing.landed.length) this.out(`# landed in the working folder: ${landing.landed.join(', ')}`);
     const at = new Date().toISOString();
-    for (const r of pending) cx.table.set(r.ctr, { zone: zoneText(zones.get(r.ctr)!), dispatched_at: at });
-    const skeleton = cx.table.writeSkeleton(root, domains.dim.globs);
-    for (const r of pending) this.out(`${r.ctr}  ${this.contractName(r.contract)}  ${zoneText(zones.get(r.ctr)!)}  → ${r.assignee}`);
-    this.out(`# ${countOf(pending.length, 'instance', 'instances')} handed out, ${countOf(Object.keys(skeleton.files).length, 'file', 'files')} fingerprinted — now only list and get until each is delivered or blocked`);
+    for (const r of pending) {
+      const p = perimeters.get(r.ctr)!;
+      cx.ws().open(r.ctr, p);
+      cx.table.set(r.ctr, { zone: zonesText(zones.get(r.ctr) ?? []), dispatched_at: at, writes: p.writes.join(',') });
+      this.out(`${r.ctr}  ${this.contractName(r.contract)}  → ${r.assignee}  within ${this.limitOf(r)}${zones.get(r.ctr) ? `  ${zonesText(zones.get(r.ctr)!)}` : ''}  copy: ${cx.ws().path(r.ctr)}`);
+    }
+    this.out(`# ${countOf(pending.length, 'instance', 'instances')} handed out — merge each as it is delivered: ${this.cmd} contract merge <ctr-id>`);
     return 0;
   }
 
-  /** A file's domain: the one the cache keeps for it (fresh or edited since), else the judge's, kept in the cache — or why there is none. */
-  private async fileDomain(d: { dim: DimensionBlock; cache: DimensionCache; slot: string; values: string[]; choices: Record<string, string> }, root: string, file: string): Promise<{ domain: string } | { refused: string }> {
-    const hash = d.cache.fingerprintOf(file);
-    if (hash === null) return { refused: `${file} does not exist` };
-    // A file keeps the domain it was given when it is edited — the lead's zone marks, a member's work: a domain is no fact a comment changes.
-    const kept = domainOf(d.cache.read(file), d.slot);
-    if (kept) return { domain: kept };
-    const checks = this.build.checks;
-    if (!checks) return { refused: `${file} has no domain yet, and this agent has no judge to give it one — add checks: { adapter: 'jev' } and compile again, or run agent-pack bundle all` };
-    let judge: JudgePlugin;
-    try { judge = this.judgeNamed(checks.adapter); } catch (e) { return { refused: `the judge \`${checks.adapter}\` cannot be loaded (${e instanceof Error ? e.message : e})` }; }
-    let answer: Awaited<ReturnType<JudgePlugin['ask']>>;
-    try { answer = await judge.ask(readFileSync(join(root, file), 'utf-8'), [{ id: 'domain', question: DOMAIN_QUESTION, options: d.choices }], checks.model); } catch (e) {
-      return { refused: `the judge could not give ${file} its domain (${e instanceof Error ? e.message : e})` };
-    }
-    const dist = answer.answers['domain'];
-    if (!isDistribution(dist)) return { refused: `the judge gave ${file} no probability per domain` };
-    const verdict = decideChoice(dist, checks.threshold, checks.margin ?? 0.2);
-    if ('grey' in verdict) return { refused: `${file}: the judge hesitates between ${verdict.grey[0]} (${verdict.p[0].toFixed(2)}) and ${verdict.grey[1]} (${verdict.p[1].toFixed(2)}) — run agent-pack bundle all on a terminal to decide` };
-    d.cache.write(domainEntry(d.dim, file, hash, d.slot, verdict.choice, `judge:${checks.adapter}`));
-    return { domain: verdict.choice };
+  /**
+   * `within <ctr> <path>` — whether a file the instance's copy changed stays
+   * within its contract: exit 0, or 3 with the warning. What a harness hook
+   * calls as soon as the file is written (adapters/claude-code).
+   */
+  private contractWithin(cx: ContractCx, args: string[]): number {
+    const r = this.instance(cx, args[0], 'within <ctr-id> <path>');
+    if (!r) return this.lastCode;
+    const path = args[1];
+    if (!path) return this.fail(2, `a path is needed — ${this.cmd} contract within ${r.ctr} <path>`);
+    if (!r.dispatched_at) return this.fail(2, `${r.ctr} has no copy yet — it was not handed out`);
+    const d = cx.ws().deliver(r.ctr, this.allowedOf(r), { dryRun: true });
+    const hit = (e: string) => e === path || e.startsWith(`${path} (`);
+    const lost = d.lostZones.filter(hit);
+    if (lost.length) { this.out(`${lost.join(', ')}: the marks of ${r.ctr}'s zones are lost — put them back around your work, as the lead wrote them`); return 3; }
+    const out = d.leftOut.filter(hit);
+    if (out.length === 0) return 0;
+    this.out(`${out.join(', ')} is outside ${r.ctr} (WITHIN ${this.limitOf(r)}): it will be left out of the delivery — keep it only with a good reason, you will be asked for it at deliver`);
+    return 3;
   }
 
   /**
-   * `deliver` — the assignee is done: its zone's marks are gone, and no file of
-   * the perimeter other than its zone's changed since the dispatch (a new file
-   * counts as a change).
+   * `deliver` — the assignee is done. An instance with a copy keeps what its
+   * WITHIN admits; anything else is left out, and only with a reason (`--why`).
+   * The instance the lead was handed is done when its parts are: delivering
+   * it lands the session's work in the working folder and closes the copies.
    */
   private contractDeliver(cx: ContractCx, args: string[]): number {
-    const r = this.instance(cx, args[0], 'deliver <ctr-id>');
+    const r = this.instance(cx, args[0], 'deliver <ctr-id> [--why "<reason>"]');
     if (!r) return this.lastCode;
     if (r.assignee !== this.root.name) return this.fail(2, `${r.ctr} is ${r.assignee}'s — only its assignee delivers it`);
     if (r.state !== 'assigned') return this.fail(2, `${r.ctr} is ${r.state} — only an assigned instance is delivered`);
-    // The parts of an instance (those written with it as parent) are done first: merged, or blocked and carried out by its assignee.
-    const open = cx.table.all().filter(p => p.parent === r.ctr && (p.state === 'assigned' || p.state === 'delivered'));
+    // The parts of an instance (those written with it as parent) are done first: merged, or blocked and taken over.
+    const open = cx.table.all().filter(p => p.parent === r.ctr && p.state !== 'merged');
     if (open.length) return this.fail(3, `${r.ctr} still has parts to finish: ${open.map(p => `${p.ctr} (${p.state})`).join(', ')} — merge them first`);
-    // The instance a lead was handed has no zone of its own: done when its parts are.
-    if (!r.zone) {
+    if (!r.dispatched_at) {
+      // The instance the lead started from: done when its parts are; the request's, when it is the root.
+      if (!r.parent && cx.table.all().some(o => o.dispatched_at)) {
+        const landing = cx.ws().land({ close: true });
+        if ('conflicts' in landing) return this.fail(3, `the work conflicts with the working folder: ${landing.conflicts.join(', ')} — make them agree there, then deliver again`);
+        if (landing.landed.length) this.out(`# landed in the working folder: ${landing.landed.join(', ')} — uncommitted, for the developer to commit`);
+      }
       if (!cx.table.transition(r.ctr, 'assigned', 'delivered')) return this.fail(4, `${r.ctr} changed meanwhile — read it: ${this.cmd} contract get ${r.ctr}`);
       this.out(`${r.ctr}  delivered`);
       return 0;
     }
-    const zone = parseZone(r.zone);
-    const skeleton = cx.table.skeleton();
-    if (!r.dispatched_at || !zone || !skeleton) return this.fail(2, `${r.ctr} was not handed out yet — wait for the lead's dispatch`);
-    const root = resolve(projectRootOf(this.exe));
-    const refusals: string[] = [];
-    const zoneText_ = existsSync(join(root, zone.file)) ? readFileSync(join(root, zone.file), 'utf-8') : '';
-    if (hasMarks(zoneText_, r.ctr)) refusals.push(`the marks of ${r.ctr} are still in ${zone.file} — remove both when the work is done`);
-    const now = perimeterFiles(root, skeleton.globs);
-    const all = cx.table.all();
-    const expected = expectedFingerprints(skeleton, all);
-    // The files other members are still working on change legitimately: theirs, not an overreach.
-    const busy = new Set(all
-      .filter(o => o.ctr !== r.ctr && o.state === 'assigned' && o.dispatched_at && o.zone)
-      .map(o => parseZone(o.zone)?.file)
-      .filter((f): f is string => !!f));
-    for (const file of now) {
-      if (file === zone.file || busy.has(file)) continue;
-      const before = expected[file];
-      if (before === undefined) refusals.push(`${file} is new — your zone is ${zone.file} alone`);
-      else if (fingerprint(readFileSync(join(root, file), 'utf-8')) !== before) refusals.push(`${file} changed — your zone is ${zone.file} alone`);
+    const why = flagValue(args.slice(1), '--why');
+    const d = cx.ws().deliver(r.ctr, this.allowedOf(r), { dryRun: true });
+    if (d.lostZones.length) return this.fail(3, `${r.ctr} was not delivered — the marks of its zones are lost in ${d.lostZones.join(', ')}: put them back around your work, as the lead wrote them`);
+    if (d.committed.length === 0 && d.strayed.length) {
+      return this.fail(3, `${r.ctr}: nothing changed in your copy, and ${d.strayed.join(', ')} changed in the project folder — the work goes in your copy: ${cx.ws().path(r.ctr)}`);
     }
-    for (const file of Object.keys(skeleton.files)) if (file !== zone.file && !now.includes(file)) refusals.push(`${file} is gone — your zone is ${zone.file} alone`);
-    if (refusals.length) {
-      for (const line of refusals) this.out(`refused: ${line}`);
-      return this.fail(3, `${r.ctr} was not delivered — undo what lies outside your zone, or block it: ${this.cmd} contract block ${r.ctr} "<why>"`);
+    if (d.leftOut.length && !why) {
+      for (const e of d.leftOut) this.out(`left out: ${e}`);
+      return this.fail(3, `${r.ctr} was not delivered — what is left out stays out only with a good reason: ${this.cmd} contract deliver ${r.ctr} --why "<reason>"; or undo it in your copy`);
     }
-    const delivered = existsSync(join(root, zone.file)) ? fingerprint(readFileSync(join(root, zone.file), 'utf-8')) : '';
-    if (!cx.table.transition(r.ctr, 'assigned', 'delivered', { delivered_hash: delivered })) return this.fail(4, `${r.ctr} changed meanwhile — read it: ${this.cmd} contract get ${r.ctr}`);
-    this.out(`${r.ctr}  delivered`);
+    cx.ws().deliver(r.ctr, this.allowedOf(r));
+    if (!cx.table.transition(r.ctr, 'assigned', 'delivered', { left_out: d.leftOut.join('; '), why: d.leftOut.length ? (why ?? '').replace(/\s+/g, ' ') : '' })) {
+      return this.fail(4, `${r.ctr} changed meanwhile — read it: ${this.cmd} contract get ${r.ctr}`);
+    }
+    this.out(`${r.ctr}  delivered — ${d.committed.length ? d.committed.join(', ') : 'nothing changed'}`);
+    if (d.leftOut.length) this.out(`left out: ${d.leftOut.join(', ')} — why: ${why}`);
     return 0;
   }
 
@@ -1401,363 +1383,49 @@ export class ApxEngine {
     return 0;
   }
 
+  /**
+   * `take` — the lead takes over an instance its assignee blocked, in its copy:
+   * the work done so far is there, and the contract's limit stays the same. The
+   * lead must write what the copy may deliver.
+   */
+  private contractTake(cx: ContractCx, args: string[]): number {
+    if (cx.lead !== this.root.name) return this.fail(2, `only the lead (${cx.lead}) takes an instance over`);
+    const r = this.instance(cx, args[0], 'take <ctr-id>');
+    if (!r) return this.lastCode;
+    if (r.state !== 'blocked') return this.fail(2, `${r.ctr} is ${r.state} — only a blocked instance is taken over`);
+    if (!r.dispatched_at) return this.fail(2, `${r.ctr} was never handed out — it has no copy to take over`);
+    const mine = this.doc.perimeter()?.writes ?? [];
+    const allowed = this.allowedOf(r);
+    const beyond = allowed.globs.filter(g => !coversGlob(mine, g));
+    if (beyond.length) return this.fail(2, `${r.ctr} delivers ${beyond.join(', ')}, which ${this.root.name} does not write — hand it to an agent that writes it`);
+    if (!cx.table.transition(r.ctr, 'blocked', 'assigned', { assignee: this.root.name })) return this.fail(4, `${r.ctr} changed meanwhile — read it: ${this.cmd} contract get ${r.ctr}`);
+    this.out(`${r.ctr}  taken by ${this.root.name} — work in ${cx.ws().path(r.ctr)}`);
+    this.out(`why it was blocked: ${r.reason}`);
+    this.out(`# when done: ${this.cmd} contract deliver ${r.ctr}`);
+    return 0;
+  }
+
+  /** `merge` — the lead folds a delivered instance into the round's result, as soon as it is delivered; a conflict names its files and who may win. */
   private contractMerge(cx: ContractCx, args: string[]): number {
     if (cx.lead !== this.root.name) return this.fail(2, `only the lead (${cx.lead}) merges`);
-    const r = this.instance(cx, args[0], 'merge <ctr-id>');
+    const r = this.instance(cx, args[0], 'merge <ctr-id> [--prefer ours|theirs]');
     if (!r) return this.lastCode;
-    const frozen = this.frozen(cx);
-    if (frozen.length) return this.fail(2, `the work is still running — wait until ${frozen.map(f => f.ctr).join(', ')} ${frozen.length > 1 ? 'are' : 'is'} delivered or blocked`);
-    // A blocked instance is the lead's to carry out: merging it says the lead did.
-    if (r.state !== 'delivered' && r.state !== 'blocked') return this.fail(2, `${r.ctr} is ${r.state} — only a delivered instance is merged, or a blocked one you carried out yourself`);
+    if (r.state === 'blocked') return this.fail(2, `${r.ctr} is blocked — take it over (${this.cmd} contract take ${r.ctr}), finish it in its copy, deliver it, then merge`);
+    if (r.state !== 'delivered') return this.fail(2, `${r.ctr} is ${r.state} — only a delivered instance is merged`);
     const waiting = r.depends.split(',').filter(Boolean).filter(d => cx.table.get(d)?.state !== 'merged');
     if (waiting.length) return this.fail(3, `${r.ctr} depends on ${waiting.map(d => `${d} (${cx.table.get(d)?.state ?? '?'})`).join(', ')} — merge ${waiting.length > 1 ? 'those' : 'that'} first`);
-    if (!cx.table.transition(r.ctr, r.state, 'merged')) return this.fail(4, `${r.ctr} changed meanwhile — read it: ${this.cmd} contract get ${r.ctr}`);
+    const prefer = flagValue(args.slice(1), '--prefer');
+    if (prefer !== undefined && prefer !== 'ours' && prefer !== 'theirs') return this.fail(2, `--prefer takes ours (keep what is merged) or theirs (take ${r.ctr}'s)`);
+    if (r.dispatched_at) {
+      const m = cx.ws().merge(r.ctr, prefer);
+      if (!m.merged) return this.fail(3, `${r.ctr} conflicts with what is merged in ${m.conflicts.join(', ')} — merge again with --prefer ours (keep what is merged) or --prefer theirs (take ${r.ctr}'s)`);
+    }
+    if (!cx.table.transition(r.ctr, 'delivered', 'merged')) return this.fail(4, `${r.ctr} changed meanwhile — read it: ${this.cmd} contract get ${r.ctr}`);
     this.out(`${r.ctr}  merged`);
+    if (r.left_out) this.out(`left out: ${r.left_out} — why: ${r.why} — look at it, or let it be: ${this.cmd} contract get ${r.ctr}`);
     return 0;
   }
 
-  // ----------------------------------------------------------------- stores
-
-  /** What is wrong with a write against the store's slots — or null when it fits. */
-  private writeIssues(store: Store, args: string[]): string | null {
-    const write = writeFields(args);
-    if (!write) return null;
-    const record: Record<string, unknown> = {};
-    for (const pair of write.pairs) {
-      const eq = pair.indexOf('=');
-      if (eq <= 0) return `\`${pair}\` is not a field=value pair`;
-      const field = pair.slice(0, eq);
-      const value = pair.slice(eq + 1);
-      const slot = store.block.slots.find(sl => sl.name === field);
-      record[field] = slot?.type.kind === 'number' && value.trim() !== '' && !Number.isNaN(Number(value)) ? Number(value) : value;
-    }
-    const slots = slotSpecsOf(store.block.slots, !write.add);
-    return issuesText(validateRecord(record, slots));
-  }
-
-  /** The stores, each with the table file behind it: beside this file, in `<agent>.state/`. */
-  /** The stores, each with its table file — the location is from the project root, two levels above this file. */
-  private stores(): Store[] {
-    const projections = this.doc.mdSource?.stores ?? {};
-    const root = resolve(projectRootOf(this.exe));
-    return (this.doc.byKind('store') as StoreBlock[]).map(block => {
-      const location = projections[block.address]?.location ?? `${projectStoreDir(this.root.name)}/${block.name}.tbl`;
-      return { block, name: block.name, key: block.storeKey, location, path: join(root, location) };
-    });
-  }
-
-  /**
-   * Forward `<store> [verb …]` to its tabeli table, creating it on first use.
-   * KEY is agent-pack semantics: `a` with the key already present updates that
-   * record instead of duplicating it, as the prompt promises.
-   */
-  private storeVerb(store: Store, args: string[]): number {
-    const refused = this.writeIssues(store, args);
-    if (refused) return this.fail(2, `${store.name}: ${refused} — nothing was written`);
-    const unopened = openTable(store.path, this.build.tabeli);
-    if (unopened) return this.fail(2, unopened);
-    const i = args[0] === 'a' && store.key ? args.findIndex((kv, j) => j > 0 && kv.startsWith(`${store.key}=`)) : -1;
-    let run;
-    if (i > 0) {
-      let upsert;
-      try {
-        upsert = upsertBy(store.path, store.key!, args[i].slice(store.key!.length + 1), [...args.slice(1, i), ...args.slice(i + 1)]);
-      } catch (e) {
-        return this.fail(2, `${store.name}: ${e instanceof Error ? e.message : e} — nothing was written`);
-      }
-      if (upsert.updated !== null) this.out(`# ${args[i]} exists as id=${upsert.updated} — updated, not duplicated`);
-      run = upsert.run;
-    } else {
-      run = runTable(store.path, args);
-    }
-    // errors and manuals name the .tbl — say it in this executable's own words
-    const table = basename(store.path);
-    const text = `${run.stdout ?? ''}${run.stderr ?? ''}`
-      .split(`./${table}`).join(`${this.cmd} ${store.name}`)
-      .split(table).join(`${this.cmd} ${store.name}`)
-      .trimEnd();
-    if (text) this.out(text);
-    return run.status ?? 2;
-  }
-
-  // ------------------------------------------------------------- dimensions
-
-  /** The dimensions, each with its AS template and its cache at the project root. */
-  private dimensions(): Dimension[] {
-    const root = resolve(projectRootOf(this.exe));
-    return (this.doc.byKind('dimension') as DimensionBlock[]).map(block => {
-      const templates = dimensionTemplates(this.doc, block);
-      return { block, name: block.name, cmd: `${this.cmd} dimension ${block.id}`, template: templates.as as TemplateBlock | null, cache: new DimensionCache(root, dimensionDefHash(block, templates)) };
-    });
-  }
-
-  /** `dimension <dim-id> <verb> …` — a dimension's answers: read and write one, find across files, and keep its cache. */
-  private dimensionVerb(dim: Dimension, args: string[]): number {
-    const [verb, ...rest] = args;
-    switch (verb) {
-      case 'read': return this.dimRead(dim, rest);
-      case 'write': return this.dimWrite(dim, rest);
-      case 'ls': return this.dimLs(dim, rest);
-      case 'find': return this.dimFind(dim, rest);
-      case 'why': return this.dimWhy(dim, rest);
-      case 'clear': return this.dimClear(dim, rest);
-      case 'gc': return this.dimGc(dim);
-    }
-    return this.fail(2, `${verb ? `'${verb}' is no verb of a dimension` : `${dim.name} is a dimension and takes a verb`} — ${dim.cmd} read|write|ls|find|why|clear|gc …, e.g. ${dim.cmd} read <file>`);
-  }
-
-  /**
-   * `<dimension> find <text>` — every instance kept for any file whose text
-   * holds `text` (case aside), each with its file: the one way to look across
-   * files. Only fresh entries answer — a stale one says nothing true any more.
-   */
-  private dimFind(dim: Dimension, args: string[]): number {
-    if (args.length === 0) return this.fail(2, `${dim.name} find needs text — ${dim.cmd} find <text>`);
-    const needle = args.join(' ').toLowerCase();
-    const template = dim.template?.slots ? dim.template : null;
-    let n = 0;
-    for (const { entry, state } of this.dimEntries(dim).entries) {
-      if (state.state !== 'fresh' || !Array.isArray(entry.value)) continue;
-      for (const v of entry.value) {
-        const text = template ? template.instanceText(v as Record<string, unknown>) : JSON.stringify(v);
-        if (!text.toLowerCase().includes(needle)) continue;
-        n++;
-        this.out(`${entry.file}  ${text.replace(/\n/g, ' ')}`);
-      }
-    }
-    this.out(`# ${countOf(n, 'instance', 'instances')} of ${dim.name} hold "${args.join(' ')}" — fresh entries only`);
-    return n > 0 ? 0 : 1;
-  }
-
-  /**
-   * The file a dimension verb names, from the project root — or null after
-   * telling what is wrong: outside the project, or a file the dimension does not cover.
-   */
-  private dimFile(dim: Dimension, verb: string, arg: string | undefined, usage: string): string | null {
-    const refuse = (message: string): null => { this.lastCode = this.fail(2, message); return null; };
-    if (!arg) return refuse(`${dim.name} ${verb} needs a file — ${dim.cmd} ${usage}`);
-    const file = relativeWithin(dim.cache.root, resolve(arg));
-    if (!file) return refuse(`\`${arg}\` lies outside the project — name a file under its root, ${dim.cache.root}`);
-    if (!matchesAnyGlob(file, dim.block.globs)) return refuse(`\`${file}\` is no file ${dim.name} covers — it covers: ${dim.block.globs.join(', ')}`);
-    return file;
-  }
-
-  /**
-   * `<dimension> read <file> [json]` — the answer kept for a file: `hit` and
-   * the answer while the file and every file it depends on are as they were;
-   * `miss` with the reason otherwise, and never the old answer; `gone` when the
-   * file no longer exists. A file moved without an edit takes its old entry along.
-   */
-  private dimRead(dim: Dimension, args: string[]): number {
-    const file = this.dimFile(dim, 'read', args[0], 'read <file> [json]');
-    if (!file) return this.lastCode;
-    const { cache } = dim;
-    const current = cache.fingerprintOf(file);
-    let entry = cache.read(file);
-    if (!entry && current === null) return this.fail(1, `no file \`${file}\` in the project — nothing to read`);
-    entry ??= cache.adopt(file, current!);
-    const state = entry ? cache.state(entry) : null;
-    if (!entry || state!.state !== 'fresh') {
-      cache.count('misses');
-      if (state?.state === 'gone') { this.out(`gone ${dim.name} ${file} — ${state.reason}`); return 1; }
-      this.out(`miss ${dim.name} ${file} — ${state ? state.reason : 'never written'}`);
-      this.out(`# once you have worked the answer out, keep it: ${dim.cmd} ${dimWriteUsage(file)}`);
-      return 1;
-    }
-    cache.count('hits');
-    if (args[1] === 'json') return this.print(JSON.stringify(entry.value));
-    this.out(`hit ${dim.name} ${file} — by ${entry.by}, ${entry.at.slice(0, 10)}`);
-    return this.print(this.dimValueText(dim, entry.value));
-  }
-
-  /** A kept value as text: each instance through its template's layout, or `none`. */
-  private dimValueText(dim: Dimension, value: CacheEntry['value']): string {
-    if (!Array.isArray(value)) return NONE;
-    const template = dim.template;
-    if (!template?.slots) return JSON.stringify(value, null, 1);
-    const texts = value.map(v => template.instanceText(v as Record<string, unknown>));
-    return texts.join(texts.some(t => t.includes('\n')) ? '\n\n' : '\n');
-  }
-
-  /**
-   * A value for a dimension, from its text: `none`, or a JSON list of at least
-   * one instance of its template — checked the way a typed variable is, with
-   * every nested template of the document.
-   */
-  private dimValue(dim: Dimension, text: string): { value: CacheEntry['value'] } | { error: string } {
-    const shape = dim.block.shape?.ref;
-    const name = shape ? refName(shape) : '?';
-    const trimmed = text.trim();
-    if (trimmed === NONE || trimmed === JSON.stringify(NONE)) return { value: NONE };
-    if (!shape || !this.doc.slotsOf(shape)) return { error: notCompiled(dim.name, name) };
-    const issues = this.contractIssues(trimmed, shape, { name: dim.name, min: 1 });
-    if (issues) return { error: `the value is not a list of \`${name}\`: ${issues}` };
-    return { value: JSON.parse(trimmed) as unknown[] };
-  }
-
-  /**
-   * `<dimension> write <file> [refs=<path>;…] -|none` — keep an answer for a
-   * file: a file the dimension covers and that exists, refs that exist, a value
-   * its template accepts. An answer still fresh is never overwritten — another
-   * agent gave it meanwhile (exit 4). Refused: nothing is written.
-   */
-  private dimWrite(dim: Dimension, args: string[]): number {
-    const usage = dimWriteUsage();
-    const file = this.dimFile(dim, 'write', args[0], usage);
-    if (!file) return this.lastCode;
-    const options = args.slice(1);
-    const refsArg = options.filter(a => a.startsWith('refs='));
-    const from = options.filter(a => !a.startsWith('refs='));
-    if (refsArg.length > 1 || from.length !== 1 || (from[0] !== '-' && from[0] !== NONE)) {
-      return this.fail(2, `${dim.name} write takes the value on stdin with -, or none — ${dim.cmd} ${usage}`);
-    }
-    const { cache } = dim;
-    const hash = cache.fingerprintOf(file);
-    if (hash === null) return this.fail(1, `no file \`${file}\` in the project — an answer is for a file that exists; nothing was written`);
-    const refs: Record<string, string> = {};
-    for (const raw of (refsArg[0]?.slice('refs='.length) ?? '').split(';').map(r => r.trim()).filter(Boolean)) {
-      const ref = relativeWithin(cache.root, resolve(raw));
-      const print = ref === null ? null : cache.fingerprintOf(ref);
-      if (ref === null || print === null) return this.fail(1, `refs: \`${raw}\` is no file of the project — name files that exist, separated by ; — nothing was written`);
-      if (ref !== file) refs[ref] = print;
-    }
-    const existing = cache.read(file);
-    if (existing && cache.state(existing).state === 'fresh') {
-      return this.fail(4, `${dim.name} ${file} is already fresh — read it: ${dim.cmd} read ${file}; nothing was written`);
-    }
-    const read = from[0] === NONE ? { value: NONE } as const : this.dimValue(dim, readFileSync(0, 'utf-8'));
-    if ('error' in read) return this.fail(2, `${read.error} — nothing was written`);
-    // The files the answer names are files it depends on.
-    for (const named of filesNamedIn(cache.root, read.value)) if (named !== file && !(named in refs)) refs[named] = cache.fingerprintOf(named)!;
-    cache.write({ format: CACHE_FORMAT, dimension: dim.name, file, hash, refs, value: read.value, by: this.root.name, at: new Date().toISOString() });
-    this.out(`# stored ${dim.name} ${file} — ${cache.entryLocation(file)}`);
-    this.out(`# hash ${hash.slice(0, 12)}  refs: ${Object.keys(refs).join(', ') || '(none)'}`);
-    return 0;
-  }
-
-  /** Each entry kept (those matching `glob`) with its state — and the counts. */
-  private dimEntries(dim: Dimension, glob?: string): { entries: { entry: CacheEntry; state: EntryState }[]; summary: string } {
-    const entries = dim.cache.entries(glob).map(entry => ({ entry, state: dim.cache.state(entry) }));
-    const n = (state: string) => entries.filter(e => e.state.state === state).length;
-    const { hits, misses } = dim.cache.stats();
-    const rate = hits + misses > 0 ? `${Math.round((100 * hits) / (hits + misses))}%` : 'n/a';
-    return {
-      entries,
-      summary: `${countOf(entries.length, 'entry', 'entries')}: ${n('fresh')} fresh, ${n('stale')} stale, ${n('gone')} gone — ${hits} hits, ${misses} misses, hit rate ${rate}`,
-    };
-  }
-
-  /** `<dimension> ls [glob]` — the entries kept, with their state and why, then the counts. */
-  private dimLs(dim: Dimension, args: string[]): number {
-    const { entries, summary } = this.dimEntries(dim, args[0]);
-    for (const { entry, state } of entries) {
-      this.out(`${state.state.padEnd(5)}  ${entry.file}${state.reason ? `  — ${state.reason}` : ''}  (by ${entry.by}, ${entry.at.slice(0, 10)})`);
-    }
-    this.out(`# ${dim.name}  ${dim.cache.location}/  ${summary}`);
-    return 0;
-  }
-
-  /** `<dimension> why <file>` — the state of a file's entry, file by file: the fingerprint kept and the current one. */
-  private dimWhy(dim: Dimension, args: string[]): number {
-    const file = this.dimFile(dim, 'why', args[0], 'why <file>');
-    if (!file) return this.lastCode;
-    const entry = dim.cache.read(file);
-    if (!entry) {
-      this.out(`never written ${dim.name} ${file} — no entry at ${dim.cache.entryLocation(file)}`);
-      return 0;
-    }
-    const state = dim.cache.state(entry);
-    this.out(`${state.state} ${dim.name} ${file}${state.reason ? ` — ${state.reason}` : ''}  (by ${entry.by}, ${entry.at})`);
-    for (const c of state.checks) {
-      const now = c.current === null ? 'gone' : c.current === c.stored ? 'same' : 'changed';
-      this.out(`  ${c.role.padEnd(4)}  ${c.path}  kept ${c.stored.slice(0, 12)}  now ${c.current ? c.current.slice(0, 12) : '(none)'}  ${now}`);
-    }
-    return 0;
-  }
-
-  /** `<dimension> clear [glob] [--by <agent>]` — delete entries: all, those matching a glob, those an agent wrote. */
-  private dimClear(dim: Dimension, args: string[]): number {
-    let glob: string | undefined;
-    let by: string | undefined;
-    for (let i = 0; i < args.length; i++) {
-      if (args[i] === '--by' && args[i + 1]) by = args[++i];
-      else if (args[i] !== '--by' && glob === undefined) glob = args[i];
-      else return this.fail(2, `${dim.name} clear takes a glob and --by <agent>, both optional — ${dim.cmd} clear 'src/**' --by <agent>`);
-    }
-    const cleared = dim.cache.entries(glob).filter(e => !by || e.by === by);
-    for (const e of cleared) dim.cache.remove(e.file);
-    this.out(`# cleared ${countOf(cleared.length, 'entry', 'entries')} of ${dim.name}${glob ? ` matching ${glob}` : ''}${by ? ` written by ${by}` : ''}`);
-    return 0;
-  }
-
-  /** `<dimension> gc` — delete the entries of files that no longer exist. */
-  private dimGc(dim: Dimension): number {
-    const orphans = dim.cache.orphans();
-    for (const e of orphans) {
-      dim.cache.remove(e.file);
-      this.out(`removed ${e.file}`);
-    }
-    this.out(`# ${countOf(orphans.length, 'entry', 'entries')} of deleted files removed from ${dim.name}`);
-    return 0;
-  }
-
-  /**
-   * `dimension` — this agent's dimensions, each by its id: what it covers, the
-   * folder of its cache, its counts. `dimension <dim-id> <verb> …` — one of them,
-   * reached by its id like every block, then its verb.
-   */
-  private dimension(args: string[]): number {
-    const dimensions = this.dimensions();
-    const [id, ...rest] = args;
-    if (id) {
-      const dim = dimensions.find(d => d.block.id === id);
-      if (dim) return this.dimensionVerb(dim, rest);
-      const known = dimensions.map(d => `${d.block.id} (${d.name})`).join(', ') || 'none';
-      return this.fail(2, `no dimension \`${id}\` in this agent — its dimensions: ${known}; list them: ${this.cmd} dimension`);
-    }
-    if (dimensions.length === 0) this.out('# this agent has no dimensions');
-    for (const d of dimensions) {
-      this.out(`${d.block.id}  ${d.name}  ${d.cache.defhash}  — files: ${d.block.globs.join(' ')} — ${this.dimEntries(d).summary}  — read: ${d.cmd} read <file>`);
-    }
-    return 0;
-  }
-}
-
-/**
- * A write checked against the store's schema before it reaches the table: `a`
- * adds a whole record (every required slot, the KEY included), `s <id>` sets
- * some fields; either way no unknown field and no value outside its slot type.
- */
-function writeFields(args: string[]): { add: boolean; pairs: string[] } | null {
-  if (args[0] === 'a') return { add: true, pairs: args.slice(1) };
-  if (args[0] === 's') {
-    const end = args.indexOf('if');
-    return { add: false, pairs: args.slice(2, end === -1 ? undefined : end) };
-  }
-  return null;
-}
-
-/** A dimension of this agent: its block, its AS template, its cache. */
-interface Dimension {
-  block: DimensionBlock;
-  name: string;
-  /** The command that reaches it: `<apx> dimension <dim-id>`. */
-  cmd: string;
-  template: TemplateBlock | null;
-  cache: DimensionCache;
-}
-
-interface Store {
-  block: StoreBlock;
-  name: string;
-  key: string | null;
-  location: string;
-  path: string;
-}
-
-/** `1 entry`, `3 entries`. */
-function countOf(n: number, one: string, many: string): string {
-  return `${n} ${n === 1 ? one : many}`;
 }
 
 /** A contract's issues on one line — null when there are none. */

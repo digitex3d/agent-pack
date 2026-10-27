@@ -3,7 +3,7 @@ IMPORT  score-row FROM @main.templates
 
 EXPORT TEMPLATE readiness-verdict:
   ABOUT   OSS production-readiness verdict — scorecard on docs/onboarding/hygiene, utility score, gaps, SHIP/HOLD/BLOCK
-  APPLIES #readiness #evaluation #scoring #release #verdict #oss
+  APPLIES #readiness, #evaluation, #scoring, #release, #verdict, #oss
 
   SLOTS:
     target:          TEXT MAX_WORDS 25 "what is being evaluated for readiness (repo/release)"
@@ -11,15 +11,15 @@ EXPORT TEMPLATE readiness-verdict:
       MUST   score all nine criteria 1-5 (integers); (score-1)/4 normalizes, so straight-3s map to 50 by design
     blocking-gaps:   TEXT MAX_WORDS 40 "gaps keeping a gate below SHIP threshold — actionable dev team handoff, or none"
     utility:         NUMBER 0..100 "100 * sum(w_i * (score_i - 1)/4), rounded"
-    band:            ENUM[weak mediocre solid strong]
-    verdict:         ENUM[SHIP HOLD BLOCK]
+    band:            ENUM[weak, mediocre, solid, strong]
+    verdict:         ENUM[SHIP, HOLD, BLOCK]
       MUST!  apply the ladder top-down, first match wins — gates decide, utility is severity/confidence
       MUST   BLOCK when first-run-success=1, install-reproducibility=1, readme-clarity=1, test-and-ci=1, or utility<45
       MUST   HOLD when no gate is at floor but utility in [45,75), or a gate is below its SHIP threshold (=4)
       MUST   SHIP only when all four gates are >=4 and utility>=75
       SHOULD calibrate: broken install=BLOCK, thin README + no CI=HOLD, polished + green gates=SHIP
     binding-axes:    TEXT MAX_WORDS 10 "the two criteria that decided the verdict"
-    status:          ENUM[verdict-emitted hold-needs-remediation blocked advanced-to-dev]
+    status:          ENUM[verdict-emitted, hold-needs-remediation, blocked, advanced-to-dev]
   BODY:
     target: {target}
 

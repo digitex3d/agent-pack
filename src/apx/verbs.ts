@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
 /**
- * The verbs of an apx — what its first word may be. A store is reached by its
- * name in the same place, so none may be named like one of these: the compiler
- * refuses it. A dimension is reached by its id, after the verb `dimension`. No imports, so the compiler reads the list without the
- * engine.
+ * The verbs of an apx — what its first word may be: the engine's own, and the
+ * kinds it serves (`<kind> <operation> [<id>] …`, src/apx/service.ts). No
+ * imports, so the compiler reads the lists without the engine.
  */
-export const APX_VERBS = ['start', 'scope', 'ls', 'get', 'set', 'refs', 'find', 'md', 'flow', 'run', 'input', 'answer', 'check', 'dimension', 'contract', 'version', 'help'] as const;
+export const APX_VERBS = ['start', 'scope', 'ls', 'get', 'set', 'refs', 'find', 'md', 'flow', 'run', 'check', 'contract', 'version', 'help'] as const;
 export type ApxVerb = typeof APX_VERBS[number];
+
+/** The kinds the apx serves, each by its name — the registry (src/apx/services) holds one service per kind. */
+export const APX_SERVICE_KINDS = ['store', 'dimension', 'ask'] as const;

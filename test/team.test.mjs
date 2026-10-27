@@ -157,6 +157,30 @@ try {
   assert.ok(content.includes('## `ship`'), content);
   assert.ok(!content.includes('MEMBER'), 'the MEMBER lines are not prose');
 
+  // --- a step may name a team: it carries the step out by its own routing ---
+  const ops = join(teams, 'ops');
+  mkdirSync(ops);
+  write(join(ops, 'deployer.ap'), ['EXPORT AGENT deployer AS deployer-role:', '    ABOUT  deploys', '    MANDATE  deploy', '', 'ROLE deployer-role:', '    ABOUT  a', '    ALWAYS  b']);
+  write(join(ops, 'ops.ap'), teamSource('ops', ['deployer'], ['ABOUT  a crew that deploys', '', 'WHEN asked to deploy:', '    RUN deploy', '', 'FLOW deploy:', '    STEP deploy it:', '        BY deployer', '        DO  push the build']));
+  const handOff = ['    STEP hand it to ops:', '        BY ops', '        DO  deploy what was built'];
+  writeTeam([...TEAM_BODY, ...handOff]);
+  const { buildContractIndex } = await import('../dist/src/services/teamMetadata.js');
+  const withTeams = () => bundleAgentObject({
+    agentName: 'builder', agentFile: builder, agentDir: team, libraryRoot: lib, libraryRoots: [lib],
+    libraries: { '@main': lib }, bundleConfig: { runtime: false }, contractIndex: buildContractIndex(teams, null),
+  });
+  const handed = (await withTeams()).structure.byKind('flow').find(f => f.name === 'ship').body[2];
+  assert.equal(handed.by.kind, 'team');
+  assert.equal(handed.by.target, '@main.teams/ops');
+  const routed = (await orchestration()).content;
+  assert.ok(routed.includes('3. hand it to ops — by `ops`'), routed);
+  assert.ok(routed.includes("when a step's `By` line names a team, hand the step to that team as to one agent"), routed);
+  writeTeam([...TEAM_BODY, ...handOff.map(l => l.replace('BY ops', 'BY nobody'))]);
+  await assert.rejects(withTeams(), /unknown agent `nobody` — BY names a member of this team, or a team/);
+  await assert.rejects(orchestration(), /BY nobody: no team member, no role bound to one and no team is called `nobody`/);
+  rmSync(ops, { recursive: true });
+  writeTeam(TEAM_BODY);
+
   console.log('team block tests passed.');
 } finally {
   rmSync(tmp, { recursive: true, force: true });

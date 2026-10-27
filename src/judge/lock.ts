@@ -18,10 +18,9 @@ import { dirname } from 'path';
 import type { JudgeCheck } from './types.js';
 import { sha256Hex } from '../apdoc/ids.js';
 
-/** A human decision: a probability on one check of one line text — or the option chosen on a choice (a file's domain). */
+/** A human decision: a probability on one check of one line text. */
 export interface Decision {
-  p?: number;
-  choice?: string;
+  p: number;
   by?: 'human';
 }
 
@@ -65,11 +64,10 @@ export class JudgeLock {
       throw new Error(`The judge lock ${path} is not a version 1 judge lock`);
     }
     for (const [key, v] of Object.entries(data.decisions)) {
-      const d = v as Decision | null;
-      const choice = typeof d?.choice === 'string' && d.choice !== '';
-      if (!choice && !isProbability(d?.p)) {
-        throw new Error(`The judge lock ${path}: the decision "${key}" has neither a p between 0 and 1 nor a choice`);
-      }
+      const d = v as { p?: unknown; choice?: unknown } | null;
+      // A file's domain the developer once chose: domains are DOMAIN blocks now — dropped at the next write.
+      if (typeof d?.choice === 'string' && d.p === undefined) { delete data.decisions[key]; continue; }
+      if (!isProbability(d?.p)) throw new Error(`The judge lock ${path}: the decision "${key}" has no p between 0 and 1`);
     }
     // Another judge's pinned model is not this judge's: it is pinned again.
     const model = data.judge === judge && typeof data.model === 'string' ? data.model : null;
@@ -98,12 +96,6 @@ export class JudgeLock {
   /** The human decision for a key, or null. */
   decision(key: string): Decision | null {
     return this.data.decisions[key] ?? null;
-  }
-
-  /** Record the developer's choice for a key — a file's domain the judge left grey. */
-  decide(key: string, choice: string): void {
-    this.data.decisions[key] = { choice, by: 'human' };
-    this.dirty = true;
   }
 
   /** Write the lock when this run pinned its model, or took a decision for the developer — the only writes the judge ever makes to it. */

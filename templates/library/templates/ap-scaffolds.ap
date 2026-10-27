@@ -2,10 +2,10 @@
 
 EXPORT TEMPLATE ap-statement:
   ABOUT   one statement of an action body — an allowed keyword plus its text
-  APPLIES #agent-pack #authoring #scaffold #rule
+  APPLIES #agent-pack, #authoring, #scaffold, #rule
 
   SLOTS:
-    key:  ENUM[DO ASK COMPUTE RUN IF ELSE UNTIL IF! IF!! UNTIL! UNTIL!! WHEN! IF* IF** UNTIL* UNTIL** IN VAR] "keyword"
+    key:  ENUM[DO, ASK, COMPUTE, RUN, IF, ELSE, UNTIL, IF!, IF!!, UNTIL!, UNTIL!!, WHEN!, IF*, IF**, UNTIL*, UNTIL**, IN, VAR] "keyword"
       MUST   act with DO (the agent), ASK (a delegate), COMPUTE (a program) or RUN; branch with IF / ELSE
       MUST   loop with UNTIL; a line may raise its executor (agent, delegate, program), never lower it
       MUST   hand a condition to the judge with IF! / UNTIL! (agent sees it) or IF!! / UNTIL!! (sealed)
@@ -25,7 +25,7 @@ EXPORT TEMPLATE ap-statement:
 
 EXPORT TEMPLATE ap-action:
   ABOUT   an imperative action body — the ordered statements a procedure or workflow runs
-  APPLIES #agent-pack #authoring #scaffold #rule
+  APPLIES #agent-pack, #authoring, #scaffold, #rule
 
   SLOTS:
     steps: LIST <ap-statement> >=1  "one statement per line, in execution order"
@@ -41,10 +41,10 @@ EXPORT TEMPLATE ap-action:
 
 EXPORT TEMPLATE ap-rule:
   ABOUT   scaffold for one force-level directive line — the unit a policy's or role's rules are built from
-  APPLIES #agent-pack #authoring #scaffold #rule
+  APPLIES #agent-pack, #authoring, #scaffold, #rule
 
   SLOTS:
-    force: ENUM[MUST ALWAYS NEVER SHOULD MAY MEM]  "force-level keyword — how binding it is (MEM: remember)"
+    force: ENUM[MUST, ALWAYS, NEVER, SHOULD, MAY, MEM]  "force-level keyword — how binding it is (MEM: remember)"
       MUST   suffix ! to strengthen (MUST! hard, MUST!! identity); prefix ! to negate (!MUST = must not)
     rule:  TEXT  "the directive — one imperative the agent must follow"
   BODY:
@@ -54,7 +54,7 @@ EXPORT TEMPLATE ap-rule:
 
 EXPORT TEMPLATE ap-workflow:
   ABOUT   scaffold for one WHEN-triggered workflow block — a conditional behaviour a role or agent runs
-  APPLIES #agent-pack #authoring #scaffold #rule
+  APPLIES #agent-pack, #authoring, #scaffold, #rule
 
   SLOTS:
     trigger: TEXT MAX_WORDS 15  "the situation that activates the block (WHEN); the header ends with a colon"
@@ -70,12 +70,12 @@ EXPORT TEMPLATE ap-workflow:
 
 EXPORT TEMPLATE ap-block-step:
   ABOUT   scaffold for a STEP — a single executable node inside a FLOW or a PARALLEL group
-  APPLIES #agent-pack #authoring #scaffold #block
+  APPLIES #agent-pack, #authoring, #scaffold, #block
 
   SLOTS:
     label:    TEXT MAX_WORDS 8  "imperative step label; the header ends with a colon"
     by?:      TEXT MAX_WORDS 1  "agent or team that executes it (BY); omit if unbound"
-    context?: ENUM[isolated summary full inherited]  "how much upstream context to pass (CONTEXT); omit for default"
+    context?: ENUM[isolated, summary, full, inherited]  "how much upstream context to pass (CONTEXT); omit for default"
     actions:  TEXT  "one DO, RUN or force-level line per action; IF/ELSE branches hold the same lines"
       MUST   give at least one DO or RUN line — a step with neither is invalid
       MUST   write a rule with its force keyword (NEVER, MUST, SHOULD …) — never as DO never
@@ -102,7 +102,7 @@ EXPORT TEMPLATE ap-block-step:
 
 EXPORT TEMPLATE ap-block-flow:
   ABOUT   scaffold for a FLOW — ordered STEP, PARALLEL and RUN nodes, IF/ELSE/UNTIL around them; referenced by RUN
-  APPLIES #agent-pack #authoring #scaffold #block
+  APPLIES #agent-pack, #authoring, #scaffold, #block
 
   SLOTS:
     flow-name: TEXT MAX_WORDS 1  "kebab-case flow name, referenced by RUN"
@@ -136,7 +136,7 @@ EXPORT TEMPLATE ap-block-flow:
 
 EXPORT TEMPLATE ap-block-parallel:
   ABOUT   scaffold for a PARALLEL group — sibling STEPs that run concurrently inside a FLOW
-  APPLIES #agent-pack #authoring #scaffold #block
+  APPLIES #agent-pack, #authoring, #scaffold, #block
 
   SLOTS:
     branches: LIST <ap-block-step> >=1  "one STEP per concurrent branch"
@@ -159,7 +159,7 @@ EXPORT TEMPLATE ap-block-parallel:
 
 EXPORT TEMPLATE ap-block-agent:
   ABOUT   scaffold for an agent-pack AGENT block — fill the slots to emit a valid `AGENT … AS …:` definition
-  APPLIES #agent-pack #authoring #scaffold #block
+  APPLIES #agent-pack, #authoring, #scaffold, #block
 
   SLOTS:
     importable?: ENUM[EXPORT]  "prefix EXPORT to make the agent importable cross-file; omit for a local agent"
@@ -169,24 +169,24 @@ EXPORT TEMPLATE ap-block-agent:
       MUST   say what the agent does and how it is routed to — never paraphrase the bound role's ABOUT
     mandate:     TEXT MAX_WORDS 20  "the agent's operating directive"
       MUST   carry exactly one MANDATE line
-    owns?:       TEXT MAX_WORDS 10  "glob(s) the agent exclusively owns, or ALL; omit the OWNS line if unscoped"
+    writes?:     TEXT MAX_WORDS 10  "the DOMAINs the agent may write, comma-separated; omit the WRITES line if unscoped"
     rules?:      LIST <ap-rule>  "project-level contracts for THIS agent; omit if none — behaviour lives in the role"
   BODY:
     {importable} AGENT {agent-name} AS {role-name}:
         ABOUT    {about}
         MANDATE  {mandate}
-        OWNS     {owns}
+        WRITES   {writes}
         {rules}
   EXAMPLE:
     EXPORT AGENT architect AS software-architect:
         ABOUT    Maintains the application architecture as PlantUML diagrams stored in the project wiki
         MANDATE  keep architecture diagrams current, consistent, and organized in the project wiki
-        OWNS     wiki/**
+        WRITES   wiki
         MUST     store every diagram in the project wiki — never write diagram files directly
 
 EXPORT TEMPLATE ap-block-role:
   ABOUT   scaffold for a ROLE — the craft an agent binds via AS; identity lives here, never in the agent
-  APPLIES #agent-pack #authoring #scaffold #block
+  APPLIES #agent-pack, #authoring, #scaffold, #block
 
   SLOTS:
     importable?: ENUM[EXPORT]  "prefix EXPORT to import the role cross-file; omit for an inline role"
@@ -208,14 +208,14 @@ EXPORT TEMPLATE ap-block-role:
   EXAMPLE:
     EXPORT ROLE software-architect:
         ABOUT      keeps the system legible as a small set of consistent PlantUML diagrams
-        EXPERTISE  plantuml system-design domain-modeling
-        APPLIES    #architecture #plantuml
+        EXPERTISE  plantuml, system-design, domain-modeling
+        APPLIES    #architecture, #plantuml
         ALWAYS  model the system as nodes and labelled edges, never prose
         NEVER   leave a dependency edge without a protocol and an intent
 
 EXPORT TEMPLATE ap-block-policy:
   ABOUT   scaffold for a POLICY — ABOUT plus ALWAYS/NEVER assertions, no control flow and no triggers
-  APPLIES #agent-pack #authoring #scaffold #block
+  APPLIES #agent-pack, #authoring, #scaffold, #block
 
   SLOTS:
     importable?: ENUM[EXPORT]  "prefix EXPORT to import the policy cross-file; omit for local"
@@ -233,13 +233,13 @@ EXPORT TEMPLATE ap-block-policy:
   EXAMPLE:
     EXPORT POLICY security:
         ABOUT    baseline security rules every agent respects
-        APPLIES  #security #baseline universal
+        APPLIES  #security, #baseline, universal
         ALWAYS  validate every input crossing a trust boundary
         NEVER   commit credentials, .env files, or private keys
 
 EXPORT TEMPLATE ap-block-procedure:
   ABOUT   scaffold for a PROCEDURE — an ordered DO/RUN routine with optional IF/ELSE/UNTIL and an output shape
-  APPLIES #agent-pack #authoring #scaffold #block
+  APPLIES #agent-pack, #authoring, #scaffold, #block
 
   SLOTS:
     importable?:    ENUM[EXPORT]  "prefix EXPORT to import the procedure cross-file; omit for local"
@@ -258,7 +258,7 @@ EXPORT TEMPLATE ap-block-procedure:
   EXAMPLE:
     EXPORT PROCEDURE create-bug-card:
         ABOUT  open a bug report card shaped as a bug-card
-        APPLIES #product #planning #bug
+        APPLIES #product, #planning, #bug
         DO     create the card in the Backlog list
         IF     the bug has no reproduction steps
           DO   move the card to Needs Clarification
@@ -266,7 +266,7 @@ EXPORT TEMPLATE ap-block-procedure:
 
 EXPORT TEMPLATE ap-block-dimension:
   ABOUT   scaffold for a DIMENSION — an answer implicit in source files, worked out once and kept by the apx
-  APPLIES #agent-pack #authoring #scaffold #block
+  APPLIES #agent-pack, #authoring, #scaffold, #block
 
   SLOTS:
     importable?:    ENUM[EXPORT]  "prefix EXPORT for a library dimensions/ folder; omit in the agent's file"
@@ -301,7 +301,7 @@ EXPORT TEMPLATE ap-block-dimension:
 
 EXPORT TEMPLATE ap-vars-line:
   ABOUT   one EXPORT VAR line of a library module — a constant, a SESSION hand-off or a private variable
-  APPLIES #agent-pack #authoring #scaffold #rule
+  APPLIES #agent-pack, #authoring, #scaffold, #rule
 
   SLOTS:
     scope?: ENUM[SESSION]  "SESSION for a variable the session's importing agents share; omit otherwise"

@@ -27,8 +27,8 @@ const apx = (args, input) => {
   });
   return { code: r.status, out: `${r.stdout}${r.stderr}` };
 };
-/** The JSON part of `apx input` — what follows it is the answer's shape. */
-const inputOf = id => JSON.parse(apx(['input', id]).out.split('\n# answer')[0]);
+/** The JSON part of `apx ask input` — what follows it is the answer's shape. */
+const inputOf = id => JSON.parse(apx(['ask', 'input', id]).out.split('\n# answer')[0]);
 const program = (dir, script, manifest, tests) => {
   const folder = join(root, 'distilled', dir);
   mkdirSync(folder, { recursive: true });
@@ -75,7 +75,7 @@ try {
   assert.ok(/^model: haiku$/m.test(quickMd), 'quick runs on a fast model on Claude Code');
   assert.ok(/^tools: \[\]$/m.test(quickMd), 'quick gets no tool: it answers from the input it is handed alone');
   const clerkMd = readFileSync(join(root, '.claude', 'agents', 'clerk.md'), 'utf-8');
-  assert.ok(clerkMd.includes('— delegate: `quick` — hand it over its input and the shape of its answer, both from `node .agent-pack/apx/clerk.apx input exe-'), 'the prompt names the default delegate and how to hand it over');
+  assert.ok(clerkMd.includes('— delegate: `quick` — hand it over its input and the shape of its answer, both from `node .agent-pack/apx/clerk.apx ask input exe-'), 'the prompt names the default delegate and how to hand it over');
   assert.ok(/^model: inherit$/m.test(clerkMd), 'any other agent inherits the session\'s model');
   assert.ok(/^tools: "\*"$/m.test(clerkMd) || /^tools: \*$/m.test(clerkMd), 'any other agent keeps its tools');
 
@@ -85,11 +85,11 @@ try {
   assert.ok(scope.includes(`${ask}  a delegate  line: summarise the invoice for {{weight_kg}}`));
 
   // --- input: one key per variable read (as stored) and per constant (with its value) ---
-  assert.equal(apx(['input', cond]).code, 1, 'an empty variable: nothing to carry out yet');
+  assert.equal(apx(['ask', 'input', cond]).code, 1, 'an empty variable: nothing to carry out yet');
   apx(['set', 'totals', '349.48']);
   apx(['set', 'document_total', '350.48']);
   assert.deepEqual(inputOf(cond), { tolerance: 1, totals: 349.48, document_total: 350.48 });
-  assert.ok(apx(['input', cond]).out.endsWith('# answer: {"holds": true | false} — JSON only\n'), 'a condition\'s answer shape');
+  assert.ok(apx(['ask', 'input', cond]).out.endsWith('# answer: {"holds": true | false} — JSON only\n'), 'a condition\'s answer shape');
 
   // --- run, first time: no program yet — where to write it, and its contract ---
   let r = apx(['run', cond]);
@@ -147,19 +147,19 @@ try {
   // --- a delegate: its answer is checked against the contract, stored, recorded ---
   apx(['set', 'weight_kg', '18']);
   assert.deepEqual(inputOf(ask), { weight_kg: 18 });
-  assert.ok(apx(['input', ask]).out.endsWith('# answer: plain text\n'), 'an untyped variable takes plain text');
-  r = apx(['answer', ask, '-'], 'An invoice for 18 kg.');
+  assert.ok(apx(['ask', 'input', ask]).out.endsWith('# answer: plain text\n'), 'an untyped variable takes plain text');
+  r = apx(['ask', 'answer', ask, '-'], 'An invoice for 18 kg.');
   assert.equal(r.code, 0, r.out);
   assert.ok(apx(['get', 'summary']).out.includes('# value:\nAn invoice for 18 kg.'), 'stored as written in its INTO variable — no JSON needed');
   // A typed variable: the delegate is handed its template, AS <template>, with an example to fill.
   const [estimate] = specs.find(([, s]) => s.site === 'line' && s.text.startsWith('estimate a dose'));
-  assert.ok(apx(['input', estimate]).out.endsWith('# answer AS `dose-result` — JSON only, shaped like:\n{"mg":0}\n'), apx(['input', estimate]).out);
-  assert.equal(apx(['answer', estimate, '-'], 'about 270 mg').code, 6, 'a typed answer must be its JSON');
-  assert.equal(apx(['answer', estimate, '-'], '{"mg": 270}').code, 0);
-  assert.equal(apx(['answer', cond, '-'], '{"holds":true}').code, 1, 'a program\'s piece takes no answer');
+  assert.ok(apx(['ask', 'input', estimate]).out.endsWith('# answer AS `dose-result` — JSON only, shaped like:\n{"mg":0}\n'), apx(['ask', 'input', estimate]).out);
+  assert.equal(apx(['ask', 'answer', estimate, '-'], 'about 270 mg').code, 6, 'a typed answer must be its JSON');
+  assert.equal(apx(['ask', 'answer', estimate, '-'], '{"mg": 270}').code, 0);
+  assert.equal(apx(['ask', 'answer', cond, '-'], '{"holds":true}').code, 1, 'a program\'s piece takes no answer');
   // A delegated line that stores nothing takes any answer — prose included — and records it.
   const [note] = specs.find(([, s]) => s.site === 'line' && s.text.startsWith('note anything odd'));
-  r = apx(['answer', note, '-'], 'Nothing odd: the weight is plausible.');
+  r = apx(['ask', 'answer', note, '-'], 'Nothing odd: the weight is plausible.');
   assert.equal(r.code, 0, r.out);
   assert.equal(apx(['run', ask]).code, 1, 'a delegate\'s piece has no program');
 
@@ -167,15 +167,15 @@ try {
   const [loop] = specs.find(([, s]) => s.site === 'condition' && s.text.includes('short enough'));
   assert.equal(doc.meta.executors[loop].rounds, 3);
   assert.ok(clerkMd.includes(`answer ${loop} -\`; after each round, ask again — at most 3 rounds: at the limit, stop and report that the condition never held`), clerkMd);
-  r = apx(['answer', loop, '-'], '{"holds":false}');
+  r = apx(['ask', 'answer', loop, '-'], '{"holds":false}');
   assert.ok(r.out.includes('# round 1 of 3 — do the next round, then ask again'), r.out);
-  assert.ok(apx(['answer', loop, '-'], '{"holds":false}').out.includes('# round 2 of 3'));
-  r = apx(['answer', loop, '-'], '{"holds":false}');
+  assert.ok(apx(['ask', 'answer', loop, '-'], '{"holds":false}').out.includes('# round 2 of 3'));
+  r = apx(['ask', 'answer', loop, '-'], '{"holds":false}');
   assert.ok(r.out.includes('# round limit reached (3 of 3): stop and report that the condition never held'), r.out);
   assert.equal(r.code, 7, 'at the limit the loop ends: an exit of its own, so a chained command never runs another round');
-  r = apx(['answer', loop, '-'], '{"holds":true}');
+  r = apx(['ask', 'answer', loop, '-'], '{"holds":true}');
   assert.ok(!r.out.includes('round'), 'it holds: the loop ends');
-  assert.ok(apx(['answer', loop, '-'], '{"holds":false}').out.includes('# round 1 of 3'), 'a new loop counts from its first round');
+  assert.ok(apx(['ask', 'answer', loop, '-'], '{"holds":false}').out.includes('# round 1 of 3'), 'a new loop counts from its first round');
 
   // --- a COMPUTE block: its program answers in its RETURN AS template ---
   r = apx(['run', proc]);
@@ -225,6 +225,19 @@ try {
   write(join(root, 'agent-pack.config.mjs'), ['export default {', "  libraryRoot: 'library',", "  agentsDir: 'agents',", "  adapters: ['claude-code'],", "  delegate: { models: { quick: 'sonnet' } },", '};']);
   assert.equal(bundle().status, 0);
   assert.ok(/^model: sonnet$/m.test(readFileSync(join(root, '.claude', 'agents', 'quick.md'), 'utf-8')));
+
+  // --- an agent's BUDGET picks its model, over the config's ---
+  write(join(root, 'agent-pack.config.mjs'), ['export default {', "  libraryRoot: 'library',", "  agentsDir: 'agents',", "  adapters: ['claude-code'],", "  delegate: { models: { quick: 'sonnet', clerk: 'sonnet' } },", '};']);
+  const withBudget = (tier) => AGENT.map(l => l.replace('    MANDATE  check invoices', `    MANDATE  check invoices\n    BUDGET   ${tier}`));
+  write(join(root, 'agents', 'standalone', 'clerk.ap'), withBudget('costly'));
+  assert.equal(bundle().status, 0);
+  const budgeted = readFileSync(join(root, '.claude', 'agents', 'clerk.md'), 'utf-8');
+  assert.ok(/^model: opus$/m.test(budgeted), budgeted.slice(0, 200));
+  assert.ok(!budgeted.includes('BUDGET'), 'the tier is metadata, never prose');
+  write(join(root, 'agents', 'standalone', 'clerk.ap'), withBudget('lavish'));
+  built = bundle();
+  assert.ok(`${built.stdout}${built.stderr}`.includes('BUDGET: unknown value `lavish` (allowed: cheap, moderate, costly)'), `${built.stdout}${built.stderr}`);
+  write(join(root, 'agents', 'standalone', 'clerk.ap'), AGENT);
 
   // --- a DISTILL line is an error that says what replaces it ---
   write(join(root, 'agents', 'standalone', 'clerk.ap'), [...AGENT, '', 'PROCEDURE old:', '    AS  dose-result', '    DISTILL!!', '    DO  compute it']);

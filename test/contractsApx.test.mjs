@@ -4,18 +4,21 @@
  * The contracts strategy — the apx side (D44): a real project, the real
  * `bundle all`, the agents' real apx run as processes in one session.
  *
- *   - start / new / dispatch / deliver / block / merge / get / list, each by the
- *     agent whose it is; ids, rotation over a BY, the freeze while work runs
- *   - dispatch: a zone in one file, two marks in order; one assignee per file;
- *     the file's domain is the contract's (kept across the lead's edits)
- *   - deliver: the marks gone, nothing written outside the zone (a changed or a
- *     new file of the perimeter); a transition is a compare-and-swap (exit 4)
- *   - merge: after every instance it depends on
+ *   - start / new / dispatch / deliver / block / take / merge / get /
+ *     list, each by the agent whose it is; ids, rotation over a BY
+ *   - dispatch: zones in what the lead writes, marks in order, a zone in a file
+ *     its assignee writes, WITHIN zone needs one; a copy per instance
+ *   - deliver: from the copy, what WITHIN admits; anything else only with a
+ *     reason; a transition is a compare-and-swap (exit 4)
+ *   - take: the lead finishes a blocked instance in its copy
+ *   - merge: after every instance it depends on, as soon as it is delivered;
+ *     delivering the request lands the work in the working folder
  */
 
 import { strict as assert } from 'assert';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'fs';
 import { join, dirname } from 'path';
+import { existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
@@ -27,33 +30,31 @@ const { queryTable, runTable } = await import('../dist/src/apx/tabeli.js');
 const proj = mkdtempSync(join(tmpdir(), 'ap-contracts-apx-'));
 const write = (file, lines) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, (Array.isArray(lines) ? lines.join('\n') : lines) + '\n'); return file; };
 
-// A judge that never hesitates, in the config file: a file mentioning a table is of persistence, any other of api.
-write(join(proj, 'agent-pack.config.mjs'), [
-  'export default {', "  libraryRoot: 'library',", "  agentsDir: 'agents',", "  adapters: ['claude-code'],",
-  "  judge: { adapter: { type: 'judge', name: 'fake', async ask(state, checks) {",
-  "    const q = checks[0]; const persistence = /table/.test(state);",
-  "    return { model: 'fake-1', answers: { [q.id]: q.options ? { api: persistence ? 0.05 : 0.95, persistence: persistence ? 0.95 : 0.05 } : 1 } };",
-  '  } } },', '};',
-]);
+write(join(proj, 'agent-pack.config.mjs'), ['export default {', "  libraryRoot: 'library',", "  agentsDir: 'agents',", "  adapters: ['claude-code'],", '};']);
 write(join(proj, 'library', 'templates', 'spec.ap'), ['EXPORT TEMPLATE spec:', '    ABOUT  a spec', '    SLOTS:', '        goal: TEXT  "what the zone does"', '    BODY:', '        {goal}']);
 write(join(proj, 'library', 'templates', 'request.ap'), ['EXPORT TEMPLATE request:', '    ABOUT  a request', '    SLOTS:', '        request: TEXT  "the request"', '    BODY:', '        {request}']);
-write(join(proj, 'library', 'templates', 'file-domain.ap'), ['EXPORT TEMPLATE file-domain:', '    ABOUT  the domain of a file', '    SLOTS:', '        domain: ENUM[api persistence]  "the one domain of the file"', '    BODY:', '        {domain}']);
-write(join(proj, 'library', 'dimensions', 'domains.ap'), ['IMPORT file-domain FROM @main.templates', '', 'EXPORT DIMENSION domains:', '    ABOUT   the domain of each source file', '    FOR     src/**', '    EACH    file', '    AS      file-domain']);
+// The domains: the lead writes all the sources, each member its own region.
+const domain = (name, globs) => write(join(proj, 'library', 'domains', `${name}.ap`), [`EXPORT DOMAIN ${name}:`, `    ABOUT  ${name}`, `    FOR    ${globs}`]);
+domain('code', 'src/**'); domain('api', 'src/api/**'); domain('persistence', 'src/db/**');
 const team = join(proj, 'agents', 'teams', 'backend');
 const agent = (name, lines, imports = []) => write(join(team, `${name}.ap`), [...imports, ...(imports.length ? [''] : []),
   `EXPORT AGENT ${name} AS ${name}-role:`, `    ABOUT    ${name}`, '    MANDATE  do the work', ...lines, '', `ROLE ${name}-role:`, '    ABOUT   a worker', '    ALWAYS  work']);
-agent('architect', ['    WHEN handed change:', '        DO  write the skeletons, hand the zones out'], ['IMPORT domains FROM @main.dimensions']);
-agent('api-dev', ['    WHEN handed endpoint:', '        DO  implement the zone']);
-agent('api-dev-2', ['    WHEN handed endpoint:', '        DO  implement the zone']);
-agent('db-dev', ['    WHEN handed repository:', '        DO  implement the zone']);
+agent('architect', ['    WRITES   code', '    WHEN handed change:', '        DO  write the skeletons, hand the zones out'], ['IMPORT code FROM @main.domains']);
+agent('api-dev', ['    WRITES   api', '    WHEN handed endpoint:', '        DO  implement the zone'], ['IMPORT api FROM @main.domains']);
+agent('api-dev-2', ['    WRITES   api', '    WHEN handed endpoint:', '        DO  implement the zone'], ['IMPORT api FROM @main.domains']);
+agent('db-dev', ['    WRITES   persistence', '    WHEN handed repository:', '        DO  implement the zone'], ['IMPORT persistence FROM @main.domains']);
 write(join(team, 'backend.ap'), ['IMPORT spec FROM @main.templates', '', 'EXPORT TEAM backend:', '    ABOUT     builds a backend change by contracts',
-  '    STRATEGY  contracts', '    LEAD      architect', '    DOMAINS   domains',
-  '    CONTRACT endpoint:', '        ABOUT   one HTTP endpoint', '        DOMAIN  api', '        AS      spec', '        BY      api-dev, api-dev-2',
+  '    STRATEGY  contracts', '    LEAD      architect',
+  '    CONTRACT endpoint:', '        ABOUT   one HTTP endpoint', '        DOMAIN  api', '        WITHIN  zone', '        AS      spec', '        BY      api-dev, api-dev-2',
   '    CONTRACT repository:', '        ABOUT   one table and its repository', '        DOMAIN  persistence', '        AS      spec', '        BY      db-dev']);
 write(join(proj, 'PROJECT.ap'), ['ABOUT  the project', '', 'IMPORT request FROM @main.templates', '', 'CONTRACT change:', '    ABOUT   any change', '    AS      request', '    BY      backend']);
 const api = write(join(proj, 'src', 'api', 'users.ts'), ['export function getUser(id: string) {', '  return null;', '}']);
 const apiOrders = write(join(proj, 'src', 'api', 'orders.ts'), ['export function getOrder(id: string) {', '  return null;', '}']);
 const db = write(join(proj, 'src', 'db', 'users.ts'), ['// the users table', 'export const users = [];']);
+const git = (cwd, ...args) => { const r = spawnSync('git', args, { cwd, encoding: 'utf-8' }); assert.equal(r.status, 0, `git ${args.join(' ')}: ${r.stderr}`); return r.stdout.trim(); };
+write(join(proj, '.gitignore'), ['.agent-pack/', '.claude/']);
+git(proj, 'init', '-q'); git(proj, 'config', 'user.email', 'dev@example.com'); git(proj, 'config', 'user.name', 'dev');
+git(proj, 'add', '-A'); git(proj, 'commit', '-qm', 'start');
 
 const SESSION = 'contracts-session';
 const bundle = () => {
@@ -118,76 +119,66 @@ try {
   const orders = ctrOf(e2.out);
   assert.equal(apx('architect', ['new', ENDPOINT, 'depends=ctr-00000000', '-'], '{"goal":"x"}').code, 1, 'depends on nothing that exists');
 
-  // --- dispatch: every zone checked, nothing handed out on a refusal ---
+  // --- dispatch: WITHIN zone needs a zone; marks in order; a zone in a file its assignee writes; nothing handed out on a refusal ---
   let d = apx('architect', ['dispatch']);
   assert.equal(d.code, 3);
-  has(d, `${users}: no zone`);
-  // marks: users in the api file, orders in the same file (two assignees), repo in an api file (wrong domain)
-  write(api, ['export function getUser(id: string) {', `  // agent-pack ${users}`, '  return null;', `  // agent-pack end ${users}`, '}',
-    'export function listUsers() {', `  // agent-pack ${orders}`, `  // agent-pack end ${orders}`, '}']);
-  write(apiOrders, ['export function getOrder(id: string) {', `  // agent-pack ${repo}`, `  // agent-pack end ${repo}`, '}']);
+  has(d, `${users}: WITHIN zone needs a zone`);
+  assert.ok(!d.out.includes(`${repo}:`), 'a repository is WITHIN domain: no zone needed');
+  write(api, ['export function getUser(id: string) {', `  // agent-pack end ${users}`, '  return null;', `  // agent-pack ${users}`, '}']);
+  write(db, ['// the users table', `// agent-pack ${orders}`, 'export const users = [];', `// agent-pack end ${orders}`]);
   d = apx('architect', ['dispatch']);
-  assert.equal(d.code, 3);
-  has(d, 'src/api/users.ts holds the zones of api-dev and api-dev-2');
-  has(d, `${repo}: src/api/orders.ts is of the domain \`api\`, and repository is of \`persistence\``);
-  assert.ok(!/handed out/.test(d.out.split('\n').filter(l => !l.startsWith('# error')).join('\n')) || d.code === 3);
-  // a closing mark before the opening one
-  write(db, ['// the users table', `// agent-pack end ${repo}`, `// agent-pack ${repo}`, 'export const users = [];']);
-  write(apiOrders, ['export function getOrder(id: string) {', `  // agent-pack ${orders}`, `  // agent-pack end ${orders}`, '}']);
-  write(api, ['export function getUser(id: string) {', `  // agent-pack ${users}`, '  return null;', `  // agent-pack end ${users}`, '}']);
-  d = apx('architect', ['dispatch']);
-  has(d, `${repo}: src/db/users.ts: the closing mark (line 2) comes before the opening one (line 3)`);
-  write(db, ['// the users table', `// agent-pack ${repo}`, `// agent-pack end ${repo}`, 'export const users = [];']);
+  has(d, `${users}: src/api/users.ts: the closing mark (line 2) comes with no opening one before it`);
+  has(d, `${orders}: src/db/users.ts holds a zone of it, and api-dev-2 does not write that file`);
+  // users: one zone; orders: two zones, in two files — one of them in users' file too.
+  write(api, ['export function getUser(id: string) {', `  // agent-pack ${users}`, '  return null;', `  // agent-pack end ${users}`, '}', '', `// agent-pack ${orders}`, 'export const ORDERS_BY_USER = false;', `// agent-pack end ${orders}`]);
+  write(apiOrders, ['export function getOrder(id: string) {', `  // agent-pack ${orders}`, '  return null;', `  // agent-pack end ${orders}`, '}']);
+  write(db, ['// the users table', 'export const users = [];']);
   d = ok(apx('architect', ['dispatch']), 'dispatch');
-  has(d, `${users}  endpoint  src/api/users.ts:2-4  → api-dev`);
-  has(d, `${repo}  repository  src/db/users.ts:2-3  → db-dev`);
+  has(d, `${users}  endpoint  → api-dev  within zone  src/api/users.ts:2-4  copy: .agent-pack/work/${users}`);
+  has(d, `${orders}  endpoint  → api-dev-2  within zone  src/api/orders.ts:2-4;src/api/users.ts:7-9`);
+  has(d, `${repo}  repository  → db-dev  within domain`);
   has(d, '3 instances handed out');
-  assert.equal(apx('architect', ['new', ENDPOINT, '-'], '{"goal":"more"}').code, 2, 'frozen while the work runs');
-  has(apx('architect', ['new', ENDPOINT, '-'], '{"goal":"more"}'), 'meanwhile only list and get');
-  assert.equal(apx('architect', ['merge', users]).code, 2, 'no merge while the work runs');
+  assert.equal(git(proj, 'rev-parse', '--abbrev-ref', 'HEAD') !== '', true);
+  assert.equal(git(proj, 'diff', '--cached', '--name-only'), '', 'the developer\'s index is untouched');
+  const copy = ctr => join(proj, '.agent-pack', 'work', ctr);
+  assert.ok(existsSync(join(copy(users), 'src', 'api', 'users.ts')), 'a copy per instance');
+  assert.ok(readFileSync(join(copy(users), 'src', 'api', 'users.ts'), 'utf-8').includes(`agent-pack ${users}`), 'the copy starts from the working folder: the lead\'s marks are there');
 
-  // --- get / list ---
+  // --- get: the limit, the zones, the copy ---
   const g = ok(apx('api-dev', ['get', users]), 'get');
   has({ out: g }, `contract ${users} — endpoint — assigned — assigned to api-dev`);
-  has({ out: g }, 'zone: src/api/users.ts:2-4');
+  has({ out: g }, 'within: zone — write only between the marks of its zones');
+  has({ out: g }, `copy: .agent-pack/work/${users}`);
+  has({ out: g }, `# work in your copy: cd .agent-pack/work/${users}`);
   has({ out: g }, `depends on: ${repo} (assigned)`);
   has({ out: g }, '"goal": "GET /users/:id"');
-  has({ out: g }, `contract deliver ${users}`);
   const l = ok(apx('db-dev', ['list']), 'list');
   assert.equal(l.split('\n').filter(x => x.startsWith('ctr-')).length, 4, l);
 
-  // --- deliver: not another's, not with marks, not outside the zone ---
+  // --- the member works in its copy: inside its zone, and once outside it — asked why at deliver ---
+  write(join(copy(users), 'src', 'api', 'users.ts'), ['import { db } from "../db/users";', 'export function getUser(id: string) {', `  // agent-pack ${users}`, '  return db.find(id);', `  // agent-pack end ${users}`, '}', '', `// agent-pack ${orders}`, 'export const ORDERS_BY_USER = false;', `// agent-pack end ${orders}`]);
+  // The Claude Code hook in the member's frontmatter: Claude Code calls it after each write, with the path written.
+  assert.ok(readFileSync(join(proj, '.claude', 'agents', 'api-dev.md'), 'utf-8').includes('command: node "$CLAUDE_PROJECT_DIR"/.agent-pack/hooks/claude-code-within.mjs api-dev'), 'a member carries the hook');
+  const hook = (agent, file) => spawnSync(process.execPath, [join(proj, '.agent-pack', 'hooks', 'claude-code-within.mjs'), agent], {
+    cwd: proj, encoding: 'utf-8', input: JSON.stringify({ session_id: SESSION, hook_event_name: 'PostToolUse', tool_name: 'Edit', tool_input: { file_path: file } }),
+    env: { ...process.env, CLAUDE_PROJECT_DIR: proj, CLAUDE_CODE_SESSION_ID: '' },
+  }).stdout;
+  const warned = JSON.parse(hook('api-dev', join(copy(users), 'src', 'api', 'users.ts')));
+  assert.equal(warned.hookSpecificOutput.hookEventName, 'PostToolUse');
+  assert.ok(warned.hookSpecificOutput.additionalContext.startsWith(`src/api/users.ts (outside its zones) is outside ${users} (WITHIN zone): it will be left out of the delivery`), warned.hookSpecificOutput.additionalContext);
+  assert.equal(hook('api-dev', join(proj, 'src', 'api', 'users.ts')), '', 'a write outside the copies: silent');
+  assert.equal(readFileSync(join(copy(users), 'src', 'api', 'users.ts'), 'utf-8').includes('import { db }'), true, 'the hook never touches the write');
   assert.equal(apx('db-dev', ['deliver', users]).code, 2, "not db-dev's");
   let r = apx('api-dev', ['deliver', users]);
   assert.equal(r.code, 3);
-  has(r, `the marks of ${users} are still in src/api/users.ts`);
-  write(api, ['export function getUser(id: string) {', '  return db.find(id);', '}']);
-  write(db, ['// the users table', `// agent-pack ${repo}`, '// touched by api-dev', `// agent-pack end ${repo}`, 'export const users = [];']);
-  write(join(proj, 'src', 'api', 'helpers.ts'), 'export const x = 1;');
-  r = apx('api-dev', ['deliver', users]);
-  assert.equal(r.code, 3);
-  has(r, 'src/api/helpers.ts is new — your zone is src/api/users.ts alone');
-  assert.ok(!r.out.includes('src/db/users.ts changed'), 'db-dev\'s zone, still at work, is not counted');
-  write(db, ['// the users table', `// agent-pack ${repo}`, `// agent-pack end ${repo}`, 'export const users = [];']);
-  rmSync(join(proj, 'src', 'api', 'helpers.ts'));
-  // the others are at work meanwhile: db-dev writes in its own zone, api-dev-2 in its own — neither counts against api-dev
-  write(db, ['// the users table', `// agent-pack ${repo}`, '// db-dev is writing here', `// agent-pack end ${repo}`, 'export const users = [];']);
-  write(apiOrders, ['export function getOrder(id: string) {', `  // agent-pack ${orders}`, '  // api-dev-2 is writing here', `  // agent-pack end ${orders}`, '}']);
-  ok(apx('api-dev', ['deliver', users]), 'deliver users while the others are still at work');
-  write(db, ['// the users table', `// agent-pack ${repo}`, `// agent-pack end ${repo}`, 'export const users = [];']);
-  write(apiOrders, ['export function getOrder(id: string) {', `  // agent-pack ${orders}`, `  // agent-pack end ${orders}`, '}']);
+  has(r, 'left out: src/api/users.ts (outside its zones)');
+  has(r, `${users} was not delivered — what is left out stays out only with a good reason`);
+  r = ok(apx('api-dev', ['deliver', users, '--why', 'the import is outside the zone']), 'deliver with a reason');
+  has({ out: r }, `${users}  delivered — src/api/users.ts`);
+  has({ out: r }, 'left out: src/api/users.ts (outside its zones) — why: the import is outside the zone');
   assert.equal(apx('api-dev', ['deliver', users]).code, 2, 'delivered once');
 
-  // --- the transition is a compare-and-swap: a state changed meanwhile is exit 4 ---
-  const table = join(proj, STATE_DIR, SESSION, 'contracts.tbl');
-  const [rec] = queryTable(table, [`ctr=${orders}`]);
-  // another agent blocks it between our read and our write: emulate by changing the state the CAS expects
-  write(apiOrders, ['export function getOrder(id: string) {', '  return null;', '}']);
-  runTable(table, ['s', String(rec.id), 'state=delivered']);
-  assert.equal(apx('api-dev-2', ['deliver', orders]).code, 2, 'no longer assigned');
-  runTable(table, ['s', String(rec.id), 'state=assigned']);
-
-  // --- the table itself: a transition from a state the record no longer has is refused (tabeli's CAS, exit 4 at the apx) ---
+  // --- a transition from a state the record no longer has is refused (tabeli's CAS, exit 4 at the apx) ---
   {
     const { ContractTable } = await import('../dist/src/apx/contracts.js');
     const { TABELI_ENGINE } = await import('../dist/src/config.js');
@@ -196,27 +187,45 @@ try {
     assert.equal(t.get(users).state, 'delivered', 'and nothing changed');
   }
 
-  // --- block: a reason, the assignee only ---
-  assert.equal(apx('db-dev', ['block', repo]).code, 2, 'a reason is needed');
-  ok(apx('db-dev', ['block', repo, 'the users table has no email column']), 'block');
-  has(apx('db-dev', ['get', repo]), 'blocked: the users table has no email column');
-  ok(apx('api-dev-2', ['deliver', orders]), 'deliver orders');
+  // --- orders: two zones in two files, all of it inside them ---
+  write(join(copy(orders), 'src', 'api', 'orders.ts'), ['export function getOrder(id: string) {', `  // agent-pack ${orders}`, '  return { id };', `  // agent-pack end ${orders}`, '}']);
+  write(join(copy(orders), 'src', 'api', 'users.ts'), ['export function getUser(id: string) {', `  // agent-pack ${users}`, '  return null;', `  // agent-pack end ${users}`, '}', '', `// agent-pack ${orders}`, 'export const ORDERS_BY_USER = true;', `// agent-pack end ${orders}`]);
+  assert.equal(hook('api-dev-2', join(copy(orders), 'src', 'api', 'orders.ts')), '', 'a write within the zones: silent');
+  r = ok(apx('api-dev-2', ['deliver', orders]), 'deliver orders');
+  has({ out: r }, `${orders}  delivered — src/api/orders.ts, src/api/users.ts`);
 
-  // --- merge: delivered only, after what it depends on ---
+  // --- block, then take: the lead finishes it in its copy ---
+  assert.equal(apx('db-dev', ['block', repo]).code, 2, 'a reason is needed');
+  write(join(copy(repo), 'src', 'db', 'users.ts'), ['// the users table', 'export const users = [];', 'export const find = (id: string) =>']);
+  ok(apx('db-dev', ['block', repo, 'the users table has no email column']), 'block');
+  assert.equal(apx('architect', ['merge', repo]).code, 2, 'a blocked instance is taken over, never merged as it is');
+  assert.equal(apx('api-dev', ['take', repo]).code, 2, 'only the lead takes over');
+  r = ok(apx('architect', ['take', repo]), 'take');
+  has({ out: r }, `${repo}  taken by architect — work in .agent-pack/work/${repo}`);
+  has({ out: r }, 'why it was blocked: the users table has no email column');
+  assert.ok(readFileSync(join(copy(repo), 'src', 'db', 'users.ts'), 'utf-8').includes('export const find'), 'the work done so far is there');
+  write(join(copy(repo), 'src', 'db', 'users.ts'), ['// the users table', 'export const users = [];', 'export const find = (id: string) => users[0];']);
+  ok(apx('architect', ['deliver', repo]), 'the lead delivers it');
+
+  // --- merge: after what it depends on, as soon as it is delivered; what was left out is shown, the lead may let it be ---
   r = apx('architect', ['merge', users]);
   assert.equal(r.code, 3);
-  has(r, `${users} depends on ${repo} (blocked)`);
+  has(r, `${users} depends on ${repo} (delivered)`);
+  ok(apx('architect', ['merge', repo]), 'merge repo');
+  r = ok(apx('architect', ['merge', users]), 'merge users');
+  has({ out: r }, 'left out: src/api/users.ts (outside its zones) — why: the import is outside the zone');
+  assert.equal(apx('architect', ['merge', orders, '--prefer', 'mine']).code, 2, 'ours or theirs');
   ok(apx('architect', ['merge', orders]), 'merge orders');
-  has(apx('architect', ['list']), `${orders}  endpoint  merged`);
   assert.equal(apx('api-dev', ['merge', orders]).code, 2, 'only the lead merges');
 
-  // --- the instance the lead was handed closes once its parts are merged; a blocked part, carried out by the lead, is merged by it ---
-  r = apx('architect', ['deliver', root]);
-  assert.equal(r.code, 3);
-  has(r, `${root} still has parts to finish: ${users} (delivered)`);
-  ok(apx('architect', ['merge', repo]), 'the lead carried the blocked one out');
-  ok(apx('architect', ['merge', users]), 'its dependency is merged now');
-  ok(apx('architect', ['deliver', root]), 'the request is done');
+  // --- the request: done once its parts are merged; delivering it lands the work, uncommitted, and closes the copies ---
+  r = ok(apx('architect', ['deliver', root]), 'the request is done');
+  has({ out: r }, '# landed in the working folder: src/api/orders.ts, src/api/users.ts, src/db/users.ts');
+  assert.equal(readFileSync(api, 'utf-8'), ['export function getUser(id: string) {', '  return db.find(id);', '}', '', 'export const ORDERS_BY_USER = true;', ''].join('\n'), 'both zones landed, marks dropped, the left-out import did not');
+  assert.equal(readFileSync(apiOrders, 'utf-8'), ['export function getOrder(id: string) {', '  return { id };', '}', ''].join('\n'));
+  assert.equal(readFileSync(db, 'utf-8'), ['// the users table', 'export const users = [];', 'export const find = (id: string) => users[0];', ''].join('\n'));
+  assert.equal(git(proj, 'diff', '--cached', '--name-only'), '', 'nothing staged: the developer commits');
+  assert.equal(git(proj, 'worktree', 'list').split('\n').length, 1, 'every copy closed');
   has(apx('architect', ['list']), `${root}  change  delivered`);
 
   // --- a team without contracts has none; no session, nothing read ---

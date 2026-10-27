@@ -3,7 +3,7 @@
 /**
  * Generic primitive helpers. A "primitive" is a leading uppercase keyword
  * that introduces a single line of metadata in a `.ap` file
- * (e.g. `ABOUT …`, `OWNS …`, `WHEN …`).
+ * (e.g. `ABOUT …`, `WRITES …`, `WHEN …`).
  */
 import { FORMULAS } from '../formulas.js';
 import { lex, escapeRegex, Keyword } from '../lexer.js';

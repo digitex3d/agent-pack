@@ -104,7 +104,7 @@ function checkedPrimitive(template: TemplateBlock, word: string, opening: string
 /**
  * The primitives a rule's BODY layout names: its first word (`DO {action}`), or
  * the values of the ENUM slot it opens with (`{keyword} {action}`, keyword:
- * `ENUM[DO MUST]`) — that slot only names the lines, so a rule on it is a load
+ * `ENUM[DO, MUST]`) — that slot only names the lines, so a rule on it is a load
  * error. Empty when it opens with any other slot (`{line}`).
  */
 function primitivesOf(template: TemplateBlock): { primitives: string[]; keywordSlot?: string } {

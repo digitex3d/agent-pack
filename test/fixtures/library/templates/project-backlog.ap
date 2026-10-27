@@ -3,7 +3,7 @@ IMPORT  backlog-item  FROM @main.templates
 
 EXPORT TEMPLATE project-backlog:
   ABOUT   the final deliverable — every agreed improvement across all domains, ordered by impact
-  APPLIES #agent-pack #analysis #scaffold #block
+  APPLIES #agent-pack, #analysis, #scaffold, #block
 
   SLOTS:
     items: LIST <backlog-item> >=1  "one row per agreed improvement, highest impact first"

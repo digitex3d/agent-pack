@@ -2,7 +2,7 @@
 
 EXPORT TEMPLATE pm-plan:
   ABOUT   the routing Plan — text Gantt with phases, parallelism, dependencies, and assigns
-  APPLIES #pm #planning #orchestration #product-manager #planner
+  APPLIES #pm, #planning, #orchestration, #product-manager, #planner
 
   SLOTS:
     request:        TEXT MAX_WORDS 25 "one-line restatement of the user's request"
@@ -13,7 +13,7 @@ EXPORT TEMPLATE pm-plan:
     phases:         TEXT "one line per phase: `T<n>: [task-ids]`"
     critical-path:  TEXT MAX_WORDS 12 "task-id → task-id → task-id"
     notes?:         TEXT MAX_WORDS 40 "blockers, unknowns, replan triggers"
-    status:         ENUM[plan-emitted replanning done]
+    status:         ENUM[plan-emitted, replanning, done]
   BODY:
     request: {request}
 

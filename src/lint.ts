@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Giuseppe Federico
 import { existsSync, readFileSync } from 'fs';
 import { basename } from 'path';
-import { lex, Token, Keyword, KEYWORDS, DIMENSION_LINES, isTriggerKind, isWithHead, opensBlock, type DimensionLine } from './lexer.js';
+import { lex, Token, Keyword, KEYWORDS, GLOBS_LINE, isTriggerKind, isWithHead, opensBlock, type DimensionLine } from './lexer.js';
 import { ACTION_VERBS } from './actionVerbs.js';
 import { desugar } from './desugar.js';
 import { parseApplies, PERIMETER_FORMS, PERIMETER_KINDS } from './services/tags.js';
@@ -23,6 +23,7 @@ import { STORE_LIFETIMES } from './storeTypes/types.js';
 import { stripTrailingColon, buildTree, type Node as TreeNode } from './bundlers/renderTree.js';
 import { condCheckOf, checkedKeyword, sugaredHead, splitMax, maxIssue, type CheckKind, type CheckSite } from './check.js';
 import { parseVarLine, parseParallelHead, isVarKeyword, splitBy, splitInto, takesInto, readsOf } from './vars.js';
+import { splitList, spacedListError, WORD_LIST_LINES } from './lists.js';
 
 export interface LintError {
   file: string;
@@ -57,9 +58,11 @@ const DEFAULT_MAX_LINE_LENGTH = 120;
  */
 function validateAppliesPayload(rest: string): string | null {
   if (!rest.trim()) return `APPLIES payload is empty — provide at least one #hashtag, or ${PERIMETER_FORMS}`;
+  const spaced = spacedListError('APPLIES', rest);
+  if (spaced) return spaced;
   const [tok] = parseApplies([rest]).invalid;
   return tok === undefined ? null
-    : `APPLIES token "${tok}" is invalid — expected a classic flat hashtag like #kebab-slug (no commas, slashes, or missing #), or ${PERIMETER_FORMS}`;
+    : `APPLIES token "${tok}" is invalid — expected a classic flat hashtag like #kebab-slug (no slashes, no missing #), or ${PERIMETER_FORMS}`;
 }
 
 function validateTriggerContent(content: string): string | null {
@@ -792,8 +795,8 @@ function isBranch(contract: BlockContract, keyword: Keyword): boolean {
   return contract.branches?.keywords.includes(keyword) ?? false;
 }
 
-/** The contracts checked line by line — a DIMENSION and a TEAM are checked on their parsed block (dimensionBlockErrors, teamBlockErrors). */
-const { DIMENSION: _parsed, TEAM: _team, CONTRACT: _contract, ...TOKEN_CONTRACTS } = BLOCK_CONTRACTS;
+/** The contracts checked line by line — a DIMENSION, a DOMAIN and a TEAM are checked on their parsed block (coveringBlockErrors, teamBlockErrors). */
+const { DIMENSION: _parsed, DOMAIN: _domain, TEAM: _team, CONTRACT: _contract, ...TOKEN_CONTRACTS } = BLOCK_CONTRACTS;
 
 export function validateBlockContracts(
   tokens: ReturnType<typeof lex>,
@@ -999,16 +1002,23 @@ function leavesRoot(glob: string): boolean {
  * file, and the compiler's.
  */
 export function dimensionBlockErrors(file: string, blocks: readonly Block[]): LintError[] {
-  const dimensions = blocks.flatMap(b => (b.key === 'DIMENSION' ? [b] : agentNestedBlocks([b], 'DIMENSION').map(n => n.block)));
-  return dimensions.flatMap(b => [
-    ...checkBlockContract(file, b, 'DIMENSION'),
+  return coveringBlockErrors(file, blocks, 'DIMENSION');
+}
+
+/** Every DOMAIN a file declares — at its top, or in an AGENT's body: its contract, and its FOR globs, read from the project root. */
+export function domainBlockErrors(file: string, blocks: readonly Block[]): LintError[] {
+  return coveringBlockErrors(file, blocks, 'DOMAIN');
+}
+
+/** The blocks that cover files with a FOR line (DIMENSION, DOMAIN): their contract, and globs that stay in the project. */
+function coveringBlockErrors(file: string, blocks: readonly Block[], key: string): LintError[] {
+  const found = blocks.flatMap(b => (b.key === key ? [b] : agentNestedBlocks([b], key).map(n => n.block)));
+  return found.flatMap(b => [
+    ...checkBlockContract(file, b, key),
     ...b.children.flatMap((c): LintError[] => {
-      if (c.type !== 'line') return [];
-      if (c.keyword === 'FOR') {
-        return c.rest.trim().split(/\s+/).filter(leavesRoot)
-          .map(glob => ({ file, line: c.line, message: `FOR \`${glob}\`: a glob is read from the project root — no absolute path, no \`..\`` }));
-      }
-      return [];
+      if (c.type !== 'line' || c.keyword !== GLOBS_LINE) return [];
+      return splitList(c.rest).filter(leavesRoot)
+        .map(glob => ({ file, line: c.line, message: `FOR \`${glob}\`: a glob is read from the project root — no absolute path, no \`..\`` }));
     }),
   ]);
 }
@@ -1035,7 +1045,7 @@ export function teamBlockErrors(file: string, blocks: readonly Block[]): LintErr
  * The two shapes of a team: with `STRATEGY contracts` it declares a LEAD and
  * CONTRACT blocks and leaves MEMBER, WHEN, FLOW and LENS-IN out (the strategy
  * runs it, the roster is the lead and the BY lines); without one it declares
- * MEMBER and may hold WHEN and FLOW, and none of LEAD, DOMAINS, CONTRACT.
+ * MEMBER and may hold WHEN and FLOW, and none of LEAD, CONTRACT.
  */
 function strategyErrors(file: string, team: Block): LintError[] {
   const errors: LintError[] = [];
@@ -1053,11 +1063,10 @@ function strategyErrors(file: string, team: Block): LintError[] {
       errors.push({ file, line: b.startLine, message: `${b.key} is not written under STRATEGY ${value} — the strategy says how the team runs` });
     }
     if (!lines.some(l => l.keyword === 'LEAD')) errors.push({ file, line: team.startLine, message: `TEAM ${name}: STRATEGY ${value} needs a LEAD — the agent that prepares the work` });
-    if (!lines.some(l => l.keyword === 'DOMAINS')) errors.push({ file, line: team.startLine, message: `TEAM ${name}: STRATEGY ${value} needs DOMAINS <dimension> — the lead's dimension that gives every file its domain` });
     if (!blocks.some(b => b.key === 'CONTRACT')) errors.push({ file, line: team.startLine, message: `TEAM ${name}: STRATEGY ${value} needs at least one CONTRACT block` });
   } else {
     if (!lines.some(l => l.keyword === 'MEMBER')) errors.push({ file, line: team.startLine, message: `TEAM block requires at least one MEMBER` });
-    for (const l of lines.filter(l => ['LEAD', 'DOMAINS'].includes(l.keyword))) {
+    for (const l of lines.filter(l => l.keyword === 'LEAD')) {
       errors.push({ file, line: l.line, message: `${l.keyword} is a line of a team with a STRATEGY — write \`STRATEGY contracts\` first` });
     }
     for (const b of blocks.filter(b => b.key === 'CONTRACT')) {
@@ -1138,6 +1147,11 @@ export function lintDimension(file: string, body: string, options: LintOptions =
   return lintSingleBlockKind(file, body, 'DIMENSION', options, block => dimensionBlockErrors(file, [block]));
 }
 
+/** A domain declares a region of the code: ABOUT and FOR once each, its globs from the project root. */
+export function lintDomain(file: string, body: string, options: LintOptions = {}): LintError[] {
+  return lintSingleBlockKind(file, body, 'DOMAIN', options, block => domainBlockErrors(file, [block]));
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -1192,15 +1206,15 @@ function isAgentOrOrchestration(file: string, body: string): boolean {
 // Vocabulary — every line of every file speaks the language
 // ---------------------------------------------------------------------------
 
-/** The lines only one block holds, and what each is of it: a COMPUTE's sections, a DIMENSION's FOR and EACH. */
-const LINE_OWNERS = new Map<string, { owner: string; what: string }>([
-  ...COMPUTE_SECTIONS.map(s => [s, { owner: 'COMPUTE', what: 'a section' }] as const),
-  ...DIMENSION_LINES.map(k => [k, { owner: 'DIMENSION', what: 'a line' }] as const),
-  ['MEMBER', { owner: TEAM_KEY, what: 'a line' }],
-  ['STRATEGY', { owner: TEAM_KEY, what: 'a line' }],
-  ['LEAD', { owner: TEAM_KEY, what: 'a line' }],
-  ['DOMAINS', { owner: TEAM_KEY, what: 'a line' }],
-  ['DOMAIN', { owner: 'CONTRACT', what: 'a line' }],
+/** The lines only some blocks hold, and what each is of them: a COMPUTE's sections, a DIMENSION's FOR and EACH, a DOMAIN's FOR. */
+const LINE_OWNERS = new Map<string, { owners: readonly string[]; what: string }>([
+  ...COMPUTE_SECTIONS.map((s): [string, { owners: readonly string[]; what: string }] => [s, { owners: ['COMPUTE'], what: 'a section' }]),
+  [GLOBS_LINE, { owners: ['DIMENSION', 'DOMAIN'], what: 'a line' }],
+  ['EACH', { owners: ['DIMENSION'], what: 'a line' }],
+  ['MEMBER', { owners: [TEAM_KEY], what: 'a line' }],
+  ['STRATEGY', { owners: [TEAM_KEY], what: 'a line' }],
+  ['LEAD', { owners: [TEAM_KEY], what: 'a line' }],
+  ['DOMAIN', { owners: ['CONTRACT'], what: 'a line' }],
 ]);
 
 /** What a keyword written alone on its line lacks — by keyword, else its text. */
@@ -1215,11 +1229,12 @@ const BARE_NEEDS: Record<string, string> = {
  * (LINE_OWNERS) directly in that block; a DIMENSION at the file top or directly
  * in an agent's body — a dimension is an agent's, reached through its apx.
  */
-function placementError(key: string, parent: string | undefined): string | null {
-  const owned = LINE_OWNERS.get(key);
-  if (owned && parent !== owned.owner) return `${key} is ${owned.what} of a ${owned.owner} block — found inside ${parent || 'the file top'}`;
-  if (key === 'DIMENSION' && parent && !AGENT_KEYS.has(parent)) return `a DIMENSION is declared at the file top or directly in an agent's body — found inside ${parent}`;
-  if (key === 'CONTRACT' && parent && parent !== TEAM_KEY) return `a CONTRACT is declared in a TEAM block, or at the top of the project file — found inside ${parent}`;
+function placementError(key: string, parent: string | undefined, opens: boolean): string | null {
+  // A block of its own (`DOMAIN api:`) is no line of another: a COMPUTE section (`ENSURE:`) still is.
+  const owned = opens && blockTypeOf(key) ? undefined : LINE_OWNERS.get(key);
+  if (owned && !owned.owners.includes(parent ?? '')) return `${key} is ${owned.what} of a ${owned.owners.join(' or a ')} block — found inside ${parent || 'the file top'}`;
+  if (opens && (key === 'DIMENSION' || key === 'DOMAIN') && parent && !AGENT_KEYS.has(parent)) return `a ${key} is declared at the file top or directly in an agent's body — found inside ${parent}`;
+  if (opens && key === 'CONTRACT' && parent && parent !== TEAM_KEY) return `a CONTRACT is declared in a TEAM block, or at the top of the project file — found inside ${parent}`;
   return null;
 }
 
@@ -1284,13 +1299,15 @@ function unknownKeyword(word: string): string {
 }
 
 /** The slot types a SLOTS line may declare (docs: language.md, Slot type). */
-const SLOT_TYPES = ['TEXT', 'NUMBER', 'ENUM[a b]', '<template>', 'LIST <template>'];
+const SLOT_TYPES = ['TEXT', 'NUMBER', 'ENUM[a, b]', '<template>', 'LIST <template>'];
 
 /** A SLOTS line (`name[?]: TYPE … "description"`) whose TYPE is none of the language's. */
 function slotTypeError(raw: string): string | null {
   const m = raw.trim().match(SLOT_LINE_RE);
   if (!m) return null;
   const type = m[3].replace(/\s*".*$/, '').trim();
+  const values = type.match(/^ENUM\[(.*)\]$/i);
+  if (values) { const spaced = spacedListError('ENUM[', values[1], ']'); if (spaced) return `slot \`${m[1]}\`: ${spaced}`; }
   if (parseTypeSpec(type).kind !== 'any') return null;
   const word = type.split(/[\s[<]/)[0].toUpperCase();
   return `slot \`${m[1]}\`: unknown type \`${type}\`${didYouMean(word, ['TEXT', 'NUMBER', 'ENUM', 'LIST'])} (types: ${SLOT_TYPES.join(', ')})`;
@@ -1431,6 +1448,9 @@ export function checkVocabulary(file: string, body: string): LintError[] {
       const base = forceLevelBaseOf(key);
       if (base && getIntroByKeyword(key) === null) err(t.line, unknownLevel(key, base));
       if (isWithHead(t)) for (const message of withLineErrors(tokens, index)) err(t.line, message);
+      // Every list of the language is comma-separated (src/lists.ts).
+      const spaced = WORD_LIST_LINES.includes(key) ? spacedListError(key, t.rest) : null;
+      if (spaced) err(t.line, spaced);
       // A perimeter says where a policy or a skill holds with no WITH: any other block has none to say.
       if (key === 'APPLIES' && parseApplies([t.rest]).scopes.length > 0) {
         const owner = ownerOf(stack.map(s => s.key), file);
@@ -1451,6 +1471,14 @@ export function checkVocabulary(file: string, body: string): LintError[] {
       // DISTILL (D22) was removed: a program carries out a PROCEDURE** or a COMPUTE block.
       if (DISTILL_RE.test(key) || DISTILL_SUFFIX_RE.test(t.rest.trim())) {
         err(t.line, `DISTILL was removed — mark the procedure PROCEDURE** or write a COMPUTE block: "${quoteRaw(t)}"`);
+      }
+      // DOMAINS was removed: a contract's DOMAIN names a DOMAIN block its BY agent writes (D44).
+      if (key === 'DOMAINS') {
+        err(t.line, `DOMAINS was removed — the files of a domain are its \`EXPORT DOMAIN <name>:\` block's FOR, and a CONTRACT's \`DOMAIN <name>\` goes to an agent that writes it (\`WRITES <name>\`): "${quoteRaw(t)}"`);
+      }
+      // OWNS was removed: a perimeter names domains (D44).
+      if (key === 'OWNS') {
+        err(t.line, `OWNS was removed — declare the files as \`EXPORT DOMAIN <name>:\` with \`FOR ${splitList(t.rest).join(', ')}\`, and write \`WRITES <name>\` (or \`READS <name>\`) in the agent: "${quoteRaw(t)}"`);
       }
       if (!isVarKeyword(key) && stack.some(a => a.key === 'VAR') && !isAllowedChild(VAR_BLOCK, key as Keyword)) {
         err(t.line, notAllowed(key as Keyword, 'VAR', VAR_BLOCK));
@@ -1488,7 +1516,7 @@ export function checkVocabulary(file: string, body: string): LintError[] {
         else err(t.line, base ? unknownLevel(word, base) : unknownKeyword(word));
       }
     }
-    const placed = placementError(key, parent?.key);
+    const placed = placementError(key, parent?.key, t.kind === 'blockOpener' || opensBlock(t));
     if (placed) err(t.line, placed);
     stack.push({ indent: t.indent, key, line: t.line });
   }
@@ -1565,7 +1593,12 @@ function computeBlockErrors(file: string, body: string): LintError[] {
 }
 
 export function lintFile(file: string, body: string, options: LintOptions = {}): LintError[] {
-  return [...checkVocabulary(file, body), ...lintByKind(file, body, options)];
+  // Both checks read a list's form (the vocabulary's, and APPLIES's own payload check): one error per line and message.
+  const seen = new Set<string>();
+  return [...checkVocabulary(file, body), ...lintByKind(file, body, options)].filter(e => {
+    const key = `${e.line}\0${e.message}`;
+    return !seen.has(key) && !!seen.add(key);
+  });
 }
 
 /** An agent's file or a team's file: a variable exported there would be no one's — library modules export them. */
@@ -1624,6 +1657,7 @@ function lintByKind(file: string, body: string, options: LintOptions): LintError
     case 'flow':      return lintFlow(file, body, options);
     case 'store':     return lintStore(file, body, options);
     case 'dimension': return lintDimension(file, body, options);
+    case 'domain':    return lintDomain(file, body, options);
   }
   // tool / generic (agents, teams, orchestration): a `.ap` holding an
   // `EXPORT AGENT … AS …` block or the file-top AS/MANDATE form — validated by

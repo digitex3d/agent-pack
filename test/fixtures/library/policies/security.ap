@@ -2,7 +2,7 @@
 
 EXPORT POLICY security:
   ABOUT  baseline security rules every agent in this project respects
-  APPLIES #security #baseline universal
+  APPLIES #security, #baseline, universal
 
   ALWAYS  validate every input crossing a trust boundary
   ALWAYS  treat secrets as opaque tokens — never log, never echo

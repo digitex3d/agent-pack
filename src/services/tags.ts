@@ -15,6 +15,7 @@
  */
 
 import { findSimilar } from './text.js';
+import { splitList } from '../lists.js';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -126,14 +127,14 @@ function normalizeTag(raw: string): string | null {
 
 /**
  * Read the payloads of a block's APPLIES lines — the one reader of the line:
- * space-separated tokens, each a `#tag` or a perimeter (`PERIMETER_RE`);
+ * comma-separated tokens, each a `#tag` or a perimeter (`PERIMETER_RE`);
  * anything else is `invalid` — the lint's to report, never guessed at.
  */
 function parseApplies(payloads: readonly string[]): { tags: string[]; scopes: string[]; invalid: string[] } {
   const tags: string[] = [];
   const scopes: string[] = [];
   const invalid: string[] = [];
-  for (const tok of payloads.flatMap(p => p.trim().split(/\s+/)).filter(Boolean)) {
+  for (const tok of payloads.flatMap(p => splitList(p))) {
     if (TAG_RE.test(tok)) { if (!tags.includes(tok)) tags.push(tok); }
     else if (PERIMETER_RE.test(tok)) { if (!scopes.includes(tok)) scopes.push(tok); }
     else invalid.push(tok);
@@ -150,13 +151,13 @@ function perimeterOf(token: string): { kind: 'universal' | 'team' | 'agent'; nam
 /**
  * Render a sorted list of tags as the payload of an `APPLIES` line.
  *
- * Output: `APPLIES #coding #typescript` (space-separated, sorted).
+ * Output: `APPLIES #coding, #typescript` (comma-separated, sorted — src/lists.ts).
  * When the list is empty, returns an empty string so callers can skip the line.
  */
 function renderTagsLine(tags: string[]): string {
   if (tags.length === 0) return '';
   const sorted = [...tags].sort();
-  return `APPLIES ${sorted.join(' ')}`;
+  return `APPLIES ${sorted.join(', ')}`;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

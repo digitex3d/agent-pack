@@ -70,7 +70,7 @@ ROLE code-reviewer:
 TEMPLATE review-report:
     ABOUT  the reviewer's answer
     SLOTS:
-        verdict:  ENUM[approve changes]   "approve, or ask for changes"
+        verdict:  ENUM[approve, changes] "approve, or ask for changes"
         findings: TEXT                    "one line per finding: file:line — what and why"
     BODY:
         verdict: {verdict}

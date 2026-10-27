@@ -2,12 +2,12 @@
 
 EXPORT TEMPLATE finding-decision:
   ABOUT   one scan finding and the verdict the developer gave it
-  APPLIES #agent-pack #analysis #scaffold
+  APPLIES #agent-pack, #analysis, #scaffold
 
   SLOTS:
     observation: TEXT MAX_WORDS 20            "the concrete thing the scan found"
     action:      TEXT MAX_WORDS 15            "the improvement proposed for it"
-    verdict:     ENUM[accepted rejected note] "accepted, rejected, or parked as an open note"
+    verdict:     ENUM[accepted, rejected, note] "accepted, rejected, or parked as an open note"
     outcome:     TEXT MAX_WORDS 15            "the agreed action item, the rejection reason, or the open note"
   BODY:
     [{verdict}] {observation} -> {action} ({outcome})

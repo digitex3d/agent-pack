@@ -5,7 +5,7 @@
  * executable, driven by its own CLI.
  *
  * What this contributes at compile time is the translation from an abstract
- * store to concrete commands: the agent reads `<its apx> cards a card='…'
+ * store to concrete commands: the agent reads `<its apx> store a <sto-id> card='…'
  * status=<raw|questioning|ready>`, with its own field names and its own enum
  * values already in the line. It never has to turn a generic example into its
  * own case, which is where a hand-written rule usually goes wrong.
@@ -75,20 +75,20 @@ const tabeliStore: StoreType = {
     const fields = store.slots.map(s => `${s.name}=${hint(s)}`).join(' ');
     const lines: string[] = [];
 
-    lines.push(`${command}                       run it bare for its own manual`);
-    lines.push(`${command} a ${fields}`);
+    lines.push(`${command('manual')}                       the table's own manual`);
+    lines.push(`${command('a')} ${fields}`);
 
     const st = statusSlot(store);
     if (st) {
       const [first, second] = st.values;
-      lines.push(`${command} q ${st.slot.name}=${first}`);
-      lines.push(`${command} q ${st.slot.name}=${first} count            how many are left, for almost no tokens`);
-      lines.push(`${command} next ${st.slot.name}=${first} set ${st.slot.name}=${second}   atomic take — two agents never get the same record`);
-      lines.push(`${command} s <id> ${st.slot.name}=${second} if ${st.slot.name}=${first}   'if' rejects a stale belief instead of overwriting it`);
+      lines.push(`${command('q')} ${st.slot.name}=${first}`);
+      lines.push(`${command('q')} ${st.slot.name}=${first} count            how many are left, for almost no tokens`);
+      lines.push(`${command('next')} ${st.slot.name}=${first} set ${st.slot.name}=${second}   atomic take — two agents never get the same record`);
+      lines.push(`${command('s')} <id> ${st.slot.name}=${second} if ${st.slot.name}=${first}   'if' rejects a stale belief instead of overwriting it`);
     } else {
-      lines.push(`${command} q`);
-      lines.push(`${command} q count`);
-      lines.push(`${command} s <id> <field>=<value>`);
+      lines.push(`${command('q')}`);
+      lines.push(`${command('q')} count`);
+      lines.push(`${command('s')} <id> <field>=<value>`);
     }
 
     if (store.key) {

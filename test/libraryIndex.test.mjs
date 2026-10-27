@@ -55,7 +55,7 @@ try {
     [
       '# scaffold-bash',
       'ABOUT  scaffold a bash script',
-      'APPLIES #bash #scripting #coding',
+      'APPLIES #bash, #scripting, #coding',
       'PROCEDURE scaffold-bash',
       '  DO write strict-mode header',
     ].join('\n'),
@@ -68,7 +68,7 @@ try {
     [
       '# security-scan',
       'ABOUT  run a security scan',
-      'APPLIES #security agent:auditor',
+      'APPLIES #security, agent:auditor',
       'WHEN a security vulnerability is reported',
       'DO run the scanner',
     ].join('\n'),

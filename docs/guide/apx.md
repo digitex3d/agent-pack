@@ -26,7 +26,7 @@ node .agent-pack/apx/reviewer.apx start
 node .agent-pack/apx/reviewer.apx start 1=c 2=a 3=b 4=?
 ```
 
-For every kind it missed (`?` counts as a miss, and costs nothing), the apx prints that kind's introduction — how to use it. Then it prints the **scope**: who the agent is and its mandate, its perimeter (`OWNS`), its role, its team and the team's routing, the policies it respects, what it does when (every `WHEN` and hook), what it remembers (`MEM`), the stores it writes to, the template requests arrive in and the one its answers take, and how many blocks of each kind it holds. The quiz runs once, at the start of the work.
+For every kind it missed (`?` counts as a miss, and costs nothing), the apx prints that kind's introduction — how to use it. Then it prints the **scope**: who the agent is and its mandate, its perimeter (`WRITES` and `READS`), its role, its team and the team's routing, the policies it respects, what it does when (every `WHEN` and hook), what it remembers (`MEM`), the stores it writes to, the template requests arrive in and the one its answers take, and how many blocks of each kind it holds. The quiz runs once, at the start of the work.
 
 Running the apx with no verb is the same as `start`.
 
@@ -44,10 +44,9 @@ Running the apx with no verb is the same as `start`.
 | `find <text>` | the blocks containing the text, each with the lines that matched |
 | `md` | the whole definition at once — the same text a harness `.md` carries |
 | `flow <flw-id>` | how to run a flow — see below |
-| `input <exe-id>` | what a delegate or a program receives — see below |
-| `answer <exe-id> - [--into <var>]` | store a delegate's answer, checked against its contract — see below |
 | `run <exe-id> [json] [--into <var>]` | run a program — see below |
 | `check <cnd-id>` | a checked condition put to the judge: `open` or `closed` — see below |
+| `<kind> <operation> [<id>] …` | a kind the apx serves at run time — `store`, `dimension`, `ask` — one form for all: the kind, the operation, then the id; `help` lists every operation |
 | `dimension [<dim-id> <verb> …]` | the agent's dimensions, by id — alone, the list: what each covers, its cache folder, its counts; with an id, that dimension's verb — see below |
 | `version` | agent and id, build date, agent-pack version, content hash, block count |
 | `help` | the verbs |
@@ -77,20 +76,20 @@ Exit code `0` is success, `1` means something does not exist (an unknown id), `2
 An agent that declares a `STORE` reads and writes it through its apx:
 
 ```bash
-node .agent-pack/apx/note-keeper.apx notes a topic=tabeli note='engine ships with agent-pack'
-node .agent-pack/apx/note-keeper.apx notes q
+node .agent-pack/apx/note-keeper.apx store a sto-7c1e40b2 topic=tabeli note='engine ships with agent-pack'
+node .agent-pack/apx/note-keeper.apx store q sto-7c1e40b2
 ```
 
-The verbs are tabeli's (`a`dd, `q`uery, `s`et, …; run the store bare for its manual). The table is created on first use and is never touched directly: a `LASTS project` store lives in `stores/<agent>/<store>.tbl`, at the project root — yours to version or not — and a `LASTS session` store beside the apx, in `.agent-pack/apx/<agent>.state/`. A write outside the store's slots is refused before it reaches the table. When the store declares a `KEY`, adding a record whose key already exists updates it instead of duplicating it.
+A store is reached by its id, like every block, after the operation; `store` alone lists the agent's stores with their ids. The operations are tabeli's (`a`dd, `q`uery, `s`et, `next`, …; `manual` for the table's own manual). The table is created on first use and is never touched directly: a `LASTS project` store lives in `stores/<agent>/<store>.tbl`, at the project root — yours to version or not — and a `LASTS session` store beside the apx, in `.agent-pack/apx/<agent>.state/`. A write outside the store's slots is refused before it reaches the table. When the store declares a `KEY`, adding a record whose key already exists updates it instead of duplicating it.
 
 Stores are backed by tabeli, which ships with agent-pack (`tabeli/`, MIT) and works on Linux. `npm run build` compiles its engine with tabeli's own Makefile, so building agent-pack needs `make` and a C compiler (gcc or clang); `bundle all` records the engine's path in every `.apx`, which is how the apx finds it — an apx written before is rewritten by `agent-pack bundle all`. The apx creates tables only with a tabeli v2 engine, and a table made earlier keeps working with the engine it carries.
 
 ## Dimensions
 
-An agent that has a [`DIMENSION`](/reference/language#dimension) reaches it by its id, like every block: `dimension <dim-id> <verb>`. `dimension` alone lists the agent's dimensions, each with its id. A dimension is an agent's own: it is reached only through that agent's apx, never imported into a project's `PROJECT.ap` or a team's `flows.ap`. When it is worth reading is the agent's to say: a [`WITH`](/reference/language#with) names the dimension above the lines it is for, and the agent's definition shows that line with the dimension's id — *For the work below, use the dimension `pseudocode` (dim-…)* — while `ls kind=dimension` lists it as holding *only where a WITH names it*. There the agent reads the answer kept for the file, and decides whether it also needs the code:
+An agent that has a [`DIMENSION`](/reference/language#dimension) reaches it by its id, like every block, after the operation: `dimension <operation> <dim-id>`. `dimension` alone lists the agent's dimensions, each with its id. A dimension is an agent's own: it is reached only through that agent's apx, never imported into a project's `PROJECT.ap` or a team's `flows.ap`. When it is worth reading is the agent's to say: a [`WITH`](/reference/language#with) names the dimension above the lines it is for, and the agent's definition shows that line with the dimension's id — *For the work below, use the dimension `pseudocode` (dim-…)* — while `ls kind=dimension` lists it as holding *only where a WITH names it*. There the agent reads the answer kept for the file, and decides whether it also needs the code:
 
 ```bash
-node .agent-pack/apx/coder.apx dimension dim-3f2a9c1e read src/billing/invoice.py
+node .agent-pack/apx/coder.apx dimension read dim-3f2a9c1e src/billing/invoice.py
 ```
 
 | Answer | Exit | |
@@ -106,19 +105,19 @@ A file outside the dimension's `FOR` is a usage error (exit `2`) naming the glob
 On a `miss`, the agent works the answer out and keeps it — a JSON list of instances of the dimension's template on stdin, or the literal `none`:
 
 ```bash
-node .agent-pack/apx/coder.apx dimension dim-3f2a9c1e write src/billing/invoice.py refs=src/billing/tax.py - < value.json
-node .agent-pack/apx/coder.apx dimension dim-3f2a9c1e write src/billing/empty.py none
+node .agent-pack/apx/coder.apx dimension write dim-3f2a9c1e src/billing/invoice.py refs=src/billing/tax.py - < value.json
+node .agent-pack/apx/coder.apx dimension write dim-3f2a9c1e src/billing/empty.py none
 ```
 
 `refs=` names the other files the answer depends on (`;` between them; each must exist); every project file the value names, literally, is one too. The write is refused, and nothing is written, for a file outside `FOR` or that does not exist, a ref that does not exist, or a value its template refuses (at least one instance, every field checked as a typed variable's). An answer still fresh is never overwritten: the write exits `4` — another agent answered meanwhile, read it.
 
 | Command | |
 |---|---|
-| `dimension <dim-id> find <text>` | every instance kept, across the dimension's files, whose text holds `<text>` (case aside) — fresh entries only; exit `1` when none does |
-| `dimension <dim-id> ls [glob]` | the entries kept — `fresh`, `stale` or `gone`, and why — then the counts, hits, misses and hit rate |
-| `dimension <dim-id> why <file>` | the state of one entry, file by file: the fingerprint kept and the current one |
-| `dimension <dim-id> clear [glob] [--by <agent>]` | delete entries: all, those matching a glob, those an agent wrote |
-| `dimension <dim-id> gc` | delete the entries of files that no longer exist |
+| `dimension find <dim-id> <text>` | every instance kept, across the dimension's files, whose text holds `<text>` (case aside) — fresh entries only; exit `1` when none does |
+| `dimension ls <dim-id> [glob]` | the entries kept — `fresh`, `stale` or `gone`, and why — then the counts, hits, misses and hit rate |
+| `dimension why <dim-id> <file>` | the state of one entry, file by file: the fingerprint kept and the current one |
+| `dimension clear <dim-id> [glob] [--by <agent>]` | delete entries: all, those matching a glob, those an agent wrote |
+| `dimension gc <dim-id>` | delete the entries of files that no longer exist |
 | `dimension` | every dimension of the agent, by its id: what it covers, its cache folder and its counts |
 
 The cache lives at the project root, outside git, and is never touched directly: `.agent-pack/cache/<defhash>/<file>.json`, one entry per file, with the counters apart in `.agent-pack/cache/stats/<defhash>.json`. The defhash is the dimension's content without its name — `ABOUT`, `FOR`, `EACH`, its rules, and the content of the templates `AS` and `EACH` name: renaming the dimension or a template keeps the cache, any other edit starts a new folder, and `agent-pack bundle all` deletes the folders no dimension produces any more. A file's fingerprint ignores line endings, trailing whitespace and blank lines; indentation and comments count.
@@ -193,14 +192,14 @@ A line an agent hands to a delegate (`ASK`, `IF*`, `UNTIL*`, `PROCEDURE*`) or to
 **A delegate** — the agent hands it the input, and stores the answer it gets back:
 
 ```bash
-node .agent-pack/apx/clerk.apx input exe-3f9a1c07
+node .agent-pack/apx/clerk.apx ask input exe-3f9a1c07
 {"pdf_text": "INVOICE 2026-114 …"}
-node .agent-pack/apx/clerk.apx answer exe-3f9a1c07 - < answer.json
+node .agent-pack/apx/clerk.apx ask answer exe-3f9a1c07 - < answer.json
 # stored as `lines` for this session — read it: node .agent-pack/apx/clerk.apx get lines
 ```
 
-- `input <exe-id>` prints the JSON the piece receives — one key per variable it reads, with its value in this session (parsed when it is JSON), one per constant — and nothing else. An empty variable stops it (exit `1`).
-- `answer <exe-id> -` reads the delegate's answer on stdin (or the rest of the line) and checks it against the contract: a line with `INTO x` takes a value of `x`'s type and stores it in `x`; a procedure takes its `AS` template; a condition takes `{"holds": true}` or `{"holds": false}` and prints it. An answer that breaks the contract is refused (exit `6`): nothing is stored, and the agent hands the piece over again with the same input.
+- `ask input <exe-id>` prints the JSON the piece receives — one key per variable it reads, with its value in this session (parsed when it is JSON), one per constant — and nothing else. An empty variable stops it (exit `1`).
+- `ask answer <exe-id> -` reads the delegate's answer on stdin (or the rest of the line) and checks it against the contract: a line with `INTO x` takes a value of `x`'s type and stores it in `x`; a procedure takes its `AS` template; a condition takes `{"holds": true}` or `{"holds": false}` and prints it. An answer that breaks the contract is refused (exit `6`): nothing is stored, and the agent hands the piece over again with the same input.
 
 **A program** — the apx runs it itself:
 
@@ -221,7 +220,7 @@ node .agent-pack/apx/clerk.apx run exe-8c21d4e0
 | `7` | an `UNTIL*` / `UNTIL**` reached its round limit: stop the loop and report that the condition never held (also from `answer`) |
 | `1` / `2` | the piece cannot run yet (an empty variable, a delegate's contract) / wrong usage |
 
-**`--into <var>`** stores a procedure's result in a variable of the agent — what `RUN p INTO x` compiles to when a delegate or a program carries `p` out: `run <exe-id> --into x`, `answer <exe-id> - --into x`. It takes only a procedure's contract; a line stores in its own `INTO`.
+**`--into <var>`** stores a procedure's result in a variable of the agent — what `RUN p INTO x` compiles to when a delegate or a program carries `p` out: `run <exe-id> --into x`, `ask answer <exe-id> - --into x`. It takes only a procedure's contract; a line stores in its own `INTO`.
 
 **Rounds.** For an `UNTIL*` or `UNTIL**`, each `holds: false` is a round: the apx adds `round 2 of 3 — do the next round, then ask again`, and at the limit (the head's `MAX <n>`) `round limit reached (3 of 3): stop and report that the condition never held`, with exit `7` — so a command chained after it with `&&` never starts another round. A `holds: true` starts the count again, and so does an answer given after the limit: the loop was left, a later entry is a new loop at round 1.
 

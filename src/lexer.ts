@@ -28,11 +28,20 @@ import { VAR_SCOPE_WORDS, isVarKeyword } from './vars.js';
 import { EXPORT_MODIFIER } from './blockTypes.js';
 
 /**
+ * `FOR <glob>, …` — the files a block covers, from the project root: a
+ * DIMENSION's and a DOMAIN's, the one word of the language for a set of files.
+ */
+export const GLOBS_LINE = 'FOR';
+
+/**
  * A DIMENSION's own lines — FOR the files it covers, EACH what to translate
  * inside a file. The one spelling of them: the vocabulary, the block's contract
  * and the lint's placement check read it here.
  */
-export const DIMENSION_LINES = ['FOR', 'EACH'] as const;
+export const DIMENSION_LINES = [GLOBS_LINE, 'EACH'] as const;
+
+/** An agent's perimeter: the DOMAINs it writes (and so reads), the DOMAINs it only reads. */
+export const PERIMETER_LINES = ['WRITES', 'READS'] as const;
 export type DimensionLine = typeof DIMENSION_LINES[number];
 
 /**
@@ -43,18 +52,21 @@ const STATIC_KEYWORDS = [
   'PROCEDURE', 'TEMPLATE', 'EXTENDS', 'APPLIES',
   'IMPORT',
   'UNTIL', 'ABOUT', 'SCOPE',
+  // OWNS is gone (WRITES/READS name DOMAINs): still lexed, so the lint names the rewrite.
   'ELSE', 'WHEN', 'OWNS',
   'RUN', 'VAR', 'IF',
   ...ACTION_VERBS,
   // A variable's scope, right before VAR (`SESSION VAR plan`) — vars.ts parses it.
   ...VAR_SCOPE_WORDS,
-  'ROLE', 'EXPERTISE', 'MANDATE', 'LENS-OUT', 'LENS-IN',
+  'ROLE', 'EXPERTISE', 'MANDATE', 'BUDGET', 'LENS-OUT', 'LENS-IN',
   'FLOW', 'STEP', 'PARALLEL', 'CONTEXT', 'BY',
   // TEAM body: MEMBER names the agents of the team (`MEMBER a, b`; lines add up);
   // STRATEGY the builtin strategy it runs by, LEAD the agent that prepares the
-  // work, DOMAINS the lead's dimension that gives each file its domain. A
-  // CONTRACT block's DOMAIN is the domain the lead picks it for.
+  // work. A CONTRACT block's DOMAIN names the DOMAIN block its work is in.
+  // DOMAINS is gone: still lexed, so the lint names the rewrite.
   'MEMBER', 'STRATEGY', 'LEAD', 'DOMAINS', 'DOMAIN',
+  // A CONTRACT's WITHIN: how far its assignee may write — its zones, their files, or its domain.
+  'WITHIN',
   // STORE body: TYPE names the backing plugin, LASTS its lifetime, KEY the
   // field that identifies a record (so re-ingesting the same thing updates it
   // instead of duplicating). The record shape itself reuses the template
@@ -63,6 +75,7 @@ const STATIC_KEYWORDS = [
   // DIMENSION body: FOR the files it covers (globs from the project root), EACH
   // what to translate inside a file; its value's shape is its AS template.
   'DIMENSION', ...DIMENSION_LINES,
+  ...PERIMETER_LINES,
   // `IN <store>:` — a block grouping the steps that work in one store. A
   // control-flow head, not a named declaration: it lives inside a runnable.
   'IN',

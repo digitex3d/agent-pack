@@ -53,11 +53,15 @@ try {
   // --- lint: every family, in any declared declension or alias ---
   assert.deepEqual(lintFile(agentFile, agentLines()), [], 'SHOULD/MAY/MEM and declensions lint clean in an agent');
   const errorsWith = (...extra) => lintFile(agentFile, agentLines(...extra)).map(e => [e.line, e.message]);
-  const EXPECTED = 'ABOUT, MANDATE, OWNS, LENS-OUT, LENS-IN, IMPORT, ON-INVOKE, WHEN, VAR, MUST, ALWAYS, SHOULD, MAY, AS, WITH, MEM';
+  const EXPECTED = 'ABOUT, MANDATE, BUDGET, WRITES, READS, LENS-OUT, LENS-IN, IMPORT, ON-INVOKE, WHEN, VAR, MUST, ALWAYS, SHOULD, MAY, AS, WITH, MEM';
   assert.deepEqual(errorsWith('    DISTILL'), [
     [13, 'DISTILL was removed — mark the procedure PROCEDURE** or write a COMPUTE block: "DISTILL"'],
     [13, `DISTILL is not allowed inside AGENT (expected one of: ${EXPECTED})`],
   ], 'DISTILL was removed: the error says what replaces it');
+  assert.deepEqual(errorsWith('    OWNS     src/**, docs/**'), [
+    [13, 'OWNS was removed — declare the files as `EXPORT DOMAIN <name>:` with `FOR src/**, docs/**`, and write `WRITES <name>` (or `READS <name>`) in the agent: "OWNS     src/**, docs/**"'],
+    [13, `OWNS is not allowed inside AGENT (expected one of: ${EXPECTED})`],
+  ], 'OWNS was removed: the error says what replaces it');
   assert.deepEqual(errorsWith('    SHOULD-NOT  x'), [], 'SHOULD-NOT is the negative level of SHOULD');
   assert.deepEqual(errorsWith('    !!SHOULD  x'), [[13, '`!!SHOULD` is not a level of SHOULD — use !SHOULD, SHOULD, SHOULD!']]);
   assert.deepEqual(errorsWith('    MAY!  x'), [[13, '`MAY!` is not a level of MAY — use MAY']]);

@@ -100,7 +100,7 @@ function writeMod(dir, name, content) {
 {
   const tmp = mkdtempSync(join(tmpdir(), 'ap-lint-'));
   try {
-    writeMod(tmp, 'a_mod.policy.ap', '# a\nABOUT a\nAPPLIES #laravel #php #backend\nALWAYS do a\n');
+    writeMod(tmp, 'a_mod.policy.ap', '# a\nABOUT a\nAPPLIES #laravel, #php, #backend\nALWAYS do a\n');
 
     const index = buildMetadataIndex(makeConfig(tmp));
     assert.equal(index.errors.length, 0, 'no errors for 3 unique tags');

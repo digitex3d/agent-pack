@@ -5,7 +5,7 @@ EXPORT TEMPLATE change-summary:
   SLOTS:
     change: TEXT MAX_WORDS 30        "the change, in one sentence"
     files:  TEXT                     "every file touched, comma-separated"
-    tests:  ENUM[passed failed none] "the result of the test run after the change"
+    tests:  ENUM[passed, failed, none] "the result of the test run after the change"
     risks:  TEXT MAX_WORDS 30        "what the reviewer should look at first, or none"
   BODY:
     change: {change}

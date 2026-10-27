@@ -6,8 +6,14 @@
  * imports: the apx engine bundles this module.
  */
 
+/** agent-pack's runtime folder, at the project root — outside git. */
+export const RUNTIME_DIR = '.agent-pack';
+
 /** The apx files — build output, outside git. */
-export const APX_DIR = '.agent-pack/apx';
+export const APX_DIR = `${RUNTIME_DIR}/apx`;
+
+/** Where the copies of a session's contract instances live: one folder per instance. */
+export const WORK_DIR = `${RUNTIME_DIR}/work`;
 
 /** Where an agent's `LASTS session` stores live: beside its apx. */
 export function storeStateDir(agent: string): string {

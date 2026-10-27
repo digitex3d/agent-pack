@@ -344,8 +344,6 @@ export interface ApMdMeta {
   breadcrumbs: Record<string, string[]>;
   /** Leading blank lines of the agent body (metadata-strip artifact). */
   agentBodyLead: number;
-  /** Whether the OWNS fence renders in the body (adapter did not claim it). */
-  ownsInBody: boolean;
   /** address → provenance — which part of the md each block belongs to. */
   provenance: Record<string, string>;
   /** address → node index of the block-level AS line in the source body. */

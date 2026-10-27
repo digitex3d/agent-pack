@@ -16,7 +16,7 @@ import type { AgentBlock, VarBlock } from '../../src/apdoc/blocks.js';
 import type { ApBlock } from '../../src/apdoc/block.js';
 import { ApDocument } from '../../src/apdoc/document.js';
 import { renderNodes, MdEnv } from './toolkit.js';
-import { OwnsPrimitive } from '../../src/primitives.js';
+import { renderPerimeter } from '../../src/primitives.js';
 import type { ApMdMeta } from '../../src/apdoc/types.js';
 import { FORMULAS, fill, refSuffix, headingLine } from '../../src/formulas.js';
 import { apxCommand } from '../../src/apx/paths.js';
@@ -29,7 +29,7 @@ const D = FORMULAS.document;
 /** An empty md-meta — a document compiled without prose metadata renders bare. */
 const EMPTY_MD: ApMdMeta = {
   bootstrap: '', intros: {}, vars: {}, breadcrumbs: {},
-  agentBodyLead: 1, ownsInBody: true, provenance: {}, shapePos: {},
+  agentBodyLead: 1, provenance: {}, shapePos: {},
 };
 
 /**
@@ -78,7 +78,7 @@ export function mdEnv(
 }
 
 /**
- * The preamble — the agent definition, never trimmed: OWNS fence, bootstrap
+ * The preamble — the agent definition, never trimmed: the scope warning, bootstrap
  * (team membership + shared + runtime defaults), identity + lens, the agent's
  * own body (rules, WHEN workflows).
  */
@@ -87,10 +87,9 @@ export function renderPreamble(doc: ApDocument, env: MdEnv): string {
   const root = doc.root() as AgentBlock | null;
   let out = '';
 
-  // OWNS fence — before everything, the scope warning (body-side only when
-  // the active adapter did not claim OWNS into frontmatter).
-  const owns = doc.owns();
-  if (owns && src.ownsInBody) out += OwnsPrimitive.renderNeutral(owns.split(/\s*,\s*/));
+  // The scope warning — before everything: what the agent writes and reads.
+  const perimeter = doc.perimeter();
+  if (perimeter) out += renderPerimeter(perimeter);
 
   // Bootstrap: team membership + shared + runtime defaults (from meta.md).
   out += src.bootstrap;

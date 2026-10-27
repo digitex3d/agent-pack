@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
 /**
- * Integration test: metadata keywords (APPLIES, OWNS) declared
+ * Integration test: metadata keywords (APPLIES) declared
  * in an imported library module must NOT appear in the compiled agent bundle.
  *
  * Regression for: imported module bodies were inlined via ingestRaw without
@@ -22,13 +22,12 @@ try {
   mkdirSync(policiesDir, { recursive: true });
 
   // A policy module that carries APPLIES (catalog metadata) plus real rule content.
-  // OWNS is an agent-dir-only keyword not valid in library policy files.
   writeFileSync(
     join(policiesDir, 'test-rules.ap'),
     [
       '# test-rules',
       'ABOUT  rules used in import-metadata-leak test',
-      'APPLIES #test-tag #leak-check universal',
+      'APPLIES #test-tag, #leak-check, universal',
       'ALWAYS follow the test-rules policy',
       'NEVER skip the test-rules policy',
     ].join('\n') + '\n',

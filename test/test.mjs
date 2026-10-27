@@ -40,15 +40,15 @@ const { lintPolicy, lintRole, lintProcedure, lintTemplate } = await import('../d
 
 {
   // APPLIES validation: valid payload passes, invalid forms produce lint errors
-  const validTags = lintPolicy('t.policy.ap', `# t\nABOUT t\nAPPLIES #typescript #code-review #bash\nALWAYS do something\n`);
+  const validTags = lintPolicy('t.policy.ap', `# t\nABOUT t\nAPPLIES #typescript, #code-review, #bash\nALWAYS do something\n`);
   assert.equal(validTags.length, 0, 'valid APPLIES payload should produce no errors');
 
   // Bare APPLIES (no payload) is lexed as unknown → rejected as unexpected line
   const emptyTags = lintPolicy('t.policy.ap', `# t\nABOUT t\nAPPLIES\nALWAYS do something\n`);
   assert.ok(emptyTags.length > 0, 'empty APPLIES should be rejected');
 
-  const commaTags = lintPolicy('t.policy.ap', `# t\nABOUT t\nAPPLIES #a, #b\nALWAYS do something\n`);
-  assert.ok(commaTags.some(e => /APPLIES token/.test(e.message)), 'comma-separated APPLIES should be rejected');
+  const spacedTags = lintPolicy('t.policy.ap', `# t\nABOUT t\nAPPLIES #a #b\nALWAYS do something\n`);
+  assert.deepEqual(spacedTags.map(e => e.message).filter(m => /APPLIES/.test(m)), ['`APPLIES #a #b`: separate the items with commas — `APPLIES #a, #b`'], 'space-separated APPLIES is refused once, with the line to write');
 
   const slashTags = lintPolicy('t.policy.ap', `# t\nABOUT t\nAPPLIES #coding/scripting\nALWAYS do something\n`);
   assert.ok(slashTags.some(e => /APPLIES token/.test(e.message)), 'hierarchical slash APPLIES should be rejected');
@@ -69,7 +69,7 @@ console.log('Lint tests passed.');
 
   // EXPORT block with ABOUT + APPLIES → clean
   const full = lintPolicy('ctx.policy.ap',
-    `# p\nEXPORT POLICY ctx:\n    ABOUT context rules\n    APPLIES #multi-agent universal\n    ALWAYS engineer the environment\n    NEVER rely on one prompt\n`);
+    `# p\nEXPORT POLICY ctx:\n    ABOUT context rules\n    APPLIES #multi-agent, universal\n    ALWAYS engineer the environment\n    NEVER rely on one prompt\n`);
   assert.equal(full.length, 0, 'EXPORT block with ABOUT+APPLIES should be clean');
 
   // EXPORT block without APPLIES → clean (APPLIES optional)
@@ -300,7 +300,6 @@ await import('./team.test.mjs');
 await import('./contracts.test.mjs');
 
 // --- The domains of a project's files at build time (D44): decideChoice, the lock's choices, jev's choice question, the lead's tagging ---
-await import('./domains.test.mjs');
 
 // --- The contracts strategy (D44), apx side: a real project, bundle all, the agents' apx in one session ---
 await import('./contractsApx.test.mjs');
@@ -323,6 +322,10 @@ await import('./whenShape.test.mjs');
 await import('./exampleCompose.test.mjs');
 await import('./reporter.test.mjs');
 await import('./version.test.mjs');
+await import('./keywordCatalog.test.mjs');
+await import('./workspace.test.mjs');
+await import('./lists.test.mjs');
+await import('./perimeter.test.mjs');
 
 // --- programs: a COMPUTE / PROCEDURE** / IF** carried out by its program — apx run, tests, refusal, timeout, orphans ---
 await import('./programs.test.mjs');

@@ -43,7 +43,9 @@ export interface Formulas {
     BY: { intro: Text; inline: Text };
     AS: { fallback: Text; line: Text; agent: Text; shaped: Text };
     APPLIES: { scope: Record<'universal' | 'team' | 'agent' | 'with' | 'ls', Text> };
-    OWNS: { fence: Text[]; glob: Text };
+    WRITES: { fence: Text[]; none: Text };
+    READS: { all: Text; only: Text };
+    FOR: { glob: Text };
     'LENS-IN': { line: Text; input: Text };
     'LENS-OUT': { bridge: Text };
     MANDATE: { line: Text };
@@ -66,11 +68,12 @@ export interface Formulas {
       reject: Text; create: Text; usage: Text; noType: Text; unknownType: Text;
     } & KindGuide;
     contract: {
-      chapter: Text; domain: Text; form: Text; by: Text; byTeam: Text;
+      chapter: Text; domain: Text; within: Text; form: Text; by: Text; byTeam: Text;
       flow: { when: Text; prepare: Text; prepareDo: Text[]; work: Text; workDo: Text[]; merge: Text; mergeDo: Text[] };
       team: { strategy: Text; contracts: Text; entry: Text; domain: Text };
     } & KindGuide;
     dimension: { chapter: Text; covers: Text; eachShape: Text; read: Text; write: Text } & KindGuide;
+    domain: { chapter: Text; covers: Text } & KindGuide;
     team: { heading: Text; member: Text; handles: Text; fellows: Text; fellow: Text; undescribed: Text; closing: Text } & KindGuide;
     runtime: { heading: Text };
     tool: { chapter: Text; heading: Text } & KindGuide;

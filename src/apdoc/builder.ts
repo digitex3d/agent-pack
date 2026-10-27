@@ -81,6 +81,7 @@ import {
 import { ApDocument, BlockProvenance } from './document.js';
 import { COMPUTE_SECTIONS, executorMark, executorSpecs, returnShape } from '../executor.js';
 import { DirectiveNode, RunNode, TextNode, IfNode, UntilNode, WhenNode, StepNode, ParallelNode, InNode, VarNode } from './nodes.js';
+import { splitList } from '../lists.js';
 
 
 /** Bullet-group keywords (DO, BY, WHEN, LOG, …) that group like force levels. */
@@ -107,8 +108,6 @@ export interface RecorderFinishOpts {
   vars: Record<string, string>;
   /** The variables the agent imports, with where (`` `@main.vars` ``). */
   declaredVars: PlacedVariable[];
-  /** Whether the OWNS fence renders in the body (adapter did not claim it). */
-  ownsInBody: boolean;
   /** The project's contracts and teams — what a `BY <team>` resolves against, and which contracts hand work to the agent's team. Absent: not known. */
   contractIndex?: ContractIndex | null;
 }
@@ -679,8 +678,11 @@ export class DocumentBuilder implements BlockCx {
   }
 
   /** A step's BY: a role names the member bound to it (as AGENTS.md resolves it), else a member by name. */
+  /** A step's BY: an agent, a role bound to one — or a team, which carries the step out by its own routing. */
   private byRef(name: string): ApRef {
     const agent = (this.roles && resolveRole(this.roles, name)?.name) ?? name;
+    const team = this.agents.has(agent) ? undefined : this.contractIndex?.teams.find(t => t.name === name);
+    if (team) return this.ref({ kind: 'team', name: team.name, namespace: TeamBlock.NAMESPACE }, name, 'team');
     return this.ref(this.agents.get(agent), agent, 'agent');
   }
 
@@ -756,9 +758,7 @@ export class DocumentBuilder implements BlockCx {
       const kind = kindOfFolder(ns.split('.')[1] ?? '');
       const ref = kind ? strategyOf(kind)?.ref : null;
       if (!kind || !ref) continue;
-      for (const raw of m[1].split(',')) {
-        const name = raw.trim();
-        if (!name) continue;
+      for (const name of splitList(m[1])) {
         this.refIndex(ref).set(name, { kind, name, namespace: ns });
       }
     }
@@ -821,10 +821,6 @@ export class DocumentBuilder implements BlockCx {
           const lead = contractsTeamOf(this.contractIndex, name)?.lead;
           if (lead) this.agents.set(lead, { kind: 'agent', name: lead, namespace: AgentBlock.NAMESPACE });
         }
-      }
-      // The DOMAINS dimension is read by the strategy itself: the lead names it there, as a WITH would.
-      if (this.team.file.strategy?.name === CONTRACTS_STRATEGY && this.team.file.domains && this.team.file.lead?.name === ctx.agentName) {
-        this.withNamed.add(this.team.file.domains.name);
       }
       if (this.team.file.strategy?.name === CONTRACTS_STRATEGY && this.contractIndex) {
         const team = this.team.name;
@@ -1064,7 +1060,6 @@ export class DocumentBuilder implements BlockCx {
       vars: opts.vars,
       breadcrumbs,
       agentBodyLead: (/^\n*/.exec(opts.agentBody)?.[0].length ?? 0) || 1,
-      ownsInBody: opts.ownsInBody,
       provenance,
       shapePos,
     };

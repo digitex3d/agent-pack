@@ -19,6 +19,7 @@ export type IngestKind =
   | 'flow'
   | 'store'
   | 'dimension'
+  | 'domain'
   | 'generic';
 
 /**
@@ -106,6 +107,7 @@ export const KIND_DIRS: Record<Exclude<IngestKind, 'generic' | 'agent'>, string>
   flow: 'flows',
   store: 'stores',
   dimension: 'dimensions',
+  domain: 'domains',
 };
 
 /**
@@ -139,6 +141,8 @@ const STRUCTURAL_KEYWORD: Partial<Record<IngestKind, RegExp>> = {
   store: /^STORE\s+([^\s:]+)/m,
   // `DIMENSION <name>:` — the name only, like STORE.
   dimension: /^DIMENSION\s+([^\s:]+)/m,
+  // `DOMAIN <name>:` — the name only. A CONTRACT's `DOMAIN <name>` line is indented: never a file's kind.
+  domain: /^DOMAIN\s+([^\s:]+)/m,
 };
 
 const H1_RE = /^#\s+(.+)$/m;
@@ -315,7 +319,7 @@ function fileFacets(
 const UNIT_METADATA_KEYWORDS = AGENT_METADATA_KEYWORDS.filter(k => k !== 'AS' && k !== 'LENS-IN');
 
 /**
- * Lift a unit's ABOUT/APPLIES and strip its metadata keywords (ABOUT, OWNS,
+ * Lift a unit's ABOUT/APPLIES and strip its metadata keywords (ABOUT, WRITES,
  * APPLIES, …), returning the rendered body. The single seam shared by
  * the whole-file path ({@link ingestRaw}) and the per-block path
  * ({@link ingestExportBlock}), so a single-export file and one block of a

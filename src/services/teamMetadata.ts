@@ -10,6 +10,7 @@ import { AGENT_KEYS, TEAM_KEY } from '../blockTypes.js';
 export { TEAM_KEY };
 import { apFilesUnder } from './fs.js';
 import { parseBlocks, type Block } from '../parseBlocks.js';
+import { splitList } from '../lists.js';
 
 /**
  * The single reader for team/agent metadata pulled straight from `.ap` source.
@@ -56,8 +57,6 @@ export interface TeamFile {
   strategy: { name: string; line: number } | null;
   /** `LEAD <agent>` — the agent that prepares the work under a strategy. */
   lead: { name: string; line: number } | null;
-  /** `DOMAINS <dimension>` — the lead's dimension that gives every file its domain. */
-  domains: { name: string; line: number } | null;
   /** The CONTRACT blocks of the team. */
   contracts: ContractDecl[];
   /** The indent of the block's lines — what `unit` de-indents them by. */
@@ -80,6 +79,9 @@ export interface ContractDecl {
   about: string;
   domain: string | null;
   domainLine: number | null;
+  /** `WITHIN zone | file | domain` — how far its assignee may write; `domain` when absent. */
+  within: ContractLimit;
+  withinLine: number | null;
   /** The template `AS` names — the shape of the spec the lead fills. */
   as: string | null;
   asLine: number | null;
@@ -91,24 +93,29 @@ export interface ContractDecl {
 }
 
 /** The lines a TEAM block holds besides its routing and flows — blanked in its unit. */
-const TEAM_HEAD_LINES = new Set(['MEMBER', 'STRATEGY', 'LEAD', 'DOMAINS']);
+const TEAM_HEAD_LINES = new Set(['MEMBER', 'STRATEGY', 'LEAD']);
 
 /** The block that declares a contract. */
 export const CONTRACT_KEY = 'CONTRACT';
+
+/** How far whoever carries an instance out may write — the values of WITHIN, the narrowest first. */
+export const CONTRACT_LIMITS = ['zone', 'file', 'domain'] as const;
+export type ContractLimit = typeof CONTRACT_LIMITS[number];
 
 /** The strategy a team of contracts declares. */
 export const CONTRACTS_STRATEGY = 'contracts';
 
 /** Read one CONTRACT block. */
 function readContract(block: Block): ContractDecl {
-  const decl: ContractDecl = { name: block.name ?? '', line: block.startLine, about: '', domain: null, domainLine: null, as: null, asLine: null, asLevelled: false, by: [], byLine: null };
+  const decl: ContractDecl = { name: block.name ?? '', line: block.startLine, about: '', domain: null, domainLine: null, within: 'domain', withinLine: null, as: null, asLine: null, asLevelled: false, by: [], byLine: null };
   for (const child of block.children) {
     if (child.type !== 'line') continue;
     const rest = child.rest.trim();
     if (child.keyword === 'ABOUT' && !decl.about) decl.about = rest;
     else if (child.keyword === 'DOMAIN' && decl.domain === null) { decl.domain = rest; decl.domainLine = child.line; }
+    else if (child.keyword === 'WITHIN' && decl.withinLine === null && (CONTRACT_LIMITS as readonly string[]).includes(rest)) { decl.within = rest as ContractLimit; decl.withinLine = child.line; }
     else if (/^!?AS!{0,2}$/.test(child.keyword) && decl.as === null) { decl.as = rest; decl.asLine = child.line; decl.asLevelled = child.keyword !== 'AS'; }
-    else if (child.keyword === 'BY' && decl.byLine === null) { decl.by = rest.split(',').map(x => x.trim()).filter(Boolean); decl.byLine = child.line; }
+    else if (child.keyword === 'BY' && decl.byLine === null) { decl.by = splitList(rest); decl.byLine = child.line; }
   }
   return decl;
 }
@@ -145,20 +152,17 @@ export function readTeamFile(root: string, sources: SourceRegistry = new SourceR
   let about = '';
   let strategy: TeamFile['strategy'] = null;
   let lead: TeamFile['lead'] = null;
-  let domains: TeamFile['domains'] = null;
   for (const child of block.children) {
     if (child.type !== 'line') continue;
     const rest = child.rest.trim();
     if (child.keyword === 'MEMBER') {
-      listed.push(...rest.split(',').map(s => s.trim()).filter(Boolean).map(name => ({ name, line: child.line })));
+      listed.push(...splitList(rest).map(name => ({ name, line: child.line })));
     } else if (child.keyword === 'ABOUT' && !about) {
       about = rest;
     } else if (child.keyword === 'STRATEGY' && !strategy) {
       strategy = { name: rest, line: child.line };
     } else if (child.keyword === 'LEAD' && !lead) {
       lead = { name: rest, line: child.line };
-    } else if (child.keyword === 'DOMAINS' && !domains) {
-      domains = { name: rest, line: child.line };
     }
   }
   const contracts = readContractBlocks(block.children);
@@ -168,7 +172,7 @@ export function readTeamFile(root: string, sources: SourceRegistry = new SourceR
       .filter((m, i, all) => all.findIndex(o => o.name === m.name) === i)
     : listed;
   const childIndent = block.children[0]?.indent ?? 0;
-  return { root, path, source, block, name: block.name ?? basename(root), about, members, strategy, lead, domains, contracts, childIndent, unit: teamUnit(lines, block, childIndent) };
+  return { root, path, source, block, name: block.name ?? basename(root), about, members, strategy, lead, contracts, childIndent, unit: teamUnit(lines, block, childIndent) };
 }
 
 /** See {@link TeamFile.unit}: the opener, the head lines and the CONTRACT blocks blanked, the block's lines de-indented, numbers kept. */
@@ -257,7 +261,7 @@ function importLineFor(source: string, name: string | null): string | null {
   if (!name) return null;
   for (const line of source.split(/\r?\n/)) {
     const m = line.match(/^IMPORT\s+(.+?)\s+FROM\s+(\S+)\s*$/);
-    if (m && m[1].split(',').map(s => s.trim()).includes(name)) return `IMPORT ${name} FROM ${m[2]}`;
+    if (m && splitList(m[1]).includes(name)) return `IMPORT ${name} FROM ${m[2]}`;
   }
   return null;
 }
@@ -329,6 +333,7 @@ export function projectContractIssues(file: string, decls: ContractDecl[], index
   for (const c of decls) {
     const at = (line: number | null, message: string) => issues.push({ file, line: line ?? c.line, message });
     if (c.domain !== null) at(c.domainLine, `CONTRACT ${c.name}: DOMAIN is a team contract's — the lead picks it by domain; a project contract hands the whole request to a team`);
+    if (c.withinLine !== null) at(c.withinLine, `CONTRACT ${c.name}: WITHIN is a team contract's — it bounds what a member writes; a project contract hands the whole request to a team`);
     if (c.by.length !== 1) at(c.byLine, `CONTRACT ${c.name}: BY names the one team that takes the request — found ${c.by.length || 'none'}`);
     else if (!contractsTeamOf(index, c.by[0])) at(c.byLine, `BY ${c.by[0]}: no team runs by contracts under that name — a project contract is handed to a team with \`STRATEGY contracts\``);
     if (c.as && !templates.has(c.as)) at(c.asLine, `CONTRACT ${c.name}: AS \`${c.as}\` names no template of this file — declare it here or IMPORT it`);

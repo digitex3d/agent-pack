@@ -52,7 +52,7 @@ const CHECKS = { adapter: fakeJudge, threshold: 0.7 };
 
 const TAIL = [
   'ROLE a-role:', '    ABOUT   a worker', '    ALWAYS  do the work', '',
-  'TEMPLATE verdict:', '    ABOUT  a verdict', '    SLOTS:', '        decision: ENUM[accept reject]  "the decision"',
+  'TEMPLATE verdict:', '    ABOUT  a verdict', '    SLOTS:', '        decision: ENUM[accept, reject]  "the decision"',
   '        reason: TEXT  "why it was decided"', '    BODY:', '        {decision}: {reason}', '',
 ];
 /** Compile agent `name` from its body lines; `checks` null compiles without the config key. */

@@ -27,25 +27,14 @@ export interface JudgeExample {
   verdict: string;
 }
 
-/**
- * A question asked as is — a checked condition's (`IF!`), built at compile
- * time; or, with `options`, a choice: the judge picks one option, each with what
- * it means, and answers a probability per option.
- */
+/** A question asked as is — a checked condition's (`IF!`), built at compile time. */
 export interface JudgeQuestion {
   id: string;
   question: string;
-  /** A choice question: option → what it means. */
-  options?: Record<string, string>;
 }
 
-/** What a judge answers per question: a probability for a yes/no question, a distribution over the options for a choice. */
-export type JudgeAnswer = number | Record<string, number>;
-
-/** Whether an answer is a distribution over options (a choice question's). */
-export function isDistribution(answer: JudgeAnswer | undefined): answer is Record<string, number> {
-  return typeof answer === 'object' && answer !== null;
-}
+/** What a judge answers per question: the probability of yes. */
+export type JudgeAnswer = number;
 
 /** A rule: a TEMPLATE tagged `#judge`, applied to every line of its layout's primitives. */
 export interface JudgeRule {
@@ -53,7 +42,7 @@ export interface JudgeRule {
   id: string;
   /**
    * The keywords of the lines it judges — the first word of the layout (`DO {action}` → `DO`),
-   * or the values of the ENUM slot it opens with (`{keyword} {action}`, `ENUM[DO MUST]` → `DO`, `MUST`);
+   * or the values of the ENUM slot it opens with (`{keyword} {action}`, `ENUM[DO, MUST]` → `DO`, `MUST`);
    * empty when the layout names none (`{line}`): every line of its scope.
    */
   primitives: string[];
@@ -107,8 +96,6 @@ export interface JudgeConfig {
   adapter: JudgePlugin;
   /** A check answered below this probability is reported. */
   threshold: number;
-  /** A choice is decided when its top option is at or above the threshold AND ahead of the next by this much; else it is the developer's. */
-  margin: number;
   offline: JudgeOffline;
   /** Absolute path of the judge lock. */
   lock: string;
@@ -126,6 +113,4 @@ export interface ChecksConfig {
   adapter: JudgePlugin;
   /** A condition answered at or above this probability is open; below, closed. */
   threshold: number;
-  /** A choice is decided when its top option is at or above the threshold AND ahead of the next by this much. */
-  margin: number;
 }

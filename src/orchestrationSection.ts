@@ -242,6 +242,8 @@ async function collectTeams(teamsRoot: string, ctx: BundleContext, projectFile: 
     { bindings, anchor: 'directory' as const },
   );
   const agentNames = new Set([...membersByTeam.values()].flat().map(a => a.name));
+  // A step may also name a team: it carries the step out by its own routing.
+  const byNames = new Set([...agentNames, ...files.map(f => f.teamName)]);
 
   const out: TeamRaw[] = [];
   for (const { teamName, teamDir, teamPath, about, source, team } of files) {
@@ -249,7 +251,7 @@ async function collectTeams(teamsRoot: string, ctx: BundleContext, projectFile: 
     const raw = resolveByLines(
       source,
       roleIndex,
-      agentNames,
+      byNames,
       (msg, line) => ctx.lintErrors.push({ file: teamPath, line, message: msg }),
     );
     // Its checked heads as AGENTS.md renders them: a step's is its BY agent's, the routing's no one's.
@@ -339,20 +341,20 @@ const BY_LINE_RE = /^([ \t]*)BY[ \t]+(\S+)([ \t]*)$/gm;
 /**
  * Rewrite `BY <role>` lines to `BY <agent>` using the RoleIndex. A name that
  * resolves to a bound agent (it is a role) is substituted with that agent. A
- * name that is already a known agent is left verbatim. A name that is neither is
- * a dangling routing target — a compile error at its line.
+ * name that is already a known agent or a team is left verbatim. A name that is
+ * neither is a dangling routing target — a compile error at its line.
  */
 function resolveByLines(
   raw: string,
   index: RoleIndex,
-  agentNames: Set<string>,
+  knownNames: Set<string>,
   fail: (msg: string, line: number) => void,
 ): string {
   return raw.replace(BY_LINE_RE, (whole, indent: string, name: string, trail: string, offset: number) => {
     const bound = resolveRole(index, name);
     if (bound) return `${indent}BY ${bound.name}${trail}`;
-    if (agentNames.has(name)) return whole;
-    fail(`BY ${name}: no team member and no role bound to one is called \`${name}\``, raw.slice(0, offset).split('\n').length);
+    if (knownNames.has(name)) return whole;
+    fail(`BY ${name}: no team member, no role bound to one and no team is called \`${name}\``, raw.slice(0, offset).split('\n').length);
     return whole;
   });
 }

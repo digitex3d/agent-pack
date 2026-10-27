@@ -62,7 +62,7 @@
   "scripts": {
     "ap": "node dist/index.js",
     "version": "node scripts/sync-version.mjs && git add CITATION.cff",
-    "build": "npm run build:tabeli && tsc && mkdir -p dist/src/config && cp src/config/*.json dist/src/config/ && npm run build:apx",
+    "build": "npm run build:tabeli && tsc && mkdir -p dist/src/config && cp src/config/*.json dist/src/config/ && node scripts/write-keywords.mjs && npm run build:apx",
     "build:tabeli": "make --no-print-directory -C tabeli",
     "test": "npm run build && node test/test.mjs && make --no-print-directory -C tabeli test",
     "install": "npm run build:tabeli",

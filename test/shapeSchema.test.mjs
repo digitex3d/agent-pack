@@ -13,7 +13,7 @@ const { parseTemplate } = await import('../dist/src/shapeCompiler.js');
 // --- 1. parseTypeSpec mirrors the shapeCompiler grammar ---
 
 {
-  assert.deepEqual(parseTypeSpec('ENUM[a b c]'), { kind: 'enum', values: ['a', 'b', 'c'] });
+  assert.deepEqual(parseTypeSpec('ENUM[a, b, c]'), { kind: 'enum', values: ['a', 'b', 'c'] });
   assert.deepEqual(parseTypeSpec('NUMBER 0..100'), { kind: 'number', min: 0, max: 100 });
   assert.deepEqual(parseTypeSpec('NUMBER >=3'), { kind: 'number', min: 3 });
   assert.equal(parseTypeSpec('TEXT MAX_WORDS 5').maxWords, 5);
@@ -28,7 +28,7 @@ const { parseTemplate } = await import('../dist/src/shapeCompiler.js');
 // this catches drift when a new TYPE form lands on one side only)
 
 {
-  const RECOGNIZED = ['ENUM[a b c]', 'NUMBER 0..100', 'NUMBER >=3', 'TEXT MAX_WORDS 5', 'TEXT', 'LIST <row> 1..9', '<row>'];
+  const RECOGNIZED = ['ENUM[a, b, c]', 'NUMBER 0..100', 'NUMBER >=3', 'TEXT MAX_WORDS 5', 'TEXT', 'LIST <row> 1..9', '<row>'];
   const PASSTHROUGH = ['JSON', 'WHATEVER 42'];
   const tplOf = type => parseTemplate(`TEMPLATE t:\n  SLOTS:\n    x: ${type} "d"`);
 
@@ -51,7 +51,7 @@ const { parseTemplate } = await import('../dist/src/shapeCompiler.js');
     '  SLOTS:',
     '    name:  TEXT MAX_WORDS 3 "n"',
     '    score: NUMBER 1..5      "s"',
-    '    band?: ENUM[weak solid] "b"',
+    '    band?: ENUM[weak, solid] "b"',
     '    data?: JSON             "d"',
   ].join('\n'));
   assert.ok(tpl && tpl.slots.length === 4, 'fixture template parses');

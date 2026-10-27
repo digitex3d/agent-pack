@@ -17,6 +17,7 @@ import { apFilesUnder } from '../services/fs.js';
 import { readAgentFile } from '../services/teamMetadata.js';
 import { fill, FORMULAS } from '../formulas.js';
 import { apxCommand } from '../apx/paths.js';
+import { splitList } from '../lists.js';
 
 /**
  * The reserved alias of the skills a harness provides itself: `IMPORT pdf FROM
@@ -237,7 +238,7 @@ export function resolveImports(
     if (t.kind !== 'keyword' || t.indent !== 0 || t.keyword !== 'IMPORT') continue;
     const m = t.rest.match(IMPORT_REST_RE);
     if (!m) continue;
-    const names = m[1].split(/\s*,\s*/).map(s => s.trim()).filter(Boolean);
+    const names = splitList(m[1]);
     const modulePath = m[2];
     for (const name of names) {
       const target = resolveTargetWith(modulePath, name, libraryRoots, libraries);
@@ -305,7 +306,7 @@ export async function processImports(body: string, ctx: BundleContext, sourcePat
       continue;
     }
 
-    const names = m[1].split(/\s*,\s*/).map(s => s.trim()).filter(Boolean);
+    const names = splitList(m[1]);
     const modulePath = m[2];
     let replacement = '';
 

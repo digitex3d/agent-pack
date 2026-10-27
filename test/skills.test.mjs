@@ -128,7 +128,7 @@ try {
     await assert.rejects(() => bundleAndEmit('user', config, claudeCodeAdapter(), ctx), /skill `pdf-report` applies nowhere/);
     // a perimeter on its APPLIES line makes it hold there with no WITH
     write(join(tmp, 'library', 'skills', 'everywhere.ap'), [
-      'EXPORT SKILL everywhere AS reporter:', '    ABOUT    always at hand', '    APPLIES  #reports universal', '    MANDATE  help',
+      'EXPORT SKILL everywhere AS reporter:', '    ABOUT    always at hand', '    APPLIES  #reports, universal', '    MANDATE  help',
       '', 'EXPORT ROLE reporter:', '    ABOUT  a writer of reports', '    ALWAYS keep a report under one page',
     ]);
     user(['IMPORT everywhere FROM @main.skills'], ['MUST be kind']);
@@ -169,7 +169,7 @@ try {
       '',
       'EXPORT POLICY baseline:',
       '    ABOUT    always on',
-      '    APPLIES  #baseline universal',
+      '    APPLIES  #baseline, universal',
       '    NEVER    leak a secret',
     ]);
     const user = (body, imports = []) => write(join(tmp, 'agents', 'standalone', 'user.ap'), [
@@ -255,8 +255,8 @@ try {
       // its zone holds lines, never a block
       assert.ok(lint(['EXPORT AGENT a AS r:', '    ABOUT  a', '    MANDATE  m', '    WITH pdf:', '        PROCEDURE p:', '            DO  work']).some(e => /opens a block: put the WITH inside it/.test(e.message)));
       // a perimeter goes on a policy or a skill only
-      assert.ok(lint(['EXPORT TEMPLATE t:', '    ABOUT  t', '    APPLIES #x universal']).some(e => /a perimeter .* goes on a POLICY or a SKILL — found on TEMPLATE/.test(e.message)));
-      assert.ok(!lint(['EXPORT POLICY q:', '    ABOUT  q', '    APPLIES #x team:delivery', '    ALWAYS  be q']).some(e => /perimeter/.test(e.message)));
+      assert.ok(lint(['EXPORT TEMPLATE t:', '    ABOUT  t', '    APPLIES #x, universal']).some(e => /a perimeter .* goes on a POLICY or a SKILL — found on TEMPLATE/.test(e.message)));
+      assert.ok(!lint(['EXPORT POLICY q:', '    ABOUT  q', '    APPLIES #x, team:delivery', '    ALWAYS  be q']).some(e => /perimeter/.test(e.message)));
     }
     rmSync(join(tmp, 'agents', 'standalone', 'user.ap'));
   }

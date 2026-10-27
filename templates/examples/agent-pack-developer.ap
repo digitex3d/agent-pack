@@ -2,7 +2,11 @@
 
 IMPORT  ap-author FROM @builtin.roles
 
+DOMAIN ap-sources:
+    ABOUT  every agent-pack source file
+    FOR    **/*.ap
+
 EXPORT AGENT agent-pack-developer AS ap-author:
     ABOUT    Authors and edits agent-pack .ap files — routed to for any task that writes or changes a .ap file
     MANDATE  write correct .ap files by filling the matching block scaffold, then validate with agent-pack bundle all
-    OWNS     **/*.ap
+    WRITES   ap-sources

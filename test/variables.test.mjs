@@ -35,7 +35,7 @@ const adapter = { ...claudeCode(), sessionEnv: SESSION };
 
 const TAIL = [
   'ROLE a-role:', '    ABOUT   a worker', '    ALWAYS  do the work', '',
-  'TEMPLATE verdict:', '    ABOUT  a verdict', '    SLOTS:', '        decision: ENUM[accept reject]  "the decision"',
+  'TEMPLATE verdict:', '    ABOUT  a verdict', '    SLOTS:', '        decision: ENUM[accept, reject]  "the decision"',
   '        reason: TEXT  "why"', '    BODY:', '        {decision}: {reason}', '',
   'TEMPLATE note:', '    ABOUT  a note', '    SLOTS:', '        text: TEXT "the note"', '',
   'PROCEDURE judge:', '    ABOUT  judge the claim', '    DO weigh it', '    AS verdict', '',
@@ -272,10 +272,6 @@ try {
   // --- 8. RETURN is gone from the language ---
   await fails(['    RETURN  the answer'], /a\.ap:4  unknown keyword `RETURN`/);
 
-  // --- 9. a store named like an apx verb would be unreachable ---
-  for (const verb of ['set', 'ls']) {
-    await fails(['', `STORE ${verb}:`, '    ABOUT  notes', '    TYPE   tabeli', '    SLOTS:', '        topic: TEXT "t"'], new RegExp(`STORE ${verb}: \`${verb}\` is a verb of the apx`));
-  }
   console.log('variables: compile tests passed.');
 
   // --- 10–14. the apx keeps variables per session: SESSION ones shared by the project's agents, private ones each agent's own ---

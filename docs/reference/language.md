@@ -11,6 +11,7 @@ EXPORT POLICY security:
 - `EXPORT` makes a block importable by other files. Without it, the block belongs to the file it is written in.
 - A line starting with `#` at the top of a file is a title, for the reader.
 - Names are lowercase words joined by dashes (`verify-claim`) — variable names too (`{{best-pizza}}`). Every block gets a stable id from its kind, library and name.
+- Every list on a line is comma-separated, whatever the line: `IMPORT a, b FROM …`, `MEMBER a, b`, `FOR src/api/**, src/db/**`, `EXPERTISE code-review, refactoring`, `APPLIES #board, universal`, `ENUM[low, high]`. A comma inside `{…}` belongs to a glob (`src/{api,db}/**` is one). A list separated by spaces fails the build, with the line to write.
 - Nothing compiles quietly: a word the language does not have, a level a keyword does not declare (`MEM!!!`), a value outside its set (`CONTEXT isolatd`), a name that points at no block, an undeclared `{{variable}}`, an `INTO` naming no variable — each fails the build, with its file and line, and a suggestion when a keyword is misspelled.
 
 ## Blocks
@@ -21,7 +22,7 @@ EXPORT POLICY security:
 EXPORT AGENT reviewer AS code-reviewer:
     ABOUT     Reviews a change for bugs and duplicated logic, never edits the code
     MANDATE   review the change the user points at and report what to fix
-    OWNS      src/**
+    READS     code
     LENS-IN   review-request
     LENS-OUT  review-report
     NEVER     edit the files under review
@@ -36,7 +37,9 @@ One agent per file, anywhere under `agents/`.
 | `AS <role>` | the role the agent embodies — its identity |
 | `ABOUT` | one line: what the agent is for — also its description in the harness and in the orchestration |
 | `MANDATE` | what it is responsible for |
-| `OWNS <globs>` | the files it may write; the definition opens with a perimeter warning |
+| `BUDGET cheap \| moderate \| costly` | how much it may spend — the adapter maps the tier to a model of its harness (Claude Code: haiku, sonnet, opus); it wins over the config's [`delegate.models`](/reference/config#delegate) |
+| `WRITES <domain>, …` | the [domains](#domain) it may write — and so read; the definition opens with a scope warning listing their files |
+| `READS <domain>, …` | the domains it may only read; without a `READS` line it reads whatever it needs. A domain is never in both lines |
 | `LENS-IN <template>` | the shape requests to it arrive in |
 | `LENS-OUT <template>` | the shape of its answers |
 | rules and `WHEN` workflows | its own behaviour — rules at every level, `SHOULD`, `MAY` and [`MEM`](#memory) included (see [Rules](#rules)), and [Control flow](#control-flow); `ASK` and `COMPUTE` lines hand a line to a delegate or a program (see [Executors](#executors)) |
@@ -58,7 +61,7 @@ A skill is an agent in every respect — the same lines, the same compilation, i
 ```
 ROLE code-reviewer:
     ABOUT      a careful reviewer who reads before judging
-    EXPERTISE  code-review refactoring
+    EXPERTISE  code-review, refactoring
     ALWAYS     quote the line a finding is about
     NEVER      report a style preference as a bug
 ```
@@ -72,7 +75,7 @@ A role can extend another with `EXTENDS <parent>`: the parent's rules — looked
 ```
 EXPORT POLICY security:
     ABOUT   baseline security rules every agent in this project respects
-    APPLIES #baseline universal
+    APPLIES #baseline, universal
     ALWAYS  validate every input crossing a trust boundary
     NEVER   commit credentials, .env files or private keys
 ```
@@ -95,7 +98,7 @@ EXPORT TEMPLATE finding:
     ABOUT  one claim of the answer, backed by its sources
     SLOTS:
         claim:       TEXT MAX_WORDS 30   "the claim, stated as fact or labelled as opinion"
-        confidence:  ENUM[high low]      "high = two independent sources agree"
+        confidence:  ENUM[high, low]     "high = two independent sources agree"
         sources:     TEXT                "each source as <url> (<publication date>)"
             MUST  give a publication date for every source
         note?:       TEXT                "anything the reader should know"
@@ -111,7 +114,7 @@ A typed answer format. `SLOTS` declares the fields — `name?:` makes one option
 |---|---|
 | `TEXT` | free text — `MAX_WORDS n`, `MIN_WORDS n`, `REGEX /p/` |
 | `NUMBER` | a number — `a..b`, `>=n`, `<=n` |
-| `ENUM[a b c]` | one of the listed values |
+| `ENUM[a, b, c]` | one of the listed values |
 | `<template>` | one instance of another template |
 | `LIST <template>` | several instances — `>=n`, `a..b` |
 
@@ -183,7 +186,7 @@ The data an agent keeps, declared like a schema. `TYPE` names the backing (`tabe
             DO  add the record when its topic is not there yet
 ```
 
-Stores are read and written through the agent's [apx](/guide/apx#stores). A store may not be named like one of the [apx's verbs](/guide/apx#reading): the apx reads that word as the verb, so the store could never be reached.
+Stores are read and written through the agent's [apx](/guide/apx#stores).
 
 ### DIMENSION
 
@@ -206,7 +209,7 @@ An answer implicit in a source file — its pseudocode, its design patterns, a d
 | `AS <template>` | a template with `SLOTS`: the value for a file is a list of its instances — one per thing `EACH` targets — or the literal `none` when there is nothing to report. No level: the value is always checked |
 | rule lines | `MUST`, `NEVER`, `SHOULD`, … — how the value is produced |
 
-`ABOUT`, `FOR`, `EACH` and `AS` are required, once each; beside them the body holds only rule lines. Any other line fails the build: a `WHEN` (as a line or a block), a nested block (`IF`, `ON-…:`, `UNTIL`, …), an action (`DO`, `ASK`, `COMPUTE`, `RUN`), and `MEM` and `WITH`, which are an agent's. A dimension is declared and imported like a store — `EXPORT DIMENSION` in the library's `dimensions/`, `IMPORT pseudocode FROM @main.dimensions` — or written in the agent's own file. A dimension belongs to an agent and is reached only through that agent's apx: importing it into `PROJECT.ap` or a team's `flows.ap` fails the build. The apx reaches it by its id, like every block — `dimension <dim-id> read <file>` — so its name may be any name.
+`ABOUT`, `FOR`, `EACH` and `AS` are required, once each; beside them the body holds only rule lines. Any other line fails the build: a `WHEN` (as a line or a block), a nested block (`IF`, `ON-…:`, `UNTIL`, …), an action (`DO`, `ASK`, `COMPUTE`, `RUN`), and `MEM` and `WITH`, which are an agent's. A dimension is declared and imported like a store — `EXPORT DIMENSION` in the library's `dimensions/`, `IMPORT pseudocode FROM @main.dimensions` — or written in the agent's own file. A dimension belongs to an agent and is reached only through that agent's apx: importing it into `PROJECT.ap` or a team's `flows.ap` fails the build. The apx reaches it by its id, like every block — `dimension read <dim-id> <file>` — so its name may be any name.
 
 **When it is worth reading is the reader's to say — with a [`WITH`](#with), like a policy or a skill.** A dimension says what it holds, not when; the agent that has it names it above the lines it is for, and reads it there:
 
@@ -219,6 +222,25 @@ WHEN about to change a function:
 The lines nested under the `WITH` are the ones that read the dimension; `!WITH pseudocode:` keeps lines out of it. A dimension that no `WITH` names applies nowhere: a warning, where a policy gets an error — the apx serves it all the same, but no line reads it; a dimension has no `APPLIES` line, so no perimeter can hold it everywhere. A moment the judge decides is a `WHEN!` with the `WITH` beneath it ([checked conditions](#checked-conditions)). Once it has read the answer, the agent decides whether it also needs the code.
 
 The agent finds its dimensions in its definition, each opening with where it applies, with the commands that read and write them; they are read and written through its [apx](/guide/apx#dimensions). Renaming a dimension or a template it names keeps what was kept; changing any of its lines, or the content of the template `AS` or `EACH` names, starts it over.
+
+### DOMAIN
+
+```
+EXPORT DOMAIN api:
+    ABOUT  the HTTP layer
+    FOR    src/api/**, src/shared/http.ts
+```
+
+A region of the code, by path. An agent names the domains it writes and reads — `WRITES api`, `READS db` — and a `CONTRACT`'s `DOMAIN` line names the domain its work is in.
+
+| Line | |
+|---|---|
+| `ABOUT <text>` | what the files of the region are |
+| `FOR <glob>, …` | its files: globs from the project root, as a [dimension's](#dimension); an absolute glob or one with `..` fails the build |
+
+`ABOUT` and `FOR` are required, once each, and a domain holds nothing else: it says where, never how. It is declared like a dimension — `EXPORT DOMAIN` in the library's `domains/`, `IMPORT api FROM @main.domains` — or at the top of the agent's own file. Domains are by path only: two regions in one folder are a project to restructure, not a domain to split. Two domains may cover the same files.
+
+The compiled agent opens with a scope warning — the files of the domains it writes, and of those it reads — and lists its domains in their chapter. An agent working alone reads it as a rule; in a team of contracts each instance works in a copy that shows only what its agent reads, and its delivery keeps only what it may write.
 
 ### FLOW
 
@@ -239,7 +261,7 @@ FLOW complex-task:
 | Line | |
 |---|---|
 | `STEP <title>:` | one step, in order |
-| `BY <agent or team>` | who carries it out |
+| `BY <agent or team>` | who carries it out — a member of the team, or a role bound to one; or another team, handed the step as one agent: it runs the flow its routing picks (a team of contracts, its contracts) and that flow's result is the step's answer. A flow with such a step is never compiled into a harness script: it is run from its text |
 | `CONTEXT isolated \| summary \| full \| inherited` | how much upstream context the step's agent receives |
 | `AS <template>` | the shape of what is handed to the step's agent — also written on the `CONTEXT` line: `CONTEXT summary AS! review-brief` reads as `CONTEXT summary` with `AS! review-brief` beneath |
 | `DO` | what to do |
@@ -379,7 +401,7 @@ WHEN an invoice arrives:
 **What a delegate or a program receives is its input, and nothing else.** One key per `{{variable}}` the piece reads, with its value in the session; one per constant, with its value; and `in`, the input of a procedure that declares a `LENS-IN`. An empty variable stops the piece before it starts. Its answer is checked against its contract: a line with `INTO x` answers a value of `x`'s type, a procedure its `AS` template, a condition `{"holds": true}` or `{"holds": false}`. Each piece gets a contract id, `exe-<8 hex>`, and the compiled line names the apx command that carries it out — `input` and `answer` for a delegate, `run` for a program (see [The apx](/guide/apx#delegates-and-programs)):
 
 ```
-Ask a delegate to read the invoice lines from `pdf_text` — delegate: `quick` — hand it over its input and the shape of its answer, both from `node .agent-pack/apx/clerk.apx input exe-…`, then store its answer: `node .agent-pack/apx/clerk.apx answer exe-… -`
+Ask a delegate to read the invoice lines from `pdf_text` — delegate: `quick` — hand it over its input and the shape of its answer, both from `node .agent-pack/apx/clerk.apx ask input exe-…`, then store its answer: `node .agent-pack/apx/clerk.apx ask answer exe-… -`
 If `totals` differ from `document_total` by more than 0.01 — a program decides — `node .agent-pack/apx/clerk.apx run exe-…`
 ```
 
@@ -404,7 +426,7 @@ distilled/dst-1a2b3c4d/
 - **`tests.json`** holds the program's cases: an input and the output it must answer, or `"exit": 1` when it must refuse. Every `REQUIRE` line gives a refusal case, every `ENSURE` line cases that prove the guarantee, and each decision the block left open a case whose `why` starts with `CHOICE:` — so the choice is written down, for a reader to confirm.
 - **A new or changed program runs its tests first**; the apx records the hash of the script and the tests (`tested` in the manifest) and runs them again only when either changes.
 - **The folder** (`dst-` and eight hex digits) is a hash of what the piece carries out and of its contract's templates: editing either gives a new folder. The new version starts from the previous one — the manifests share a `lineage` (the procedure's address); the new one sets `version` + 1 and `previous`. `bundle all` lists the folders no piece owns any more, for you to review and delete; it never deletes them.
-- Writing its programs is always inside an agent's perimeter (`OWNS` gains `distilled/**`).
+- Writing its programs is always inside an agent's perimeter (its `WRITES` gains `distilled/**`).
 
 A refusal (exit `1`) stops the procedure: the agent never carries the piece out itself. A program that does not answer in `timeout_ms` hands that one run to the agent, which says so.
 
@@ -663,7 +685,7 @@ IMPORT plan, board FROM @main.vars
 
 `@main` is the project library; shared libraries have their own alias. See [Configuration](/reference/config#libraries).
 
-`APPLIES #board #planning` tags a block: in the compiled definition, blocks sharing tags sit under a common heading, the apx filters by them (`ls tag=board`, or `tag=#board`), and a [`WITH #policy:board:`](#with) (or `#skill:board`) selects every imported policy (or skill) that carries the tag. On a policy or a skill, `APPLIES` also takes its perimeter — `universal`, `team:<team>`, `agent:<agent>` (see [POLICY](#policy)); on any other block a perimeter fails the build.
+`APPLIES #board, #planning` tags a block: in the compiled definition, blocks sharing tags sit under a common heading, the apx filters by them (`ls tag=board`, or `tag=#board`), and a [`WITH #policy:board:`](#with) (or `#skill:board`) selects every imported policy (or skill) that carries the tag. On a policy or a skill, `APPLIES` also takes its perimeter — `universal`, `team:<team>`, `agent:<agent>` (see [POLICY](#policy)); on any other block a perimeter fails the build.
 
 ## Skills
 

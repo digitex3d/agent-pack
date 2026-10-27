@@ -2,12 +2,12 @@
 
 EXPORT TEMPLATE card:
   ABOUT   the contract every board card satisfies — the shape plus the obligation on each field
-  APPLIES #board #planning
+  APPLIES #board, #planning
 
   SLOTS:
-    type:               ENUM[Feature Bug Chore Spike]  "card type"
+    type:               ENUM[Feature, Bug, Chore, Spike]  "card type"
     title:              TEXT               "short imperative title"
-    priority:           ENUM[P0 P1 P2 P3]  "assigned priority"
+    priority:           ENUM[P0, P1, P2, P3]  "assigned priority"
       MUST   carry exactly one priority while the card is active
     goal:               TEXT               "the main goal or subgoal it supports"
       MUST   link to the main goal, a subgoal, or a critical operational necessity

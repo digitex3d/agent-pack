@@ -2,7 +2,7 @@
 
 EXPORT TEMPLATE bug-card:
   ABOUT   the required fields of a bug report card
-  APPLIES #product #planning #bug
+  APPLIES #product, #planning, #bug
 
   SLOTS:
     title:              TEXT              "short bug title"
@@ -10,7 +10,7 @@ EXPORT TEMPLATE bug-card:
     expected:           TEXT              "the expected behavior"
     steps:              TEXT              "steps to reproduce"
     impact:             TEXT              "who or what is affected, and how badly"
-    priority:           ENUM[P0 P1 P2 P3] "assigned priority"
+    priority:           ENUM[P0, P1, P2, P3] "assigned priority"
     definition-of-done: TEXT              "what makes this bug resolved"
   BODY:
     type: Bug

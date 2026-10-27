@@ -132,8 +132,8 @@ try {
       'Have a program group `lines` by VAT rate',
       'Have a program round the totals',
       'If `totals` differ from `document_total` — a program decides — `apx run exe-',
-      'Until `risks` are all reviewed — a delegate decides — hand it over its input and the shape of its answer, both from `apx input exe-',
-      'Ask a delegate to read the invoice lines from `pdf_text` — delegate: `quick` — hand it over its input and the shape of its answer, both from `apx input exe-',
+      'Until `risks` are all reviewed — a delegate decides — hand it over its input and the shape of its answer, both from `apx ask input exe-',
+      'Ask a delegate to read the invoice lines from `pdf_text` — delegate: `quick` — hand it over its input and the shape of its answer, both from `apx ask input exe-',
       'Have a program group `lines` by VAT rate — `apx run exe-',
     ]) assert.ok(plain.includes(line), `the md says: ${line}`);
     assert.ok(!/store the result as `(lines|risks|totals)`/.test(plain), 'answer / run store the result: no set to tell');
@@ -334,7 +334,7 @@ try {
     write(join(proj, 'agent-pack.config.mjs'), ['export default {', "  libraryRoot: 'library',", "  agentsDir: 'agents',", "  adapters: ['claude-code'],",
       "  judge: { adapter: { type: 'judge', name: 'fake', ask: (...a) => globalThis.__executedAsk(...a) } },", '};']);
     const rule = (name, tag, force = 'NEVER', layout = '{line}') => write(join(proj, 'library', 'templates', `${name}.ap`), [
-      `EXPORT TEMPLATE ${name}:`, '  ABOUT  test rule', `  APPLIES   #judge ${tag}`, '  SLOTS:', '    line: TEXT  "a line"', `      ${force}  name a planet`, '  BODY:', `    ${layout}`,
+      `EXPORT TEMPLATE ${name}:`, '  ABOUT  test rule', `  APPLIES   #judge, ${tag}`, '  SLOTS:', '    line: TEXT  "a line"', `      ${force}  name a planet`, '  BODY:', `    ${layout}`,
     ]);
     rule('t-executed', '#executed');
     rule('t-program', '#program');

@@ -31,13 +31,15 @@ import { phraseOf, STORE_LIFETIMES, type StoreDecl, type StoreLifetime } from '.
 import { parseTemplate, templateLayout, composeExample, SLOT_NAME } from '../shapeCompiler.js';
 import type { VarScope } from '../vars.js';
 import { extractPrimitive, extractPrimitives, stripPrimitives } from '../services/text.js';
-import { renderIdentityBlock, renderGlobs } from '../primitives.js';
+import { renderIdentityBlock, renderGlobs, enumPrimitiveFor } from '../primitives.js';
 import { DirectiveNode, reviveNodes } from './nodes.js';
 import { deslugifyRole } from '../services/role.js';
 import { readFileSync, existsSync } from 'fs';
 import { resolve, basename, dirname } from 'path';
 import type { Block } from '../parseBlocks.js';
-import { isTeamFile, CONTRACTS_STRATEGY, type TeamFile, type ContractDecl } from '../services/teamMetadata.js';
+import { isTeamFile, CONTRACTS_STRATEGY, type TeamFile, type ContractDecl, type ContractLimit } from '../services/teamMetadata.js';
+import { splitList } from '../lists.js';
+import { serviceCommand } from '../apx/service.js';
 
 /**
  * The services a block needs from its builder to construct itself: the body
@@ -196,7 +198,7 @@ export class RoleBlock extends ApBlock {
     const block = new RoleBlock(cx.defInit(def));
     // EXPERTISE may already be lifted out of the body (Definition.expertise).
     const expertise = def.expertise ?? extractPrimitive(def.body, 'EXPERTISE');
-    if (expertise) block.expertise = expertise.trim().split(/\s+/);
+    if (expertise) block.expertise = splitList(expertise);
     cx.walk(cx.walkableBody(def), block.body, block);
     return block;
   }
@@ -287,7 +289,7 @@ export class StoreBlock extends ApBlock {
     return {
       type: type.name,
       location: type.location(decl),
-      usage: type.usage(decl, `${command} ${this.name}`.trim()),
+      usage: type.usage(decl, op => serviceCommand(command, 'store', op, this.id)),
       rejects,
     };
   }
@@ -349,7 +351,7 @@ export class DimensionBlock extends ApBlock {
 
   static fromDefinition(def: Definition, cx: BlockCx): DimensionBlock {
     const block = new DimensionBlock(cx.defInit(def));
-    block.globs = (extractPrimitive(def.body, 'FOR') ?? '').trim().split(/\s+/).filter(Boolean);
+    block.globs = splitList(extractPrimitive(def.body, 'FOR') ?? '');
     block.each = (extractPrimitive(def.body, 'EACH') ?? '').trim();
     if (new RegExp(`^${SLOT_NAME}$`).test(block.each)) {
       const ref = cx.templateRef(block.each, false);
@@ -371,8 +373,8 @@ export class DimensionBlock extends ApBlock {
   /** Where it applies (src/withUse.ts), what it covers and its shape, how to read it and write it, then its rules. */
   override asMdBody(env: MdEnv): string {
     const D = FORMULAS.blocks.dimension;
-    // A dimension is reached by its id, like every block: `<apx> dimension <dim-id> <verb>`.
-    const command = `${env.apxOf(null)} dimension ${this.id}`;
+    // A dimension is reached by its id, like every block: `<apx> dimension <op> <dim-id>`.
+    const command = (op: string) => serviceCommand(env.apxOf(null), 'dimension', op, this.id);
     const shape = this.shape?.ref;
     const each = this.eachRef ? fill(D.eachShape, { name: refName(this.eachRef), ref: env.refOf(this.eachRef.target) }) : this.each;
     return withScopeLine(this.kind, this.scopes, [
@@ -382,10 +384,40 @@ export class DimensionBlock extends ApBlock {
         name: shape ? refName(shape) : '',
         ref: shape ? env.refOf(shape.target) : '',
       }),
-      fill(D.read, { command }),
-      fill(D.write, { command }),
+      fill(D.read, { read: command('read') }),
+      fill(D.write, { write: command('write') }),
       ...renderNodes(env, this.body),
     ].join('\n'));
+  }
+}
+
+/** A region of the code by path (D44) — an agent's WRITES and READS name domains, and so does a CONTRACT's DOMAIN line. */
+export class DomainBlock extends ApBlock {
+  static readonly PREFIX = 'dom';
+  readonly kind = 'domain';
+  protected readonly idPrefix = DomainBlock.PREFIX;
+  /** The `FOR` globs — from the project root. */
+  globs: string[] = [];
+
+  static fromData(data: ApBlockData): DomainBlock {
+    const block = restore(new DomainBlock(initOf(data)), data);
+    block.globs = (data.args['for'] as string[] | undefined) ?? [];
+    return block;
+  }
+
+  static fromDefinition(def: Definition, cx: BlockCx): DomainBlock {
+    const block = new DomainBlock(cx.defInit(def));
+    block.globs = splitList(extractPrimitive(def.body, 'FOR') ?? '');
+    return block;
+  }
+
+  protected override argsJson(): Record<string, unknown> {
+    return { for: this.globs };
+  }
+
+  /** The files it covers — a domain holds no rule, it only says where. */
+  override asMdBody(): string {
+    return fill(FORMULAS.blocks.domain.covers, { globs: renderGlobs(this.globs) });
   }
 }
 
@@ -605,8 +637,6 @@ export class TeamBlock extends ApBlock {
   strategy: string | null = null;
   /** `LEAD <agent>` under a strategy. */
   lead: ApRef | null = null;
-  /** `DOMAINS <dimension>` — the lead's dimension, by name: only the lead's document holds the block. */
-  domains: string | null = null;
   /** The team's CONTRACT blocks, in order. */
   contracts: ApRef[] = [];
 
@@ -627,7 +657,6 @@ export class TeamBlock extends ApBlock {
     block.shared = (data.args['shared'] as string | undefined) ?? null;
     block.strategy = (data.args['strategy'] as string | undefined) ?? null;
     block.lead = (data.args['lead'] as ApRef | undefined) ?? null;
-    block.domains = (data.args['domains'] as string | undefined) ?? null;
     block.contracts = (data.args['contracts'] as ApRef[] | undefined) ?? [];
     return block;
   }
@@ -643,7 +672,6 @@ export class TeamBlock extends ApBlock {
     if (scan.file.strategy) {
       block.strategy = scan.file.strategy.name;
       block.lead = scan.file.lead ? cx.agentRef(scan.file.lead.name) : null;
-      block.domains = scan.file.domains?.name ?? null;
       block.contracts = scan.file.contracts.map(c => cx.contractRef(c.name));
     }
 
@@ -675,7 +703,6 @@ export class TeamBlock extends ApBlock {
       ...(this.shared ? { shared: this.shared } : {}),
       ...(this.strategy ? { strategy: this.strategy } : {}),
       ...(this.lead ? { lead: this.lead } : {}),
-      ...(this.domains ? { domains: this.domains } : {}),
       ...(this.contracts.length ? { contracts: this.contracts } : {}),
     };
   }
@@ -695,12 +722,15 @@ export class ContractBlock extends ApBlock {
   readonly kind = 'contract';
   protected readonly idPrefix = ContractBlock.PREFIX;
   domain: string | null = null;
+  /** `WITHIN`: how far whoever carries an instance out may write. */
+  within: ContractLimit = 'domain';
   by: ApRef[] = [];
   byTeam: ApRef | null = null;
 
   static fromData(data: ApBlockData): ContractBlock {
     const block = restore(new ContractBlock(initOf(data)), data);
     block.domain = (data.args['domain'] as string | undefined) ?? null;
+    block.within = (data.args['within'] as ContractLimit | undefined) ?? 'domain';
     block.by = (data.args['by'] as ApRef[] | undefined) ?? [];
     block.byTeam = (data.args['byTeam'] as ApRef | undefined) ?? null;
     block.shape = (data.args['shape'] as ApShape | undefined) ?? null;
@@ -711,6 +741,7 @@ export class ContractBlock extends ApBlock {
   static fromDecl(decl: ContractDecl, namespace: string, by: ApRef[], byTeam: ApRef | null, cx: BlockCx): ContractBlock {
     const block = new ContractBlock({ name: decl.name, namespace, about: decl.about || null });
     block.domain = decl.domain;
+    block.within = decl.within;
     block.by = by;
     block.byTeam = byTeam;
     if (decl.as) block.shape = { force: 0, ref: cx.templateRef(decl.as) };
@@ -720,6 +751,7 @@ export class ContractBlock extends ApBlock {
   protected override argsJson(): Record<string, unknown> {
     return {
       ...(this.domain ? { domain: this.domain } : {}),
+      ...(this.within !== 'domain' ? { within: this.within } : {}),
       by: this.by,
       ...(this.byTeam ? { byTeam: this.byTeam } : {}),
       ...(this.shape ? { shape: this.shape } : {}),
@@ -731,6 +763,7 @@ export class ContractBlock extends ApBlock {
     const C = FORMULAS.blocks.contract;
     const lines: string[] = [];
     if (this.domain) lines.push(fill(C.domain, { domain: this.domain }));
+    if (!this.byTeam) lines.push(fill(C.within, { limit: enumPrimitiveFor('WITHIN')!.values[this.within]() }));
     if (this.shape) lines.push(fill(C.form, { name: refName(this.shape.ref), ref: env.refOf(this.shape.ref.target) }));
     const who = this.by.map(r => `\`${refName(r)}\`${env.refOf(r.target)}`).join(', ');
     lines.push(this.byTeam
@@ -755,14 +788,21 @@ export class AgentBlock extends ApBlock {
   protected readonly idPrefix = AgentBlock.PREFIX;
   role: ApRef | null = null;
   mandate: string | null = null;
-  owns: string | null = null;
+  /** `BUDGET <tier>`: the cost tier the adapter maps to a model. */
+  budget: string | null = null;
+  /** `WRITES <domain>, …`: the domains it may write — and so read. */
+  writes: string[] = [];
+  /** `READS <domain>, …`: the domains it may only read — null, no READS line: whatever it needs. */
+  reads: string[] | null = null;
   lensOut: ApShape | null = null;
 
   static fromData(data: ApBlockData): AgentBlock {
     const block = restore(new AgentBlock(initOf(data)), data);
     block.role = (data.args['role'] as ApRef | undefined) ?? null;
     block.mandate = (data.args['mandate'] as string | undefined) ?? null;
-    block.owns = (data.args['owns'] as string | undefined) ?? null;
+    block.budget = (data.args['budget'] as string | undefined) ?? null;
+    block.writes = (data.args['writes'] as string[] | undefined) ?? [];
+    block.reads = (data.args['reads'] as string[] | undefined) ?? null;
     block.lensIn = (data.args['lensIn'] as ApShape | undefined) ?? null;
     block.lensOut = (data.args['lensOut'] as ApShape | undefined) ?? null;
     block.shape = (data.args['shape'] as ApShape | undefined) ?? null;
@@ -779,7 +819,7 @@ export class AgentBlock extends ApBlock {
       identityMeta.set('ROLE', [deslugifyRole(roleBlock.name)]);
       if (roleBlock.about) identityMeta.set('ROLE-ABOUT', [roleBlock.about]);
       const expertise = (roleBlock as { expertise?: string[] | null }).expertise;
-      if (expertise?.length) identityMeta.set('EXPERTISE', [expertise.join(' ')]);
+      if (expertise?.length) identityMeta.set('EXPERTISE', [expertise.join(', ')]);
     }
     if (this.mandate) identityMeta.set('MANDATE', [this.mandate]);
     const behaviours = roleBlock ? renderNodes(env, roleBlock.body).join('\n') : '';
@@ -809,7 +849,10 @@ export class AgentBlock extends ApBlock {
       block.role = { id: null, target: roleName, kind: 'role', resolved: false };
     }
     block.mandate = md('MANDATE');
-    block.owns = md('OWNS');
+    block.budget = md('BUDGET');
+    block.writes = splitList(md('WRITES') ?? '');
+    const reads = md('READS');
+    block.reads = reads === null ? null : splitList(reads);
     const lensIn = md('LENS-IN');
     if (lensIn) block.lensIn = { force: 0, ref: cx.templateRef(lensIn) };
     const lensOut = md('LENS-OUT');
@@ -823,7 +866,9 @@ export class AgentBlock extends ApBlock {
     return {
       ...(this.role ? { role: this.role } : {}),
       ...(this.mandate ? { mandate: this.mandate } : {}),
-      ...(this.owns ? { owns: this.owns } : {}),
+      ...(this.budget ? { budget: this.budget } : {}),
+      ...(this.writes.length ? { writes: this.writes } : {}),
+      ...(this.reads ? { reads: this.reads } : {}),
       ...(this.lensIn ? { lensIn: this.lensIn } : {}),
       ...(this.lensOut ? { lensOut: this.lensOut } : {}),
       ...(this.shape ? { shape: this.shape } : {}),
@@ -879,6 +924,9 @@ export const KIND_STRATEGIES: KindStrategy[] = [
   // Reached by its name through the apx, and named by a WITH like a policy: no reference index.
   { kind: 'dimension', revive: DimensionBlock.fromData, folder: 'dimensions', chapterTitle: FORMULAS.blocks.dimension.chapter, prefix: DimensionBlock.PREFIX, ref: null,
     entries: ctx => ctx.dimensions, from: DimensionBlock.fromDefinition },
+  // Named by an agent's WRITES/READS: the perimeter reads its FOR globs.
+  { kind: 'domain', revive: DomainBlock.fromData, folder: 'domains', chapterTitle: FORMULAS.blocks.domain.chapter, prefix: DomainBlock.PREFIX, ref: null,
+    entries: ctx => ctx.domains, from: DomainBlock.fromDefinition },
   // A team's contracts — built from the team file, not collected from a library: a chapter the lead and its members read.
   { kind: 'contract', revive: ContractBlock.fromData, folder: 'contracts', chapterTitle: FORMULAS.blocks.contract.chapter, prefix: ContractBlock.PREFIX, ref: null,
     entries: () => [] },

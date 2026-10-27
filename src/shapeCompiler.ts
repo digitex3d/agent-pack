@@ -28,7 +28,7 @@
  *   scalar shorthand:  TEMPLATE role-name: TEXT REGEX /^[a-z-]+$/ "kebab id"
  *
  * Types: TEXT [MAX_WORDS n | MIN_WORDS n | REGEX /p/] · NUMBER n..m / >=n / <=n
- *        · ENUM[a b c] · <template> · LIST <template> [range].
+ *        · ENUM[a, b, c] · <template> · LIST <template> [range].
  * `<template>` / `LIST <template>` emit an internal `@shape(slug)` marker that
  * `resolveShapeRefs` turns into `(id)` after emission — reusing the `AS` path.
  */
@@ -36,6 +36,7 @@
 import { FORMULAS, fill, refSuffix } from './formulas.js';
 import { markVerbatim } from "./services/text.js";
 import { getIntroByKeyword, toCanonicalKeyword } from './forceLevelConfig.js';
+import { splitList } from './lists.js';
 
 export interface Range {
   min?: number;
@@ -48,7 +49,7 @@ export interface Slot {
   /** Human render phrase; may contain an `@shape(slug)` marker for refs. */
   typePhrase: string;
   /**
-   * The TYPE expression as written in source (e.g. `ENUM[a b]`, `TEXT MAX_WORDS 3`).
+   * The TYPE expression as written in source (e.g. `ENUM[a, b]`, `TEXT MAX_WORDS 3`).
    * Machine-parseable counterpart of `typePhrase` — consumed by shapeSchema's
    * validator, never rendered.
    */
@@ -130,7 +131,7 @@ function typeToPhrase(typePart: string): string {
   }
   if ((m = typePart.match(/^<([a-z][a-z0-9_-]*)>$/))) return `@shape(${m[1]})`;
   if ((m = typePart.match(/^ENUM\[(.*)\]$/i))) {
-    const vals = m[1].trim().split(/\s+/).filter(Boolean);
+    const vals = splitList(m[1]);
     return `one of: ${vals.join(', ')}`;
   }
   if ((m = typePart.match(/^NUMBER\b\s*(.*)$/i))) {

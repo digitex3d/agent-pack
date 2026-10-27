@@ -179,21 +179,21 @@ try {
       return () => loadJudgeRules({ libraryRoot: dir, sharedLibraries: [], userRoot: '' }).find(r => r.template.name === 'body-rule');
     };
     for (const keyword of ['ABOUT', 'APPLIES', 'EXPERTISE', 'FOR', 'EACH', 'TYPE', 'LASTS', 'KEY', 'AS', 'CONTEXT', 'ELSE']) {
-      for (const tags of ['#judge', '#judge #agent']) {
+      for (const tags of ['#judge', '#judge, #agent']) {
         assert.throws(bodyRule(join(root, `body-${keyword}-${tags.length}`), `${keyword} {x}`, tags),
           new RegExp(`body-rule.*BODY starts with \`${keyword}\`, which never starts a body line`), `BODY ${keyword} (${tags}) is a load error`);
       }
     }
     for (const [keyword, stored] of [['NEVER', 'ALWAYS'], ['MUST-NOT', 'MUST'], ['SHOULD-NOT', 'SHOULD'], ['!MUST', 'MUST'], ['MUST!', 'MUST'],
       ['IF!', 'IF'], ['UNTIL*', 'UNTIL'], ['ON-INVOKE', 'WHEN'], ['SESSION', 'VAR']]) {
-      assert.throws(bodyRule(join(root, `body-${keyword.replace(/[!*]/g, '_')}`), `${keyword} {x}`, '#judge #agent'),
+      assert.throws(bodyRule(join(root, `body-${keyword.replace(/[!*]/g, '_')}`), `${keyword} {x}`, '#judge, #agent'),
         new RegExp(`body-rule.*BODY starts with \`${keyword.replace(/[!*]/g, '\\$&')}\`, but lines written .* are stored under \`${stored}\` — write \`${stored}\``),
         `BODY ${keyword} points to ${stored}`);
     }
     for (const keyword of ['DO', 'ASK', 'COMPUTE', 'MUST', 'ALWAYS', 'SHOULD', 'MAY', 'MEM', 'WITH', 'RUN', 'VAR', 'IF', 'UNTIL', 'WHEN', 'STEP', 'PARALLEL', 'IN']) {
       assert.deepEqual(bodyRule(join(root, `body-ok-${keyword}`), `${keyword} {x}`)().primitives, [keyword], `BODY ${keyword} names its lines`);
     }
-    assert.deepEqual(bodyRule(join(root, 'body-ok-line'), '{x}', '#judge #agent')().primitives, [], 'a scoped rule may lay out a slot alone');
+    assert.deepEqual(bodyRule(join(root, 'body-ok-line'), '{x}', '#judge, #agent')().primitives, [], 'a scoped rule may lay out a slot alone');
 
     // A BODY opening with an ENUM slot judges the lines of each of its values: one rule, many keywords.
     const enumRule = (dir, values, keywordRules = []) => {
@@ -204,15 +204,15 @@ try {
       ]);
       return () => loadJudgeRules({ libraryRoot: dir, sharedLibraries: [], userRoot: '' }).find(r => r.template.name === 'enum-rule');
     };
-    const several = enumRule(join(root, 'enum-ok'), 'DO MUST ALWAYS SHOULD MAY')();
+    const several = enumRule(join(root, 'enum-ok'), 'DO, MUST, ALWAYS, SHOULD, MAY')();
     assert.deepEqual(several.primitives, ['DO', 'MUST', 'ALWAYS', 'SHOULD', 'MAY'], 'the ENUM values are the primitives');
     assert.equal(several.role, "the line's text", 'the role is the line slot\'s description, never the keyword slot\'s');
     assert.deepEqual(several.checks.map(c => c.id), ['enum-rule.x.1'], 'the checks are the line slot\'s rules');
-    assert.throws(enumRule(join(root, 'enum-never'), 'DO NEVER'),
+    assert.throws(enumRule(join(root, 'enum-never'), 'DO, NEVER'),
       /enum-rule.*BODY starts with `\{keyword\}`, whose value `NEVER`, but lines written `NEVER` are stored under `ALWAYS` — write `ALWAYS`/, 'an ENUM value is checked like a BODY word');
-    assert.throws(enumRule(join(root, 'enum-meta'), 'DO ABOUT'),
+    assert.throws(enumRule(join(root, 'enum-meta'), 'DO, ABOUT'),
       /enum-rule.*BODY starts with `\{keyword\}`, whose value `ABOUT`, which never starts a body line/, 'a value no line is stored under is a load error');
-    assert.throws(enumRule(join(root, 'enum-ruled'), 'DO MUST', ['            SHOULD  be DO']),
+    assert.throws(enumRule(join(root, 'enum-ruled'), 'DO, MUST', ['            SHOULD  be DO']),
       /enum-rule.*slot `keyword` names the lines the rule judges, so it takes no rule of its own/, 'a rule on the keyword slot is a load error');
   }
 
@@ -896,7 +896,7 @@ try {
     ]);
     // A test-only rule on the MUST lines the agent keeps itself — a dimension's rules among them.
     write(join(dproj, 'library', 'templates', 'dim-rule.ap'), [
-      'EXPORT TEMPLATE dim-rule:', '    ABOUT  test rule on MUST lines', '    APPLIES   #judge #agent', '    SLOTS:',
+      'EXPORT TEMPLATE dim-rule:', '    ABOUT  test rule on MUST lines', '    APPLIES   #judge, #agent', '    SLOTS:',
       '        rule: TEXT  "a rule the agent keeps"', '            SHOULD  name one thing to do', '    BODY:', '        MUST {rule}', '',
     ]);
     write(join(dproj, 'library', 'templates', 'pseudo-steps.ap'), [
@@ -982,8 +982,8 @@ try {
       "  judge: { adapter: { type: 'judge', name: 'fake', ask: (...a) => globalThis.__enumAsk(...a) } },", '};', '',
     ]);
     write(join(eproj, 'library', 'templates', 'one-thing.ap'), [
-      'EXPORT TEMPLATE one-thing:', '    ABOUT  test rule on DO and ALWAYS lines', '    APPLIES   #judge #agent', '    SLOTS:',
-      '        keyword: ENUM[DO ALWAYS]  "the keyword of the line"',
+      'EXPORT TEMPLATE one-thing:', '    ABOUT  test rule on DO and ALWAYS lines', '    APPLIES   #judge, #agent', '    SLOTS:',
+      '        keyword: ENUM[DO, ALWAYS]  "the keyword of the line"',
       '        rule: TEXT  "what the agent does"', '            SHOULD  name one thing', '    BODY:', '        {keyword} {rule}', '',
     ]);
     const agent = write(join(eproj, 'agents', 'standalone', 'worker.ap'), [

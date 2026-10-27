@@ -6,11 +6,12 @@ import { lex, Keyword } from './lexer.js';
 import type { BundleContext } from './dispatch/types.js';
 import { resolveRunTarget } from './definition.js';
 import { applyVars } from './vars.js';
+import { splitList } from './lists.js';
 
 /**
  * Per-primitive translation strategy.
  *
- * Each primitive (ABOUT, OWNS, …) is stripped from `.ap` source and
+ * Each primitive (ABOUT, MANDATE, …) is stripped from `.ap` source and
  * translated into either:
  *   - a body injection rendered in the neutral compile (no adapter), or
  *   - one or more frontmatter fields rendered by a specific adapter.
@@ -56,7 +57,7 @@ export const AboutPrimitive: PrimitiveStrategy = {
 };
 
 /**
- * `APPLIES #tag1 #tag2 … [universal | team:<team> | agent:<agent>]` — the
+ * `APPLIES #tag1, #tag2, … [, universal | team:<team> | agent:<agent>]` — the
  * block's tags, searchable in the catalog and selectable by a WITH
  * (`#policy:<tag>`, `#skill:<tag>`), and the perimeter on which a policy or
  * a skill holds with no WITH naming it. Read by `parseApplies`
@@ -89,9 +90,9 @@ export const RolePrimitive: PrimitiveStrategy = {
 };
 
 /**
- * `EXPERTISE <space-separated identifiers>` — capability domains the agent
- * masters (e.g. "nodejs python go"). Optional in agent.ap (0 or 1). The
- * rest is stored as a single string; callers split on whitespace to render.
+ * `EXPERTISE <comma-separated identifiers>` — capability domains the agent
+ * masters (e.g. "nodejs, python, go"). Optional in agent.ap (0 or 1). The
+ * rest is stored as a single string; callers split it with `splitList`.
  */
 export const ExpertisePrimitive: PrimitiveStrategy = {
   keyword: 'EXPERTISE',
@@ -175,7 +176,7 @@ export function renderIdentityBlock(
   const lines: string[] = [A.identity, ''];
 
   if (role) {
-    const expertise = expertiseRaw.split(/\s+/).filter(Boolean).map(item => fill(A.expertise, { item })).join(', ');
+    const expertise = splitList(expertiseRaw).map(item => fill(A.expertise, { item })).join(', ');
     const formula = expertise ? (about ? A.roleAboutExpertise : A.roleExpertise) : (about ? A.roleAbout : A.role);
     lines.push(fill(formula, { role, about, expertise }));
   }
@@ -195,20 +196,25 @@ export function renderIdentityBlock(
   return lines.join('\n');
 }
 
-/** Globs as the md lists them — each quoted as code, comma-separated: an agent's OWNS, a dimension's FOR. */
+/** Globs as the md lists them — each quoted as code, comma-separated: a FOR line's, an agent's perimeter. */
 export function renderGlobs(globs: readonly string[]): string {
-  return globs.map(glob => fill(FORMULAS.keywords.OWNS.glob, { glob })).join(', ');
+  return globs.map(glob => fill(FORMULAS.keywords.FOR.glob, { glob })).join(', ');
 }
 
-export const OwnsPrimitive: PrimitiveStrategy = {
-  keyword: 'OWNS',
-  renderNeutral: globs => {
-    if (globs.length === 0) return '';
-    const list = renderGlobs(globs);
-    return [...FORMULAS.keywords.OWNS.fence.map(line => fill(line, { globs: list })), '', ''].join('\n');
-  },
-  contributesFrontmatter: () => null,
-};
+/** An agent's perimeter as globs: what it writes, and what it reads — null, whatever it needs. */
+export interface PerimeterGlobs {
+  writes: string[];
+  reads: string[] | null;
+}
+
+/** The scope warning at the top of an agent's definition — its WRITES and READS, as the globs of their domains. */
+export function renderPerimeter(p: PerimeterGlobs): string {
+  const W = FORMULAS.keywords.WRITES;
+  const R = FORMULAS.keywords.READS;
+  const writes = p.writes.length ? W.fence.map(line => fill(line, { globs: renderGlobs(p.writes) })) : [W.fence[0], W.none];
+  const reads = p.reads ? fill(R.only, { globs: renderGlobs(p.reads) }) : R.all;
+  return [...writes, reads, '', ''].join('\n');
+}
 
 /**
  * Strip a leading `<KEYWORD> <name>` line (TEMPLATE / PROCEDURE) and dedent
@@ -445,12 +451,14 @@ export const FORCE_LEVEL_PRIMITIVES: BulletGroupPrimitive[] = [
  */
 export const AGENT_METADATA_KEYWORDS: Keyword[] = [
   AboutPrimitive.keyword as Keyword,      // ABOUT
-  OwnsPrimitive.keyword as Keyword,       // OWNS  (rendered via injectNeutralIfUnclaimed, not partitionMetadata body)
+  'WRITES' as Keyword,                    // WRITES  (the perimeter: rendered as the scope warning, src/apdoc/document.ts)
+  'READS' as Keyword,                     // READS
   AppliesPrimitive.keyword as Keyword,    // APPLIES
   // ROLE is NOT stripped here: it is the inline `ROLE <name>:` block opener,
   // extracted by inlineBlocks. Stripping it would orphan the block body.
   ExpertisePrimitive.keyword as Keyword,  // EXPERTISE  (lint-forbidden in agent.ap — lives in the bound role)
   MandatePrimitive.keyword as Keyword,    // MANDATE    (combined into # Identity block)
+  'BUDGET' as Keyword,                    // BUDGET     (the cost tier: the adapter maps it to a model)
   'AS' as Keyword,                        // AS <role> (the binding; resolves the role's display/EXPERTISE into Identity)
   LensOutPrimitive.keyword as Keyword,    // LENS-OUT   (rendered as the AS! binding after Identity)
   LensInPrimitive.keyword as Keyword,     // LENS-IN    (caller-side: consumed by the orchestration members list)
@@ -490,7 +498,26 @@ export const ENUM_PRIMITIVES: EnumPrimitive[] = [
     },
     legendIntro: "Context modes — when a step's signature names one, pass upstream context exactly so:",
   },
+  // `BUDGET <tier>` in an AGENT: how much it may spend — the adapter maps the
+  // tier to a model of its harness; the source never names a model.
+  {
+    keyword: 'BUDGET',
+    values: {
+      cheap:    () => 'fast, shallow work — the cheapest model',
+      moderate: () => 'balanced work — a mid-range model',
+      costly:   () => 'deep reasoning — the strongest model',
+    },
+  },
   // `STRATEGY <name>` in a TEAM: the builtin way the team organises its work.
+  // `WITHIN <limit>` in a CONTRACT: how far whoever carries an instance out may write. Absent: domain.
+  {
+    keyword: 'WITHIN',
+    values: {
+      zone:   () => 'only between the marks of its zones',
+      file:   () => 'only in the files that hold its zones',
+      domain: () => 'anywhere in the domains it writes',
+    },
+  },
   {
     keyword: 'STRATEGY',
     values: {
@@ -506,7 +533,6 @@ export function enumPrimitiveFor(keyword: string): EnumPrimitive | null {
 /** Registry: every primitive whose metadata can flow into adapter frontmatter. */
 export const FRONTMATTER_PRIMITIVES: PrimitiveStrategy<unknown>[] = [
   AboutPrimitive     as unknown as PrimitiveStrategy<unknown>,
-  OwnsPrimitive      as unknown as PrimitiveStrategy<unknown>,
   WhenPrimitive      as unknown as PrimitiveStrategy<unknown>,
   RolePrimitive      as unknown as PrimitiveStrategy<unknown>,
   ExpertisePrimitive as unknown as PrimitiveStrategy<unknown>,
@@ -534,7 +560,7 @@ export function collectFrontmatter(
 }
 
 /**
- * Prepend a primitive's neutral body rendering (e.g. OWNS scope warning, WHEN
+ * Prepend a primitive's neutral body rendering (e.g. the WHEN
  * trigger block) when the active adapter does NOT consume the same primitive
  * via frontmatter. Otherwise pass `body` through unchanged.
  */

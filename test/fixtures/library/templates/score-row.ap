@@ -2,7 +2,7 @@
 
 EXPORT TEMPLATE score-row:
   ABOUT   one scored criterion row of the idea-verdict scorecard
-  APPLIES #concept-shaper #evaluation #scoring
+  APPLIES #concept-shaper, #evaluation, #scoring
 
   SLOTS:
     criterion: TEXT MAX_WORDS 4  "criterion name, suffixed [G] when it is a verdict gate"

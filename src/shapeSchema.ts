@@ -12,7 +12,7 @@
  *
  * Type coverage mirrors shapeCompiler's grammar:
  *   TEXT [MIN_WORDS n | MAX_WORDS n | REGEX /p/] · NUMBER n..m / >=n / <=n
- *   · ENUM[a b c] · <template> · LIST <template> [range]
+ *   · ENUM[a, b, c] · <template> · LIST <template> [range]
  * Unknown type expressions (e.g. `JSON`) validate as "any value" — the same
  * pass-through-verbatim stance shapeCompiler takes when rendering them.
  *
@@ -23,6 +23,7 @@
 import { parseTemplate, type ParsedTemplate } from './shapeCompiler.js';
 import type { ApSlotType } from './apdoc/types.js';
 import { addressName } from './apdoc/ids.js';
+import { splitList } from './lists.js';
 
 export type SlotTypeSpec =
   | { kind: 'text'; minWords?: number; maxWords?: number; regex?: RegExp }
@@ -63,7 +64,7 @@ export function parseTypeSpec(rawType: string): SlotTypeSpec {
   }
   if ((m = rawType.match(/^<([a-z][a-z0-9_-]*)>$/))) return { kind: 'shape', ref: m[1] };
   if ((m = rawType.match(/^ENUM\[(.*)\]$/i))) {
-    return { kind: 'enum', values: m[1].trim().split(/\s+/).filter(Boolean) };
+    return { kind: 'enum', values: splitList(m[1]) };
   }
   if ((m = rawType.match(/^NUMBER\b\s*(.*)$/i))) {
     return { kind: 'number', ...parseRange(m[1].trim()) };

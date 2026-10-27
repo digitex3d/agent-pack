@@ -21,7 +21,8 @@ import type { ApDocumentMeta, ApMdMeta, ApOutlineItem, ApOutlinePart, ApRef, ApN
 import { walk, type LineHead } from './nodes.js';
 import { DISTILLED_DIR } from '../apx/paths.js';
 import { ApBlock } from './block.js';
-import type { AgentBlock, TemplateBlock } from './blocks.js';
+import type { AgentBlock, DomainBlock, TemplateBlock } from './blocks.js';
+import type { PerimeterGlobs } from '../primitives.js';
 import { slotSpecsOf, type SlotSpec, type SlotResolver } from '../shapeSchema.js';
 import { KIND_STRATEGIES, strategyOf } from './blocks.js';
 import { FORMULAS } from '../formulas.js';
@@ -174,14 +175,18 @@ export class ApDocument {
   }
 
   /**
-   * The agent's perimeter as it applies: its OWNS globs, plus the programs'
-   * folder when a program carries out some of its work — writing its programs
-   * is always allowed. Null when the agent declares no perimeter.
+   * The agent's perimeter as globs: the FOR globs of the domains it WRITES —
+   * plus the programs' folder when a program carries out some of its work,
+   * writing its programs being always allowed — and of the domains it READS
+   * (null: whatever it needs). Null when the agent declares neither.
    */
-  owns(): string | null {
-    const owns = (this.root() as AgentBlock | null)?.owns ?? null;
-    if (!owns) return null;
-    return Object.values(this.meta.executors ?? {}).some(e => e.program) ? `${owns}, ${DISTILLED_DIR}/**` : owns;
+  perimeter(): PerimeterGlobs | null {
+    const root = this.root() as AgentBlock | null;
+    if (!root || (root.writes.length === 0 && root.reads === null)) return null;
+    const domains = this.byKind('domain') as DomainBlock[];
+    const globsOf = (names: string[]) => names.flatMap(name => domains.find(d => d.name === name)?.globs ?? []);
+    const programs = Object.values(this.meta.executors ?? {}).some(e => e.program) ? [`${DISTILLED_DIR}/**`] : [];
+    return { writes: [...globsOf(root.writes), ...programs], reads: root.reads === null ? null : globsOf(root.reads) };
   }
 
   /** Every block, in insertion (production) order. */

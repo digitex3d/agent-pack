@@ -75,7 +75,7 @@ An agent starts once with `node .agent-pack/apx/<agent>.apx start`: a short quiz
 | `refs <id>` | only the links of a block |
 | `find <text>` | the blocks containing the text, with the matching lines |
 | `md` | the whole prompt at once |
-| `<store> <verb> …` | read or write one of the agent's stores |
+| `store <op> <sto-id> …` | read or write one of the agent's stores — `dimension` and `ask` are served the same way: kind, operation, id |
 
 Every reference the apx prints carries the command that fetches it — `Shape your response as \`finding\` [node .agent-pack/apx/web-researcher.apx get tpl-d82fd6de]` — so the agent follows ids, never guesses.
 
@@ -125,7 +125,7 @@ A complete team you can bundle as it is — two members, routing, a two-step flo
 | Construct | Purpose |
 |---|---|
 | `AGENT`, `ROLE` | who the agent is: mandate, rules, identity and expertise |
-| `OWNS <globs>` | the files an agent may write; its definition opens with a perimeter warning |
+| `DOMAIN`, `WRITES`, `READS` | regions of the code by path, and the ones an agent may write and read; its definition opens with a scope warning |
 | `POLICY` | rules every agent that imports them must respect |
 | `TEMPLATE` | a typed answer format — `SLOTS`, `BODY` layout, `EXAMPLE` |
 | `PROCEDURE` | reusable steps, invoked with `RUN` |

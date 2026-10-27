@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { DIMENSION_LINES, type Keyword } from './lexer.js';
+import { DIMENSION_LINES, GLOBS_LINE, PERIMETER_LINES, type Keyword } from './lexer.js';
 import { ACTION_VERBS } from './actionVerbs.js';
 import { getFamilyBases } from './forceLevelConfig.js';
 import { VERBATIM_REGIONS } from './shapeCompiler.js';
@@ -103,10 +103,10 @@ export interface BlockContract {
  */
 /** The agent surface — see its comment in BLOCK_CONTRACTS.AGENT. */
 const AGENT_CONTRACT: BlockContract = {
-  allows: ['ABOUT', 'MANDATE', 'OWNS', 'LENS-OUT', 'LENS-IN', 'IMPORT', 'ON-INVOKE', 'WHEN', 'VAR', ...AGENT_FAMILIES],
+  allows: ['ABOUT', 'MANDATE', 'BUDGET', ...PERIMETER_LINES, 'LENS-OUT', 'LENS-IN', 'IMPORT', 'ON-INVOKE', 'WHEN', 'VAR', ...AGENT_FAMILIES],
   excluded: AGENT_EXCLUDED,
   requiresAll: ['AS', 'MANDATE'] as const,
-  unique: ['AS', 'ABOUT', 'MANDATE', 'LENS-OUT', 'LENS-IN'] as const,
+  unique: ['AS', 'ABOUT', 'MANDATE', 'BUDGET', ...PERIMETER_LINES, 'LENS-OUT', 'LENS-IN'] as const,
   identityKeywords: ['ROLE', 'EXPERTISE', 'APPLIES'] as const,
 };
 
@@ -174,6 +174,14 @@ export const BLOCK_CONTRACTS: Record<string, BlockContract> = {
     requiresAll: ['ABOUT', ...DIMENSION_LINES, 'AS'] as const,
     unique: ['ABOUT', ...DIMENSION_LINES, 'AS'] as const,
   },
+  // A domain is a region of the code by path: ABOUT what it is, FOR its files.
+  // An agent's WRITES and READS name domains, and so does a CONTRACT's DOMAIN line.
+  // Nothing else: a domain holds no rule, it only says where.
+  DOMAIN: {
+    allows: ['ABOUT', GLOBS_LINE] as const,
+    requiresAll: ['ABOUT', GLOBS_LINE] as const,
+    unique: ['ABOUT', GLOBS_LINE] as const,
+  },
   // A team is its `EXPORT TEAM <name>:` block: ABOUT, the MEMBER lines that
   // name its agents (several add up), `LENS-IN <agent> <template>` overrides,
   // its routing (`WHEN …:` with `RUN <flow>` beneath — a lifecycle `ON-…:` is a
@@ -181,22 +189,22 @@ export const BLOCK_CONTRACTS: Record<string, BlockContract> = {
   // regions: a flow takes the FLOW/STEP contracts line by line as it does in a
   // flow file, and a routing WHEN holds what a WHEN holds. Checked on the
   // parsed block (teamBlockErrors): the EXPORT form is not the token pass's.
-  // Under `STRATEGY contracts` the team declares a LEAD, the DOMAINS dimension
-  // and CONTRACT blocks instead of MEMBER, WHEN and FLOW — which of the two sets
+  // Under `STRATEGY contracts` the team declares a LEAD and CONTRACT blocks
+  // instead of MEMBER, WHEN and FLOW — which of the two sets
   // holds is the lint's (teamBlockErrors); the contract admits both.
   TEAM: {
-    allows: ['ABOUT', 'MEMBER', 'LENS-IN', 'WHEN', 'FLOW', 'STRATEGY', 'LEAD', 'DOMAINS', 'CONTRACT'] as const,
+    allows: ['ABOUT', 'MEMBER', 'LENS-IN', 'WHEN', 'FLOW', 'STRATEGY', 'LEAD', 'CONTRACT'] as const,
     requiresAll: ['ABOUT'] as const,
-    unique: ['ABOUT', 'STRATEGY', 'LEAD', 'DOMAINS'] as const,
+    unique: ['ABOUT', 'STRATEGY', 'LEAD'] as const,
     regions: ['WHEN', 'FLOW', 'CONTRACT'] as const,
   },
   // A contract: ABOUT and DOMAIN, what the lead reads to pick it for a zone; AS,
   // the template of the spec it fills; BY, the agents that carry it out, or the
   // one team it is handed to. Checked on the parsed block (contractBlockErrors).
   CONTRACT: {
-    allows: ['ABOUT', 'DOMAIN', 'AS', 'BY'] as const,
+    allows: ['ABOUT', 'DOMAIN', 'WITHIN', 'AS', 'BY'] as const,
     requiresAll: ['ABOUT', 'AS', 'BY'] as const,
-    unique: ['ABOUT', 'DOMAIN', 'AS', 'BY'] as const,
+    unique: ['ABOUT', 'DOMAIN', 'WITHIN', 'AS', 'BY'] as const,
   },
   // First-class `EXPORT AGENT <name> AS <role>:` block. `AS` here is a
   // *signature* argument on the header line (the role binding) — NOT the same

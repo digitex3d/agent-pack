@@ -110,8 +110,11 @@ items on the left more.
 ## 3. Primitives
 
 The shared vocabulary of the paradigm. Each primitive has a stable
-identifier (`D1`–`D43`) for external citation as `Agent Pack §D<n>`.
+identifier (`D1`–`D44`) for external citation as `Agent Pack §D<n>`.
 These terms have precise meaning and are not interchangeable.
+Wherever a primitive takes several items on one line — names, globs,
+tags, values — they are separated by commas, one form for the whole
+language; a space-separated list is a compilation error.
 
 - **D1 — agent** — an executable unit defined by a mission (what it
   must accomplish), a set of constraints (what it must not violate),
@@ -317,9 +320,12 @@ These terms have precise meaning and are not interchangeable.
 - **D28 — mandate** — `MANDATE`: the one statement of what an agent is
   responsible for, distinct from how it behaves.
 
-- **D29 — perimeter** — `OWNS <globs>`: the files an agent may write.
-  Its definition opens with a scope warning; outside the perimeter
-  belongs to other agents.
+- **D29 — perimeter** — `WRITES <domain>, …`: the domains (D44) an
+  agent may write, and so read; `READS <domain>, …`: the ones it may
+  only read — without it, whatever it needs. Its definition opens with
+  a scope warning listing their files; outside the perimeter belongs to
+  other agents. A domain is never both written and read. (Amended: the
+  former `OWNS <globs>` is removed — a perimeter names domains.)
 
 - **D30 — export and namespace** — a block is local to its file unless
   marked `EXPORT`; exported blocks live in libraries and are reached by
@@ -328,7 +334,7 @@ These terms have precise meaning and are not interchangeable.
   shipped with the compiler). A reference resolves to exactly one block
   or the compilation fails.
 
-- **D31 — tags** — `APPLIES #a #b`: the labels that group blocks — under a
+- **D31 — tags** — `APPLIES #a, #b`: the labels that group blocks — under a
   common heading in the compiled definition, under a filter in the
   executable — and link blocks that share them; a `WITH #a` block selects
   the imported policies that carry one, `WITH #skill:a` the skills (D23).
@@ -576,6 +582,16 @@ These terms have precise meaning and are not interchangeable.
   deleted when the agents are rebuilt: they can be worked out again. The
   executable reaches a dimension by its id, as every block, after its
   verb `dimension`. (Added in 1.2.)
+
+- **D44 — domain** — a region of the code, by path: `ABOUT`, what its
+  files are; `FOR`, its files, as globs relative to the project root,
+  never absolute nor climbing out with `..` — the line a dimension (D43)
+  takes too. Both are required, once; a domain holds nothing else. It is
+  named by an agent's perimeter (D29) and by a contract's `DOMAIN` line.
+  Domains are by path only: two regions sharing a folder are a project
+  to restructure; two domains may cover the same files. Declared and
+  imported like a dimension (`domains/`, `@main.domains`), or at the
+  top of an agent's file.
 
 ## 4. Citation
 

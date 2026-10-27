@@ -116,7 +116,7 @@ try {
 
     // --- N4: FOR globs are read from the project root ---
     for (const glob of ['/abs/**/*.py', '../other/*.py', 'src/../../x.py', '~/x.py']) {
-      await assert.rejects(compile(dimension({ forLine: `    FOR    src/*.py ${glob}` })), new RegExp(`FOR \`${glob.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}\`: a glob is read from the project root — no absolute path, no \`\\.\\.\``), glob);
+      await assert.rejects(compile(dimension({ forLine: `    FOR    src/*.py, ${glob}` })), new RegExp(`FOR \`${glob.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}\`: a glob is read from the project root — no absolute path, no \`\\.\\.\``), glob);
     }
 
     // --- N5: a keyword alone on its line says what it lacks ---
@@ -156,10 +156,10 @@ try {
     }
 
     // --- B1: FOR and EACH are a DIMENSION's lines; a DIMENSION stands at the file top or directly in an agent's body ---
-    await assert.rejects(compile([], [], ['    FOR    src/*.py']), /FOR is a line of a DIMENSION block — found inside AGENT/);
+    await assert.rejects(compile([], [], ['    FOR    src/*.py']), /FOR is a line of a DIMENSION or a DOMAIN block — found inside AGENT/);
     await assert.rejects(compile([], [], ['    EACH   function']), /EACH is a line of a DIMENSION block — found inside AGENT/);
     await assert.rejects(compile(['PROCEDURE p:', '    ABOUT  a procedure', '    DO     work', '    EACH   function']), /EACH is a line of a DIMENSION block — found inside PROCEDURE/);
-    await assert.rejects(compile(['FOR    src/*.py']), /FOR is a line of a DIMENSION block — found inside the file top/);
+    await assert.rejects(compile(['FOR    src/*.py']), /FOR is a line of a DIMENSION or a DOMAIN block — found inside the file top/);
     await assert.rejects(compile(['PROCEDURE p:', '    ABOUT  a procedure', '    DO     work', ...dimension().map(l => `    ${l}`)]),
       /a DIMENSION is declared at the file top or directly in an agent's body — found inside PROCEDURE/);
     await assert.rejects(compile(['ROLE other:', '    ABOUT  another', ...dimension().map(l => `    ${l}`)]), /found inside ROLE/);
@@ -261,7 +261,7 @@ try {
   // A dimension is reached by its id, like every block: `<apx> dimension <dim-id> <verb>`.
   const DIM = apx(['dimension']).out.match(/^(dim-[0-9a-f]{8})  pseudocode/m)?.[1];
   assert.ok(DIM, apx(['dimension']).out);
-  const CMD = `${CMD0} dimension ${DIM}`;
+  const CMD = op => `${CMD0} dimension ${op} ${DIM}`;
   const value = [{ name: 'a', steps: 'calls b, returns what it gives' }];
   const json = v => JSON.stringify(v);
 
@@ -271,13 +271,13 @@ try {
     has(md, '# Dimensions', '## `pseudocode` — what each function does, step by step, in plain words\nApplies only to the work nested under a line that names it.\nFiles: `src/**/*.py` — each: function — its value: a list of `pseudo-steps`',
       'Each dimension says what it holds and which files it covers; the lines it is for are the ones nested under a line that names it.', 'once read, whether you also need the code is your call',
       'When about to change a function:\n    For the work below, use the dimension `pseudocode` (dim-',
-      `${CMD} read <file>`, `${CMD} write <file> [refs=<path>;<path>] - < value.json`, 'You must write one step per decision the code takes');
+      `${CMD('read')} <file>`, `${CMD('write')} <file> [refs=<path>;<path>] - < value.json`, 'You must write one step per decision the code takes');
     has(apx(['scope']).out, 'dimensions:', 'dimension pseudocode', '— files: src/**/*.py');
     has(apx(['ls', 'kind=dimension']).out, '[only where a WITH names it]');
-    has(apx(['help']).out, 'dimension <dim-id> read <file> [json]', 'dimension <dim-id> write <file> [refs=<path>;<path>] -|none', 'dimension <dim-id> find <text>');
+    has(apx(['help']).out, 'dimension read <dim-id> <file> [json]', 'dimension write <dim-id> <file> [refs=<path>;<path>] -|none', 'dimension find <dim-id> <text>');
     // the name is no way in any more: only the id, after `dimension`
     assert.equal(apx(['pseudocode', 'read', 'src/a.py']).code, 2, 'a dimension is not reached by its name');
-    const wrong = apx(['dimension', 'dim-00000000', 'read', 'src/a.py']);
+    const wrong = apx(['dimension', 'read', 'dim-00000000', 'src/a.py']);
     assert.equal(wrong.code, 2);
     has(wrong.out, `no dimension \`dim-00000000\` in this agent — its dimensions: ${DIM} (pseudocode)`);
     const dims = apx(['dimension']);
@@ -287,7 +287,7 @@ try {
       libraryRoot: join(proj, 'library'), libraryRoots: [join(proj, 'library')], libraries: { '@main': join(proj, 'library') }, bundleConfig: { runtime: false },
     });
     const [defhash] = documentDefHashes(compiled.structure);
-    has(dims.out, `${DIM}  pseudocode  ${defhash}  — files: src/**/*.py — 0 entries`, `read: ${CMD} read <file>`);
+    has(dims.out, `${DIM}  pseudocode  ${defhash}  — files: src/**/*.py — 0 entries`, `read: ${CMD('read')} <file>`);
     const claude = readFileSync(join(proj, '.claude', 'agents', 'coder.md'), 'utf-8');
     assert.ok(claude.includes('coder.apx'), 'the harness file points at the apx that serves the dimensions');
   }
@@ -296,37 +296,37 @@ try {
 
   // --- read: never written → miss; write → hit, through the template's BODY ---
   {
-    const miss = apx(['dimension', DIM, 'read', 'src/a.py']);
+    const miss = apx(['dimension', 'read', DIM, 'src/a.py']);
     assert.equal(miss.code, 1);
-    has(miss.out, 'miss pseudocode src/a.py — never written', `${CMD} write src/a.py`);
-    const w = apx(['dimension', DIM, 'write', 'src/a.py', '-'], json(value));
+    has(miss.out, 'miss pseudocode src/a.py — never written', `${CMD('write')} src/a.py`);
+    const w = apx(['dimension', 'write', DIM, 'src/a.py', '-'], json(value));
     assert.equal(w.code, 0, w.out);
     has(w.out, '# stored pseudocode src/a.py — .agent-pack/cache/', 'refs: (none)');
     const entry = JSON.parse(readFileSync(join(proj, '.agent-pack', 'cache', cacheDir(), 'src', 'a.py.json'), 'utf-8'));
     assert.deepEqual(Object.keys(entry), ['format', 'dimension', 'file', 'hash', 'refs', 'value', 'by', 'at']);
     assert.equal(entry.format, 1); assert.equal(entry.dimension, 'pseudocode'); assert.equal(entry.file, 'src/a.py'); assert.equal(entry.by, 'coder');
-    const hit = apx(['dimension', DIM, 'read', 'src/a.py']);
+    const hit = apx(['dimension', 'read', DIM, 'src/a.py']);
     assert.equal(hit.code, 0);
     assert.match(hit.out, /^hit pseudocode src\/a\.py — by coder, \d{4}-\d{2}-\d{2}\na: calls b, returns what it gives$/);
-    assert.deepEqual(JSON.parse(apx(['dimension', DIM, 'read', 'src/a.py', 'json']).out), value, 'json: the raw value');
+    assert.deepEqual(JSON.parse(apx(['dimension', 'read', DIM, 'src/a.py', 'json']).out), value, 'json: the raw value');
     // a path from the project root or from elsewhere in it names the same file
-    assert.equal(spawnSync(process.execPath, [EXE, 'dimension', DIM, 'read', 'a.py'], { cwd: join(proj, 'src'), encoding: 'utf-8' }).status, 0);
+    assert.equal(spawnSync(process.execPath, [EXE, 'dimension', 'read', DIM, 'a.py'], { cwd: join(proj, 'src'), encoding: 'utf-8' }).status, 0);
   }
 
   // --- the file edited: whitespace aside a hit, indentation or content a miss ---
   {
     write(a, 'def a():   \r\n\n    return b()\n\n');
-    assert.equal(apx(['dimension', DIM, 'read', 'src/a.py']).code, 0, 'trailing spaces, CRLF, blank lines: still a hit');
+    assert.equal(apx(['dimension', 'read', DIM, 'src/a.py']).code, 0, 'trailing spaces, CRLF, blank lines: still a hit');
     write(a, 'def a():\n  return b()\n');
-    const indent = apx(['dimension', DIM, 'read', 'src/a.py']);
+    const indent = apx(['dimension', 'read', DIM, 'src/a.py']);
     assert.equal(indent.code, 1);
     has(indent.out, 'miss pseudocode src/a.py — changed: src/a.py');
     assert.ok(!indent.out.includes('calls b'), 'a miss never prints the old value');
     write(a, 'def a():\n    return b()\n');
-    assert.equal(apx(['dimension', DIM, 'read', 'src/a.py']).code, 0, 'back as it was: a hit again');
+    assert.equal(apx(['dimension', 'read', DIM, 'src/a.py']).code, 0, 'back as it was: a hit again');
     write(a, 'def a():\n    return b() + 1\n');
-    has(apx(['dimension', DIM, 'read', 'src/a.py']).out, 'miss pseudocode src/a.py — changed: src/a.py');
-    const why = apx(['dimension', DIM, 'why', 'src/a.py']);
+    has(apx(['dimension', 'read', DIM, 'src/a.py']).out, 'miss pseudocode src/a.py — changed: src/a.py');
+    const why = apx(['dimension', 'why', DIM, 'src/a.py']);
     assert.equal(why.code, 0);
     assert.match(why.out, /^stale pseudocode src\/a\.py — changed: src\/a\.py/);
     assert.match(why.out, /file  src\/a\.py  kept [0-9a-f]{12}  now [0-9a-f]{12}  changed/);
@@ -334,110 +334,110 @@ try {
 
   // --- write refusals: outside FOR, a file that does not exist, a bad value, an answer still fresh ---
   {
-    const outside = apx(['dimension', DIM, 'write', 'docs/x.md', '-'], json(value));
+    const outside = apx(['dimension', 'write', DIM, 'docs/x.md', '-'], json(value));
     assert.equal(outside.code, 2);
     has(outside.out, '`docs/x.md` is no file pseudocode covers — it covers: src/**/*.py');
-    assert.equal(apx(['dimension', DIM, 'read', 'docs/x.md']).code, 2, 'reading outside FOR is a usage error too');
-    assert.equal(apx(['dimension', DIM, 'write', '../elsewhere.py', '-'], json(value)).code, 2, 'outside the project');
-    const absent = apx(['dimension', DIM, 'write', 'src/nope.py', '-'], json(value));
+    assert.equal(apx(['dimension', 'read', DIM, 'docs/x.md']).code, 2, 'reading outside FOR is a usage error too');
+    assert.equal(apx(['dimension', 'write', DIM, '../elsewhere.py', '-'], json(value)).code, 2, 'outside the project');
+    const absent = apx(['dimension', 'write', DIM, 'src/nope.py', '-'], json(value));
     assert.equal(absent.code, 1);
     has(absent.out, 'no file `src/nope.py` in the project');
     for (const [bad, why] of [['not json', 'the value is not a list of `pseudo-steps`: not valid JSON'], ['[]', 'expected ≥1 items'], [json([{ name: 'a' }]), 'pseudocode[0].steps: required field missing'],
       [json({ name: 'a', steps: 's' }), 'expected an array (list of <pseudo-steps>)'], [json([{ name: 'a', steps: 's', extra: 1 }]), 'pseudocode[0].extra: unknown field']]) {
-      const r = apx(['dimension', DIM, 'write', 'src/a.py', '-'], bad);
+      const r = apx(['dimension', 'write', DIM, 'src/a.py', '-'], bad);
       assert.equal(r.code, 2, `${bad}: ${r.out}`);
       has(r.out, why, 'nothing was written');
     }
-    has(apx(['dimension', DIM, 'read', 'src/a.py']).out, 'miss pseudocode src/a.py — changed');   // a refused write leaves the stale entry as it was
-    assert.equal(apx(['dimension', DIM, 'write', 'src/a.py', '-'], json(value)).code, 0, 'a stale entry is overwritten');
-    const again = apx(['dimension', DIM, 'write', 'src/a.py', '-'], json(value));
+    has(apx(['dimension', 'read', DIM, 'src/a.py']).out, 'miss pseudocode src/a.py — changed');   // a refused write leaves the stale entry as it was
+    assert.equal(apx(['dimension', 'write', DIM, 'src/a.py', '-'], json(value)).code, 0, 'a stale entry is overwritten');
+    const again = apx(['dimension', 'write', DIM, 'src/a.py', '-'], json(value));
     assert.equal(again.code, 4, 'another agent answered meanwhile');
     has(again.out, 'pseudocode src/a.py is already fresh — read it', 'nothing was written');
-    const usage = apx(['dimension', DIM, 'write', 'src/a.py']);
+    const usage = apx(['dimension', 'write', DIM, 'src/a.py']);
     assert.equal(usage.code, 2);
-    has(usage.out, 'pseudocode write takes the value on stdin with -, or none', `${CMD} write <file> [refs=<path>;<path>] - < value.json`);
-    const refGone = apx(['dimension', DIM, 'write', 'src/b.py', 'refs=src/missing.py', '-'], json(value));
+    has(usage.out, 'pseudocode write takes the value on stdin with -, or none', `${CMD('write')} <file> [refs=<path>;<path>] -|none`);
+    const refGone = apx(['dimension', 'write', DIM, 'src/b.py', 'refs=src/missing.py', '-'], json(value));
     assert.equal(refGone.code, 1);
     has(refGone.out, 'refs: `src/missing.py` is no file of the project');
-    const verb = apx(['dimension', DIM, 'reed', 'src/a.py']);
+    const verb = apx(['dimension', 'reed', DIM, 'src/a.py']);
     assert.equal(verb.code, 2);
-    has(verb.out, "'reed' is no verb of a dimension", `${CMD} read|write|ls|find|why|clear|gc`);
+    has(verb.out, "'reed' is no operation of a dimension", `${CMD0} dimension read|write|find|ls|why|clear|gc <dim-id>`);
   }
 
   // --- refs: declared ones and the project files the value names; each one's edit or loss stales the entry ---
   {
     const named = [{ name: 'b', steps: 'returns 1, used by src/util/c.py' }];
-    const w = apx(['dimension', DIM, 'write', 'src/b.py', 'refs=src/a.py', '-'], json(named));
+    const w = apx(['dimension', 'write', DIM, 'src/b.py', 'refs=src/a.py', '-'], json(named));
     assert.equal(w.code, 0, w.out);
     has(w.out, 'refs: src/a.py, src/util/c.py');
-    assert.equal(apx(['dimension', DIM, 'read', 'src/b.py']).code, 0);
+    assert.equal(apx(['dimension', 'read', DIM, 'src/b.py']).code, 0);
     write(c, 'def c():\n    return 3\n');
-    has(apx(['dimension', DIM, 'read', 'src/b.py']).out, 'miss pseudocode src/b.py — changed: src/util/c.py');
+    has(apx(['dimension', 'read', DIM, 'src/b.py']).out, 'miss pseudocode src/b.py — changed: src/util/c.py');
     write(c, 'def c():\n    return 2\n');
-    assert.equal(apx(['dimension', DIM, 'read', 'src/b.py']).code, 0);
+    assert.equal(apx(['dimension', 'read', DIM, 'src/b.py']).code, 0);
     rmSync(c);
-    const gone = apx(['dimension', DIM, 'read', 'src/b.py']);
+    const gone = apx(['dimension', 'read', DIM, 'src/b.py']);
     assert.equal(gone.code, 1);
     has(gone.out, 'miss pseudocode src/b.py — ref gone: src/util/c.py');
-    has(apx(['dimension', DIM, 'why', 'src/b.py']).out, 'ref   src/util/c.py', 'now (none)  gone');
+    has(apx(['dimension', 'why', DIM, 'src/b.py']).out, 'ref   src/util/c.py', 'now (none)  gone');
     write(c, 'def c():\n    return 2\n');
   }
 
   // --- find: across files, fresh entries only, case aside; nothing found exits 1 ---
   {
-    const found = apx(['dimension', DIM, 'find', 'RETURNS 1']);
+    const found = apx(['dimension', 'find', DIM, 'RETURNS 1']);
     assert.equal(found.code, 0, found.out);
     has(found.out, 'src/b.py  b: returns 1, used by src/util/c.py', '# 1 instance of pseudocode hold "RETURNS 1" — fresh entries only');
     assert.ok(!found.out.includes('src/a.py'), 'another file\'s instance that does not hold the text stays out');
-    assert.equal(apx(['dimension', DIM, 'find', 'nothing like this']).code, 1);
-    assert.equal(apx(['dimension', DIM, 'find']).code, 2, 'find needs text');
+    assert.equal(apx(['dimension', 'find', DIM, 'nothing like this']).code, 1);
+    assert.equal(apx(['dimension', 'find', DIM]).code, 2, 'find needs text');
   }
 
   // --- none: nothing to report is an answer too ---
   {
-    const n = apx(['dimension', DIM, 'write', 'src/util/c.py', 'none']);
+    const n = apx(['dimension', 'write', DIM, 'src/util/c.py', 'none']);
     assert.equal(n.code, 0, n.out);
-    const r = apx(['dimension', DIM, 'read', 'src/util/c.py']);
+    const r = apx(['dimension', 'read', DIM, 'src/util/c.py']);
     assert.equal(r.code, 0);
     assert.match(r.out, /^hit pseudocode src\/util\/c\.py — by coder, [\d-]+\nnone$/);
-    assert.equal(apx(['dimension', DIM, 'read', 'src/util/c.py', 'json']).out, '"none"');
+    assert.equal(apx(['dimension', 'read', DIM, 'src/util/c.py', 'json']).out, '"none"');
     rmSync(join(proj, '.agent-pack', 'cache', cacheDir(), 'src', 'util', 'c.py.json'));
-    assert.equal(apx(['dimension', DIM, 'write', 'src/util/c.py', '-'], '"none"').code, 0, 'none as JSON on stdin');
+    assert.equal(apx(['dimension', 'write', DIM, 'src/util/c.py', '-'], '"none"').code, 0, 'none as JSON on stdin');
   }
 
   // --- a file moved without an edit keeps its answer; a deleted one is gone ---
   {
     renameSync(b, join(proj, 'src', 'moved.py'));
-    assert.equal(apx(['dimension', DIM, 'read', 'src/b.py']).code, 1, 'the old path: no file, no entry');
-    const moved = apx(['dimension', DIM, 'read', 'src/moved.py']);
+    assert.equal(apx(['dimension', 'read', DIM, 'src/b.py']).code, 1, 'the old path: no file, no entry');
+    const moved = apx(['dimension', 'read', DIM, 'src/moved.py']);
     assert.equal(moved.code, 0, moved.out);
     has(moved.out, 'hit pseudocode src/moved.py', 'b: returns 1');
     const dir = join(proj, '.agent-pack', 'cache', cacheDir(), 'src');
     assert.ok(existsSync(join(dir, 'moved.py.json')) && !existsSync(join(dir, 'b.py.json')), 'the entry moved with the file');
     assert.equal(JSON.parse(readFileSync(join(dir, 'moved.py.json'), 'utf-8')).file, 'src/moved.py');
     rmSync(a);
-    const gone = apx(['dimension', DIM, 'read', 'src/a.py']);
+    const gone = apx(['dimension', 'read', DIM, 'src/a.py']);
     assert.equal(gone.code, 1);
     assert.equal(gone.out, 'gone pseudocode src/a.py — file not found');
-    has(apx(['dimension', DIM, 'read', 'src/moved.py']).out, 'miss pseudocode src/moved.py — ref gone: src/a.py');   // its ref deleted: a miss
+    has(apx(['dimension', 'read', DIM, 'src/moved.py']).out, 'miss pseudocode src/moved.py — ref gone: src/a.py');   // its ref deleted: a miss
   }
 
   // --- ls and the counters; gc drops the entries of deleted files; clear by glob and by agent ---
   {
-    const ls = apx(['dimension', DIM, 'ls']);
+    const ls = apx(['dimension', 'ls', DIM]);
     assert.equal(ls.code, 0);
     assert.match(ls.out, /^gone   src\/a\.py  — file not found  \(by coder, /m);
     assert.match(ls.out, /^stale  src\/moved\.py  — ref gone: src\/a\.py  \(by coder, /m);
     assert.match(ls.out, /^fresh  src\/util\/c\.py  \(by coder, /m);
     assert.match(ls.out, /# pseudocode  \.agent-pack\/cache\/[0-9a-f]{8}\/  3 entries: 1 fresh, 1 stale, 1 gone — \d+ hits, \d+ misses, hit rate \d+%/);
-    has(apx(['dimension', DIM, 'ls', 'src/util/**']).out, '1 entry: 1 fresh');
-    const gc = apx(['dimension', DIM, 'gc']);
+    has(apx(['dimension', 'ls', DIM, 'src/util/**']).out, '1 entry: 1 fresh');
+    const gc = apx(['dimension', 'gc', DIM]);
     assert.equal(gc.code, 0);
     has(gc.out, 'removed src/a.py', '# 1 entry of deleted files removed from pseudocode');
-    has(apx(['dimension', DIM, 'clear', 'src/util/**']).out, '# cleared 1 entry of pseudocode matching src/util/**');
-    has(apx(['dimension', DIM, 'clear', '--by', 'someone-else']).out, '# cleared 0 entries');
-    has(apx(['dimension', DIM, 'clear', '--by', 'coder']).out, '# cleared 1 entry of pseudocode written by coder');
-    has(apx(['dimension', DIM, 'ls']).out, '0 entries');
+    has(apx(['dimension', 'clear', DIM, 'src/util/**']).out, '# cleared 1 entry of pseudocode matching src/util/**');
+    has(apx(['dimension', 'clear', DIM, '--by', 'someone-else']).out, '# cleared 0 entries');
+    has(apx(['dimension', 'clear', DIM, '--by', 'coder']).out, '# cleared 1 entry of pseudocode written by coder');
+    has(apx(['dimension', 'ls', DIM]).out, '0 entries');
     const stats = JSON.parse(readFileSync(join(proj, '.agent-pack', 'cache', 'stats', `${cacheDir()}.json`), 'utf-8'));
     assert.ok(stats.hits > 0 && stats.misses > 0, JSON.stringify(stats));
   }
@@ -445,7 +445,7 @@ try {
   // --- bundle all removes the cache folders no dimension produces any more ---
   {
     const live = cacheDir();
-    apx(['dimension', DIM, 'write', 'src/moved.py', 'none']);
+    apx(['dimension', 'write', DIM, 'src/moved.py', 'none']);
     write(join(proj, '.agent-pack', 'cache', 'deadbeef', 'src', 'x.py.json'), '{}');
     write(join(proj, '.agent-pack', 'cache', 'stats', 'deadbeef.json'), '{"hits":1,"misses":0}');
     has(bundle(), '.agent-pack/cache/deadbeef/ removed');
@@ -455,17 +455,17 @@ try {
     write(dimFile, readFileSync(dimFile, 'utf-8').replace('one step per decision', 'one step per branch'));
     has(bundle(), `.agent-pack/cache/${live}/ removed`);
     assert.ok(!existsSync(join(proj, '.agent-pack', 'cache', live)));
-    has(apx(['dimension', DIM, 'read', 'src/moved.py']).out, 'miss pseudocode src/moved.py — never written');
+    has(apx(['dimension', 'read', DIM, 'src/moved.py']).out, 'miss pseudocode src/moved.py — never written');
   }
 
   // --- an entry of another format is read as never written ---
   {
-    assert.equal(apx(['dimension', DIM, 'write', 'src/moved.py', 'none']).code, 0);
-    assert.equal(apx(['dimension', DIM, 'read', 'src/moved.py']).code, 0);
+    assert.equal(apx(['dimension', 'write', DIM, 'src/moved.py', 'none']).code, 0);
+    assert.equal(apx(['dimension', 'read', DIM, 'src/moved.py']).code, 0);
     const dir = join(proj, '.agent-pack', 'cache', cacheDir(), 'src');
     const path = join(dir, 'moved.py.json');
     writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, 'utf-8')), format: 99 }));
-    has(apx(['dimension', DIM, 'read', 'src/moved.py']).out, 'miss pseudocode src/moved.py — never written');
+    has(apx(['dimension', 'read', DIM, 'src/moved.py']).out, 'miss pseudocode src/moved.py — never written');
   }
 
   // --- B6: a dimension is an agent's — PROJECT.ap or a team's file that imports one fails the build ---

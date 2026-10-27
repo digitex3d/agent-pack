@@ -17,7 +17,7 @@ try {
   const sourceWithMetadata = [
     '# security-policy',
     'ABOUT  require security role for sensitive tasks',
-    'APPLIES #security #access-control #compliance universal',
+    'APPLIES #security, #access-control, #compliance, universal',
     'POLICY security-policy',
     'ALWAYS  require security audit for sensitive operations',
   ].join('\n');
@@ -53,7 +53,7 @@ try {
     '  Here is an indented APPLIES example:',
     '  APPLIES special for edge cases',
     '  And an indented APPLIES example:',
-    '  APPLIES #special #edge-case',
+    '  APPLIES #special, #edge-case',
   ].join('\n');
 
   const strippedIndented = stripPrimitives(sourceWithIndentedMetadata, 'APPLIES', 'APPLIES');
@@ -64,7 +64,7 @@ try {
 
   // Indented occurrences preserved
   assert.ok(strippedIndented.includes('  APPLIES special for edge cases'), 'indented APPLIES preserved');
-  assert.ok(strippedIndented.includes('  APPLIES #special #edge-case'), 'indented APPLIES preserved');
+  assert.ok(strippedIndented.includes('  APPLIES #special, #edge-case'), 'indented APPLIES preserved');
 
   console.log('stripPrimitives preserves indented metadata test passed.');
 
@@ -78,7 +78,7 @@ try {
 
     const source = [
       '# test',
-      'APPLIES #security #access-control #compliance',
+      'APPLIES #security, #access-control, #compliance',
       'WHEN a security vulnerability is reported',
       'POLICY test-policy',
     ].join('\n');
@@ -87,7 +87,7 @@ try {
     const when = extractPrimitives(source, 'WHEN');
 
     assert.equal(tags.length, 1, 'extractPrimitives finds APPLIES');
-    assert.equal(tags[0], '#security #access-control #compliance', 'APPLIES payload extracted verbatim');
+    assert.equal(tags[0], '#security, #access-control, #compliance', 'APPLIES payload extracted verbatim');
 
     assert.equal(when.length, 1, 'extractPrimitives finds WHEN');
     assert.equal(when[0], 'a security vulnerability is reported', 'WHEN payload extracted verbatim');
@@ -104,7 +104,7 @@ try {
 
     const source = [
       '# multi',
-      'APPLIES #tag1 #tag2',
+      'APPLIES #tag1, #tag2',
       'APPLIES #tag3',
       'POLICY multi',
     ].join('\n');
@@ -160,7 +160,7 @@ try {
       [
         '# valid',
         'ABOUT  valid policy',
-        'APPLIES #tag1 #tag2 #tag3',
+        'APPLIES #tag1, #tag2, #tag3',
         'POLICY valid',
         'ALWAYS be valid',
       ].join('\n'),
@@ -194,7 +194,7 @@ try {
         '# ctx',
         'EXPORT POLICY ctx:',
         '  ABOUT  block-scoped context rules',
-        '  APPLIES #multi-agent #orchestration universal',
+        '  APPLIES #multi-agent, #orchestration, universal',
         '  ALWAYS engineer the environment',
       ].join('\n') + '\n',
       'utf-8',

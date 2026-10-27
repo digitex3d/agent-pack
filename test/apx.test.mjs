@@ -105,14 +105,15 @@ const answers = quiz.map((q, i) => `${i + 1}=${q.right}`);
     `  WHEN asked to evaluate an idea  -> flow shape-idea  [${CMD} flow ${idOf('flow', 'shape-idea')}]`,
     `  policy board-rules  [${CMD} get ${idOf('policy', 'board-rules')}]  — how the board is kept`,
     `  WHEN a new feature is requested  -> procedure open-card  [${CMD} get ${idOf('procedure', 'open-card')}]`,
-    `  store notes  [${CMD} get ${idOf('store', 'notes')}]  — use: ${CMD} notes <verb> …`,
+    `  store notes  [${CMD} get ${idOf('store', 'notes')}]  — use: ${CMD} store <op> ${idOf('store', 'notes')} …`,
     `answer as: template plan  [${CMD} get ${idOf('template', 'plan')}]`,
     `— list them: ${CMD} ls`);
 }
 
 // --- a store write outside its schema is refused before it reaches the table ---
 {
-  const refused = (args, why) => { const r = run('notes', ...args); assert.equal(r.code, 2, r.out); has(r.out, why, 'nothing was written'); };
+  const STORE = idOf('store', 'notes');
+  const refused = ([op, ...args], why) => { const r = run('store', op, STORE, ...args); assert.equal(r.code, 2, r.out); has(r.out, why, 'nothing was written'); };
   refused(['a', 'note=no topic'], 'topic: required field missing');
   refused(['a', 'topic=two words', 'note=x'], 'topic: expected ≤1 words, got 2');
   refused(['a', 'topic=iban', 'note=x', 'iban=IT60X0542811101000000123456'], 'iban: unknown field');
@@ -196,7 +197,7 @@ assert.equal(renderMd(doc), compiled.body, 'the round-tripped document renders t
 
 // --- version and help ---
 has(run('version').out, `# pm  ${idOf('agent', 'pm')}`, 'built 2026-09-24T10:00:00Z by agent-pack 0.26.0  hash c0ffee');
-has(run('help').out, `${CMD} start`, `${CMD} get <id> [json]`, `${CMD} <store> <verb> …`);
+has(run('help').out, `${CMD} start`, `${CMD} get <id> [json]`, `${CMD} store a <sto-id> <field>=<value> …`, `${CMD} ask input <exe-id>`);
 
 // --- errors: one line, the command that fixes it, exit 1 (missing) or 2 (usage) ---
 {
@@ -218,12 +219,13 @@ has(run('help').out, `${CMD} start`, `${CMD} get <id> [json]`, `${CMD} <store> <
   try {
     const exe = join(tmp, '.agent-pack', 'apx', 'pm.apx');   // where bundle all puts it: the project root is two levels up
     const cmd = `node ${exe}`;
-    has(apx(exe, 'get', idOf('store', 'notes')).out, `${cmd} notes a topic='…' note='…'`);
-    has(apx(exe, 'notes', 'a', 'topic=tabeli', 'note=engine ships with agent-pack').out, 'id=1 topic=tabeli');
-    has(apx(exe, 'notes', 'a', 'topic=tabeli', 'note=a C binary').out,
+    const STORE = idOf('store', 'notes');
+    has(apx(exe, 'get', STORE).out, `${cmd} store a ${STORE} topic='…' note='…'`);
+    has(apx(exe, 'store', 'a', STORE, 'topic=tabeli', 'note=engine ships with agent-pack').out, 'id=1 topic=tabeli');
+    has(apx(exe, 'store', 'a', STORE, 'topic=tabeli', 'note=a C binary').out,
       '# topic=tabeli exists as id=1 — updated, not duplicated', "note='a C binary'");
-    assert.equal(apx(exe, 'notes', 'q', 'count').out.trim(), '# 1 record');
-    const bad = apx(exe, 'notes', 'nope');
+    assert.equal(apx(exe, 'store', 'q', STORE, 'count').out.trim(), '# 1 record');
+    const bad = apx(exe, 'store', 'nope', STORE);
     assert.equal(bad.code, 2);
     has(bad.out, "unknown command 'nope'");
     assert.ok(!bad.out.includes('notes.tbl'), 'the table file is never named — the engine speaks for it');

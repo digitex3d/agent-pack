@@ -69,7 +69,7 @@ import { parseBlocks } from '../dist/src/parseBlocks.js';
 // --- 5. ROLE block ---
 {
   const src = `ROLE architect:
-  EXPERTISE plantuml system-design
+  EXPERTISE plantuml, system-design
   ALWAYS    model the system as nodes and labelled edges
 `;
   const r = parseBlocks(src);
@@ -263,7 +263,7 @@ PROCEDURE foo:
 {
   const src = `EXPORT POLICY ctx-eng:
   ABOUT context-engineering rules for multi-agent work
-  APPLIES  #multi-agent #orchestration
+  APPLIES  #multi-agent, #orchestration
   APPLIES universal
   ALWAYS engineer the informational environment
 `;

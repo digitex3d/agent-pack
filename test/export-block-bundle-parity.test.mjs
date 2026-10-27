@@ -50,7 +50,7 @@ async function bundlePolicy(policyText) {
 const LEGACY = [
   '# ctx',
   'ABOUT  context-engineering rules for multi-agent work',
-  'APPLIES   #context-engineering #multi-agent #orchestration universal',
+  'APPLIES   #context-engineering, #multi-agent, #orchestration, universal',
   'ALWAYS  engineer the informational environment as a structured blueprint',
   'ALWAYS  chain context: feed each step output as the typed input of the next',
   'NEVER  rely on a single shared prompt across multiple agents',
@@ -62,7 +62,7 @@ const EXPORTED = [
   '# ctx',
   'EXPORT POLICY ctx:',
   '  ABOUT  context-engineering rules for multi-agent work',
-  '  APPLIES   #context-engineering #multi-agent #orchestration universal',
+  '  APPLIES   #context-engineering, #multi-agent, #orchestration, universal',
   '',
   '  ALWAYS  engineer the informational environment as a structured blueprint',
   '  ALWAYS  chain context: feed each step output as the typed input of the next',

@@ -35,7 +35,7 @@ export default {
 
 ## Judge
 
-With a `judge` key, `bundle` and `bundle all` run a judge phase: a model checks that the `.ap` code is well written. A rule is a `TEMPLATE` tagged `#judge` — its `BODY` layout names the lines it applies to (`DO {action}` → every `DO` line; `{keyword} {action}` with `keyword: ENUM[DO MUST ALWAYS]` → the lines of each keyword, one rule for many — that slot takes no rule of its own), each slot rule is a check, `MUST` an error and `SHOULD` a warning. A rule may also be negative — `NEVER`, `MUST-NOT` an error, `SHOULD-NOT` a warning: the judge is asked directly whether the line does it. `YES` and `NO` lines under a slot rule say what a yes and a no mean; `EXAMPLE` lines written `<line> → <verdict>` are reference examples, sent with every line. The layout starts with the keyword lines are stored under, or the rule fails to load: `ALWAYS {rule}`, not `NEVER {rule}` (a `NEVER` line is an `ALWAYS` line); `WHEN {x}`, not `ON-INVOKE`; never a block's own line such as `ABOUT`, `FOR`, `EACH` or `AS`, which no body line starts with. A tag narrows a rule to the lines of one [executor](/reference/language#executors):
+With a `judge` key, `bundle` and `bundle all` run a judge phase: a model checks that the `.ap` code is well written. A rule is a `TEMPLATE` tagged `#judge` — its `BODY` layout names the lines it applies to (`DO {action}` → every `DO` line; `{keyword} {action}` with `keyword: ENUM[DO, MUST, ALWAYS]` → the lines of each keyword, one rule for many — that slot takes no rule of its own), each slot rule is a check, `MUST` an error and `SHOULD` a warning. A rule may also be negative — `NEVER`, `MUST-NOT` an error, `SHOULD-NOT` a warning: the judge is asked directly whether the line does it. `YES` and `NO` lines under a slot rule say what a yes and a no mean; `EXAMPLE` lines written `<line> → <verdict>` are reference examples, sent with every line. The layout starts with the keyword lines are stored under, or the rule fails to load: `ALWAYS {rule}`, not `NEVER {rule}` (a `NEVER` line is an `ALWAYS` line); `WHEN {x}`, not `ON-INVOKE`; never a block's own line such as `ABOUT`, `FOR`, `EACH` or `AS`, which no body line starts with. A tag narrows a rule to the lines of one [executor](/reference/language#executors):
 
 | Tag | The rule judges |
 |---|---|
@@ -66,7 +66,7 @@ Only a judge that cannot be reached, times out, or has no key or a rejected one 
 
 ## Delegate
 
-The `delegate` key says who answers an `ASK` line without `BY` (see [Executors](/reference/language#executors)), and which model each agent runs on — the `.ap` source never names a model:
+The `delegate` key says who answers an `ASK` line without `BY` (see [Executors](/reference/language#executors)), and which model each agent runs on — the `.ap` source never names a model, only a `BUDGET` tier:
 
 ```javascript
 export default {
@@ -74,7 +74,7 @@ export default {
 };
 ```
 
-`default` is an agent of the project, or `quick`, the builtin delegate (the default). `models` maps an agent's name to a model of its harness; with Claude Code it becomes the agent's `model:` — `quick` runs on `haiku` unless set here, every other agent on `inherit`.
+`default` is an agent of the project, or `quick`, the builtin delegate (the default). `models` maps an agent's name to a model of its harness; with Claude Code it becomes the agent's `model:` — `quick` runs on `haiku` unless set here, every other agent on `inherit`. An agent that declares a [`BUDGET`](/reference/language#agent) tier runs on that tier's model instead.
 
 ## Libraries
 

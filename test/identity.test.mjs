@@ -24,7 +24,7 @@ const { renderIdentityBlock } = await import('../dist/src/primitives.js');
   // All three fields present
   const meta = new Map([
     ['ROLE', ['senior backend developer']],
-    ['EXPERTISE', ['nodejs python go']],
+    ['EXPERTISE', ['nodejs, python, go']],
     ['MANDATE', ['build scalable secure systems without breaking what works']],
   ]);
   const block = renderIdentityBlock(meta);
@@ -96,7 +96,7 @@ const { renderIdentityBlock } = await import('../dist/src/primitives.js');
   const meta = new Map([
     ['ROLE', ['software architect']],
     ['ROLE-ABOUT', ['a software architect who keeps the system legible']],
-    ['EXPERTISE', ['plantuml system-design']],
+    ['EXPERTISE', ['plantuml, system-design']],
     ['MANDATE', ['keep diagrams current']],
   ]);
   const block = renderIdentityBlock(meta);
@@ -255,14 +255,18 @@ console.log('identity cross-kind lint tests passed.');
     // its de-slugified form ("backend engineer") is the display role.
     const agentFile = join(agentDir, 'my-agent.ap');
     writeFileSync(agentFile, [
+      'DOMAIN code:',
+      '    ABOUT      the source',
+      '    FOR        src/**',
+      '',
       'EXPORT AGENT my-agent AS backend-engineer:',
       '    ABOUT      a test agent for identity block integration',
       '    MANDATE    build scalable secure systems without breaking what works',
-      '    OWNS       src/**',
+      '    WRITES     code',
       '',
       'EXPORT ROLE backend-engineer:',
       '    ABOUT      a senior backend developer who ships secure systems',
-      '    EXPERTISE  nodejs python go',
+      '    EXPERTISE  nodejs, python, go',
       '    ALWAYS     keep the system secure',
       '',
     ].join('\n'), 'utf-8');
@@ -286,12 +290,10 @@ console.log('identity cross-kind lint tests passed.');
     assert.ok(output.includes('**go**'), 'go expertise bold in bundle');
     assert.ok(output.includes('Your mandate: build scalable secure systems without breaking what works'), 'mandate in bundle');
 
-    // OWNS scope warning must appear before Identity block (OWNS is a leading fence)
-    const ownsIdx = output.indexOf('SCOPE — WARNING');
+    // The scope warning (the WRITES perimeter) is a leading fence: before the Identity block
+    const scopeIdx = output.indexOf('SCOPE — WARNING');
     const identityIdx = output.indexOf('# Identity');
-    if (ownsIdx !== -1) {
-      assert.ok(ownsIdx < identityIdx, 'OWNS scope fence appears before Identity block');
-    }
+    assert.ok(scopeIdx !== -1 && scopeIdx < identityIdx, 'the scope warning appears before Identity block');
 
     // Identity block must come before any `# 1.` rule sections that may follow
     // (no rule sections in this minimal bundle, but the identity block itself

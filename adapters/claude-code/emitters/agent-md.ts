@@ -5,6 +5,8 @@ import { Emitter, AgentBundle } from '../../types.js';
 import { collectFrontmatter, serializeFrontmatter, FrontmatterField } from '../../../src/primitives.js';
 import { someNode } from '../../../src/apdoc/nodes.js';
 import { DEFAULT_DELEGATE } from '../../../src/config.js';
+import type { AgentBlock } from '../../../src/apdoc/blocks.js';
+import { withinHookFiles, withinHookYaml, worksInCopies } from './within-hook.js';
 
 const DEFAULT_TOOLS = '*';
 
@@ -19,16 +21,19 @@ export interface AgentMdOptions {
 
 export function makeAgentMdEmitter(opts: AgentMdOptions): Emitter<AgentBundle> {
   const tools = opts.tools ?? DEFAULT_TOOLS;
-  return (b, ctx) => [{
-    path: resolve(ctx.projectRoot, opts.agentsDir, `${b.name}.md`),
-    content: buildAgentFrontmatter(b, tools) + b.body,
-  }];
+  return (b, ctx) => [
+    {
+      path: resolve(ctx.projectRoot, opts.agentsDir, `${b.name}.md`),
+      content: buildAgentFrontmatter(b, tools) + b.body,
+    },
+    // An agent of a team of contracts works in copies: its hook warns it when it writes outside its contract.
+    ...withinHookFiles(b.structure, ctx.projectRoot),
+  ];
 }
 
 /**
- * Agent frontmatter: name, description (from ABOUT), tools (none for the default delegate), model. The model is
- * always `inherit` — the source never picks a model, so the session (or a router
- * below the harness) decides. An agent told to remember (`MEM`) gets
+ * Agent frontmatter: name, description (from ABOUT), tools (none for the default delegate), model — see
+ * {@link modelOf}. An agent told to remember (`MEM`) gets
  * `memory: project`: Claude Code then gives it a memory directory and loads
  * its MEMORY.md at every start. Shared with the claude-code-apx adapter.
  * All scalar values pass through `quoteIfNeeded` (claude-code agent convention
@@ -44,7 +49,11 @@ export function buildAgentFrontmatter(b: AgentBundle, tools: string): string {
     ...(remembers(b) ? [{ key: 'memory', value: 'project' }] : []),
   ].map(f => Array.isArray(f.value) || f.value === NO_TOOLS ? f : { ...f, value: quoteIfNeeded(f.value as string) });
 
-  return serializeFrontmatter(fields) + '\n';
+  const frontmatter = serializeFrontmatter(fields);
+  if (!worksInCopies(b.structure)) return frontmatter + '\n';
+  // The hook's YAML is nested: it goes in before the closing `---`.
+  const at = frontmatter.lastIndexOf('---');
+  return `${frontmatter.slice(0, at)}${withinHookYaml(b.name).join('\n')}\n${frontmatter.slice(at)}\n`;
 }
 
 /**
@@ -55,13 +64,17 @@ function isQuick(b: AgentBundle): boolean {
   return b.name === DEFAULT_DELEGATE;
 }
 
+/** Claude Code's model for each `BUDGET` tier. */
+const BUDGET_MODELS: Record<string, string> = { cheap: 'haiku', moderate: 'sonnet', costly: 'opus' };
+
 /**
- * The agent's model: the `delegate.models` config key's (in the document's meta);
- * else, for the default delegate shipped with the package, a fast model — Claude
- * Code's haiku; else `inherit`.
+ * The agent's model: its `BUDGET` tier's, when it declares one; else the
+ * `delegate.models` config key's (in the document's meta); else, for the default
+ * delegate shipped with the package, a fast model — Claude Code's haiku; else `inherit`.
  */
 function modelOf(b: AgentBundle): string {
-  return b.structure?.meta.model ?? (isQuick(b) ? 'haiku' : 'inherit');
+  const budget = (b.structure?.root() as AgentBlock | null | undefined)?.budget;
+  return (budget && BUDGET_MODELS[budget]) ?? b.structure?.meta.model ?? (isQuick(b) ? 'haiku' : 'inherit');
 }
 
 /** Whether the agent is told to save anything to memory — any `MEM` level but `!MEM`. */

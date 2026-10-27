@@ -24,6 +24,7 @@ import { parseForceLevel } from './forceLevelConfig.js';
 import { FORMULAS, fill } from './formulas.js';
 import { PERIMETER_FORMS, PERIMETER_KINDS, SCOPED_KINDS, perimeterOf } from './services/tags.js';
 import type { Definition } from './definition.js';
+import { splitList } from './lists.js';
 
 /** What a WITH can name — the compilation's imported skills, policies and dimensions — and the templates an AS may shape with. */
 export interface WithScope {
@@ -43,7 +44,7 @@ const KIND_TAG_RE = /^#(policy|skill):([a-zA-Z0-9][a-zA-Z0-9-]*)$/;
 export function splitWith(text: string): { items: string[]; template: string | null } | null {
   const m = text.trim().replace(/\s*:$/, '').match(/^(.+?)(?:\s+AS\s+(\S+))?$/);
   if (!m) return null;
-  const items = m[1].split(',').map(s => s.trim());
+  const items = splitList(m[1]);
   return items.every(s => /^#?[\w:-]+$/.test(s)) ? { items, template: m[2] ?? null } : null;
 }
 

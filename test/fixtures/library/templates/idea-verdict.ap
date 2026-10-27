@@ -3,7 +3,7 @@ IMPORT  score-row FROM @main.templates
 
 EXPORT TEMPLATE idea-verdict:
   ABOUT   severe single-idea verdict — scorecard, utility score, overengineering check, REJECT/RESHAPE/REFINE/ADOPT
-  APPLIES #concept-shaper #evaluation #scoring #overengineering #verdict #upstream-of-pm
+  APPLIES #concept-shaper, #evaluation, #scoring, #overengineering, #verdict, #upstream-of-pm
 
   SLOTS:
     idea:           TEXT MAX_WORDS 25 "one-line restatement of the single atomic idea under evaluation"
@@ -13,8 +13,8 @@ EXPORT TEMPLATE idea-verdict:
     leaner:         TEXT MAX_WORDS 25 "the smaller specific thing that would do"
     cost-signal:    TEXT MAX_WORDS 25 "objective cost: new files / abstractions / deps / public surface / config"
     utility:        NUMBER 0..100 "100 * sum(w_i * (score_i - 1)/4), rounded"
-    band:           ENUM[weak mediocre solid strong]
-    verdict:        ENUM[REJECT RESHAPE REFINE ADOPT]
+    band:           ENUM[weak, mediocre, solid, strong]
+    verdict:        ENUM[REJECT, RESHAPE, REFINE, ADOPT]
       MUST!  apply the ladder top-down, first match wins — gates decide, the utility score is severity/confidence
       MUST   REJECT when feasibility=1 or problem-reality=1 or net-roi=1 or full duplicate or (no gate, utility<45)
       MUST   RESHAPE when overengineering=1 or cheaper-alternative=1 or (overeng=2, cheaper<=3) or (overeng=3, roi<=3)
@@ -24,7 +24,7 @@ EXPORT TEMPLATE idea-verdict:
     binding-axes:   TEXT MAX_WORDS 10 "the two axes that decided the verdict"
     brief?:         TEXT MAX_WORDS 60 "only on ADOPT — carries verdict, utility + band, binding axes, for pm"
     open-questions?: TEXT MAX_WORDS 30 "unfilled gaps, or the cheap test that would de-risk the riskiest assumption"
-    status:         ENUM[verdict-emitted refine-needs-specification advanced-to-pm reshape-invited]
+    status:         ENUM[verdict-emitted, refine-needs-specification, advanced-to-pm, reshape-invited]
   BODY:
     idea: {idea}
 

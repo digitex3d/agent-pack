@@ -52,7 +52,7 @@ export interface StoreType {
    * agent's apx — a store is never touched directly), so the agent never has
    * to translate a generic example into its own case.
    */
-  usage(store: StoreDecl, command: string): string[];
+  usage(store: StoreDecl, command: (op: string) => string): string[];
   /**
    * Why this backing cannot hold a slot of this shape, or null when it can.
    * This is what makes the seam worth having: a type states its limits and the

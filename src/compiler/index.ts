@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { FORMULAS, fill, introOf } from '../formulas.js';
 import { resolve, join, dirname, basename, sep } from 'path';
 import { unitNameFromPath } from '../ingest.js';
@@ -14,15 +14,14 @@ import { resolveTeamMembership } from '../services/teamMembership.js';
 import { findAgentFiles, readAgentFile, standaloneDir, agentNameOf, teamRootForAgentFile, readTeamFile, teamRosterIssues, legacyTeamIssue, buildContractIndex, readContractBlocks, projectContractIssues, withoutBlocks, CONTRACTS_STRATEGY, type ContractIndex, type TeamFile } from '../services/teamMetadata.js';
 import { askTargetErrors, executorErrors, usesPrograms, WRITE_PROGRAM, type AgentIndexEntry } from '../executor.js';
 import { BUILTIN_AGENTS_DIR, resolveDelegateConfig, PROJECT_SOURCE, type DelegateConfig } from '../config.js';
-import { LintError, checkVocabulary, lineOfName, checkedHeadIssues, dimensionBlockErrors, teamBlockErrors, contractBlockErrors } from '../lint.js';
-import { tagDomains, decideDomain, undecidedMessage, type UndecidedDomain } from '../judge/domains.js';
+import { LintError, checkVocabulary, lineOfName, checkedHeadIssues, dimensionBlockErrors, domainBlockErrors, teamBlockErrors, contractBlockErrors } from '../lint.js';
 import { CompileError, reporter } from '../report.js';
 import { extractInlineDefinitions } from '../dispatch/inlineBlocks.js';
 import { renderTree } from '../bundlers/renderTree.js';
 import { renderEnumLegend } from '../enumPrimitives.js';
 import { partitionMetadata, mergeMetadata, protectVerbatim } from '../services/text.js';
 import { lex, opensBlock } from '../lexer.js';
-import { OwnsPrimitive, applyBodySubstitutions, stripHeaderKeyword, AGENT_METADATA_KEYWORDS } from '../primitives.js';
+import { applyBodySubstitutions, stripHeaderKeyword, AGENT_METADATA_KEYWORDS } from '../primitives.js';
 import { resolveShapeRefs } from '../shapeCompiler.js';
 import { AdapterPlugin } from '../../adapters/types.js';
 import { renderMd } from '../../adapters/md/index.js';
@@ -31,13 +30,12 @@ import { STRATEGIES, strategyFor, type DefinitionStrategy, type Definition } fro
 import { parseNamespace } from '../namespace.js';
 import { DocumentBuilder } from '../apdoc/builder.js';
 import type { ApDocument } from '../apdoc/document.js';
-import type { StoreBlock, DimensionBlock, TemplateBlock, TeamBlock } from '../apdoc/blocks.js';
+import type { AgentBlock, StoreBlock, DimensionBlock, TemplateBlock, TeamBlock } from '../apdoc/blocks.js';
 import { SourceRegistry } from '../sources.js';
 import { judgeDocument, type JudgeRun } from '../judge/phase.js';
 import type { ChecksConfig } from '../judge/types.js';
 import { importedVariables, visibleIn } from '../exportedVars.js';
 import { readsOf, constantOf, parseVarLine, splitInto, takesInto } from '../vars.js';
-import { APX_VERBS } from '../apx/verbs.js';
 import { refName } from '../../adapters/md/phrases.js';
 
 
@@ -62,8 +60,6 @@ export interface BundleOptions {
   sources?: SourceRegistry;
   /** The command's judge run — the judge phase runs when present. */
   judge?: JudgeRun | null;
-  /** Who decides a file's domain the judge left grey (DOMAINS of a team of contracts). Absent: nobody. */
-  decide?: DomainDecider;
   /** The judge of checked conditions (`checks` config key) — absent: none. */
   checks?: ChecksConfig | null;
   /** Every agent of the project and its team — what `ASK … BY` may name. Absent: not checked. */
@@ -120,11 +116,7 @@ export interface BundleFromConfigOverrides {
   vars?: Record<string, string>;
   adapter?: AdapterPlugin;
   judge?: JudgeRun | null;
-  decide?: DomainDecider;
 }
-
-/** Who decides a file's domain the judge left grey: the chosen option, or null to leave it undecided (an error). */
-export type DomainDecider = (undecided: UndecidedDomain) => Promise<string | null>;
 
 /**
  * Compose a bundle from a Config, deriving libraryRoot and agentDir from it.
@@ -169,7 +161,6 @@ function buildBundleOpts(
     vars: overrides.vars,
     adapter: overrides.adapter,
     judge: overrides.judge,
-    decide: overrides.decide,
     checks: config.checks ?? null,
     agentIndex: agentIndexOf(config),
     contractIndex: contractIndexOf(config, overrides.projectRoot),
@@ -217,7 +208,7 @@ function standaloneWithErrors(ctx: BundleContext, file: string, body: string): L
 
 /** What a name that resolves to no block of its kind is told. */
 function unresolvedMessage(kind: string, name: string): string {
-  if (kind === 'agent') return `unknown agent \`${name}\` — BY names a member of this team`;
+  if (kind === 'agent') return `unknown agent \`${name}\` — BY names a member of this team, or a team`;
   if (kind === 'skill') return `unknown skill \`${name}\` — ${SKILL_IMPORT_HINT}`;
   if (kind === 'with') return unknownWithMessage(name);
   return `unknown ${kind} \`${name}\` — define it, or IMPORT it FROM @<lib>.${kind}s`;
@@ -254,6 +245,7 @@ export function makeBundleContext(opts: MakeContextOpts): BundleContext {
     flows: [],
     stores: [],
     dimensions: [],
+    domains: [],
     skills: [],
     variables: [],
     lintErrors: [],
@@ -416,26 +408,37 @@ function storeErrors(doc: ApDocument, ctx: BundleContext, agentFilePath: string)
   });
 }
 
-/** The kinds the apx reaches by their name, where its verbs stand (`<store> <verb>`) — a dimension is reached by its id, after `dimension`. */
-const APX_NAMED_KINDS = ['store'] as const;
+
+/** A domain keeps its contract wherever it is written — a library file or the agent's own (domainBlockErrors, the lint's own check). */
+function domainFileErrors(ctx: BundleContext): LintError[] {
+  const files = [...new Set(ctx.domains.map(d => d.path))].filter(file => existsSync(file));
+  return files.flatMap(file => domainBlockErrors(file, ctx.sources.tree(file).blocks));
+}
 
 /**
- * The apx reads its first word as a verb, then as the name of a store: a store
- * named like a verb is unreachable, and two sharing a name reach only the first.
+ * An agent's perimeter names domains (D44): every name of its WRITES and READS
+ * is a DOMAIN it declares or imports, listed once; a domain it writes is not
+ * also one it reads — writing a domain reads it.
  */
-function apxNameErrors(doc: ApDocument, ctx: BundleContext, agentFilePath: string): LintError[] {
-  const taken = new Map<string, string>();
-  return APX_NAMED_KINDS.flatMap(kind => doc.byKind(kind).flatMap(block => {
-    const file = strategyFor(kind)!.getEntries(ctx).find(d => d.name === block.name)?.path ?? agentFilePath;
-    const at = { file, line: lineOfName(file, block.name) };
-    const head = `${kind.toUpperCase()} ${block.name}: \`${block.name}\``;
-    const errors: LintError[] = [];
-    if ((APX_VERBS as readonly string[]).includes(block.name)) errors.push({ ...at, message: `${head} is a verb of the apx (${APX_VERBS.join(', ')}) — give the ${kind} another name` });
-    const other = taken.get(block.name);
-    if (other) errors.push({ ...at, message: `${head} names a ${other} of this agent too — the apx reaches both by name: give one of them another name` });
-    else taken.set(block.name, kind);
-    return errors;
-  }));
+function perimeterErrors(doc: ApDocument, file: string): LintError[] {
+  const root = doc.root() as AgentBlock | null;
+  if (!root) return [];
+  const domains = new Set(doc.byKind('domain').map(d => d.name));
+  const lines = existsSync(file) ? readFileSync(file, 'utf-8').split(/\r?\n/) : [];
+  const at = (keyword: string) => Math.max(1, lines.findIndex(l => new RegExp(`^\\s*${keyword}\\b`).test(l)) + 1);
+  const errors: LintError[] = [];
+  for (const [keyword, names] of [['WRITES', root.writes], ['READS', root.reads ?? []]] as const) {
+    const seen = new Set<string>();
+    for (const name of names) {
+      if (seen.has(name)) errors.push({ file, line: at(keyword), message: `${keyword}: \`${name}\` is listed twice` });
+      seen.add(name);
+      if (!domains.has(name)) errors.push({ file, line: at(keyword), message: `${keyword} ${name}: no DOMAIN is called \`${name}\` — declare it (\`EXPORT DOMAIN ${name}:\` with \`FOR <glob>, …\`) or IMPORT it FROM @main.domains` });
+    }
+  }
+  for (const name of root.reads ?? []) {
+    if (root.writes.includes(name)) errors.push({ file, line: at('READS'), message: `READS ${name}: \`${name}\` is in WRITES already — writing a domain reads it` });
+  }
+  return errors;
 }
 
 /**
@@ -465,50 +468,18 @@ function dimensionErrors(doc: ApDocument, ctx: BundleContext): LintError[] {
 }
 
 /**
- * The domains of the files a team of contracts works on (src/judge/domains.ts):
- * tagged by the judge at build time; a grey file is the developer's, through
- * `decide` — without a decider, or a judge, the build fails naming the files.
- */
-async function domainErrors(doc: ApDocument, dim: DimensionBlock, team: TeamFile, opts: BundleOptions): Promise<LintError[]> {
-  const line = lineOfName(team.path, dim.name);
-  if (!opts.judge) return [{ file: team.path, line, message: `DOMAINS ${dim.name}: a team of contracts needs the judge to give every file its domain — add \`judge: { adapter: 'jev' }\` to agent-pack.config.mjs` }];
-  const root = opts.projectRoot ?? process.cwd();
-  const tagging = await tagDomains(doc, dim, team.path, opts.judge, root);
-  const errors = [...tagging.errors];
-  for (const u of tagging.undecided) {
-    const choice = (await opts.decide?.(u)) ?? null;
-    if (choice && u.options.includes(choice)) decideDomain(doc, dim, opts.judge, root, u, choice);
-    else errors.push({ file: team.path, line, message: undecidedMessage(dim, u) });
-  }
-  for (const w of tagging.warnings) opts.judge.warn({ ...w, severity: 'warning' });
-  return errors;
-}
-
-/**
- * Under `STRATEGY contracts`: the lead's document holds the DOMAINS dimension —
- * its template has one ENUM slot, and every CONTRACT's DOMAIN is one of its
- * values; a member some BY names declares `WHEN handed <contract>:` for each
- * such contract, and no LENS-IN — its input is the contract it is handed.
+ * Under `STRATEGY contracts`: a CONTRACT's DOMAIN is one the agent its BY names
+ * writes (`WRITES <domain>` — a DOMAIN block, D44); a member some BY names
+ * declares `WHEN handed <contract>:` for each such contract, and no LENS-IN —
+ * its input is the contract it is handed.
  */
 function contractErrors(doc: ApDocument, team: TeamFile, agentName: string, lensInFile: string | null): LintError[] {
   if (team.strategy?.name !== CONTRACTS_STRATEGY) return [];
   const errors: LintError[] = [];
   const at = (line: number | null, message: string) => errors.push({ file: team.path, line: line ?? team.block.startLine, message });
-  if (team.lead?.name === agentName && team.domains) {
-    const dim = doc.byKind('dimension').find(d => d.name === team.domains!.name) as DimensionBlock | undefined;
-    if (!dim) {
-      at(team.domains.line, `DOMAINS ${team.domains.name}: no dimension of that name in the lead's document — declare it in \`${basename(team.lead.name)}.ap\` or IMPORT it there`);
-    } else {
-      const slots = dim.shape ? doc.slotsOf(dim.shape.ref) ?? [] : [];
-      const values = slots.length === 1 && slots[0].spec.kind === 'enum' ? slots[0].spec.values : null;
-      if (!values) {
-        at(team.domains.line, `DOMAINS ${team.domains.name}: its template has one slot, an \`ENUM[...]\` of the domains — one domain per file`);
-      } else {
-        for (const c of team.contracts) {
-          if (c.domain !== null && !values.includes(c.domain)) at(c.domainLine, `CONTRACT ${c.name}: DOMAIN \`${c.domain}\` is none of the domains — ${values.join(', ')}`);
-        }
-      }
-    }
+  const writes = (doc.root() as AgentBlock | null)?.writes ?? [];
+  for (const c of team.contracts.filter(c => c.domain !== null && c.by.includes(agentName))) {
+    if (!writes.includes(c.domain!)) at(c.domainLine, `CONTRACT ${c.name}: DOMAIN \`${c.domain}\` — \`${agentName}\`, its BY, does not write it: give it \`WRITES ${c.domain}\`, or hand the contract to an agent that writes it`);
   }
   const handed = team.contracts.filter(c => c.by.includes(agentName));
   if (handed.length > 0) {
@@ -835,10 +806,6 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
   }
   reportLintIssues(ctx, 'Bundle');
 
-  const ownsValues = metadata.get('OWNS') ?? [];
-  const ownsInBody = ownsValues.length > 0 &&
-    OwnsPrimitive.contributesFrontmatter(opts.adapter?.name ?? '', ownsValues) === null;
-
   const structure = builder.finish(ctx, {
     metadata,
     boundRole,
@@ -848,7 +815,6 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     bootstrap,
     vars: variables.constants,
     declaredVars: variables.variables,
-    ownsInBody,
     contractIndex: opts.contractIndex ?? null,
   });
   // An ASK without BY goes to the default delegate; the config may set this agent's model.
@@ -866,8 +832,9 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     ...withProblemErrors(builder.withProblems),
     ...unappliedErrors(ctx, builder.withNamed, true),
     ...storeErrors(structure, ctx, agentFilePath),
-    ...apxNameErrors(structure, ctx, agentFilePath),
     ...dimensionErrors(structure, ctx),
+    ...perimeterErrors(structure, agentFilePath),
+    ...domainFileErrors(ctx),
     ...(teamFile ? contractErrors(structure, teamFile, agentName, agentFile.info.lensIn ? agentFilePath : null) : []),
     ...builder.varErrors.map(located),
     ...builder.checkIssues.map(located),
@@ -878,11 +845,6 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
   ], 'Bundle');
   // The judge phase: a well-formed document's lines checked by the judge.
   if (opts.judge) failOnErrors(await judgeDocument(structure, opts.judge, ctx.sources), 'Bundle');
-  // The lead of a team of contracts: every file of its DOMAINS gets its domain, by the judge or the developer.
-  if (teamFile?.strategy?.name === CONTRACTS_STRATEGY && teamFile.lead?.name === agentName && teamFile.domains) {
-    const dim = structure.byKind('dimension').find(d => d.name === teamFile.domains!.name) as DimensionBlock | undefined;
-    if (dim) failOnErrors(await domainErrors(structure, dim, teamFile, opts), 'Bundle');
-  }
   const body = renderMd(structure) + await emitTools(ctx);
 
   return {

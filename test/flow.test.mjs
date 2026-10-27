@@ -26,7 +26,7 @@ const { applyForceLevels } = await import('../dist/src/forceLevel.js');
   const tdd = `# tdd
 
 ABOUT     Test-Driven Development: tester writes failing test, dev implements, tester verifies
-APPLIES      #flow #tdd
+APPLIES      #flow, #tdd
 
 FLOW tdd
   STEP tester:
@@ -326,7 +326,7 @@ FLOW bad-flow
     '# tdd',
     '',
     'ABOUT     Test-Driven Development: tester writes failing test, dev implements, tester verifies',
-    'APPLIES      #flow #tdd',
+    'APPLIES      #flow, #tdd',
     '',
     'IMPORT brief FROM library.templates',
     '',

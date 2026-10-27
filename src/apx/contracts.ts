@@ -7,22 +7,19 @@
  * whose state the code moves, never the text — a transition is a tabeli
  * compare-and-swap, so two agents never move the same instance twice.
  *
- * The zones: a pair of comments in a file, `agent-pack <ctr-id>` opening and
- * `agent-pack end <ctr-id>` closing, found by their text in any comment syntax.
- * The skeleton: every file of the perimeter with its fingerprint when the lead
- * dispatched — what tells, at delivery, that a member wrote outside its zone. A
- * delivered instance moves the reference of its own file to what it delivered
- * (kept on its record, set by the same compare-and-swap), so the next delivery
- * does not count a finished zone as a change; and the file of a zone another
- * member is still working on is that member's, not counted either — whoever
- * writes in it, the apx cannot tell.
+ * The zones: pairs of comments, `agent-pack <ctr-id>` opening and
+ * `agent-pack end <ctr-id>` closing, found by their text in any comment syntax
+ * — where the lead tells an instance "write here". An instance may have none
+ * (new code: its limit is its assignee's domains) or several, in several files.
+ * Each instance works in a copy of its own (src/workspace): what it wrote is
+ * the copy's diff, so its delivery keeps exactly what its contract's WITHIN
+ * admits, and names the rest.
  */
-import { existsSync, readFileSync } from 'fs';
+import { readFileSync } from 'fs';
 import { join } from 'path';
 import { STATE_DIR } from './paths.js';
 import { openTable, queryTable, runTable, tabeliVersionError } from './tabeli.js';
-import { fingerprint } from './dimensions.js';
-import { projectFiles, writeFileAtomic } from '../services/fs.js';
+import { projectFiles } from '../services/fs.js';
 import { matchesAnyGlob } from '../services/glob.js';
 
 /** The states an instance passes through: assigned the moment it is written, delivered by its assignee, merged by the lead — or blocked by its assignee. */
@@ -43,19 +40,23 @@ export interface ContractRecord {
   depends: string;
   /** The instance the lead started from; '' for the one it was handed. */
   parent: string;
-  /** Where the zone is: `file:open-close;file:open-close`; '' until dispatched. */
+  /** Where its zones are, in the base: `file:open-close;file:open-close`; '' when it has none, or until dispatched. */
   zone: string;
   state: ContractState;
   reason: string;
   /** ISO time of the dispatch; '' until then. */
   dispatched_at: string;
-  /** The fingerprint of the zone's file when it was delivered — the reference for that file from then on; '' until then. */
-  delivered_hash: string;
+  /** The globs the assignee wrote at dispatch, comma separated — a domain limit, kept if the lead takes it over. */
+  writes: string;
+  /** What its delivery left out, `; ` separated; '' when nothing. */
+  left_out: string;
+  /** Why it left that out — the assignee's word; '' when nothing was. */
+  why: string;
   /** The agent that wrote it. */
   author: string;
 }
 
-const FIELDS: (keyof ContractRecord)[] = ['ctr', 'contract', 'spec', 'assignee', 'depends', 'parent', 'zone', 'state', 'reason', 'dispatched_at', 'delivered_hash', 'author'];
+const FIELDS: (keyof ContractRecord)[] = ['ctr', 'contract', 'spec', 'assignee', 'depends', 'parent', 'zone', 'state', 'reason', 'dispatched_at', 'writes', 'left_out', 'why', 'author'];
 
 /** The id prefix of an instance. */
 export const CONTRACT_ID_RE = /^ctr-[0-9a-f]{8}$/;
@@ -111,26 +112,6 @@ export class ContractTable {
   private ok(run: ReturnType<typeof runTable>): void {
     if (run.status !== 0) throw new Error(`${run.error?.message ?? `${run.stderr}${run.stdout}`}`.trim());
   }
-
-  // ---------------------------------------------------------------- skeleton
-
-  private skeletonPath(): string {
-    return join(this.dir, 'skeleton.json');
-  }
-
-  /** The perimeter as it was at dispatch: its globs and every file with its fingerprint — null before any dispatch. */
-  skeleton(): Skeleton | null {
-    if (!existsSync(this.skeletonPath())) return null;
-    try { return JSON.parse(readFileSync(this.skeletonPath(), 'utf-8')) as Skeleton; } catch { return null; }
-  }
-
-  /** Take the perimeter's picture: every file the globs admit, fingerprinted. */
-  writeSkeleton(projectRoot: string, globs: string[]): Skeleton {
-    const files = Object.fromEntries(perimeterFiles(projectRoot, globs).map(f => [f, fingerprint(readFileSync(join(projectRoot, f), 'utf-8'))]));
-    const skeleton = { globs, files };
-    writeFileAtomic(this.skeletonPath(), JSON.stringify(skeleton, null, 1) + '\n');
-    return skeleton;
-  }
 }
 
 export interface Skeleton {
@@ -139,23 +120,13 @@ export interface Skeleton {
   files: Record<string, string>;
 }
 
-/** The fingerprint each file of the perimeter is expected to have now: the dispatch's, or what a delivered zone left. */
-export function expectedFingerprints(skeleton: Skeleton, records: ContractRecord[]): Record<string, string> {
-  const out = { ...skeleton.files };
-  for (const r of records) {
-    const zone = r.delivered_hash ? parseZone(r.zone) : null;
-    if (zone && (r.state === 'delivered' || r.state === 'merged')) out[zone.file] = r.delivered_hash;
-  }
-  return out;
-}
-
 function asRecord(r: Record<string, string>): ContractRecord {
   const out = {} as Record<string, string>;
   for (const f of FIELDS) out[f] = r[f] ?? '';
   return out as unknown as ContractRecord;
 }
 
-/** The files of the perimeter: the project's files the globs admit (the DOMAINS dimension's FOR). */
+/** The project's files the globs admit — where the lead's marks are looked for. */
 export function perimeterFiles(projectRoot: string, globs: string[]): string[] {
   return projectFiles(projectRoot, rel => matchesAnyGlob(rel, globs));
 }
@@ -187,48 +158,40 @@ function markLines(text: string, ctr: string): { opens: number[]; closes: number
 }
 
 /**
- * Find the zones of `ids` across `files` (from the project root). Each id has
- * one zone: an opening mark and, after it in the same file, a closing one.
- * What is wrong is told per id: no marks, two zones, a closing mark missing or
- * before the opening one.
+ * Find the zones of `ids` across `files` (from the project root): each opening
+ * mark and the closing one after it, in any number of files. An id with no
+ * mark has no zone — none is required here. What is wrong is told per id: a
+ * closing mark with no opening one before it, two openings in a row, an
+ * opening never closed.
  */
-export function scanZones(projectRoot: string, files: string[], ids: string[]): { zones: Map<string, Zone>; problems: Map<string, string> } {
-  const zones = new Map<string, Zone>();
+export function scanZones(projectRoot: string, files: string[], ids: string[]): { zones: Map<string, Zone[]>; problems: Map<string, string> } {
+  const zones = new Map<string, Zone[]>();
   const problems = new Map<string, string>();
-  const found = new Map<string, { file: string; opens: number[]; closes: number[] }[]>();
   for (const file of files) {
     const text = readFileSync(join(projectRoot, file), 'utf-8');
     for (const ctr of ids) {
-      if (!text.includes(ctr)) continue;
-      const marks = markLines(text, ctr);
-      if (marks.opens.length + marks.closes.length > 0) found.set(ctr, [...(found.get(ctr) ?? []), { file, ...marks }]);
+      if (!text.includes(ctr) || problems.has(ctr)) continue;
+      const { opens, closes } = markLines(text, ctr);
+      const marks = [...opens.map(line => ({ line, open: true })), ...closes.map(line => ({ line, open: false }))].sort((a, b) => a.line - b.line);
+      let open: number | null = null;
+      for (const m of marks) {
+        if (m.open && open !== null) { problems.set(ctr, `${file}: two opening marks, lines ${open} and ${m.line} — close the first one`); break; }
+        if (!m.open && open === null) { problems.set(ctr, `${file}: the closing mark (line ${m.line}) comes with no opening one before it`); break; }
+        if (m.open) open = m.line;
+        else { zones.set(ctr, [...(zones.get(ctr) ?? []), { file, open: open!, close: m.line }]); open = null; }
+      }
+      if (open !== null && !problems.has(ctr)) problems.set(ctr, `${file}: the opening mark (line ${open}) is never closed`);
     }
-  }
-  for (const ctr of ids) {
-    const hits = found.get(ctr) ?? [];
-    const { open, close } = zoneMarks(ctr);
-    if (hits.length === 0) { problems.set(ctr, `no zone: write \`${open}\` where the work starts and \`${close}\` where it ends, in one file, inside comments`); continue; }
-    if (hits.length > 1) { problems.set(ctr, `marks in ${hits.length} files (${hits.map(h => h.file).join(', ')}) — a zone is one file`); continue; }
-    const [h] = hits;
-    if (h.opens.length !== 1 || h.closes.length !== 1) { problems.set(ctr, `${h.file}: ${h.opens.length} opening and ${h.closes.length} closing marks — one of each`); continue; }
-    if (h.closes[0] <= h.opens[0]) { problems.set(ctr, `${h.file}: the closing mark (line ${h.closes[0]}) comes before the opening one (line ${h.opens[0]})`); continue; }
-    zones.set(ctr, { file: h.file, open: h.opens[0], close: h.closes[0] });
   }
   return { zones, problems };
 }
 
-/** Whether `text` still holds any mark of `ctr`. */
-export function hasMarks(text: string, ctr: string): boolean {
-  const { opens, closes } = markLines(text, ctr);
-  return opens.length + closes.length > 0;
+/** Zones as the table writes them, and back. */
+export function zonesText(zones: Zone[]): string {
+  return zones.map(z => `${z.file}:${z.open}-${z.close}`).join(';');
 }
 
-/** A zone as the table writes it, and back. */
-export function zoneText(zone: Zone): string {
-  return `${zone.file}:${zone.open}-${zone.close}`;
-}
-
-export function parseZone(text: string): Zone | null {
-  const m = /^(.+):(\d+)-(\d+)$/.exec(text);
-  return m ? { file: m[1], open: Number(m[2]), close: Number(m[3]) } : null;
+export function parseZones(text: string): Zone[] {
+  return text.split(';').map(part => /^(.+):(\d+)-(\d+)$/.exec(part)).filter((m): m is RegExpExecArray => m !== null)
+    .map(m => ({ file: m[1], open: Number(m[2]), close: Number(m[3]) }));
 }
