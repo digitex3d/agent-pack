@@ -18,6 +18,7 @@
  * Semantics (rendering, frontmatter, validation) live in BLOCK_TYPES.
  */
 
+import { DECORATOR_MARK, danglingDecoratorMessage, emptyDecoratorMessage, definitionDecoratorMessage, definitionInDecoratorMessage, type DecoratorLine } from './decorators.js';
 import { lex, Token } from './lexer.js';
 import { blockTypeOf, EXPORT_MODIFIER, AGENT_KEYS } from './blockTypes.js';
 import { computeHead, splitExecutorMark } from './executor.js';
@@ -89,6 +90,10 @@ export interface Block {
   computed?: boolean;
   /** An exported variable's declaration — set on the block an `EXPORT VAR` line becomes. */
   variable?: VarDecl;
+  /** The decorators written right above it (`@WITHIN web`), in order (src/decorators.ts). */
+  decorators?: DecoratorLine[];
+  /** Set on the block a decorator opens (`@WITHIN web:`): its key is `@WITHIN`, its children the lines it decorates. */
+  decorator?: DecoratorLine;
 }
 
 export type Node = Block | Line;
@@ -96,6 +101,8 @@ export type Node = Block | Line;
 export interface ParseError {
   line: number;
   message: string;
+  /** A decorator that decorates no block — the one parse error the lint reports as is (src/decorators.ts). */
+  decorator?: true;
 }
 
 export interface ParseResult {
@@ -217,7 +224,7 @@ export function parseBlocks(source: string): ParseResult {
   let i = 0;
   while (i < tokens.length) {
     const t = tokens[i];
-    if (asBlockOpener(t) !== null || exportedVar(t)?.indent === 0) break;
+    if (asBlockOpener(t) !== null || exportedVar(t)?.indent === 0 || t.kind === 'decorator') break;
     if (t.kind === 'blank' || t.kind === 'comment') {
       prologue.push(t);
       i++;
@@ -262,10 +269,47 @@ export function parseBlocks(source: string): ParseResult {
     }
   };
 
+  // The decorators read above the next block, waiting for it (src/decorators.ts).
+  let pending: (DecoratorLine & { indent: number })[] = [];
+  const dangling = (): void => {
+    for (const d of pending) errors.push({ line: d.line, message: danglingDecoratorMessage(d.key), decorator: true });
+    pending = [];
+  };
+  /** The decorators a block opened at `indent` takes: those right above it, at its indent — never a definition's (yet). */
+  const takePending = (indent: number, key?: string): DecoratorLine[] | undefined => {
+    if (pending.length === 0) return undefined;
+    if (pending.some(d => d.indent !== indent)) { dangling(); return undefined; }
+    if (key && blockTypeOf(key)) {
+      for (const d of pending) errors.push({ line: d.line, message: definitionDecoratorMessage(d.key, key), decorator: true });
+      pending = [];
+      return undefined;
+    }
+    const taken = pending.map(({ key, rest, line }) => ({ key, rest, line }));
+    pending = [];
+    return taken;
+  };
+
   while (i < tokens.length) {
     const t = tokens[i++];
 
     if (t.kind === 'blank' || t.kind === 'comment') continue;
+
+    if (t.kind === 'decorator') {
+      if (!t.opens) {
+        pending.push({ key: t.key, rest: t.rest, line: t.line, indent: t.indent });
+        continue;
+      }
+      popUntilParentOf(t.indent);
+      const above = takePending(t.indent);
+      const block: Block = {
+        type: 'block', key: `${DECORATOR_MARK}${t.key}`, name: null, rest: t.rest, children: [],
+        startLine: t.line, indent: t.indent, exported: false, decorator: { key: t.key, rest: t.rest, line: t.line },
+        ...(above ? { decorators: above } : {}),
+      };
+      addNode(block);
+      stack.push(block);
+      continue;
+    }
 
     // `EXPORT VAR x` is a declaration a module exports: a top-level block with
     // no body, named by its variable, so IMPORT resolves it like any export.
@@ -314,6 +358,7 @@ export function parseBlocks(source: string): ParseResult {
       // `COMPUTE <name>:` is a procedure a program carries out — src/executor.ts.
       const compute = computeHead(opener.key);
       if (compute) opener = { ...opener, key: compute.key, executor: compute.executor };
+      const above = takePending(t.indent, opener.key);
       const block: Block = {
         type: 'block',
         key: opener.key,
@@ -325,6 +370,7 @@ export function parseBlocks(source: string): ParseResult {
         exported,
         ...(opener.executor ? { executor: opener.executor } : {}),
         ...(compute ? { computed: true } : {}),
+        ...(above ? { decorators: above } : {}),
       };
       // Registered primitives must declare a name. Control-flow keys (WHEN,
       // IF, ELSE) are not registered and bypass this check — their lack of
@@ -342,6 +388,7 @@ export function parseBlocks(source: string): ParseResult {
     }
 
     if (t.kind === 'keyword') {
+      dangling();
       popUntilParentOf(t.indent);
       addNode({
         type: 'line',
@@ -355,6 +402,7 @@ export function parseBlocks(source: string): ParseResult {
     }
 
     if (t.kind === 'procRef' || t.kind === 'unknown' || t.kind === 'rawLine') {
+      dangling();
       // Opaque content — attach to the current block under a sentinel keyword
       // so PR3 renderers can roundtrip them verbatim. No error: the lexer's
       // `unknown` already signals weirdness; failing the parse would be too
@@ -373,6 +421,22 @@ export function parseBlocks(source: string): ParseResult {
       });
     }
   }
+
+  dangling();
+  // A decorator's block holds the lines it decorates: one that holds none says nothing.
+  const emptyDecorators = (bs: readonly Node[]): void => {
+    for (const b of bs) {
+      if (b.type !== 'block') continue;
+      if (b.decorator && b.children.length === 0) errors.push({ line: b.startLine, message: emptyDecoratorMessage(b.decorator.key), decorator: true });
+      if (b.decorator) {
+        for (const c of b.children) {
+          if (c.type === 'block' && !c.decorator && blockTypeOf(c.key)) errors.push({ line: c.startLine, message: definitionInDecoratorMessage(b.decorator.key, c.key), decorator: true });
+        }
+      }
+      emptyDecorators(b.children);
+    }
+  };
+  emptyDecorators(blocks);
 
   // --- Phase 3: validate uniqueness of (key, name) across the file ---
   const seen = new Map<string, number>();

@@ -188,6 +188,8 @@ function descendantLines(children: Children): number[] {
     if (c.type === 'line') {
       out.push(c.line);
     } else {
+      // The decorators right above a block are its lines too (src/decorators.ts).
+      for (const d of c.decorators ?? []) out.push(d.line);
       out.push(c.startLine);
       out.push(...descendantLines(c.children));
     }

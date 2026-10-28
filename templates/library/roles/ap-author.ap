@@ -39,13 +39,16 @@ EXPORT ROLE ap-author:
     WHEN writing or using a skill — an agent the harness loads as a skill:
       DO   write it as one EXPORT SKILL <name> AS <role> under agents/library/skills/ — the lines of an AGENT
       DO   import a library skill FROM @main.skills, a harness one FROM @harness.skills — named as the harness knows it
-      DO   let the agent use an imported skill freely; add WITH <skill> to say which block it is for
-      DO   put WITH right above an IF, a WHEN, a block with lines beneath or a WITH — first in a body for all of it
-      DO   put WITH above an EXPORT block to open its body — the skill travels with that block
-      DO   write WITH <skill> AS <template> to shape its answer, !WITH <skill> to keep it out of that block
-      DO   import the skill in the file that writes the WITH
-      NEVER write a WITH on a flow STEP or a COMPUTE block, nor a WITH with nothing below it to decorate
-      NEVER write AS on a !WITH — it fails the build
+      DO   let the agent use an imported skill freely; add @WITH <skill> to say which block it is for
+      DO   put @WITH <skill> on its own line right above a control block, at its indent — a WHEN, an IF, an UNTIL
+      DO   put @WITH <skill>: first in a block's body, around its lines, for the skill to travel with that block
+      NEVER put a @WITH above a definition block — an AGENT, a PROCEDURE, a ROLE, a FLOW or any EXPORT block
+      DO   write @WITH <skill>: to open a block in a body — it decorates only the lines nested beneath it
+      DO   stack several decorators one per line; separate the names with commas
+      DO   write @WITH <skill> AS <template> to shape one skill's answer
+      DO   narrow a policy's APPLIES line to keep lines out of it — there is no negated @WITH
+      DO   import the skill in the file that writes the @WITH
+      NEVER write a @WITH on a flow STEP or a COMPUTE block, nor a @WITH with nothing below it to decorate
 
     WHEN binding shapes:
       DO   bind an agent's answers with LENS-OUT <template> and the requests it receives with LENS-IN <template>

@@ -22,6 +22,9 @@
  *             returns typed ApBlock subclasses. The JSON/md shape of every
  *             kind lives in its class, never here.
  */
+import { readDecorator, decoratorPhrase } from '../decoratorUse.js';
+import { DecoratorScope, DECORATOR_MARK } from '../decorators.js';
+import { plugins, pluginOf } from '../plugins.js';
 import { existsSync } from 'fs';
 import { resolve, basename } from 'path';
 import type { BundleContext } from '../dispatch/types.js';
@@ -59,7 +62,6 @@ import type { ApNode, ApRef, ApShape, ApSlotType, ApStepNode, ApIfNode, ApDocume
 import { parseVarLine, parallelEachOf, readsOf, splitBy, splitInto, takesInto, constantOf, type VarScope } from '../vars.js';
 import type { PlacedVariable } from '../exportedVars.js';
 import { introOf, fill, refSuffix, FORMULAS } from '../formulas.js';
-import { readWithHead, withPhrase, type WithProblem } from '../withUse.js';
 import { parseForceLevel, toCanonicalKeyword, getIntroByKeyword, forceLevelFamilies } from '../forceLevelConfig.js';
 
 /** Keyword (post-desugar or alias) → family base + numeric force; null force for bullets. */
@@ -171,10 +173,14 @@ export class DocumentBuilder implements BlockCx {
   private when: { node: WhenNode; bodies: ApNode[][] } | null = null;
   /** What is wrong with the checked conditions: a compile error each — or a warning — reported by the caller. */
   readonly checkIssues: { path: string; name: string; line: number | null; message: string; severity?: 'warning' }[] = [];
-  /** What does not hold in the WITH heads walked — reported by the caller (src/withUse.ts). */
-  readonly withProblems: (WithProblem & { path: string; line: number | null })[] = [];
-  /** The skills, policies and dimensions a positive WITH names — the ones that hold somewhere without a perimeter. */
-  readonly withNamed = new Set<string>();
+  /** What does not hold in the decorators walked — names and tags that select nothing (src/decorators.ts). */
+  readonly decoratorProblems: { path: string; line: number | null; message: string }[] = [];
+  /** The blocks some decorator names — a policy, a skill or a dimension named so holds there (unappliedErrors). */
+  readonly decoratorNamed = new Set<string>();
+  /** At every decorator walked, what its key names there — combined with the enclosing ones of the same key. */
+  readonly decoratorTrail: { path: string; line: number | null; key: string; names: string[] }[] = [];
+  /** The conditions the walk is under at this point: every enclosing decorator, combined. */
+  private scope: DecoratorScope = DecoratorScope.EMPTY;
 
   /** The reference index a kind's strategy names — lookup, never a branch. */
   private refIndex(ref: RefClass): Map<string, IndexedBlock> {
@@ -250,6 +256,19 @@ export class DocumentBuilder implements BlockCx {
           this.visit(n.children, t.key === 'REQUIRE' ? (host.require ??= []) : (host.ensure ??= []), host, steps);
         }
         i++;
+        continue;
+      }
+
+      // A decorator: opening a block, it decorates its own lines; above one, the block that
+      // follows — through any decorators stacked between them.
+      if (t.kind === 'decorator') {
+        let end = i;
+        if (!t.opens) {
+          end = i + 1;
+          while (end < nodes.length && (nodes[end].token.kind === 'blank' || (nodes[end].token.kind === 'decorator' && !(nodes[end].token as { opens: boolean }).opens))) end++;
+        }
+        this.decorate(t, t.opens ? n.children : nodes.slice(i + 1, end + 1), sink, host, steps);
+        i = t.opens ? i + 1 : end + 1;
         continue;
       }
 
@@ -355,11 +374,7 @@ export class DocumentBuilder implements BlockCx {
         i++;
         continue;
       }
-      if (base === 'WITH') {
-        const node = this.at(this.withHead(t, force), t);
-        sink.push(node);
-        this.visit(n.children, node.body!, host, steps);
-      } else if (base === 'WHEN') {
+      if (base === 'WHEN') {
         const node = this.at(new WhenNode(rest, t.indent), t);
         // `WHEN handed <contract>:` in a team of contracts — the instance of that contract is the trigger's input.
         const handed = this.team?.file.strategy?.name === CONTRACTS_STRATEGY ? rest.match(/^handed\s+(\S+)$/) : null;
@@ -541,26 +556,30 @@ export class DocumentBuilder implements BlockCx {
   }
 
   /**
-   * A `WITH …:` head — `!WITH …:`, its negation — read by `readWithHead`
-   * (src/withUse.ts): the skills and policies it names, each a Ref, the shape
-   * of a skill's answer, and what does not hold, reported with its line. The
-   * lines nested below it are its zone; the caller walks them into its body.
+   * A decorator and the work it decorates (src/decorators.ts): one node for
+   * every decorator — its sentence, the blocks it names as Refs, the work
+   * beneath as its body — walked under the scope it opens. What it names that
+   * does not hold is reported with its line; a key no decorator has is the
+   * lint's, and its work is walked undecorated.
    */
-  private withHead(t: Token & { kind: 'keyword' }, force: number | null): DirectiveNode {
-    const head = this.ctx ? readWithHead(t, this.ctx) : null;
-    const uses = head?.uses ?? [];
-    for (const p of head?.problems ?? []) this.withProblems.push({ ...p, path: this.sourcePath, line: this.fileLine(t) });
-    if (head && !head.negated) for (const d of uses) this.withNamed.add(d.name);
-    const refs = uses.map(d => this.ref({ kind: d.kind, name: d.name, namespace: this.nsOf(d) }, d.name, d.kind));
-    const shape = head?.template ? { force: 0, ref: this.templateRef(head.template, false) } : null;
-    const phrase = withPhrase(
-      uses.map((d, k) => ({ kind: d.kind, name: d.name, ref: refSuffix(refs[k].id) })),
-      shape ? { name: head!.template!, ref: refSuffix(shape.ref.id) } : undefined,
-    );
-    const node = new DirectiveNode('WITH', force, phrase, t.indent, []);
+  private decorate(t: Token & { kind: 'decorator' }, decorated: WalkNode[], sink: ApNode[], host: ApBlock | null, steps: ApStepNode[]): void {
+    const read = this.ctx ? readDecorator(t, this.ctx) : null;
+    if (!read) { this.visit(decorated, sink, host, steps); return; }
+    for (const message of read.problems) this.decoratorProblems.push({ path: this.sourcePath, line: this.fileLine(t), message });
+    const refs = read.uses.map(d => this.ref({ kind: d.kind, name: d.name, namespace: this.nsOf(d) }, d.name, d.kind));
+    const shape = read.template ? { force: 0, ref: this.templateRef(read.template.name, false) } : null;
+    const phrase = decoratorPhrase(read.spec, read.uses.map((d, k) => ({ kind: d.kind, name: d.name, ref: refSuffix(refs[k].id) })),
+      shape ? { name: read.template!.name, ref: refSuffix(shape.ref.id) } : undefined);
+    const node = this.at(new DirectiveNode(`${DECORATOR_MARK}${read.spec.key}`, null, phrase, t.indent, []), t);
     node.uses = refs;
     if (shape) node.shape = shape;
-    return node;
+    for (const d of read.uses) this.decoratorNamed.add(d.name);
+    sink.push(node);
+    const prior = this.scope;
+    this.scope = prior.enter(read.spec, read.uses.map(d => ({ kind: d.kind, name: d.name })));
+    this.decoratorTrail.push({ path: this.sourcePath, line: this.fileLine(t), key: read.spec.key, names: (this.scope.get(read.spec.key) ?? []).map(u => u.name) });
+    this.visit(decorated, node.body!, host, steps);
+    this.scope = prior;
   }
 
   /**
@@ -1037,7 +1056,7 @@ export class DocumentBuilder implements BlockCx {
     // with them, the apx serves them to whoever misses that kind's quiz.
     const intros: Record<string, string> = {};
     for (const kind of new Set(doc.all().map(b => b.kind))) {
-      const text = renderedIntro(kind);
+      const text = renderedIntro(kind) || (pluginOf(kind)?.about ?? '');
       if (text) intros[kind] = text;
     }
 
@@ -1098,6 +1117,8 @@ export class DocumentBuilder implements BlockCx {
     this.checkSpecs(doc, opts.vars);
     const executors = executorSpecs(doc, opts.vars ?? {}, this.ctx!.agentName, name => templateClosure(name, this.ctx?.templates ?? []));
     if (Object.keys(executors).length > 0) doc.meta.executors = executors;
+    const used = Object.fromEntries(plugins().filter(p => doc.byKind(p.name).length > 0).map(p => [p.name, p]));
+    if (Object.keys(used).length > 0) doc.meta.plugins = used;
     doc.seal();
     const md = this.buildMdMeta(doc, opts, provenanceMap);
     doc.attachMdSource(md);

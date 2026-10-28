@@ -24,7 +24,8 @@ import { ApBlock } from './block.js';
 import type { AgentBlock, DomainBlock, TemplateBlock } from './blocks.js';
 import type { PerimeterGlobs } from '../primitives.js';
 import { slotSpecsOf, type SlotSpec, type SlotResolver } from '../shapeSchema.js';
-import { KIND_STRATEGIES, strategyOf } from './blocks.js';
+import { KIND_STRATEGIES, strategyOf, installPluginKind } from './blocks.js';
+import { registerPlugin } from '../plugins.js';
 import { FORMULAS } from '../formulas.js';
 import { buildHierarchy } from '../services/tags.js';
 import { assignLeafNodes, buildTagRenderTree, TagRenderNode } from '../bundlers/sections.js';
@@ -61,6 +62,8 @@ export class ApDocument {
       blocks: Record<string, import('./types.js').ApBlockData>;
     };
     const doc = new ApDocument(data.meta);
+    // The plugins its blocks belong to: kinds of this process before any block is revived.
+    for (const spec of Object.values(data.meta.plugins ?? {})) { registerPlugin(spec); installPluginKind(spec); }
     const md = data.meta.md;
     for (const [address, blockData] of Object.entries(data.blocks)) {
       const strategy = strategyOf(blockData.kind);

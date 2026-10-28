@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
+import { plugins } from '../plugins.js';
 import { existsSync, readFileSync } from 'fs';
 import { FORMULAS, fill, introOf } from '../formulas.js';
 import { resolve, join, dirname, basename, sep } from 'path';
@@ -8,13 +9,14 @@ import { projectAgentFiles } from '../agentDiscovery.js';
 import { Config, BundleConfig, LintConfig, libraryRoots as libraryRootsOf, librariesAliasMap } from '../config.js';
 import { BundleContext, RoleEntry } from '../dispatch/index.js';
 import { processImports, resolveTargetWith, SKILL_IMPORT_HINT } from '../dispatch/imports.js';
-import { unknownWithMessage, scanWith, unappliedBlocks, unappliedIssue, withScopeLine, type WithProblem } from '../withUse.js';
+import { unappliedBlocks, unappliedIssue, withScopeLine } from '../withUse.js';
+import { readDecorator } from '../decoratorUse.js';
 import { resolveBundleDefaults, resolveTeamShared } from '../bundleDefaults.js';
 import { resolveTeamMembership } from '../services/teamMembership.js';
 import { findAgentFiles, readAgentFile, standaloneDir, agentNameOf, teamRootForAgentFile, readTeamFile, teamRosterIssues, legacyTeamIssue, buildContractIndex, readContractBlocks, projectContractIssues, withoutBlocks, CONTRACTS_STRATEGY, type ContractIndex, type TeamFile } from '../services/teamMetadata.js';
 import { askTargetErrors, executorErrors, usesPrograms, WRITE_PROGRAM, type AgentIndexEntry } from '../executor.js';
 import { BUILTIN_AGENTS_DIR, resolveDelegateConfig, PROJECT_SOURCE, type DelegateConfig } from '../config.js';
-import { LintError, checkVocabulary, lineOfName, checkedHeadIssues, dimensionBlockErrors, domainBlockErrors, teamBlockErrors, contractBlockErrors } from '../lint.js';
+import { LintError, checkVocabulary, lineOfName, checkedHeadIssues, dimensionBlockErrors, domainBlockErrors, pluginBlockErrors, teamBlockErrors, contractBlockErrors } from '../lint.js';
 import { CompileError, reporter } from '../report.js';
 import { extractInlineDefinitions } from '../dispatch/inlineBlocks.js';
 import { renderTree } from '../bundlers/renderTree.js';
@@ -178,11 +180,6 @@ function unresolvedErrors(unresolved: { path: string; name: string; kind: string
   return unresolved.map(u => ({ file: u.path, line: lineOfName(u.path, u.name), message: unresolvedMessage(u.kind, u.name) }));
 }
 
-/** What does not hold in a WITH head (src/withUse.ts), as an error at the file — and the line, when known — it was written in. */
-function withProblemErrors(problems: (WithProblem & { path: string; line?: number | null })[]): LintError[] {
-  return problems.map(p => ({ file: p.path, line: p.line ?? lineOfName(p.path, p.name), message: p.message ?? unresolvedMessage(p.kind, p.name) }));
-}
-
 /**
  * The policies and skills the compilation imports — and an agent's dimensions —
  * that hold nowhere: no perimeter on their APPLIES line and no positive WITH
@@ -197,20 +194,37 @@ function unappliedErrors(ctx: BundleContext, named: ReadonlySet<string>, dimensi
 }
 
 /**
- * The WITH checks of a standalone file, which has no document builder: every
- * head of the file and of the blocks it brings in, read once (scanWith).
+ * The decorators of a standalone file, which has no document builder: every
+ * one of the file and of the blocks it brings in, read once (src/decoratorUse.ts)
+ * — what does not hold, where it is written, and the blocks they name.
  */
-function standaloneWithErrors(ctx: BundleContext, file: string, body: string): LintError[] {
+function standaloneDecoratorErrors(ctx: BundleContext, file: string, body: string): LintError[] {
   const blocks = [ctx.roles, ctx.procedures, ctx.flows, ctx.policies, ctx.skills].flat();
-  const { named, problems } = scanWith([{ path: file, tokens: lex(body) }, ...blocks.map(d => ({ path: d.path, tokens: lex(d.body) }))], ctx);
-  return [...withProblemErrors(problems), ...unappliedErrors(ctx, named)];
+  const named = new Set<string>();
+  const errors: LintError[] = [];
+  for (const { path, text } of [{ path: file, text: body }, ...blocks.map(d => ({ path: d.path, text: d.body }))]) {
+    for (const t of lex(text)) {
+      const read = readDecorator(t, ctx);
+      if (!read) continue;
+      for (const d of read.uses) named.add(d.name);
+      const line = path === file && 'line' in t ? t.line : lineOfText(path, 'raw' in t ? t.raw : '');
+      errors.push(...read.problems.map(message => ({ file: path, line, message })));
+    }
+  }
+  return [...errors, ...unappliedErrors(ctx, named)];
+}
+
+/** The 1-based line of `path` that holds `text`, trimmed — 1 when none does. */
+function lineOfText(path: string, text: string): number {
+  if (!existsSync(path)) return 1;
+  const i = readFileSync(path, 'utf-8').split(/\r?\n/).findIndex(l => l.trim() === text.trim());
+  return i + 1 || 1;
 }
 
 /** What a name that resolves to no block of its kind is told. */
 function unresolvedMessage(kind: string, name: string): string {
   if (kind === 'agent') return `unknown agent \`${name}\` — BY names a member of this team, or a team`;
   if (kind === 'skill') return `unknown skill \`${name}\` — ${SKILL_IMPORT_HINT}`;
-  if (kind === 'with') return unknownWithMessage(name);
   return `unknown ${kind} \`${name}\` — define it, or IMPORT it FROM @<lib>.${kind}s`;
 }
 
@@ -246,6 +260,8 @@ export function makeBundleContext(opts: MakeContextOpts): BundleContext {
     stores: [],
     dimensions: [],
     domains: [],
+    // Each plugin's blocks, under its folder's name — read back by its kind strategy.
+    ...Object.fromEntries(plugins().map(p => [p.folder, []])),
     skills: [],
     variables: [],
     lintErrors: [],
@@ -408,6 +424,13 @@ function storeErrors(doc: ApDocument, ctx: BundleContext, agentFilePath: string)
   });
 }
 
+
+/** A plugin's block keeps its contract and its template wherever it is written — a library file or the agent's own (pluginBlockErrors). */
+function pluginFileErrors(ctx: BundleContext): LintError[] {
+  const defs = plugins().flatMap(p => (ctx as unknown as Record<string, { path: string }[]>)[p.folder] ?? []);
+  const files = [...new Set(defs.map(d => d.path))].filter(file => existsSync(file));
+  return files.flatMap(file => pluginBlockErrors(file, ctx.sources.tree(file).blocks));
+}
 
 /** A domain keeps its contract wherever it is written — a library file or the agent's own (domainBlockErrors, the lint's own check). */
 function domainFileErrors(ctx: BundleContext): LintError[] {
@@ -694,7 +717,7 @@ export async function bundleStandaloneToString(
     const index = contractIndexOf(config, dirname(absolute));
     ctx.lintErrors.push(...contractBlockErrors(absolute, contractBlocks), ...projectContractIssues(absolute, readContractBlocks(contractBlocks), index, new Set(ctx.templates.map(t => t.name))));
   }
-  ctx.lintErrors.push(...standaloneWithErrors(ctx, absolute, body), ...strayDimensionErrors(ctx, absolute));
+  ctx.lintErrors.push(...standaloneDecoratorErrors(ctx, absolute, body), ...strayDimensionErrors(ctx, absolute));
   body = `${emitCollectedSections(ctx)}${tidyBlankLines(body)}\n`;
   noExecutableChecks(absolute, ctx);
 
@@ -829,12 +852,13 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     ({ file: e.path, line: e.line ?? lineOfName(e.path, e.name), message: e.message, ...(e.severity ? { severity: e.severity } : {}) });
   reportIssues([
     ...unresolvedErrors(builder.unresolved),
-    ...withProblemErrors(builder.withProblems),
-    ...unappliedErrors(ctx, builder.withNamed, true),
+    ...builder.decoratorProblems.map(p => ({ file: p.path, line: p.line ?? 1, message: p.message })),
+    ...unappliedErrors(ctx, builder.decoratorNamed, true),
     ...storeErrors(structure, ctx, agentFilePath),
     ...dimensionErrors(structure, ctx),
     ...perimeterErrors(structure, agentFilePath),
     ...domainFileErrors(ctx),
+    ...pluginFileErrors(ctx),
     ...(teamFile ? contractErrors(structure, teamFile, agentName, agentFile.info.lensIn ? agentFilePath : null) : []),
     ...builder.varErrors.map(located),
     ...builder.checkIssues.map(located),

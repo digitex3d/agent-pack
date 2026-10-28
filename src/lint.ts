@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
+import { DECORATOR_MARK, decoratorOf, decoratorItemError, splitDecoratorRest, unknownDecoratorMessage } from './decorators.js';
 import { existsSync, readFileSync } from 'fs';
 import { basename } from 'path';
-import { lex, Token, Keyword, KEYWORDS, GLOBS_LINE, isTriggerKind, isWithHead, opensBlock, type DimensionLine } from './lexer.js';
+import { lex, Token, Keyword, KEYWORDS, GLOBS_LINE, isTriggerKind, opensBlock, type DimensionLine } from './lexer.js';
 import { ACTION_VERBS } from './actionVerbs.js';
 import { desugar } from './desugar.js';
 import { parseApplies, PERIMETER_FORMS, PERIMETER_KINDS } from './services/tags.js';
-import { splitWith, withItemError } from './withUse.js';
 import { getFamilyBases, getIntroByKeyword, forceLevelBaseOf, splitBangs, forceLevelFamilies, toCanonicalKeyword, parseForceLevel, NON_RULE_FAMILIES } from './forceLevelConfig.js';
 import { enumPrimitiveFor } from './primitives.js';
 import { BLOCK_CONTRACTS, BlockContract, VAR_BLOCK } from './blockContracts.js';
@@ -15,7 +15,8 @@ import { parseBlocks, agentNestedBlocks, exportedVar, readExportedVar, isExporte
 import { isExportFile } from './services/text.js';
 import { parseAgentSignature, contextShape } from './definitionArgs.js';
 import { kindFromDir, unitNameFromPath } from './ingest.js';
-import { BLOCK_TYPES, blockTypeOf, EXPORT_MODIFIER, AGENT_KEYS } from './blockTypes.js';
+import { plugins, pluginOf, pluginOfKey, recordOfLines, lineIssues } from './plugins.js';
+import { BLOCK_TYPES, blockTypeOf, EXPORT_MODIFIER, AGENT_KEYS, PLUGIN_KEY, OPERATION_KEY } from './blockTypes.js';
 import { COMPUTE_SECTIONS, executorMark, returnShape, splitExecutorMark } from './executor.js';
 import { parseTypeSpec } from './shapeSchema.js';
 import { SLOT_LINE_RE, VERBATIM_REGIONS } from './shapeCompiler.js';
@@ -106,42 +107,6 @@ function nextSubstantive(tokens: Token[], from: number): number {
     return j;
   }
   return -1;
-}
-
-/**
- * What is wrong with a `WITH` head — a block (src/withUse.ts): names (a skill,
- * a policy, a dimension) and kind tags (`#policy:<tag>`, `#skill:<tag>`), comma
- * separated, an `AS <template>`
- * only on one name that is used, the block colon, lines nested below it — its
- * zone, holding lines, never a block — and a body to stand in.
- */
-function withLineErrors(tokens: Token[], index: number): string[] {
-  const t = tokens[index] as Extract<Token, { kind: 'keyword' }>;
-  const head = t.raw.trim();
-  const errors: string[] = [];
-  const use = splitWith(t.rest);
-  if (!use) errors.push(`\`${head}\`: WITH names skills, policies and dimensions by name, and skills and policies by kind tag, comma separated — \`WITH <name>, #policy:<tag>:\`, or \`WITH <skill> AS <template>:\` to shape a skill's answer`);
-  else {
-    for (const item of use.items) { const e = withItemError(item); if (e) errors.push(e); }
-    if (use.template && (parseForceLevel(t.keyword as string)?.level ?? 0) < 0) errors.push(`\`${head}\`: a skill not used has no answer to shape — drop the AS`);
-    else if (use.template && (use.items.length > 1 || use.items[0].startsWith('#'))) errors.push(`\`${head}\`: AS shapes the answer of one skill — name only that skill`);
-  }
-  if (!opensBlock(t)) errors.push(`\`${head}\`: WITH is a block — end the line with \`:\` and nest the lines it is for below it`);
-  else {
-    const below = nextSubstantive(tokens, index + 1);
-    if (below === -1 || tokens[below].indent <= t.indent) errors.push(`\`${head}\`: nothing is nested below it — indent the lines it is for under it`);
-  }
-  // Its zone holds lines; a block (PROCEDURE, ROLE, …) inside it, like a WITH at the file top, stands outside any body.
-  let j = index + 1;
-  while (j < tokens.length && (tokens[j].kind === 'blank' || tokens[j].kind === 'comment' || tokens[j].indent > t.indent)) {
-    const n = tokens[j];
-    const key = n.kind === 'blockOpener' ? (n.key === EXPORT_MODIFIER ? n.rest.split(/\s+/)[0] : n.key)
-      : opensBlock(n) ? (n as { keyword: string }).keyword : '';
-    if (key && blockTypeOf(key)) { errors.push(`\`${head}\`: WITH stands in a body, around lines — \`${(n as { raw: string }).raw.trim()}\` opens a block: put the WITH inside it`); break; }
-    j++;
-  }
-  if (t.indent === 0) errors.push(`\`${head}\`: WITH stands in a body — inside an agent, a role or a procedure, around the lines it is for`);
-  return errors;
 }
 
 // ---------------------------------------------------------------------------
@@ -796,7 +761,7 @@ function isBranch(contract: BlockContract, keyword: Keyword): boolean {
 }
 
 /** The contracts checked line by line — a DIMENSION, a DOMAIN and a TEAM are checked on their parsed block (coveringBlockErrors, teamBlockErrors). */
-const { DIMENSION: _parsed, DOMAIN: _domain, TEAM: _team, CONTRACT: _contract, ...TOKEN_CONTRACTS } = BLOCK_CONTRACTS;
+const { DIMENSION: _parsed, DOMAIN: _domain, TEAM: _team, CONTRACT: _contract, [PLUGIN_KEY]: _plugin, [OPERATION_KEY]: _operation, ...TOKEN_CONTRACTS } = BLOCK_CONTRACTS;
 
 export function validateBlockContracts(
   tokens: ReturnType<typeof lex>,
@@ -965,6 +930,8 @@ function checkBlockContract(file: string, block: Block, key: string): LintError[
   const visit = (children: Node[], top: boolean): void => {
     for (const child of children) {
       if (child.type === 'block' && contract.regions?.includes(child.key)) continue;
+      // A decorator's block is transparent: what it holds is this block's own (src/decorators.ts).
+      if (child.type === 'block' && child.decorator) { visit(child.children, top); continue; }
       const keyword = child.type === 'block' ? child.key : child.keyword;
       const line = child.type === 'block' ? child.startLine : child.line;
       if (child.type === 'line' && keyword === OPAQUE_LINE) {
@@ -1021,6 +988,23 @@ function coveringBlockErrors(file: string, blocks: readonly Block[], key: string
         .map(glob => ({ file, line: c.line, message: `FOR \`${glob}\`: a glob is read from the project root — no absolute path, no \`..\`` }));
     }),
   ]);
+}
+
+/**
+ * Every block a plugin declares in a file — at its top, or in an AGENT's body:
+ * its contract (the lines its template has, each as often as its slot says),
+ * then its lines as a record of that template.
+ */
+export function pluginBlockErrors(file: string, blocks: readonly Block[]): LintError[] {
+  return plugins().flatMap(spec => {
+    const found = blocks.flatMap(b => (b.key === spec.key ? [b] : agentNestedBlocks([b], spec.key).map(n => n.block)));
+    return found.flatMap(b => {
+      const contract = checkBlockContract(file, b, spec.key);
+      const lines = b.children.flatMap(c => (c.type === 'line' && c.keyword ? [{ key: String(c.keyword), rest: c.rest }] : []));
+      const issues = contract.length > 0 ? null : lineIssues(spec, recordOfLines(spec, lines));
+      return issues ? [...contract, { file, line: b.startLine, message: `${spec.key} ${b.name}: ${issues}` }] : contract;
+    });
+  });
 }
 
 /**
@@ -1217,6 +1201,19 @@ const LINE_OWNERS = new Map<string, { owners: readonly string[]; what: string }>
   ['DOMAIN', { owners: ['CONTRACT'], what: 'a line' }],
 ]);
 
+/** A plugin's manifest against its contracts: the PLUGIN block, and each OPERATION block in it. */
+export function pluginManifestErrors(file: string, blocks: readonly Block[]): LintError[] {
+  return blocks.filter(b => b.key === PLUGIN_KEY).flatMap(plugin => [
+    ...checkBlockContract(file, plugin, PLUGIN_KEY),
+    ...plugin.children.flatMap(c => (c.type === 'block' && c.key === OPERATION_KEY ? checkBlockContract(file, c, OPERATION_KEY) : [])),
+  ]);
+}
+
+/** Make a plugin's line one of its block's (src/plugins.ts): `ITEM` stands only in a CHECKLIST. */
+export function registerLineOwner(key: string, owner: string): void {
+  LINE_OWNERS.set(key, { owners: [owner], what: 'a line' });
+}
+
 /** What a keyword written alone on its line lacks — by keyword, else its text. */
 const BARE_NEEDS: Record<string, string> = {
   FOR: 'at least one glob',
@@ -1233,7 +1230,7 @@ function placementError(key: string, parent: string | undefined, opens: boolean)
   // A block of its own (`DOMAIN api:`) is no line of another: a COMPUTE section (`ENSURE:`) still is.
   const owned = opens && blockTypeOf(key) ? undefined : LINE_OWNERS.get(key);
   if (owned && !owned.owners.includes(parent ?? '')) return `${key} is ${owned.what} of a ${owned.owners.join(' or a ')} block — found inside ${parent || 'the file top'}`;
-  if (opens && (key === 'DIMENSION' || key === 'DOMAIN') && parent && !AGENT_KEYS.has(parent)) return `a ${key} is declared at the file top or directly in an agent's body — found inside ${parent}`;
+  if (opens && (key === 'DIMENSION' || key === 'DOMAIN' || pluginOfKey(key)) && parent && !AGENT_KEYS.has(parent)) return `a ${key} is declared at the file top or directly in an agent's body — found inside ${parent}`;
   if (opens && key === 'CONTRACT' && parent && parent !== TEAM_KEY) return `a CONTRACT is declared in a TEAM block, or at the top of the project file — found inside ${parent}`;
   return null;
 }
@@ -1379,6 +1376,21 @@ function intoError(t: Extract<Token, { kind: 'keyword' }>): string | null {
   return `INTO ends only a DO, ASK, COMPUTE or RUN line — \`${t.raw.trim().split(/\s/)[0]}\` takes none`;
 }
 
+/** What an old `WITH x:` line is told: it is a decorator now. */
+const WITH_REWRITE = 'WITH became a decorator — write `@WITH <names>` right above the block it is for, or `@WITH <names>:` around the lines';
+
+/** What is wrong with a decorator line as written: its key, its items. Resolution is the compiler's. */
+function decoratorLineErrors(key: string, rest: string): string[] {
+  const spec = decoratorOf(key);
+  if (!spec) return [unknownDecoratorMessage(key)];
+  const { items, template } = splitDecoratorRest(rest);
+  if (items.length === 0) return [`\`${DECORATOR_MARK}${key}\` needs what it names — a block or a tag: \`${DECORATOR_MARK}${key} <name>\``];
+  const shaped = !template ? []
+    : !spec.shape ? [`\`${DECORATOR_MARK}${key} … AS ${template}\`: ${DECORATOR_MARK}${key} shapes no answer — drop the AS`]
+      : items.length > 1 || items[0].startsWith('#') ? [`\`${DECORATOR_MARK}${key} … AS ${template}\`: AS shapes the answer of one ${spec.shape} — name only that ${spec.shape}`] : [];
+  return [...items.flatMap(item => decoratorItemError(spec, item) ?? []), ...shaped];
+}
+
 /**
  * The language's own words, checked in every file whatever its kind: an unknown
  * keyword, an undeclared force level, an enum value outside its set, the old
@@ -1418,6 +1430,13 @@ export function checkVocabulary(file: string, body: string): LintError[] {
       if (as && as !== 'AS') err(t.line, `\`${read}\`: the AS of a read is a shape and takes no force level — write \`{{${name} AS ${template}}}\``);
     }
 
+    // A decorator: its key and its items, then, opening a block, transparent — what it holds stands in its parent.
+    if (t.kind === 'decorator') {
+      for (const message of decoratorLineErrors(t.key, t.rest)) err(t.line, message);
+      if (t.opens) stack.push({ indent: t.indent, key: parent?.key ?? '', line: t.line });
+      continue;
+    }
+
     let key = '';
     if (t.kind === 'blockOpener') {
       key = t.key === EXPORT_MODIFIER ? t.rest.split(/\s+/)[0] : t.key;
@@ -1447,7 +1466,6 @@ export function checkVocabulary(file: string, body: string): LintError[] {
       if (early) err(t.line, `BY ${early.name} must end the ASK line — write \`ASK … INTO <name> BY ${early.name}\``);
       const base = forceLevelBaseOf(key);
       if (base && getIntroByKeyword(key) === null) err(t.line, unknownLevel(key, base));
-      if (isWithHead(t)) for (const message of withLineErrors(tokens, index)) err(t.line, message);
       // Every list of the language is comma-separated (src/lists.ts).
       const spaced = WORD_LIST_LINES.includes(key) ? spacedListError(key, t.rest) : null;
       if (spaced) err(t.line, spaced);
@@ -1476,6 +1494,8 @@ export function checkVocabulary(file: string, body: string): LintError[] {
       if (key === 'DOMAINS') {
         err(t.line, `DOMAINS was removed — the files of a domain are its \`EXPORT DOMAIN <name>:\` block's FOR, and a CONTRACT's \`DOMAIN <name>\` goes to an agent that writes it (\`WRITES <name>\`): "${quoteRaw(t)}"`);
       }
+      // WITH became a decorator (src/decorators.ts).
+      if (key === 'WITH') err(t.line, `${WITH_REWRITE}: "${quoteRaw(t)}"`);
       // OWNS was removed: a perimeter names domains (D44).
       if (key === 'OWNS') {
         err(t.line, `OWNS was removed — declare the files as \`EXPORT DOMAIN <name>:\` with \`FOR ${splitList(t.rest).join(', ')}\`, and write \`WRITES <name>\` (or \`READS <name>\`) in the agent: "${quoteRaw(t)}"`);
@@ -1504,6 +1524,8 @@ export function checkVocabulary(file: string, body: string): LintError[] {
       }
       const into = intoError(t);
       if (into) err(t.line, into);
+    } else if (t.kind === 'unknown' && /^\s*!WITH\b/.test(t.raw)) {
+      err(t.line, `!WITH was removed — a policy says where it holds with its APPLIES line: to keep lines out of one, narrow its perimeter: "${t.raw.trim()}"`);
     } else if (t.kind === 'unknown') {
       const word = t.raw.match(KEYWORD_LIKE_RE)?.[1];
       const starred = starredTrigger(t.raw);
@@ -1522,6 +1544,8 @@ export function checkVocabulary(file: string, body: string): LintError[] {
   }
 
   errors.push(...computeBlockErrors(file, body));
+  // A decorator decorating no block: the parser's to see (src/parseBlocks.ts), the lint's to report.
+  errors.push(...parseBlocks(body).errors.filter(e => e.decorator).map(e => ({ file, line: e.line, message: e.message })));
   return errors;
 }
 
@@ -1636,7 +1660,7 @@ function lintByKind(file: string, body: string, options: LintOptions): LintError
   // flow file: FLOW, STEP, PARALLEL and their branches, wherever they live.
   if (isAgentOrOrchestration(file, body)) {
     const blocks = parseBlocks(body).blocks;
-    return [...lintAgentBlocks(file, body), ...validateBlockContracts(desugar(lex(body)), file), ...dimensionBlockErrors(file, blocks), ...teamBlockErrors(file, blocks), ...contractBlockErrors(file, blocks)];
+    return [...lintAgentBlocks(file, body), ...validateBlockContracts(desugar(lex(body)), file), ...dimensionBlockErrors(file, blocks), ...pluginBlockErrors(file, blocks), ...teamBlockErrors(file, blocks), ...contractBlockErrors(file, blocks)];
   }
 
   // A module's exported variables are its kind lint's no business: they are
@@ -1659,6 +1683,8 @@ function lintByKind(file: string, body: string, options: LintOptions): LintError
     case 'dimension': return lintDimension(file, body, options);
     case 'domain':    return lintDomain(file, body, options);
   }
+  const plugin = pluginOf(kindFromDir(file));
+  if (plugin) return lintSingleBlockKind(file, body, plugin.key, options, block => pluginBlockErrors(file, [block]));
   // tool / generic (agents, teams, orchestration): a `.ap` holding an
   // `EXPORT AGENT … AS …` block or the file-top AS/MANDATE form — validated by
   // `lintAgentBlocks`. Tools have no dedicated linter and inline cleanly here.

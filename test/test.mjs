@@ -374,7 +374,13 @@ await import('./libraryUnits.test.mjs');
 // --- skills: agents the adapter writes as skills ---
 await import('./skills.test.mjs');
 
+// --- block decorators: one structure for every decorator — lexer, parser, lint, resolution, scope, rendering ---
+await import('./decorators.test.mjs');
+
 // --- dimensions (D43): answers about the code, kept by the apx — the block, its catalog, the cache and its verbs ---
 await import('./dimensions.test.mjs');
+
+// --- plugins: a block and the apx commands that serve it, from a plugin folder in the config ---
+await import('./plugins.test.mjs');
 
 console.log('All tests passed.');

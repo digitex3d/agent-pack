@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
+import { loadPlugins } from './pluginLoader.js';
+import type { PluginSpec } from './plugins.js';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync, readFileSync } from 'fs';
@@ -273,6 +275,8 @@ export interface Config {
   checks?: ChecksConfig | null;
   /** Who an ASK without BY is handed to, and the models delegates run on (src/executor.ts). */
   delegate?: DelegateConfig;
+  /** The plugins the project activates (`plugins: ['./plugins/checklist']`), installed — src/plugins.ts. */
+  plugins?: PluginSpec[];
 }
 
 /**
@@ -466,5 +470,7 @@ export async function loadConfig(args: string[]): Promise<Config> {
     judge: resolveJudgeConfig(userConfig.judge, projectRoot),
     checks: resolveChecksConfig(userConfig.checks),
     delegate: resolveDelegateConfig(userConfig.delegate),
+    // Each plugin folder, from the project root — loaded and installed before any agent compiles.
+    plugins: await loadPlugins(((userConfig.plugins ?? []) as string[]).map(dir => resolve(projectRoot, expandHome(dir)))),
   };
 }

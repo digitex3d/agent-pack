@@ -79,7 +79,7 @@ export interface ParsedTemplate {
   bodyLayout: string | null;
   example: string | null;
   /** Set for the scalar shorthand (a single typed value, no SLOTS). */
-  scalar: { typePhrase: string; description?: string } | null;
+  scalar: { typePhrase: string; rawType: string; description?: string } | null;
 }
 
 /** Internal marker for `<tpl>` / `LIST <tpl>`; resolved to `(id)` post-emit. */
@@ -255,7 +255,7 @@ export function parseTemplate(body: string): ParsedTemplate | null {
   const decl = scalarDecl(body, lines);
   if (decl) {
     const { typePart, desc } = splitDesc(decl);
-    return { slots: [], bodyLayout: null, example, scalar: { typePhrase: typeToPhrase(typePart), description: desc } };
+    return { slots: [], bodyLayout: null, example, scalar: { typePhrase: typeToPhrase(typePart), rawType: typePart, description: desc } };
   }
   return null;
 }

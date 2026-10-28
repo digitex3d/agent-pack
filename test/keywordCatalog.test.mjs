@@ -22,7 +22,7 @@ assert.equal(catalog.MUST, 'rule');
 assert.equal(catalog.NEVER, 'rule', 'an alias takes its family\'s role');
 assert.equal(catalog.ABOUT, 'meta');
 assert.equal(catalog.BUDGET, 'meta');
-// AS, WITH and MEM are force families but no rule.
+// AS and MEM are force families but no rule; WITH is lexed only to name its rewrite (it is the decorator @WITH).
 assert.equal(catalog.AS, 'keyword');
 assert.equal(catalog.WITH, 'keyword');
 // Words spelled inside the lexer's patterns, and the COMPUTE sections.

@@ -87,9 +87,9 @@ Invariants: only `ALWAYS` and `NEVER` rules. A policy holds where its scope says
 | `universal` | everywhere it is imported |
 | `team:<team>` | in the members of that team that import it |
 | `agent:<agent>` | in that agent, when it imports it |
-| tags only, or no `APPLIES` | only in the lines a [`WITH`](#with) names it for |
+| tags only, or no `APPLIES` | only in the work a [`@WITH`](#decorators-with) names it for |
 
-A policy imported where it holds nowhere — no perimeter and no `WITH` naming it — fails the build. In the compiled definition every policy opens with the line that says where it applies.
+A policy imported where it holds nowhere — no perimeter and no `@WITH` naming it — fails the build. In the compiled definition every policy opens with the line that says where it applies.
 
 ### TEMPLATE
 
@@ -209,17 +209,17 @@ An answer implicit in a source file — its pseudocode, its design patterns, a d
 | `AS <template>` | a template with `SLOTS`: the value for a file is a list of its instances — one per thing `EACH` targets — or the literal `none` when there is nothing to report. No level: the value is always checked |
 | rule lines | `MUST`, `NEVER`, `SHOULD`, … — how the value is produced |
 
-`ABOUT`, `FOR`, `EACH` and `AS` are required, once each; beside them the body holds only rule lines. Any other line fails the build: a `WHEN` (as a line or a block), a nested block (`IF`, `ON-…:`, `UNTIL`, …), an action (`DO`, `ASK`, `COMPUTE`, `RUN`), and `MEM` and `WITH`, which are an agent's. A dimension is declared and imported like a store — `EXPORT DIMENSION` in the library's `dimensions/`, `IMPORT pseudocode FROM @main.dimensions` — or written in the agent's own file. A dimension belongs to an agent and is reached only through that agent's apx: importing it into `PROJECT.ap` or a team's `flows.ap` fails the build. The apx reaches it by its id, like every block — `dimension read <dim-id> <file>` — so its name may be any name.
+`ABOUT`, `FOR`, `EACH` and `AS` are required, once each; beside them the body holds only rule lines. Any other line fails the build: a `WHEN` (as a line or a block), a nested block (`IF`, `ON-…:`, `UNTIL`, …), an action (`DO`, `ASK`, `COMPUTE`, `RUN`), and `MEM` and `@WITH`, which are an agent's. A dimension is declared and imported like a store — `EXPORT DIMENSION` in the library's `dimensions/`, `IMPORT pseudocode FROM @main.dimensions` — or written in the agent's own file. A dimension belongs to an agent and is reached only through that agent's apx: importing it into `PROJECT.ap` or a team's `flows.ap` fails the build. The apx reaches it by its id, like every block — `dimension read <dim-id> <file>` — so its name may be any name.
 
-**When it is worth reading is the reader's to say — with a [`WITH`](#with), like a policy or a skill.** A dimension says what it holds, not when; the agent that has it names it above the lines it is for, and reads it there:
+**When it is worth reading is the reader's to say — with [`@WITH`](#decorators-with), like a policy or a skill.** A dimension says what it holds, not when; the agent that has it names it above the lines it is for, and reads it there:
 
 ```
+@WITH pseudocode
 WHEN about to change a function:
-    WITH pseudocode:
-        DO  change it, knowing what it does first
+    DO  change it, knowing what it does first
 ```
 
-The lines nested under the `WITH` are the ones that read the dimension; `!WITH pseudocode:` keeps lines out of it. A dimension that no `WITH` names applies nowhere: a warning, where a policy gets an error — the apx serves it all the same, but no line reads it; a dimension has no `APPLIES` line, so no perimeter can hold it everywhere. A moment the judge decides is a `WHEN!` with the `WITH` beneath it ([checked conditions](#checked-conditions)). Once it has read the answer, the agent decides whether it also needs the code.
+The work `@WITH` decorates is the work that reads the dimension. A dimension that no `@WITH` names applies nowhere: a warning, where a policy gets an error — the apx serves it all the same, but no line reads it; a dimension has no `APPLIES` line, so no perimeter can hold it everywhere. A moment the judge decides is a `WHEN!` decorated by the `@WITH` ([checked conditions](#checked-conditions)). Once it has read the answer, the agent decides whether it also needs the code.
 
 The agent finds its dimensions in its definition, each opening with where it applies, with the commands that read and write them; they are read and written through its [apx](/guide/apx#dimensions). Renaming a dimension or a template it names keeps what was kept; changing any of its lines, or the content of the template `AS` or `EACH` names, starts it over.
 
@@ -685,7 +685,7 @@ IMPORT plan, board FROM @main.vars
 
 `@main` is the project library; shared libraries have their own alias. See [Configuration](/reference/config#libraries).
 
-`APPLIES #board, #planning` tags a block: in the compiled definition, blocks sharing tags sit under a common heading, the apx filters by them (`ls tag=board`, or `tag=#board`), and a [`WITH #policy:board:`](#with) (or `#skill:board`) selects every imported policy (or skill) that carries the tag. On a policy or a skill, `APPLIES` also takes its perimeter — `universal`, `team:<team>`, `agent:<agent>` (see [POLICY](#policy)); on any other block a perimeter fails the build.
+`APPLIES #board, #planning` tags a block: in the compiled definition, blocks sharing tags sit under a common heading, the apx filters by them (`ls tag=board`, or `tag=#board`), and a [`@WITH #policy:board`](#decorators-with) (or `#skill:board`) selects every imported policy (or skill) that carries the tag. On a policy or a skill, `APPLIES` also takes its perimeter — `universal`, `team:<team>`, `agent:<agent>` (see [POLICY](#policy)); on any other block a perimeter fails the build.
 
 ## Skills
 
@@ -698,36 +698,38 @@ IMPORT pdf, frontend-design:frontend-design FROM @harness.skills
 
 `@harness.skills` is reserved: agent-pack neither compiles nor writes those skills — the adapter tells the agent how its harness loads them (Claude Code: the Skill tool). The name is written as the harness knows it.
 
-**A skill holds where its scope says — like a policy.** An imported skill is listed in the agent's *Skills* chapter with its scope line and how to load it — run its apx, or ask the harness. With `universal`, `team:<team>` or `agent:<agent>` on its `APPLIES` line it holds there; otherwise only in the lines a [`WITH`](#with) names it for. A skill imported where it holds nowhere fails the build; a skill of `@harness.skills` has no `APPLIES` line, so a `WITH` names it. Its own body stays in its apx: it is loaded when it is needed, never with the agent.
+**A skill holds where its scope says — like a policy.** An imported skill is listed in the agent's *Skills* chapter with its scope line and how to load it — run its apx, or ask the harness. With `universal`, `team:<team>` or `agent:<agent>` on its `APPLIES` line it holds there; otherwise only in the work a [`@WITH`](#decorators-with) names it for. A skill imported where it holds nowhere fails the build; a skill of `@harness.skills` has no `APPLIES` line, so a `@WITH` names it. Its own body stays in its apx: it is loaded when it is needed, never with the agent.
 
-### WITH
+### Decorators: @WITH
 
-**`WITH` says which work skills, policies and dimensions are for.** It is a block: the lines nested below it are under the skills and policies it names, and read the dimensions it names — by name, or (a skill, a policy) by a tag with its kind (`#policy:<tag>`, `#skill:<tag>`), comma separated.
+**A decorator says under which conditions the work it decorates is done — never what to do.** It is a line that opens with `@`, and it decorates either the block written right below it, at its indent, or — with a trailing colon — the lines nested beneath it:
+
+| Form | Decorates |
+|---|---|
+| `@KEY <names>` right above a `WHEN`, an `IF`, an `UNTIL` | that block, all of it |
+| `@KEY <names>:` in a body | the lines nested beneath it |
+
+Every decorator follows the same rules: its items are names or tags, comma separated; several decorators may be stacked, one per line; a decorator that decorates nothing — above a line, at the end of a body, or opening a block with nothing nested — fails the build, and so does a definition inside its block (`@WITH pdf:` around `PROCEDURE p:`). A definition — an agent, a procedure, a role, a flow, any `EXPORT` block — is decorated from inside its body, not from above: `@WITH x:` as the first line of its body covers all of it, and whoever imports it gets it with it. A decorator has no negation.
+
+**`@WITH` says which work skills, policies and dimensions are for.** The work it decorates is under the skills and policies it names, and reads the dimensions it names — by name, or (a skill, a policy) by a tag with its kind (`#policy:<tag>`, `#skill:<tag>`). Nested `@WITH`s add up.
 
 ```
 EXPORT PROCEDURE reasoning:
     ABOUT  reason a decision out with the developer
-    WITH developer-reasons-first:
+    @WITH developer-reasons-first:
         UNTIL the developer has a solution:
             DO  ask one question that helps the developer reason it out
 
-    WITH pdf-report AS report:
-        IF the input is a text PDF:
-            MUST extract every table as CSV
-
-    !WITH pdf, #skill:scanning:
-        IF the input is a scanned image:
-            MUST run OCR with the project script
+    @WITH pdf-report AS report
+    IF the input is a text PDF:
+        MUST extract every table as CSV
 ```
 
-| Head | |
+| Decorator | |
 |---|---|
-| `WITH <name>, #policy:<tag>, #skill:<tag>:` | the lines below are under these skills and policies, and read these dimensions |
-| `WITH <skill> AS <template>:` | and the skill's answer is shaped as the template |
-| `!WITH <name>, #policy:<tag>:` | the lines below are out of them |
+| `@WITH <name>, #policy:<tag>, #skill:<tag>` | the work is under these skills and policies, and reads these dimensions |
+| `@WITH <skill> AS <template>` | and the skill's answer is shaped as the template |
 
-`#policy:<tag>` selects every imported policy whose `APPLIES` line carries `#<tag>`, `#skill:<tag>` every such skill; the compiler writes their names, each with its id, in place of the tag. A [dimension](#dimension) has no `APPLIES` line: a `WITH` names it by name, and the compiled line carries its id — `get <id>` returns it with the commands that read and write it. A tag without its kind, and a name or a tag that selects nothing, fail the build. `AS` shapes the answer of one skill — named, never a policy, a dimension or a tag — and never on `!WITH`.
+`#policy:<tag>` selects every imported policy whose `APPLIES` line carries `#<tag>`, `#skill:<tag>` every such skill; the compiler writes their names, each with its id, in place of the tag. A [dimension](#dimension) has no `APPLIES` line: `@WITH` names it by name, and the compiled line carries its id — `get <id>` returns it with the commands that read and write it. A tag without its kind, and a name or a tag that selects nothing, fail the build. `AS` shapes the answer of one skill — named, never a policy, a dimension or a tag. A flow step takes no `@WITH` — its `BY` agent uses what it imports. It reads the same in `PROJECT.ap`, whose `AGENTS.md` lists the skills it imports in its own *Skills* chapter.
 
-`WITH` stands in a body — an agent, a role, a procedure — around the lines it is for; first in a procedure's body, it covers the whole procedure, and whoever imports the procedure gets it with it. Its zone holds lines, never a block, and a flow step takes none — its `BY` agent uses what it imports. It reads the same in `PROJECT.ap`, whose `AGENTS.md` lists the skills it imports in its own *Skills* chapter.
-
-`!WITH` is an instruction to the agent: a skill the harness triggers on its own description may still be offered, the agent is told not to use it there; a policy that holds everywhere does not hold there.
+There is no way to keep lines out of a policy: a policy says where it holds with its `APPLIES` line, and that is where it is narrowed. The old `WITH x:` and `!WITH` lines fail the build with the rewrite.

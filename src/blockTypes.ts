@@ -39,6 +39,11 @@ export interface BlockType {
 /** The block that declares a team — `EXPORT TEAM <name>:` (src/services/teamMetadata.ts reads it). */
 export const TEAM_KEY = 'TEAM';
 
+/** A plugin's manifest — `PLUGIN <name>:` in its `plugin.ap` (src/plugins.ts, src/pluginLoader.ts). */
+export const PLUGIN_KEY = 'PLUGIN';
+/** One apx command of a plugin — `OPERATION <op>:` in its manifest, served by the function of that name. */
+export const OPERATION_KEY = 'OPERATION';
+
 export const BLOCK_TYPES: Record<string, BlockType> = {
   AGENT:      { key: 'AGENT'      },
   POLICY:     { key: 'POLICY'     },
@@ -60,6 +65,10 @@ export const BLOCK_TYPES: Record<string, BlockType> = {
   TEAM:       { key: 'TEAM'       },
   // `CONTRACT <name>:` — a piece of work a lead hands out: its form (AS), who carries it out (BY), its DOMAIN.
   CONTRACT:   { key: 'CONTRACT'   },
+  // `PLUGIN <name>:` — a plugin's manifest: its block (AS) and its OPERATION blocks.
+  [PLUGIN_KEY]:    { key: PLUGIN_KEY    },
+  // `OPERATION <op>:` — an apx command of a plugin: ABOUT, and AS for its input.
+  [OPERATION_KEY]: { key: OPERATION_KEY },
   EXPORT:     { key: 'EXPORT', modifier: true },
 };
 

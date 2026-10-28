@@ -21,6 +21,7 @@ export interface QuizQuestion { ask: Text; options: Text[]; right: string }
 export interface KindGuide { intro: Text[]; quiz: QuizQuestion[] }
 
 export interface Formulas {
+  decorators: { use: Text; and: Text; intros: Record<string, Text> };
   keywords: {
     IF: { head: Text };
     ELSE: { head: Text };
@@ -49,7 +50,6 @@ export interface Formulas {
     'LENS-IN': { line: Text; input: Text };
     'LENS-OUT': { bridge: Text };
     MANDATE: { line: Text };
-    WITH: { skill: Text; policy: Text; dimension: Text; and: Text };
     VAR: { read: Text; readShaped: Text; block: Text; store: Text; storeTyped: Text; about: Text; scopes: Record<'private' | 'session', Text>; typed: Text; entry: Text };
   };
   blocks: {
@@ -74,6 +74,7 @@ export interface Formulas {
     } & KindGuide;
     dimension: { chapter: Text; covers: Text; eachShape: Text; read: Text; write: Text } & KindGuide;
     domain: { chapter: Text; covers: Text } & KindGuide;
+    plugin: { line: Text; commands: Text; command: Text };
     team: { heading: Text; member: Text; handles: Text; fellows: Text; fellow: Text; undescribed: Text; closing: Text } & KindGuide;
     runtime: { heading: Text };
     tool: { chapter: Text; heading: Text } & KindGuide;

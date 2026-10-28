@@ -21,6 +21,7 @@
  * The indent-tree is built once from the lexer token stream; the recursion is
  * bounded by the block contracts (STEP cannot nest STEP), so depth is shallow.
  */
+import { readDecorator, decoratorPhrase } from '../decoratorUse.js';
 import { lex, Token } from '../lexer.js';
 import { applyForceLevels } from '../forceLevel.js';
 import { applyEnumPrimitives } from '../enumPrimitives.js';
@@ -34,7 +35,6 @@ import { apxCommand } from '../apx/paths.js';
 import { executorHead, parallelHead } from '../../adapters/md/phrases.js';
 import { directiveText } from '../../adapters/md/toolkit.js';
 import { parallelEachOf, splitBy } from '../vars.js';
-import { readWithHead, withPhrase } from '../withUse.js';
 
 const CONTROL_HEADS: Record<string, string> = { IF: 'If', ELSE: 'Else', UNTIL: 'Until' };
 
@@ -162,7 +162,7 @@ function minIndent(lines: string[]): number {
 
 /** Render a maximal run of leaf nodes through the existing flat primitive passes. */
 function renderLeafRun(nodes: Node[], ctx?: BundleContext): string[] {
-  const text = nodes.map(n => askLine(n.token) ?? withLine(n.token, ctx) ?? rawOf(n.token)).join('\n');
+  const text = nodes.map(n => askLine(n.token) ?? rawOf(n.token)).join('\n');
   const rendered = applyEnumPrimitives(applyForceLevels(text, ctx), ctx);
   return rendered.split('\n');
 }
@@ -174,21 +174,14 @@ function askLine(t: Token): string | null {
   return by ? `${' '.repeat(t.indent)}ASK ${directiveText({ text: by.text, by: by.name })}` : null;
 }
 
-/**
- * A `WITH …:` head as rendered — what it names, each with the id its chapter
- * entry was stamped with, a tag expanded (src/withUse.ts readWithHead, the
- * reader the document builder shares); null for any other line. What does not
- * hold is the compiler's to report (standaloneWithErrors).
- */
-function withLine(t: Token, ctx?: BundleContext): string | null {
-  const head = ctx ? readWithHead(t, ctx) : null;
-  if (!head || t.kind !== 'keyword') return null;
-  const template = head.template ? ctx!.templates.find(d => d.name === head.template) : undefined;
-  const phrase = withPhrase(
-    head.uses.map(d => ({ kind: d.kind, name: d.name, ref: refSuffix(d.refId) })),
-    head.template ? { name: head.template, ref: refSuffix(template?.refId) } : undefined,
-  );
-  return `${' '.repeat(t.indent)}${t.keyword} ${phrase}:`;
+/** A decorator line as rendered — its sentence, each block it names with its id (src/decoratorUse.ts, shared with the builder). */
+function decoratorLine(t: Token & { kind: 'decorator' }, ctx?: BundleContext): string {
+  const read = ctx ? readDecorator(t, ctx) : null;
+  const phrase = read
+    ? decoratorPhrase(read.spec, read.uses.map(d => ({ kind: d.kind, name: d.name, ref: refSuffix(d.refId) })),
+      read.template ? { name: read.template.name, ref: refSuffix(read.template.refId) } : undefined)
+    : t.raw.trim().replace(/:$/, '');
+  return `${' '.repeat(t.indent)}${phrase}:`;
 }
 
 export function isStructural(t: Token, hasChildren: boolean): boolean {
@@ -196,6 +189,8 @@ export function isStructural(t: Token, hasChildren: boolean): boolean {
   // token (e.g. `ON-INVOKE:` which the lexer classifies as
   // unknown): its children must be recursed, not dropped.
   if (hasChildren) return true;
+  // A decorator stands for the block below it, never in a run of lines (src/decorators.ts).
+  if (t.kind === 'decorator') return true;
   if (t.kind !== 'keyword') return false;
   const kw = t.keyword as string;
   return !!sequencePrimitiveFor(kw) || kw === 'PARALLEL' || !!CONTROL_HEADS[kw];
@@ -218,6 +213,14 @@ function renderNodes(nodes: Node[], ctx: BundleContext | undefined, ordered: boo
         run.push(nodes[i]); i++;
       }
       out.push(...renderLeafRun(run, ctx));
+      continue;
+    }
+
+    // A decorator: its sentence, then the lines it opens — above a block, the block follows as written.
+    if (t.kind === 'decorator') {
+      out.push(decoratorLine(t, ctx));
+      out.push(...renderNodes(n.children, ctx, ordered, by));
+      i++;
       continue;
     }
 

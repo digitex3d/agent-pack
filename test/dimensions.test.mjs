@@ -50,8 +50,8 @@ try {
   // --- compile errors: the block's contract, wherever it is written ---
   const lib = join(root, 'errors-lib');
   mkdirSync(lib, { recursive: true });
-  // The agent names the dimension of the source in a WITH — a dimension no WITH names applies nowhere.
-  const withLines = (lines, body) => { const name = [...lines, ...body].join('\n').match(/DIMENSION\s+([^\s:]+)/)?.[1]; return name ? [`    WITH ${name}:`, '        DO  read it first'] : []; };
+  // The agent names the dimension of the source with @WITH — a dimension no @WITH names applies nowhere.
+  const withLines = (lines, body) => { const name = [...lines, ...body].join('\n').match(/DIMENSION\s+([^\s:]+)/)?.[1]; return name ? [`    @WITH ${name}:`, '        DO  read it first'] : []; };
   const agentSource = (lines, extra = [], body = [], named = true) => [
       'EXPORT AGENT a AS a-role:', '    ABOUT    an agent', '    MANDATE  do the work', ...body, ...(named ? withLines(lines, body) : []), '',
       'ROLE a-role:', '    ABOUT   a worker', '    ALWAYS  do the work', '',
@@ -128,29 +128,28 @@ try {
     assert.ok(bareErrors.includes('FOR needs at least one glob') && !bareErrors.some(m => /did you mean|line of prose/.test(m)), bareErrors.join('\n'));
     for (const name of ['strict', 'bare']) rmSync(join(lib, 'dimensions', `${name}.ap`));
 
-    // --- a dimension is read where a WITH names it — like a policy or a skill with no perimeter; one no WITH names applies nowhere ---
+    // --- a dimension is read where @WITH names it — like a policy or a skill with no perimeter; one no @WITH names applies nowhere ---
     {
-      const named = await compile(dimension(), [], ['    WHEN about to change a function:', '        WITH pseudocode:', '            DO  change it, knowing what it does first'], false);
+      const named = await compile(dimension(), [], ['    WHEN about to change a function:', '        @WITH pseudocode:', '            DO  change it, knowing what it does first'], false);
       const dim = named.structure.byKind('dimension')[0];
       assert.ok(named.body.includes(`For the work below, use the dimension \`pseudocode\` (${dim.id}):\n        Do change it, knowing what it does first`), named.body);
       // the entry opens with where it applies, as a policy's does
       assert.ok(named.body.includes('## `pseudocode` — what each function does\nApplies only to the work nested under a line that names it.\nFiles: `src/**/*.py`'), named.body);
       assert.ok(!/read this dimension/.test(named.body), 'no trigger of its own');
-      // !WITH takes it out of the lines below; a positive WITH elsewhere still names it
-      const out = await compile(dimension(), [], ['    WITH pseudocode:', '        DO  read it first', '    !WITH pseudocode:', '        DO  guess'], false);
-      assert.ok(out.body.includes(`For the work below, do not use the dimension \`pseudocode\` (${dim.id}):`), out.body);
-      // named nowhere, or by a !WITH alone: it applies nowhere — a warning, where a policy gets an error: the apx serves it all the same
-      const nowhere = /a\.ap:\d+  dimension `pseudocode` applies nowhere — name it in a `WITH pseudocode:` block around the lines that read it/;
-      for (const [lines, body] of [[dimension(), []], [dimension(), ['    !WITH pseudocode:', '        DO  guess']], [dimension({ exported: true }), []]]) {
+      // !WITH is gone: no negation
+      await assert.rejects(compile(dimension(), [], ['    @WITH pseudocode:', '        DO  read it first', '    !WITH pseudocode:', '        DO  guess'], false), /!WITH was removed/);
+      // named nowhere: it applies nowhere — a warning, where a policy gets an error: the apx serves it all the same
+      const nowhere = /a\.ap:\d+  dimension `pseudocode` applies nowhere — name it with `@WITH pseudocode` above the lines that read it/;
+      for (const [lines, body] of [[dimension(), []], [dimension({ exported: true }), []]]) {
         const { result, stderr } = await stderrOf(() => compile(lines, [], body, false));
         assert.match(stderr, nowhere);
         assert.equal(result.structure.byKind('dimension').length, 1, 'kept all the same');
       }
-      assert.ok(!nowhere.test((await stderrOf(() => compile(dimension()))).stderr), 'named by a WITH: no warning');
-      // a WITH on a name no import brings
-      await assert.rejects(compile([], [], ['    WITH nope:', '        DO  read it']), /unknown skill, policy or dimension `nope`/);
+      assert.ok(!nowhere.test((await stderrOf(() => compile(dimension()))).stderr), 'named by @WITH: no warning');
+      // @WITH on a name no import brings
+      await assert.rejects(compile([], [], ['    @WITH nope:', '        DO  read it']), /`@WITH nope`: no imported skill, policy or dimension is called `nope`/);
       // AS shapes a skill's answer — a dimension's value has its own AS
-      await assert.rejects(compile(dimension(), [], ['    WITH pseudocode AS steps:', '        DO  read it'], false), /`AS steps` shapes the answer of one skill — this WITH names the dimension `pseudocode`/);
+      await assert.rejects(compile(dimension(), [], ['    @WITH pseudocode AS steps:', '        DO  read it'], false), /`AS steps` shapes the answer of one skill — this @WITH names the dimension `pseudocode`/);
       // a trigger takes no star
       await assert.rejects(compile([], [], ['    WHEN* a function is long:', '        DO  split it']), /`WHEN\*` is not allowed — a trigger takes no star: write WHEN, or WHEN! \(a judge decides the condition\)/);
     }
@@ -200,7 +199,7 @@ try {
     const hashOf = async (name, template, rule = 'write one step per decision', slot = 'its steps', { each = 'function', unit = 'a function' } = {}) => {
       const file = join(root, 'h.ap');
       writeFileSync(file, [
-        'EXPORT AGENT h AS h-role:', '    ABOUT    h', '    MANDATE  m', `    WITH     ${name}:`, '        DO  read it first', '',
+        'EXPORT AGENT h AS h-role:', '    ABOUT    h', '    MANDATE  m', `    @WITH    ${name}:`, '        DO  read it first', '',
         'ROLE h-role:', '    ABOUT   r', '    ALWAYS  work', '',
         `TEMPLATE ${template}:`, '    ABOUT  the steps', '    SLOTS:', '        name: TEXT "the function"', `        steps: TEXT "${slot}"`, '',
         'TEMPLATE unit:', '    ABOUT  what to translate', '    SLOTS:', `        what: TEXT "${unit}"`, '',
@@ -238,7 +237,7 @@ try {
   const agentLines = (dim = 'pseudocode') => [
     `IMPORT ${dim} FROM @main.dimensions`, '',
     'EXPORT AGENT coder AS coder-role:', '    ABOUT    coder', '    MANDATE  understand the code',
-    '    WHEN about to change a function:', `        WITH ${dim}:`, '            DO  change it, knowing what it does first', '',
+    '    WHEN about to change a function:', `        @WITH ${dim}:`, '            DO  change it, knowing what it does first', '',
     'ROLE coder-role:', '    ABOUT   a reader of code', '    ALWAYS  read before you change', '',
   ];
   write(join(proj, 'agents', 'standalone', 'coder.ap'), agentLines());
@@ -273,7 +272,7 @@ try {
       'When about to change a function:\n    For the work below, use the dimension `pseudocode` (dim-',
       `${CMD('read')} <file>`, `${CMD('write')} <file> [refs=<path>;<path>] - < value.json`, 'You must write one step per decision the code takes');
     has(apx(['scope']).out, 'dimensions:', 'dimension pseudocode', '— files: src/**/*.py');
-    has(apx(['ls', 'kind=dimension']).out, '[only where a WITH names it]');
+    has(apx(['ls', 'kind=dimension']).out, '[only where @WITH names it]');
     has(apx(['help']).out, 'dimension read <dim-id> <file> [json]', 'dimension write <dim-id> <file> [refs=<path>;<path>] -|none', 'dimension find <dim-id> <text>');
     // the name is no way in any more: only the id, after `dimension`
     assert.equal(apx(['pseudocode', 'read', 'src/a.py']).code, 2, 'a dimension is not reached by its name');

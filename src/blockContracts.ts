@@ -4,6 +4,7 @@ import { DIMENSION_LINES, GLOBS_LINE, PERIMETER_LINES, type Keyword } from './le
 import { ACTION_VERBS } from './actionVerbs.js';
 import { getFamilyBases } from './forceLevelConfig.js';
 import { VERBATIM_REGIONS } from './shapeCompiler.js';
+import { PLUGIN_KEY, OPERATION_KEY } from './blockTypes.js';
 
 /**
  * The force-level families (MUST, ALWAYS/NEVER, SHOULD, MAY, …) a step admits,
@@ -15,7 +16,6 @@ import { VERBATIM_REGIONS } from './shapeCompiler.js';
  */
 const STEP_EXCLUDED: Partial<Record<Keyword, string>> = {
   MEM: "a step's BY agent may have no memory in its harness; MEM goes in an agent, a role or a procedure",
-  WITH: "a step's BY agent uses the skills it imports; WITH goes in an agent, a role or a procedure",
 };
 const STEP_FAMILIES = familiesWithout(STEP_EXCLUDED);
 const BRANCH_FAMILIES = STEP_FAMILIES.filter(base => base !== 'AS');
@@ -42,7 +42,6 @@ const VAR_EXCLUDED: Partial<Record<Keyword, string>> = {
 /** What a DIMENSION's rules leave out: they say how its value is produced, not what the agent remembers or loads. */
 const DIMENSION_EXCLUDED: Partial<Record<Keyword, string>> = {
   MEM: "a dimension's rules say how its value is produced; MEM goes in an agent, a role or a procedure",
-  WITH: "a dimension's rules say how its value is produced; WITH goes in an agent, a role or a procedure",
 };
 
 /** Every force-level family base, less those `excluded` names. */
@@ -181,6 +180,22 @@ export const BLOCK_CONTRACTS: Record<string, BlockContract> = {
     allows: ['ABOUT', GLOBS_LINE] as const,
     requiresAll: ['ABOUT', GLOBS_LINE] as const,
     unique: ['ABOUT', GLOBS_LINE] as const,
+  },
+  // A plugin's manifest: ABOUT what its block is, AS the template its lines
+  // are, and an OPERATION block per apx command — ABOUT what it does, AS the
+  // template of its input when it takes one. Checked on the parsed manifest
+  // (pluginManifestErrors) before the plugin is installed.
+  [PLUGIN_KEY]: {
+    allows: ['ABOUT', 'AS', OPERATION_KEY] as const,
+    requiresAll: ['ABOUT', 'AS'] as const,
+    unique: ['ABOUT', 'AS'] as const,
+    // Each OPERATION is held to its own contract, not to the PLUGIN's.
+    regions: [OPERATION_KEY] as const,
+  },
+  [OPERATION_KEY]: {
+    allows: ['ABOUT', 'AS'] as const,
+    requiresAll: ['ABOUT'] as const,
+    unique: ['ABOUT', 'AS'] as const,
   },
   // A team is its `EXPORT TEAM <name>:` block: ABOUT, the MEMBER lines that
   // name its agents (several add up), `LENS-IN <agent> <template>` overrides,

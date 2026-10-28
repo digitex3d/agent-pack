@@ -16,6 +16,7 @@ import type { ApBlock } from './block.js';
 import type { ApCondCheck, ApCheckSpec } from '../check.js';
 import type { RuleCriteria } from '../shapeCompiler.js';
 import type { ApExecutorSpec } from '../executor.js';
+import type { PluginSpec } from '../plugins.js';
 
 /**
  * A pointer to another block. `id` is the stable identity of the target
@@ -413,6 +414,8 @@ export interface ApDocumentMeta {
    * its input and its output — src/executor.ts.
    */
   executors?: Record<string, ApExecutorSpec>;
+  /** The plugins whose blocks this agent holds, by name — the apx serves them from here (src/plugins.ts). */
+  plugins?: Record<string, PluginSpec>;
   /** The agent an ASK without BY is handed to — set when this agent has one (src/executor.ts). */
   delegate?: string;
   /** The model this agent runs on, from the `delegate.models` config key — absent: the harness decides. */

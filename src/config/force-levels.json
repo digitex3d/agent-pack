@@ -50,13 +50,6 @@
       }
     },
     {
-      "name": "WITH",
-      "levels": {
-        "-1": "For the work below, do not use",
-        "0": "For the work below, use"
-      }
-    },
-    {
       "name": "MEM",
       "levels": {
         "-1": "Never save to your persistent memory:",

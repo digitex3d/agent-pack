@@ -99,12 +99,29 @@ export interface SlotSpec {
   spec: SlotTypeSpec;
 }
 
-/** A template name → its slots, or null when the caller cannot resolve it. */
-export type SlotResolver = (template: string) => readonly SlotSpec[] | null;
+/**
+ * A template name → its slots, or its type when it is a scalar template
+ * (`TEMPLATE check: TEXT MAX_WORDS 12`) — null when the caller cannot resolve it.
+ */
+export type SlotResolver = (template: string) => readonly SlotSpec[] | SlotTypeSpec | null;
 
-/** A nested record's issues, their fields prefixed with where the record sits. */
+/** The type of a scalar template the resolver names — null for a record template or none. */
+function scalarOf(ref: string, resolve?: SlotResolver): SlotTypeSpec | null {
+  const resolved = resolve?.(ref);
+  return resolved && !Array.isArray(resolved) ? resolved as SlotTypeSpec : null;
+}
+
+/** The slots of a record template the resolver names — null for a scalar template or none. */
+function slotsOf(ref: string, resolve?: SlotResolver): readonly SlotSpec[] | null {
+  const resolved = resolve?.(ref);
+  return Array.isArray(resolved) ? resolved : null;
+}
+
+/** A nested value's issues, their fields prefixed with where it sits: a scalar against its type, a record against its slots. */
 function nestedIssues(at: string, value: unknown, ref: string, resolve?: SlotResolver): SchemaIssue[] {
-  const slots = resolve?.(ref);
+  const scalar = scalarOf(ref, resolve);
+  if (scalar) return checkSlot({ name: at, optional: false, spec: scalar }, value, resolve);
+  const slots = slotsOf(ref, resolve);
   if (!slots) return [];
   return validateRecord(value, slots, resolve).map(i => ({ ...i, field: i.field === '(root)' ? at : `${at}.${i.field}` }));
 }
@@ -151,6 +168,7 @@ function checkSlot(slot: SlotSpec, value: unknown, resolve?: SlotResolver): Sche
       return issues;
     }
     case 'shape': {
+      if (scalarOf(spec.ref, resolve)) return nestedIssues(field, value, spec.ref, resolve);
       if (typeof value !== 'object' || value === null || Array.isArray(value)) {
         return [{ field, message: `expected an object (shape <${spec.ref}>), got ${describeValue(value)}` }];
       }
@@ -250,7 +268,9 @@ export function jsonSchemaOf(slots: readonly SlotSpec[], resolve?: SlotResolver,
 
 function slotJsonSchema(spec: SlotTypeSpec, resolve: SlotResolver | undefined, expanding: ReadonlySet<string>): Record<string, unknown> {
   const nested = (ref: string): Record<string, unknown> => {
-    const slots = expanding.has(ref) ? null : resolve?.(ref);
+    const scalar = scalarOf(ref, resolve);
+    if (scalar) return slotJsonSchema(scalar, resolve, expanding);
+    const slots = expanding.has(ref) ? null : slotsOf(ref, resolve);
     return slots ? jsonSchemaOf(slots, resolve, new Set([...expanding, ref])) : { type: 'object' };
   };
   switch (spec.kind) {
@@ -295,7 +315,9 @@ export function templateClosure(name: string, templates: readonly { name: string
  */
 export function jsonExample(slots: readonly SlotSpec[], resolve: SlotResolver, seen: ReadonlySet<string> = new Set()): unknown {
   const nested = (ref: string): unknown => {
-    const inner = seen.has(ref) ? null : resolve(ref);
+    const scalar = scalarOf(ref, resolve);
+    if (scalar) return value(scalar);
+    const inner = seen.has(ref) ? null : slotsOf(ref, resolve);
     return inner ? jsonExample(inner, resolve, new Set([...seen, ref])) : {};
   };
   const value = (spec: SlotTypeSpec): unknown => {

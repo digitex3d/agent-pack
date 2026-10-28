@@ -66,7 +66,7 @@
                    "shaped": "{text} — shaped as `{name}`{ref}" },
     "APPLIES":   { "$comment": "Where a policy, a skill or a dimension holds (src/withUse.ts): its perimeter, or only under a WITH that names it — a dimension has no perimeter; `ls` is the apx listing's short form.",
                    "scope": { "universal": "Applies everywhere.", "team": "Applies to the members of team `{name}`.", "agent": "Applies to the agent `{name}`.",
-                              "with": "Applies only to the work nested under a line that names it.", "ls": "only where a WITH names it" } },
+                              "with": "Applies only to the work nested under a line that names it.", "ls": "only where @WITH names it" } },
     "WRITES":    { "$comment": "An agent's perimeter: WRITES names the domains it writes (and reads), READS the ones it only reads — {globs} are their FOR globs. Without READS it reads whatever it needs.",
                    "fence": [
                      "> **SCOPE — WARNING**",
@@ -81,8 +81,6 @@
                    "input": "Its input arrives shaped as **{name}**{ref}." },
     "LENS-OUT":  { "bridge": "You must answer every such request by filling **{name}**{ref}." },
     "MANDATE":   { "line": "Your mandate: {mandate}" },
-    "WITH":      { "$comment": "`WITH <name|#policy:<tag>|#skill:<tag>>, … [AS <template>]:` / `!WITH …:` — the skills, policies and dimensions the lines nested below it are under. The intro is the WITH family's (force-levels.json; an adapter may reword it: renderings.WITH).",
-                   "skill": "the skill `{name}`{ref}", "policy": "the policy `{name}`{ref}", "dimension": "the dimension `{name}`{ref}", "and": " and " },
     "VAR":       { "read": "`{name}` (read its value: `{command}`)",
                    "readShaped": "{read}, keeping only what fits {template} and shaped as it",
                    "block": "Work out `{name}` — its value is the outcome of the lines below:",
@@ -178,6 +176,10 @@
                     "write": "On a `miss`, once you have worked the answer out, write it — JSON on stdin, or `none`: `{write} <file> [refs=<path>;<path>] - < value.json`",
                     "intro": ["Answers about the code, already worked out and kept by the apx. Each dimension says what it holds and which files it covers; the lines it is for are the ones nested under a line that names it.", "MUST      on a `hit`, use its answer — once read, whether you also need the code is your call", "MUST      on a `miss`, once you have worked the answer out, write it with the dimension's write command, shaped as its template", "!MUST     touch the cache under `.agent-pack/cache/` directly"],
                     "quiz": [{"ask": "The lines you are on are nested under a line that names a dimension. What do you do?", "options": ["work the answer out from the code", "read the dimension: on a hit, use its answer — and read the code too only if you still need it", "open its cache file"], "right": "b"}] },
+    "plugin":     { "$comment": "A plugin's block (src/plugins.ts): its lines as written, then the commands its apx serves it with — each the plugin's own operation on the block's id.",
+                    "line": "- {key}: {value}",
+                    "commands": "Its commands:",
+                    "command": "- `{command}` — {about}" },
     "domain":     { "$comment": "A domain (D44): a region of the code by path. An agent's WRITES/READS name domains; the perimeter fence lists their globs.",
                     "chapter": "Domains",
                     "covers": "Files: {globs}.",
@@ -214,6 +216,10 @@
     "storeShape": "shape <{target}>",
     "storeList": "list of <{target}>"
   },
+
+  "decorators": { "$comment": "A block decorator (src/decorators.ts): the opening of its sentence is its own; each block it names reads so, joined.",
+                  "use": "the {kind} `{name}`{ref}", "and": " and ",
+                  "intros": { "WITH": "For the work below, use" } },
 
   "document": {
     "ref": " ({id})",

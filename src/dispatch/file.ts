@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
+import { pluginOf } from '../plugins.js';
 import { BundleContext } from './types.js';
 import { numberSteps } from '../refactor.js';
 import { applyVars } from '../vars.js';
@@ -142,6 +143,9 @@ async function collectUnit(
   if (unit.kind === 'policy')      return collect('policy',    ctx.policies   as Collected[]);
   if (unit.kind === 'procedure')   return collect('procedure', ctx.procedures as Collected[]);
   if (unit.kind === 'template')    return collect('template',  ctx.templates  as Collected[]);
+  // A plugin's block, under its folder's name (src/plugins.ts).
+  const plugin = pluginOf(unit.kind);
+  if (plugin) return collect(plugin.name, ((ctx as unknown as Record<string, Collected[]>)[plugin.folder] ??= []));
 
   // Non-collected kinds (rare): emit a single
   // chapter heading derived from the unit name; breadcrumb-driven nested

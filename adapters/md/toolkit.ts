@@ -8,6 +8,7 @@
  * adapters/md/index.ts (`renderMd`). `MdEnv` is what rendering needs from
  * the document — the md twin of BlockCx.
  */
+import { DECORATOR_MARK } from '../../src/decorators.js';
 import { renderKeywordBlock } from '../../src/services/text.js';
 import { FORMULAS, fill } from '../../src/formulas.js';
 import { FORCE_LEVEL_PRIMITIVES } from '../../src/primitives.js';
@@ -123,6 +124,8 @@ export function directiveText(n: { text: string; by?: string; keyword?: string; 
 /** Render a run of same-keyword directives — grouped exactly like the flat pipeline. */
 export function renderDirectiveGroup(env: MdEnv, keyword: string, force: number | null, texts: string[]): string[] {
   const substituted = texts.map(t => env.substitute(t));
+  // A decorator's sentence is whole already: its opening is its entry's (src/decorators.ts).
+  if (keyword.startsWith(DECORATOR_MARK)) return substituted;
   const intro = forceIntro(env, keyword, force);
   if (intro !== null) return renderKeywordBlock(intro, substituted).split('\n');
   const bullet = BULLETS.get(keyword);

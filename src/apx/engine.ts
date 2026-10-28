@@ -45,7 +45,7 @@ import { splitList } from '../lists.js';
 import { fingerprint } from './dimensions.js';
 import { constantOf, readsOf } from '../vars.js';
 import { dimensionDefHash, dimensionTemplates } from './dimensions.js';
-import { APX_SERVICES, serviceOf } from './services/registry.js';
+import { servicesOf, serviceOf } from './services/registry.js';
 import { countOf } from './service.js';
 import { enumPrimitiveFor } from '../primitives.js';
 import { globRegExp, matchesAnyGlob } from '../services/glob.js';
@@ -228,7 +228,7 @@ export class ApxEngine {
     const [verb = 'start', ...args] = argv;
     if (verb === '-h' || verb === '--help') return this.help();
     if (Object.hasOwn(this.verbs, verb)) return this.verbs[verb as ApxVerb](args);
-    const service = serviceOf(verb);
+    const service = serviceOf(verb, this.doc);
     if (service) return service.serve(this, args[0], args.slice(1));
     return this.fail(2, `unknown verb '${verb}' — the verbs: ${this.cmd} help`);
   }
@@ -782,7 +782,7 @@ export class ApxEngine {
   }
 
   private help(): number {
-    const rows: [string, string][] = [...HELP, ...APX_SERVICES.flatMap(s => s.operations.map(o => [`${s.kind} ${o.op} ${o.args}`.trim(), o.about] as [string, string]))];
+    const rows: [string, string][] = [...HELP, ...servicesOf(this.doc).flatMap(s => s.operations.map(o => [`${s.kind} ${o.op} ${o.args}`.trim(), o.about] as [string, string]))];
     const width = Math.max(...rows.map(([v]) => v.length));
     for (const [verb, what] of rows) this.out(`${this.cmd} ${verb.padEnd(width)}  ${what}`);
     return 0;
@@ -1066,11 +1066,11 @@ export class ApxEngine {
   // -------------------------------------------------------------- contracts
 
   /** The session id the harness gives — or why there is none (the same rule the variables follow). */
-  private sessionIdOrReason(): { id: string } | { reason: string } {
+  sessionIdOrReason(needs = 'contracts need'): { id: string } | { reason: string } {
     const env = this.doc.meta.sessionEnv;
     const id = env ? process.env[env] : undefined;
-    if (!env) return { reason: 'contracts need the harness session id, and this agent was compiled without an adapter that names where it is' };
-    if (!id) return { reason: `contracts need the harness session id, and ${env} is not set` };
+    if (!env) return { reason: `${needs} the harness session id, and this agent was compiled without an adapter that names where it is` };
+    if (!id) return { reason: `${needs} the harness session id, and ${env} is not set` };
     if (!SESSION_ID_RE.test(id)) return { reason: `${env} holds no usable session id (letters, digits, . _ - only)` };
     return { id };
   }

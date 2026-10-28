@@ -1,0 +1,4 @@
+EXPORT CHECKLIST before-deploy:
+    ABOUT  what a deploy needs
+    ITEM   the backup is fresh
+    ITEM   the rollback plan is written

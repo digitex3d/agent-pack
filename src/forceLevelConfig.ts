@@ -63,9 +63,9 @@ export function forceLevelFamilies(): readonly { name: string; levels: Record<st
 
 /**
  * The families whose lines are no rule: a shape (`AS`), a memory (`MEM`), a
- * skill (`WITH`). Every other family's line is a rule of the block it is in.
+ * skill. Every other family's line is a rule of the block it is in.
  */
-export const NON_RULE_FAMILIES: readonly string[] = ['AS', 'MEM', 'WITH'];
+export const NON_RULE_FAMILIES: readonly string[] = ['AS', 'MEM'];
 
 /** All family base names (e.g. ['MUST', 'ALWAYS', 'SHOULD', 'MAY']). */
 export function getFamilyBases(): string[] {

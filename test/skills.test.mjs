@@ -93,7 +93,7 @@ try {
 
   // --- an agent IMPORTs skills: FROM the library (its apx) or FROM @harness.skills (the harness's own) ---
   {
-    const user = (imports, body = ['WITH #skill:reports, pdf, anthropic-skills:xlsx:', '    DO read the files']) => write(join(tmp, 'agents', 'standalone', 'user.ap'), [
+    const user = (imports, body = ['@WITH #skill:reports, pdf, anthropic-skills:xlsx:', '    DO read the files']) => write(join(tmp, 'agents', 'standalone', 'user.ap'), [
       ...imports, '',
       'EXPORT AGENT user AS helping:',
       '    ABOUT    uses skills',
@@ -123,10 +123,10 @@ try {
     const neutral = await bundleAndEmit('user', config, junieAdapter(), ctx);
     assert.ok(neutral.bundle.body.includes('it is a skill of your harness — `pdf`'), neutral.bundle.body);
 
-    // like a policy: a skill no WITH names and no perimeter brings applies nowhere
-    user(['IMPORT pdf-report FROM @main.skills', 'IMPORT pdf FROM @harness.skills'], ['WITH pdf:', '    DO read it']);
+    // like a policy: a skill no @WITH names and no perimeter brings applies nowhere
+    user(['IMPORT pdf-report FROM @main.skills', 'IMPORT pdf FROM @harness.skills'], ['@WITH pdf:', '    DO read it']);
     await assert.rejects(() => bundleAndEmit('user', config, claudeCodeAdapter(), ctx), /skill `pdf-report` applies nowhere/);
-    // a perimeter on its APPLIES line makes it hold there with no WITH
+    // a perimeter on its APPLIES line makes it hold there with no @WITH
     write(join(tmp, 'library', 'skills', 'everywhere.ap'), [
       'EXPORT SKILL everywhere AS reporter:', '    ABOUT    always at hand', '    APPLIES  #reports, universal', '    MANDATE  help',
       '', 'EXPORT ROLE reporter:', '    ABOUT  a writer of reports', '    ALWAYS keep a report under one page',
@@ -146,14 +146,14 @@ try {
   }
   console.log('skills: import tests passed.');
 
-  // --- WITH is a block: the lines nested below it are under the skills and policies it names; !WITH keeps them out ---
+  // --- @WITH is a decorator: the block below it, or the lines nested under `@WITH …:`, are under the skills and policies it names ---
   {
     write(join(tmp, 'library', 'templates', 'report.ap'), ['EXPORT TEMPLATE report:', '    ABOUT  a report', '    SLOTS:', '        summary: TEXT "what it says"', '    BODY:', '        {summary}']);
     write(join(tmp, 'library', 'procedures', 'design-page.ap'), [
       'IMPORT frontend-design:frontend-design FROM @harness.skills', '',
       'EXPORT PROCEDURE design-page:',
       '    ABOUT  design a page',
-      '    WITH frontend-design:frontend-design:',
+      '    @WITH frontend-design:frontend-design:',
       '        MUST pick an aesthetic direction before writing code',
     ]);
     write(join(tmp, 'library', 'policies', 'reasons-first.ap'), [
@@ -184,14 +184,12 @@ try {
       '    ALWAYS help kindly',
     ]);
     user([
-      'WITH pdf-report AS report:',
+      '@WITH pdf-report AS report:',
       '    IF the input is a text PDF:',
       '        MUST extract every table as CSV',
-      'WITH pdf:',
+      '@WITH pdf',
+      'WHEN asked to read a PDF:',
       '    DO read the PDF',
-      '!WITH pdf:',
-      '    IF the input is a scanned image:',
-      '        MUST run OCR with the project script',
       'WHEN asked for a page:',
       '    RUN design-page',
     ]);
@@ -199,16 +197,17 @@ try {
     const md = bundle.body;
     const id = (name, kind = 'skill') => bundle.structure.byKind(kind).find(b => b.name === name).id;
     assert.ok(md.includes(`For the work below, use the skill \`pdf-report\` (${id('pdf-report')}) — shaped as \`report\` (${id('report', 'template')}):`), md);
-    assert.ok(md.includes(`For the work below, do not use the skill \`pdf\` (${id('pdf')}):`), md);
+    // above a block, it decorates that block
+    assert.ok(md.includes(`For the work below, use the skill \`pdf\` (${id('pdf')}):\nWhen asked to read a PDF:`), md);
     // the zone is the nested lines: they render under the head
     assert.ok(/use the skill `pdf-report`[^\n]*:\n\s+[^\n]*text PDF/.test(md), md);
     // first in a procedure's body: the whole procedure, and the skill travels with it
     const proc = bundle.structure.byKind('procedure').find(b => b.name === 'design-page');
-    assert.equal(proc.body[0].keyword, 'WITH', JSON.stringify(proc.body));
+    assert.equal(proc.body[0].keyword, '@WITH', JSON.stringify(proc.body));
     assert.ok(md.includes(`For the work below, use the skill \`frontend-design:frontend-design\` (${id('frontend-design:frontend-design')}):`), md);
 
     // a policy by name, and by #tag — expanded to every imported policy with that tag on its APPLIES line
-    user(['WITH reasons-first:', '    DO weigh the options', 'WITH #policy:decisions, pdf, pdf-report:', '    DO pick one'], ['IMPORT reasons-first, careful, baseline FROM @main.policies']);
+    user(['@WITH reasons-first:', '    DO weigh the options', '@WITH #policy:decisions, pdf, pdf-report:', '    DO pick one'], ['IMPORT reasons-first, careful, baseline FROM @main.policies']);
     {
       const { bundle } = await bundleAndEmit('user', config, claudeCodeAdapter(), ctx);
       const md = bundle.body;
@@ -220,49 +219,50 @@ try {
       assert.ok(md.includes('Applies everywhere.'), md);
       assert.ok(md.includes('wherever its scope line says it applies'), md);
     }
-    // a policy with no perimeter that no WITH names applies nowhere: an error
-    user(['WITH reasons-first:', '    DO weigh the options'], ['IMPORT reasons-first, careful FROM @main.policies']);
+    // a policy with no perimeter that no @WITH names applies nowhere: an error
+    user(['@WITH reasons-first:', '    DO weigh the options'], ['IMPORT reasons-first, careful FROM @main.policies']);
     await assert.rejects(() => bundleAndEmit('user', config, claudeCodeAdapter(), ctx), /policy `careful` applies nowhere/);
     // a tag no import carries selects nothing
-    user(['WITH #policy:nothing, pdf, pdf-report:', '    DO weigh the options']);
+    user(['@WITH #policy:nothing, pdf, pdf-report:', '    DO weigh the options']);
     await assert.rejects(() => bundleAndEmit('user', config, claudeCodeAdapter(), ctx), /no imported policy has #nothing/);
     // a tag selects its kind only: #skill: never brings a policy
-    user(['WITH #skill:decisions, pdf, pdf-report:', '    DO weigh the options'], ['IMPORT reasons-first FROM @main.policies']);
+    user(['@WITH #skill:decisions, pdf, pdf-report:', '    DO weigh the options'], ['IMPORT reasons-first FROM @main.policies']);
     await assert.rejects(() => bundleAndEmit('user', config, claudeCodeAdapter(), ctx), /no imported skill has #decisions/);
     // AS shapes the answer of one skill — never a policy's
-    user(['WITH reasons-first AS report:', '    DO weigh the options', 'WITH pdf, pdf-report:', '    DO read'], ['IMPORT reasons-first FROM @main.policies']);
-    await assert.rejects(() => bundleAndEmit('user', config, claudeCodeAdapter(), ctx), /`AS report` shapes the answer of one skill — this WITH names the policy `reasons-first`/);
+    user(['@WITH reasons-first AS report:', '    DO weigh the options', '@WITH pdf, pdf-report:', '    DO read'], ['IMPORT reasons-first FROM @main.policies']);
+    await assert.rejects(() => bundleAndEmit('user', config, claudeCodeAdapter(), ctx), /`AS report` shapes the answer of one skill — this @WITH names the policy `reasons-first`/);
 
     // a name not imported is an unknown name
-    user(['WITH xlsx:', '    IF the input is a sheet:', '        MUST read it']);
-    await assert.rejects(() => bundleAndEmit('user', config, claudeCodeAdapter(), ctx), /unknown skill, policy or dimension `xlsx`/);
-    // a skill not used has no answer to shape
-    user(['!WITH pdf AS report:', '    IF the input is a scan:', '        MUST run OCR']);
-    await assert.rejects(() => bundleAndEmit('user', config, claudeCodeAdapter(), ctx), /a skill not used has no answer to shape/);
+    user(['@WITH xlsx:', '    IF the input is a sheet:', '        MUST read it']);
+    await assert.rejects(() => bundleAndEmit('user', config, claudeCodeAdapter(), ctx), /`@WITH xlsx`: no imported skill, policy or dimension is called `xlsx`/);
+    // the old forms say how to rewrite them
+    user(['WITH pdf:', '    DO read it']);
+    await assert.rejects(() => bundleAndEmit('user', config, claudeCodeAdapter(), ctx), /WITH became a decorator — write `@WITH <names>`/);
+    user(['!WITH pdf:', '    IF the input is a scan:', '        MUST run OCR']);
+    await assert.rejects(() => bundleAndEmit('user', config, claudeCodeAdapter(), ctx), /!WITH was removed — a policy says where it holds with its APPLIES line/);
     {
       const { checkVocabulary } = await import('../dist/src/lint.js');
       const lint = lines => checkVocabulary('p.ap', ['IMPORT pdf FROM @harness.skills', '', ...lines].join('\n'));
-      // WITH is a block: its colon, and lines nested below it
-      assert.ok(lint(['EXPORT PROCEDURE p:', '    ABOUT  p', '    WITH pdf', '    DO  work']).some(e => /WITH is a block/.test(e.message)));
-      assert.ok(lint(['EXPORT PROCEDURE p:', '    ABOUT  p', '    WITH pdf:', '    DO  work']).some(e => /nothing is nested below it/.test(e.message)));
-      // it stands in a body, never above a block
-      assert.ok(lint(['WITH pdf:', '    EXPORT PROCEDURE p:', '        ABOUT  p', '        DO  work']).some(e => /WITH stands in a body/.test(e.message)));
+      // a decorator decorates a block: above one, or opening one with lines nested below it
+      assert.ok(lint(['EXPORT PROCEDURE p:', '    ABOUT  p', '    @WITH pdf', '    DO  work']).some(e => /`@WITH` decorates no block/.test(e.message)));
+      assert.ok(lint(['EXPORT PROCEDURE p:', '    ABOUT  p', '    @WITH pdf:', '    DO  work']).some(e => /nothing is nested below it/.test(e.message)));
+      // a definition is decorated from inside its body — never from above, never inside a decorator's block
+      assert.ok(lint(['@WITH pdf', 'EXPORT PROCEDURE p:', '    ABOUT  p', '    DO  work']).some(e => /stands above PROCEDURE, a definition/.test(e.message)));
+      assert.ok(lint(['EXPORT AGENT a AS r:', '    ABOUT  a', '    MANDATE  m', '    @WITH pdf:', '        PROCEDURE p:', '            DO  work']).some(e => /holds PROCEDURE, a definition/.test(e.message)));
       // AS shapes one skill's answer
-      assert.ok(lint(['EXPORT PROCEDURE p:', '    ABOUT  p', '    WITH pdf, pdf-report AS report:', '        DO  work']).some(e => /AS shapes the answer of one skill/.test(e.message)));
-      assert.deepEqual(lint(['EXPORT PROCEDURE p:', '    ABOUT  p', '    WITH pdf, #policy:decisions:', '        DO  work']), []);
-      // a tag in a WITH says its kind
-      assert.ok(lint(['EXPORT PROCEDURE p:', '    ABOUT  p', '    WITH #decisions:', '        DO  work']).some(e => /a tag in a WITH says which kind it selects/.test(e.message)));
-      // its zone holds lines, never a block
-      assert.ok(lint(['EXPORT AGENT a AS r:', '    ABOUT  a', '    MANDATE  m', '    WITH pdf:', '        PROCEDURE p:', '            DO  work']).some(e => /opens a block: put the WITH inside it/.test(e.message)));
+      assert.ok(lint(['EXPORT PROCEDURE p:', '    ABOUT  p', '    @WITH pdf, pdf-report AS report:', '        DO  work']).some(e => /AS shapes the answer of one skill/.test(e.message)));
+      assert.deepEqual(lint(['EXPORT PROCEDURE p:', '    ABOUT  p', '    @WITH pdf, #policy:decisions:', '        DO  work']), []);
+      // a tag says its kind, when the decorator names several
+      assert.ok(lint(['EXPORT PROCEDURE p:', '    ABOUT  p', '    @WITH #decisions:', '        DO  work']).some(e => /a tag says which: `#<kind>:decisions`/.test(e.message)));
       // a perimeter goes on a policy or a skill only
       assert.ok(lint(['EXPORT TEMPLATE t:', '    ABOUT  t', '    APPLIES #x, universal']).some(e => /a perimeter .* goes on a POLICY or a SKILL — found on TEMPLATE/.test(e.message)));
       assert.ok(!lint(['EXPORT POLICY q:', '    ABOUT  q', '    APPLIES #x, team:delivery', '    ALWAYS  be q']).some(e => /perimeter/.test(e.message)));
     }
     rmSync(join(tmp, 'agents', 'standalone', 'user.ap'));
   }
-  console.log('skills: WITH tests passed.');
+  console.log('skills: @WITH tests passed.');
 
-  // --- a standalone file (PROJECT.ap) reads WITH the same way: a Skills chapter, its scope lines, errors where they were written ---
+  // --- a standalone file (PROJECT.ap) reads @WITH the same way: a Skills chapter, its scope lines, errors where they were written ---
   {
     const { bundleStandaloneToString } = await import('../dist/src/compiler/index.js');
     const project = lines => write(join(tmp, 'PROJECT.ap'), lines);
@@ -272,7 +272,7 @@ try {
       'IMPORT reasons-first FROM @main.policies', '',
       'PROCEDURE decide:',
       '  ABOUT  decide together',
-      '  WITH reasons-first, pdf:',
+      '  @WITH reasons-first, pdf:',
       '    DO  weigh the options', '',
       'WHEN a decision is due:',
       '  RUN decide',
@@ -283,19 +283,19 @@ try {
     assert.ok(/For the work below, use the policy `reasons-first` \(pol-[0-9a-f]{8}\) and the skill `pdf` \(skl-[0-9a-f]{8}\):/.test(md), md);
     assert.ok(md.includes('When a decision is due:'), 'a WHEN with lines beneath is the file\'s trigger');
     // a WHEN with nothing beneath stays header metadata
-    project(['ABOUT  project rules', 'WHEN working in this repo:', '', 'IMPORT reasons-first FROM @main.policies', '', 'PROCEDURE decide:', '  ABOUT  d', '  WITH reasons-first:', '    DO  weigh']);
+    project(['ABOUT  project rules', 'WHEN working in this repo:', '', 'IMPORT reasons-first FROM @main.policies', '', 'PROCEDURE decide:', '  ABOUT  d', '  @WITH reasons-first:', '    DO  weigh']);
     assert.ok(!(await bundleStandaloneToString(join(tmp, 'PROJECT.ap'), config)).includes('working in this repo'));
     // an unknown item of an imported procedure is reported where it was written
-    write(join(tmp, 'library', 'procedures', 'broken.ap'), ['EXPORT PROCEDURE broken:', '    ABOUT  broken', '    WITH nosuch:', '        DO  work']);
+    write(join(tmp, 'library', 'procedures', 'broken.ap'), ['EXPORT PROCEDURE broken:', '    ABOUT  broken', '    @WITH nosuch:', '        DO  work']);
     project(['ABOUT  project rules', 'IMPORT broken FROM @main.procedures', '', 'WHEN asked:', '  RUN broken']);
-    await assert.rejects(() => bundleStandaloneToString(join(tmp, 'PROJECT.ap'), config), /broken\.ap:3  unknown skill, policy or dimension `nosuch`/);
+    await assert.rejects(() => bundleStandaloneToString(join(tmp, 'PROJECT.ap'), config), /broken\.ap:3  `@WITH nosuch`: no imported skill, policy or dimension is called `nosuch`/);
     rmSync(join(tmp, 'library', 'procedures', 'broken.ap'));
     // an AS naming no template fails here too
-    project(['ABOUT  project rules', 'IMPORT pdf FROM @harness.skills', '', 'PROCEDURE p:', '  ABOUT  p', '  WITH pdf AS nope:', '    DO  read']);
-    await assert.rejects(() => bundleStandaloneToString(join(tmp, 'PROJECT.ap'), config), /unknown template `nope`/);
+    project(['ABOUT  project rules', 'IMPORT pdf FROM @harness.skills', '', 'PROCEDURE p:', '  ABOUT  p', '  @WITH pdf AS nope:', '    DO  read']);
+    await assert.rejects(() => bundleStandaloneToString(join(tmp, 'PROJECT.ap'), config), /`AS nope`: no imported template is called `nope`/);
     rmSync(join(tmp, 'PROJECT.ap'));
   }
-  console.log('skills: standalone WITH tests passed.');
+  console.log('skills: standalone @WITH tests passed.');
 } finally {
   process.chdir(prevCwd);
   rmSync(tmp, { recursive: true, force: true });

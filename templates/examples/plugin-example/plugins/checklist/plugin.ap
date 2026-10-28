@@ -1,0 +1,29 @@
+# A plugin adds one new block to the language — here CHECKLIST.
+# The block's name is the plugin's name, written in capitals.
+# ABOUT says what the block is for — one line, required.
+# AS names the record template: each slot is a line of the block.
+# Each OPERATION is one function of the same name in service.mjs;
+# its AS, when present, names the template of its input.
+PLUGIN checklist:
+    ABOUT  a list of checks an agent goes through before it delivers
+    AS     checklist
+
+    OPERATION status:
+        ABOUT  every item, ticked or not
+    OPERATION tick:
+        ABOUT  mark one item done
+        AS     tick
+
+# The record: slot item is the ITEM line; LIST lets it repeat.
+EXPORT TEMPLATE checklist:
+    SLOTS:
+        item: LIST <check> 1..   "one check to do before delivering"
+
+# A scalar template: its type goes on the line under the header.
+EXPORT TEMPLATE check:
+    TEXT MAX_WORDS 8   "one check"
+
+# The input of the tick operation: the item it marks done.
+EXPORT TEMPLATE tick:
+    SLOTS:
+        item: <check>   "the item done"

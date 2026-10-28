@@ -56,6 +56,8 @@ export interface ApxHost {
   variable(name: string): VarBlock | null;
   storeVariable(block: VarBlock, value: string): { code: number; reason: string } | null;
   openSession(): SessionVars | string;
+  /** The harness session id — or why there is none, opening with what `needs` it. */
+  sessionIdOrReason(needs?: string): { id: string } | { reason: string };
   executorArg(verb: string, id: string | undefined): ApExecutorSpec | null;
   inputJson(spec: ApExecutorSpec, extra?: Record<string, unknown>): Record<string, unknown> | null;
   intoArg(spec: ApExecutorSpec, id: string, args: string[]): { spec: ApExecutorSpec; args: string[] } | null;

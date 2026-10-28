@@ -128,8 +128,8 @@ language; a space-separated list is a compilation error.
   a subagent. Skills are imported into agents, not duplicated; the same
   skill can serve dozens of agents. Like a policy (D23), an imported
   skill holds where its scope says: its `APPLIES` perimeter, or the
-  lines a `WITH` block names it for; `!WITH` keeps it out of them, and
-  a skill imported where it holds nowhere fails the compilation. A skill the runtime
+  work a `@WITH` decorator (D45) names it for, and a skill imported
+  where it holds nowhere fails the compilation. A skill the runtime
   provides itself is imported by name from `@harness.skills`, never
   compiled. (Amended in 1.2: was *playbook*, a triggered workflow.)
 
@@ -270,9 +270,8 @@ language; a space-separated list is a compilation error.
   that hold wherever the policy's scope says. A policy holds everywhere
   it is imported with `APPLIES universal`, in a team's members with
   `team:<team>`, in one agent with `agent:<agent>`; otherwise only in
-  the lines a `WITH` block names it for (D2, D31), and `!WITH` takes
-  it out of them. A policy imported where it holds nowhere fails the
-  compilation. Every policy that holds applies, cumulatively; none is
+  the work a `@WITH` decorator (D45) names it for (D2, D31). A policy
+  imported where it holds nowhere fails the compilation. Every policy that holds applies, cumulatively; none is
   weighed against convenience. (Amended in 1.2.)
 
 - **D24 — flow** — the ordered steps a team follows for one kind of
@@ -336,8 +335,8 @@ language; a space-separated list is a compilation error.
 
 - **D31 — tags** — `APPLIES #a, #b`: the labels that group blocks — under a
   common heading in the compiled definition, under a filter in the
-  executable — and link blocks that share them; a `WITH #a` block selects
-  the imported policies that carry one, `WITH #skill:a` the skills (D23).
+  executable — and link blocks that share them; `@WITH #policy:a` (D45)
+  selects the imported policies that carry one, `@WITH #skill:a` the skills (D23).
   On a policy or a skill the line also takes its perimeter: `universal`,
   `team:<team>`, `agent:<agent>`. (Amended in 1.2: was `TAGS`; the catalog-only
   `APPLIES` gate is withdrawn.)
@@ -556,13 +555,13 @@ language; a space-separated list is a compilation error.
   a list of its instances, or the literal `none` when there is nothing
   to report; and rules at a force level (D11) on how the value is
   produced. When it is worth reading is the reader's to say, never the
-  dimension's: a `WITH` block (D2, D23) names it above the lines that
-  read it, as it names a policy or a skill, and `!WITH` keeps lines out
-  of it. A dimension has no `APPLIES` line (D31), so no perimeter holds
-  it everywhere; one that no `WITH` names draws a warning — the
+  dimension's: a `@WITH` decorator (D2, D23, D45) names it above the
+  work that reads it, as it names a policy or a skill. A dimension has
+  no `APPLIES` line (D31), so no perimeter holds
+  it everywhere; one that no `@WITH` names draws a warning — the
   executable serves it all the same, but no line reads it — where a
   policy named nowhere fails the compilation. A moment the judge decides
-  is a `WHEN!` (D26, D39) with the `WITH` beneath it.
+  is a `WHEN!` (D26, D39) decorated by the `@WITH`.
   Whether the answer read suffices or the code is needed too is the
   agent's call. `ABOUT`, `FOR`, `EACH` and `AS` are each required,
   once. The body holds nothing else: a nested block — other
@@ -592,6 +591,20 @@ language; a space-separated list is a compilation error.
   to restructure; two domains may cover the same files. Declared and
   imported like a dimension (`domains/`, `@main.domains`), or at the
   top of an agent's file.
+
+- **D45 — decorator** — a line that says under which conditions the work
+  it decorates is done, never what to do: `@KEY <names>` right above a
+  control block (`WHEN`, `IF`, `UNTIL`) decorates that block, `@KEY
+  <names>:` in a body the lines nested beneath it. Every decorator reads
+  the same: names or tags, comma separated, resolved among the blocks
+  the compilation imports; stacked decorators apply in order; nested ones
+  of the same key combine as that key says (they add up, or narrow). A
+  decorator that decorates nothing, or a definition inside its block,
+  fails the compilation; a definition is decorated from inside its body.
+  A decorator has no negation. `@WITH` (D2, D23, D43) names the skills,
+  policies and dimensions the work is under; `@WITH <skill> AS
+  <template>` shapes one skill's answer. (New in 1.3: replaces the `WITH`
+  block and its negation `!WITH`.)
 
 ## 4. Citation
 

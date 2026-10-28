@@ -221,7 +221,7 @@ EXPORT TEMPLATE ap-block-policy:
     importable?: ENUM[EXPORT]  "prefix EXPORT to import the policy cross-file; omit for local"
     policy-name: TEXT MAX_WORDS 1  "kebab-case policy name"
     about:       TEXT MAX_WORDS 15  "one-line description of what the policy governs"
-    applies?:    TEXT MAX_WORDS 8  "space-separated #tags, plus where it holds with no WITH; omit if none"
+    applies?:    TEXT MAX_WORDS 8  "space-separated #tags, plus where it holds with no @WITH; omit if none"
       MUST   name where it holds as universal, team:<team> or agent:<agent>
     rules:       LIST <ap-rule> >=1  "one ALWAYS / NEVER directive per line"
       MUST   use only ALWAYS / NEVER force — a policy admits no control flow and no triggers
@@ -272,9 +272,9 @@ EXPORT TEMPLATE ap-block-dimension:
     importable?:    ENUM[EXPORT]  "prefix EXPORT for a library dimensions/ folder; omit in the agent's file"
       MUST   keep a dimension an agent's — in its file, or imported by an agent FROM @main.dimensions
       MUST   never import a dimension into PROJECT.ap, a skill or a flows.ap
-    dimension-name: TEXT MAX_WORDS 1  "kebab-case dimension name — the apx reaches it by name, a WITH names it"
+    dimension-name: TEXT MAX_WORDS 1  "kebab-case dimension name — the apx reaches it by name, a @WITH names it"
       MUST   never name it after an apx verb (dims, get …) nor after a store of the same agent
-      MUST   name it in a `WITH <name>:` block of the agent, above the lines that read it — a dimension no WITH names applies nowhere (a warning)
+      MUST   name it in a `@WITH <name>` decorator above the lines that read it — unnamed, it applies nowhere
     about:          TEXT MAX_WORDS 15  "the question the dimension answers (ABOUT)"
     globs:          TEXT MAX_WORDS 8  "space-separated globs of the files it answers for (FOR)"
       MUST   write each glob from the project root — never absolute, never with `..`

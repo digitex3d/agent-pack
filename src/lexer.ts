@@ -52,8 +52,9 @@ const STATIC_KEYWORDS = [
   'PROCEDURE', 'TEMPLATE', 'EXTENDS', 'APPLIES',
   'IMPORT',
   'UNTIL', 'ABOUT', 'SCOPE',
-  // OWNS is gone (WRITES/READS name DOMAINs): still lexed, so the lint names the rewrite.
-  'ELSE', 'WHEN', 'OWNS',
+  // OWNS is gone (WRITES/READS name DOMAINs), and WITH became the decorator `@WITH`
+  // (src/decorators.ts): still lexed, so the lint names the rewrite.
+  'ELSE', 'WHEN', 'OWNS', 'WITH',
   'RUN', 'VAR', 'IF',
   ...ACTION_VERBS,
   // A variable's scope, right before VAR (`SESSION VAR plan`) — vars.ts parses it.
@@ -104,6 +105,18 @@ export const KEYWORDS: string[] = [
   ...ALIAS_NAMES,
   ...LIFECYCLE_ALIASES,
 ];
+
+/**
+ * The line keywords a plugin's block takes (src/plugins.ts): learned when the
+ * plugin is installed, lexed like the static ones — `ITEM the tests pass`.
+ */
+const PLUGIN_LINE_KEYWORDS = new Set<string>();
+const PLUGIN_LINE_RE = /^([ \t]*)([A-Z][A-Z0-9-]*)[ \t]+(.+?)[ \t]*$/;
+
+/** Teach the lexer a plugin's line keywords. */
+export function addPluginLineKeywords(words: readonly string[]): void {
+  for (const word of words) PLUGIN_LINE_KEYWORDS.add(word);
+}
 
 /** Escape a string for safe inclusion as a literal inside a RegExp source. */
 export function escapeRegex(s: string): string {
@@ -186,6 +199,8 @@ const KEYWORD_BARE_RE = new RegExp(`^([ \\t]*)(IF|ELSE|PARALLEL|!?DISTILL!{0,2})
 // legacy `ON-INVOKE <text>` form is handled by KEYWORD_WITH_REST_RE above.
 const LIFECYCLE_BARE_RE = new RegExp(`^([ \\t]*)(${LIFECYCLE_ALT})([ \\t]*:)?[ \\t]*$`);
 const PROC_REF_RE = /^([ \t]*)(@[a-zA-Z0-9][\w-]*)\b[ \t]*(.*?)[ \t]*$/;
+// A block decorator: the mark, an uppercase key, its items, a colon when it opens a block (src/decorators.ts).
+const DECORATOR_RE = /^([ \t]*)@([A-Z][A-Z0-9-]*)(?:[ \t]+(.*?))?[ \t]*(:)?[ \t]*$/;
 const RAW_OPEN_RE = /^[ \t]*RAW:[ \t]*$/;
 const RAW_CLOSE_RE = /^[ \t]*:RAW[ \t]*$/;
 
@@ -229,6 +244,8 @@ export type Token =
   | (Position & { kind: 'keyword'; keyword: Keyword; rest: string; raw: string; level?: number; executor?: number })
   | (Position & { kind: 'blockOpener'; key: string; rest: string; raw: string })
   | (Position & { kind: 'procRef'; name: string; trailing: string; raw: string })
+  // `@KEY items` above a block, `@KEY items:` opening one — a block decorator (src/decorators.ts).
+  | (Position & { kind: 'decorator'; key: string; rest: string; opens: boolean; raw: string })
   | (Position & { kind: 'unknown'; raw: string });
 
 function indentOf(line: string): number {
@@ -322,6 +339,12 @@ export function lexRaw(source: string): Token[] {
       continue;
     }
 
+    const pluginLine = raw.match(PLUGIN_LINE_RE);
+    if (pluginLine && PLUGIN_LINE_KEYWORDS.has(pluginLine[2])) {
+      out.push({ kind: 'keyword', line, col, indent, keyword: pluginLine[2] as Keyword, rest: pluginLine[3], raw });
+      continue;
+    }
+
     const lifecycle = raw.match(LIFECYCLE_BARE_RE);
     if (lifecycle) {
       out.push({
@@ -341,6 +364,12 @@ export function lexRaw(source: string): Token[] {
         rest: '',
         raw,
       });
+      continue;
+    }
+
+    const decorator = raw.match(DECORATOR_RE);
+    if (decorator) {
+      out.push({ kind: 'decorator', line, col, indent, key: decorator[2], rest: (decorator[3] ?? '').trim(), opens: decorator[4] === ':', raw });
       continue;
     }
 
@@ -366,14 +395,6 @@ export function lexRaw(source: string): Token[] {
  */
 export function lex(source: string): Token[] {
   return desugar(lexRaw(source));
-}
-
-/**
- * A `WITH …:` / `!WITH …:` head — a block whose nested lines are under the
- * skills and policies it names (src/withUse.ts). The one predicate every reader asks.
- */
-export function isWithHead(t: Token | undefined): boolean {
-  return t?.kind === 'keyword' && forceLevelBaseOf(t.keyword as string) === 'WITH';
 }
 
 /** A keyword line written as a block head — its rest ends with the block colon (`WHEN x:`, `WITH a:`). */

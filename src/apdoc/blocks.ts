@@ -40,6 +40,7 @@ import type { Block } from '../parseBlocks.js';
 import { isTeamFile, CONTRACTS_STRATEGY, type TeamFile, type ContractDecl, type ContractLimit } from '../services/teamMetadata.js';
 import { splitList } from '../lists.js';
 import { serviceCommand } from '../apx/service.js';
+import { pluginOf, recordOfLines, lineKeyOf, inputUsage, type PluginSpec } from '../plugins.js';
 
 /**
  * The services a block needs from its builder to construct itself: the body
@@ -418,6 +419,58 @@ export class DomainBlock extends ApBlock {
   /** The files it covers — a domain holds no rule, it only says where. */
   override asMdBody(): string {
     return fill(FORMULAS.blocks.domain.covers, { globs: renderGlobs(this.globs) });
+  }
+}
+
+/**
+ * A block a plugin declares (src/plugins.ts) — `CHECKLIST before-release:`. Its
+ * lines are a record of the plugin's template, kept as written; its chapter
+ * shows them, then the commands the plugin serves it with.
+ */
+export class PluginBlock extends ApBlock {
+  readonly kind: string;
+  protected readonly idPrefix: string;
+  /** Its lines, as a record of the plugin's template: `{ item: ['the tests pass', …] }`. */
+  fields: Record<string, unknown> = {};
+
+  constructor(spec: PluginSpec, init: ApBlockInit) {
+    super(init);
+    this.kind = spec.name;
+    this.idPrefix = spec.prefix;
+  }
+
+  static fromData(spec: PluginSpec, data: ApBlockData): PluginBlock {
+    const block = restore(new PluginBlock(spec, initOf(data)), data);
+    block.fields = (data.args['fields'] as Record<string, unknown> | undefined) ?? {};
+    return block;
+  }
+
+  static fromDefinition(spec: PluginSpec, def: Definition, cx: BlockCx): PluginBlock {
+    const block = new PluginBlock(spec, cx.defInit(def));
+    const lines = def.body.split(/\r?\n/).flatMap(l => {
+      const m = l.match(/^\s*([A-Z][A-Z0-9-]*)\s+(.+)$/);
+      return m ? [{ key: m[1], rest: m[2] }] : [];
+    });
+    block.fields = recordOfLines(spec, lines);
+    return block;
+  }
+
+  protected override argsJson(): Record<string, unknown> {
+    return { fields: this.fields };
+  }
+
+  /** Its lines as written, then each command its plugin serves it with, on its id. */
+  override asMdBody(env: MdEnv): string {
+    const spec = pluginOf(this.kind);
+    const P = FORMULAS.blocks.plugin;
+    const lines = Object.entries(this.fields).flatMap(([slot, value]) =>
+      (Array.isArray(value) ? value : [value]).map(v => fill(P.line, { key: lineKeyOf(slot), value: String(v) })));
+    if (!spec || spec.operations.length === 0) return lines.join('\n');
+    const commands = spec.operations.map(o => fill(P.command, {
+      command: `${serviceCommand(env.apxOf(null), spec.name, o.op, this.id)} ${inputUsage(spec, o.input)}`.trimEnd(),
+      about: o.about,
+    }));
+    return [...lines, '', P.commands, ...commands].join('\n');
   }
 }
 
@@ -938,6 +991,22 @@ export const KIND_STRATEGIES: KindStrategy[] = [
 
 export function strategyOf(kind: string): KindStrategy | null {
   return KIND_STRATEGIES.find(s => s.kind === kind) ?? null;
+}
+
+/**
+ * Make a plugin's block a kind of the document — the one row every reader
+ * finds it by (revive, folder, chapter). Once per plugin; the compiler and the
+ * apx both call it.
+ */
+export function installPluginKind(spec: PluginSpec): void {
+  if (KIND_STRATEGIES.some(s => s.kind === spec.name)) return;
+  KIND_STRATEGIES.push({
+    kind: spec.name, prefix: spec.prefix, folder: spec.folder, ref: null,
+    chapterTitle: spec.folder.charAt(0).toUpperCase() + spec.folder.slice(1),
+    revive: data => PluginBlock.fromData(spec, data),
+    entries: ctx => (ctx as unknown as Record<string, Definition[]>)[spec.folder] ?? [],
+    from: (def, cx) => PluginBlock.fromDefinition(spec, def, cx),
+  });
 }
 
 /** The kind living in a library folder / namespace segment, or null. */

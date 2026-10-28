@@ -145,6 +145,17 @@ const STRUCTURAL_KEYWORD: Partial<Record<IngestKind, RegExp>> = {
   domain: /^DOMAIN\s+([^\s:]+)/m,
 };
 
+/**
+ * Make a plugin's kind a kind of the library (src/plugins.ts): its folder, its
+ * block naming a file's kind, its name read off that block. Once per plugin.
+ */
+export function registerIngestKind(kind: string, folder: string, key: string): void {
+  (KIND_DIRS as Record<string, string>)[kind] = folder;
+  DIR_TO_KIND[folder] = kind as IngestKind;
+  BLOCK_KINDS.add(kind);
+  STRUCTURAL_KEYWORD[kind as IngestKind] = new RegExp(`^${key}\\s+([^\\s:]+)`, 'm');
+}
+
 const H1_RE = /^#\s+(.+)$/m;
 const SCOPE_RE = /^SCOPE\s+(.+)$/m;
 
