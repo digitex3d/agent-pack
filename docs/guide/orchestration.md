@@ -2,8 +2,6 @@
 
 A flow is how a team splits a piece of work among its agents: who does what, with how much context, in which order, at the same time or not, and within which files. This guide walks through it one concept at a time. For the full grammar see [Language reference — FLOW](/reference/language#flow); for the commands see [The apx](/guide/apx).
 
-Some pieces below are **planned** — decided, not built yet. They are marked as such.
-
 ## A flow is run by whoever runs it
 
 A flow is a list of steps. Whoever runs the flow — the lead, usually the harness's main session — carries the steps out in order. A step names no one: the lines inside it say who does the work.
@@ -163,9 +161,9 @@ FLOW build-engine:
 - **`MAX <n>`** caps the number of zones, with a project default. No zone found is not an error: the `DELEGATE` does nothing, with a warning.
 - Marks stay in the code. A file that cannot hold a comment cannot be marked.
 
-- The list is a variable like any other — `SESSION VAR parts` in a module, imported by the team file. It holds the ids of its contracts. A `DELEGATE` of a variable no `MARK` above it filled fails the build.
+- The list is a variable like any other — `SESSION VAR parts` in a module, imported by the team file. Before its `WAIT` it holds the ids of its contracts; after it, each one's state — `merged`, `blocked` with why, `ended without delivery` — so a later step can say `IF {{parts}} has a blocked part:`. A `DELEGATE` of a variable no `MARK` above it filled fails the build.
 
-## EACH: one delegation per item (planned)
+## EACH: one delegation per item
 
 `EACH` hands one item of a data list to each delegation:
 
@@ -179,11 +177,11 @@ STEP work on the subtasks:
 
 - `EACH` holds only `DELEGATE` and `FORK` lines.
 - All delegations start together. Without `~` the flow waits for all of them; with `~` it goes on until the `WAIT`.
-- `INTO` collects one result per item, as a list.
+- `INTO` collects one result per item, as a list in item order. A run that fails does not stop the others: its state goes in the list.
 - `MAX` is required: a longer list stops the flow with an error.
-- Lists of contracts need no `EACH`: delegate them directly.
-
-Until it lands, the same is written with `PARALLEL EACH` — see [Language reference — FLOW](/reference/language#flow).
+- The list is a variable typed with a template of one `LIST` slot.
+- Lists of contracts need no `EACH`: delegate them directly. An `EACH` over one fails the build.
+- With `~`, each run is a piece of its own in the apx: `dlg-28f9d7d3-1`, `dlg-28f9d7d3-2`, … The `WAIT` takes them all back.
 
 ## A complete flow
 
@@ -237,11 +235,11 @@ node .agent-pack/apx/lead.apx wait dlg-28f9d7d3 dlg-1d06e0a6 --max 10m
 
 See [The apx — Background work](/guide/apx#background-work).
 
-## Harnesses (planned)
+## Harnesses
 
 The flow is the same everywhere. How it runs differs.
 
-- **Claude Code.** A `~` runs as a background agent, and the session hears when it finishes — but only between turns. So a `WAIT` does not block the session: the lead goes on until the notifications of the pieces it waits for arrive, records each delivery, then checks the states with `apx wait`. A `FORK … BY y` runs as a native fork that reads `y`'s definition first and works as `y`; `y`'s perimeter is enforced by the hook, from the registered piece.
+- **Claude Code.** A `~` runs as a background agent, and the session hears when it finishes — but only between turns. So a `WAIT` does not block the session: the lead does not go on until the notifications of the pieces it waits for have come, records one that ended without delivering, then checks the states with `apx wait … --now` — the limit counted from when each piece started. A `FORK` runs as a native fork; a `FORK … BY y` is one that reads `y`'s definition first (`y.apx scope`) and follows `y`'s rules from there.
 - **Other harnesses.** `apx wait` blocks until the pieces settle or the limit is reached. A `FORK … BY y` becomes a `DELEGATE … BY y` with all the context.
 
 Today a flow made only of `DELEGATE` lines can also run as a Claude Code Workflow script — see [The apx — Flows](/guide/apx#flows).

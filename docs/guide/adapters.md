@@ -52,6 +52,14 @@ A skill is an agent: `bundle all` builds every `EXPORT SKILL` of the project lib
 
 An adapter may word how an imported skill is loaded: `renderings.SKILL.apx` (an agent-pack skill, `{command}` its apx) and `renderings.SKILL.harness` (a skill of the harness, `{name}`). `claude-code` says to load the harness's skills with the Skill tool.
 
+An adapter may word how its harness hands work out and waits, over the neutral words of a flow's lines (`src/config/formulas.json`, keywords `DELEGATE`, `FORK`, `WAIT`): `renderings.DELEGATE.background` (how a `~` starts), `renderings.FORK.self` / `.agent` (a fork; `{definition}` is the command that reads the agent's definition), `renderings.WAIT.run` (`{apx}`, `{ids}`, `{max}`). `claude-code` uses them for its own way of working:
+
+- a `~` is a background agent (the Agent tool, `run_in_background: true`);
+- a `WAIT` never blocks the session: Claude Code tells it when a background agent ends, between turns — the lead goes on only when the notification of each piece has come, then checks the states with `apx wait … --now`, the limit counted from when each piece started;
+- a `FORK` is a native fork (`subagent_type: "fork"`); a `FORK … BY y` first reads who `y` is (`y.apx scope`) and follows its rules from there.
+
+Every other adapter keeps the neutral words: `apx wait` blocks until each piece is settled or the limit is reached.
+
 ## Writing an adapter
 
 An adapter is an object:

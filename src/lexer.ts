@@ -65,7 +65,7 @@ const STATIC_KEYWORDS = [
   ...ACTION_VERBS,
   // FORK hands work to a copy of whoever runs it, WAIT takes back what a `~` started, MARK binds
   // zones to contracts (src/delegation.ts). ASK became DELEGATE, a step's CONTEXT its DELEGATE's form,
-  // and STRATEGY, LEAD and CONTRACT MARK + DELEGATE: still lexed, so the lint names the rewrite.
+  // STRATEGY, LEAD and CONTRACT MARK + DELEGATE, PARALLEL `~` + WAIT or EACH: still lexed, so the lint names the rewrite.
   'FORK', 'WAIT', 'MARK', 'ASK', 'CONTRACT',
   // A variable's scope, right before VAR (`SESSION VAR plan`) — vars.ts parses it.
   ...VAR_SCOPE_WORDS,

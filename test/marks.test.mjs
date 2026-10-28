@@ -162,6 +162,9 @@ try {
   has(r.out, `${a}  screens  merged`, `${b}  screens  blocked`, 'ended without delivery', 'landed in the working folder: src/login.css.ts, src/login.ts', 'you decide');
   has(readFileSync(join(proj, 'src', 'login.ts'), 'utf-8'), 'return { ok: true };');
   assert.ok(!readFileSync(join(proj, 'src', 'signup.ts'), 'utf-8').includes('ok: true'));
+  // After its WAIT, `{{screens}}` reads each contract's state (D50) — what an `IF {{screens}} has a blocked screen` judges.
+  const states = ok(apx('lead', ['get', 'screens']), 'get screens after the wait');
+  has(states, `{"id":"${a}","state":"merged"}`, `{"id":"${b}","state":"blocked","reason":"the sign-up spec is ambiguous"}`, `{"id":"${spare}","state":"ended without delivery"}`);
 
   // One registry: the contracts sit beside any background piece, and `delegate list` shows them.
   const all = ok(apx('lead', ['delegate', 'list']), 'list');

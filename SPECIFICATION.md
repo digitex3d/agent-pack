@@ -110,7 +110,7 @@ items on the left more.
 ## 3. Primitives
 
 The shared vocabulary of the paradigm. Each primitive has a stable
-identifier (`D1`–`D48`) for external citation as `Agent Pack §D<n>`.
+identifier (`D1`–`D49`) for external citation as `Agent Pack §D<n>`.
 These terms have precise meaning and are not interchangeable.
 Wherever a primitive takes several items on one line — names, globs,
 tags, values — they are separated by commas, one form for the whole
@@ -286,19 +286,12 @@ language; a space-separated list is a compilation error.
   memory (`MEM`, D21), since whoever runs the flow may have no memory in
   its harness — memory belongs to an agent, a role or a procedure. A
   directive is a rule of the step, never its action: a step needs at
-  least one action (`DO`, `DELEGATE`, `COMPUTE`, D40, `FORK`, `WAIT`) or
-  `RUN`. `PARALLEL EACH <item> IN <list> MAX <n>` holds one step and
-  runs it once per element of a list, all at the same time; in the step,
-  `{{<item>}}` is the run's element. The list is a variable (D32) typed
-  with a template holding one `LIST` slot, its elements; anything else
-  fails the compilation. The bound is always written: without `MAX`, or
-  with one that is not a whole number of at least 1, the compilation
-  fails, and a list longer than it is an error that stops the flow when
-  it runs. A run that fails does not stop the others; its report goes on
-  with theirs. The language adds nothing to clone an agent: a step that
-  forks it (`FORK … BY` the agent) is its clone. (Amended in 1.3: the
-  step's `BY`, `CONTEXT` and `AS` lines and the bare `PARALLEL` give way
-  to the delegation, D46.)
+  least one action (`DO`, `DELEGATE`, `COMPUTE`, D40, `FORK`, `WAIT`,
+  `MARK`, `EACH`) or `RUN`. The language adds nothing to clone an agent:
+  a delegation that forks it (`FORK … BY` the agent) is its clone, and
+  `EACH` (D49) clones it once per element of a list. (Amended in 1.3: the
+  step's `BY`, `CONTEXT` and `AS` lines and `PARALLEL` give way to the
+  delegation, D46, and to `EACH`, D49.)
 
 - **D25 — context mode** — how much upstream context a step's executor
   receives: `isolated` (only its own intent), `summary` (a synthesized
@@ -409,7 +402,7 @@ language; a space-separated list is a compilation error.
 
 - **D37 — flow control** — a flow (D24) may hold `IF <condition>:`, its
   `ELSE` and `UNTIL <condition>:` around its steps. Under them sit what
-  the flow itself holds — `STEP`, `PARALLEL EACH`, `RUN` — and further `IF`,
+  the flow itself holds — `STEP`, `RUN` — and further `IF`,
   `ELSE` and `UNTIL`, nested at any depth. A step under them is the
   flow's own: a flow whose only step sits under an `UNTIL` still has its
   step, while a lone `RUN` is not a step. The condition is prose, judged
@@ -647,8 +640,7 @@ language; a space-separated list is a compilation error.
   fails the compilation. `~`, `WAIT` and `FORK` are a flow step's; in an
   agent's body a `DELEGATE` waits where it stands, under its contract
   (D40). (New in 1.3: replaces `ASK`, a step's `BY`, `CONTEXT` and `AS`,
-  and the bare `PARALLEL`; each of them fails the compilation with the
-  rewrite.)
+  and `PARALLEL`; each of them fails the compilation with the rewrite.)
 - **D47 — background work** — each piece a `~` starts has an id
   (`dlg-…`) and a record in the session's registry, kept by the apx on
   disk: running, delivered, blocked, or ended without delivery. The
@@ -660,7 +652,10 @@ language; a space-separated list is a compilation error.
   `2h`), else the project's `wait.max` (30 minutes by default). Nothing is
   settled by itself: at the limit, and for a piece ended without
   delivery, the lead decides — wait again, take it over, reassign it, or
-  block it. (New in 1.3.)
+  block it. A harness that tells its session when work ends needs no
+  blocking wait: its adapter words the `WAIT` so — the lead goes on only
+  once the word of each piece has come, then reads the states at once,
+  each one's limit counted from its start. (New in 1.3.)
 - **D48 — contract** — a promise: work with an id the apx knows, its
   spec, its zones, who carries it out and its state. `DELEGATE <task>`
   creates one and starts it; `MARK <criterion> INTO <list> AS <spec>
@@ -674,9 +669,24 @@ language; a space-separated list is a compilation error.
   its delivery keeps its zones, the files it created and its `WITHIN`
   domain, which stays inside the work's perimeter. Waited for, the
   deliveries are merged and land in the working folder. One registry
-  holds them with the background pieces (D47). (New in 1.3: replaces the
-  team strategy of contracts — `STRATEGY`, `LEAD`, `CONTRACT` blocks —
-  which fails the compilation with the rewrite.)
+  holds them with the background pieces (D47). Before its `WAIT` the
+  list holds the contracts' ids; after it, each one's state. (New in 1.3:
+  replaces the team strategy of contracts — `STRATEGY`, `LEAD`, `CONTRACT`
+  blocks — which fails the compilation with the rewrite.)
+- **D49 — one run per element** — `EACH <item> IN {{<list>}} MAX <n>:`, in
+  a flow step, holds `DELEGATE` and `FORK` lines only, and runs each once
+  per element of a list variable (D32) typed with a template holding one
+  `LIST` slot — all the runs at once; beneath it `{{<item>}}` is the run's
+  element. The bound is always written: without `MAX`, or with one that
+  is not a whole number of at least 1, the compilation fails, and a list
+  longer than it is an error that stops the flow when it runs. Without
+  `~` the flow waits for every run where the `EACH` stands; with `~` the
+  step's `WAIT` takes them back, each run a piece of its own (D47). An
+  `INTO` inside collects one result per run, a list in element order — a
+  plain variable, or one typed with a template of one `LIST` slot. A run
+  that fails does not stop the others. A list of contracts is no
+  `EACH`'s: it is delegated as it is (D48). (New in 1.3: replaces
+  `PARALLEL EACH`, which fails the compilation with the rewrite.)
 
 ## 4. Citation
 

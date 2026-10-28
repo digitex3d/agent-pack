@@ -280,30 +280,31 @@ A step is a label: it groups the lines whoever runs the flow carries out, in ord
 | `WAIT <name>, …` / `WAIT ALL` `[MAX <duration>]` | waits for what a `~` of this block started — the ones it names, or all — every one delivered, blocked or ended without delivery, or until its limit: `MAX` (`90s`, `10m`, `2h`), else the `wait.max` config key; then each one's variable holds its result, and for what is not delivered the lead decides |
 | `MUST`, `NEVER`, `SHOULD`, … | a [rule](#rules) of the step — `NEVER skip a finding`, not `DO never skip a finding`; never `MEM` |
 | `IF <condition>:` / `ELSE` | the lines indented under it apply only when the condition holds (or, under `ELSE`, when it does not) |
-| `PARALLEL EACH <item> IN <list> MAX <n>:` | the one step indented under it runs once per element of the list, all at the same time — `{{<item>}}` is the run's element |
+| `EACH <item> IN {{<list>}} MAX <n>:` | the `DELEGATE` and `FORK` lines indented under it run once per element of the list, all the runs at once — `{{<item>}}` is the run's element |
 
-**Each piece a `~` starts is tracked by the apx** — its id (`dlg-…`), its state, its result — and the compiled lines name the commands: `delegate start` before handing it over, `delegate deliver` or `delegate block` from whoever carries it out, `wait` at its `WAIT` (see [Background work](/guide/apx#background-work)). At the limit nothing is blocked by itself: the lead decides — wait again, take it over, reassign it or block it.
+**Each piece a `~` starts is tracked by the apx** — its id (`dlg-…`), its state, its result — and the compiled lines name the commands: `delegate start` before handing it over, `delegate deliver` or `delegate block` from whoever carries it out, `wait` at its `WAIT` (see [Background work](/guide/apx#background-work)). Inside an `EACH`, each run is a piece of its own: `dlg-…-<k>`, `<k>` the run's number. At the limit nothing is blocked by itself: the lead decides — wait again, take it over, reassign it or block it.
 
 **What a `~` starts is waited for in its own block.** Every `DELEGATE~` and `FORK~` is taken back by a `WAIT` before the block it is written in ends — its STEP, its `IF` or `ELSE` branch, its `UNTIL` — and its variable is read only after that `WAIT`. A `WAIT` names what its own block started. Each of these fails the build, with its line. `~`, `WAIT` and `FORK` are a flow step's: in an agent's body a `DELEGATE` waits where it stands.
 
-**A contract is a promise.** `DELEGATE <task>` hands work over and starts it; `MARK` binds zones of the code to contracts and leaves them waiting, and `DELEGATE <name> BY <agent>` starts them later — the name without braces, a list of contracts. `MARK` needs its `INTO` and its `AS` (the spec of each zone, a template); its `MAX` caps the zones, else the `mark.max` config key (20); its `WITHIN <domain>` lets the contracts write in that domain beyond their zones — inside the perimeter of the work around it, or the build fails. A zone is a pair of comments, `agent-pack <ctr-id>` where it starts and `agent-pack end <ctr-id>` where it ends, in any files; the marks stay in the code, and a file that cannot hold a comment is not marked. Each contract works in a copy of its own: its delivery keeps its zones, the files it created and its `WITHIN` domain, and names the rest — which stays out only with a reason. One agent takes the whole list: other agents, other `MARK`s. A `DELEGATE` of a list takes no `AS` (each contract carries its spec), no `INTO` (the list reports into itself) and no lines beneath it; a `DELEGATE` of a variable no `MARK` above it filled fails the build. Marking none is no error: the `DELEGATE` has nothing to start. The commands are the apx's (see [Contracts](/guide/apx#contracts)). The old team strategy — `STRATEGY`, `LEAD` and `CONTRACT` blocks — fails the build with this rewrite.
+**A contract is a promise.** `DELEGATE <task>` hands work over and starts it; `MARK` binds zones of the code to contracts and leaves them waiting, and `DELEGATE <name> BY <agent>` starts them later — the name without braces, a list of contracts. `MARK` needs its `INTO` and its `AS` (the spec of each zone, a template); its `MAX` caps the zones, else the `mark.max` config key (20); its `WITHIN <domain>` lets the contracts write in that domain beyond their zones — inside the perimeter of the work around it, or the build fails. A zone is a pair of comments, `agent-pack <ctr-id>` where it starts and `agent-pack end <ctr-id>` where it ends, in any files; the marks stay in the code, and a file that cannot hold a comment is not marked. Each contract works in a copy of its own: its delivery keeps its zones, the files it created and its `WITHIN` domain, and names the rest — which stays out only with a reason. One agent takes the whole list: other agents, other `MARK`s. A `DELEGATE` of a list takes no `AS` (each contract carries its spec), no `INTO` (the list reports into itself) and no lines beneath it; a `DELEGATE` of a variable no `MARK` above it filled fails the build. Marking none is no error: the `DELEGATE` has nothing to start. Before its `WAIT` the list holds the contracts' ids; after it, each one's state — its id, `merged`, `blocked` (with why) or `ended without delivery` — so a step can say `IF {{screens}} has a blocked screen:`. The commands are the apx's (see [Contracts](/guide/apx#contracts)). The old team strategy — `STRATEGY`, `LEAD` and `CONTRACT` blocks — fails the build with this rewrite.
 
-**`PARALLEL EACH` — one run per element of a list.** A step fills a list variable (`DELEGATE … INTO subtasks BY …`); `PARALLEL EACH subtask IN subtasks MAX 5:` then runs the one step beneath it once per element, all at the same time. The list is a variable typed with a template that holds one `LIST` slot — in a team's `flows.ap`, an imported `SESSION VAR`. `MAX` is required: a list longer than it stops the flow with an error. A run that fails does not stop the others: its report goes on with theirs, to the step that comes next. To clone an agent over the parts of a task, the step forks it:
+**`EACH` — one run per element of a list.** A step fills a list variable (`DELEGATE … INTO subtasks BY …`); in a later step, `EACH subtask IN {{subtasks}} MAX 5:` runs the `DELEGATE` and `FORK` lines beneath it once per element, all the runs at once — nothing else stands in an `EACH`. The list is a variable typed with a template that holds one `LIST` slot — in a team, an imported `SESSION VAR`. `MAX` is required: a list longer than it stops the flow with an error. Without `~` the flow waits for every run where the `EACH` stands; with `~` it goes on, and the step's `WAIT` takes the runs back. An `INTO` inside collects one result per run, a list in element order: a plain variable, or one typed with a template of one `LIST` slot. A run that fails does not stop the others: its result goes on with theirs. A list of contracts is no `EACH`'s: it is delegated as it is, `DELEGATE <list> BY <agent>`. To clone an agent over the parts of a task, the runs fork it:
 
 ```
 FLOW divide-and-conquer:
     STEP split the task:
         DELEGATE split the task into independent subtasks INTO subtasks BY developer
-    PARALLEL EACH subtask IN subtasks MAX 5:
-        STEP work the subtask:
-            FORK work only on {{subtask}} BY developer
+    STEP work the subtasks:
+        EACH subtask IN {{subtasks}} MAX 5:
+            FORK~ work only on {{subtask}} INTO reports BY developer
+        WAIT reports
     STEP merge the results:
-        DELEGATE merge every subtask report into one result BY developer
+        DELEGATE merge {{reports}} into one result BY developer
 ```
 
-A flow with a `PARALLEL EACH` runs as written, never as a Workflow script: the script does not hold the list.
+A flow with an `EACH` runs as written, never as a Workflow script: the script does not hold the list.
 
-A flow itself may put its `STEP`, `PARALLEL EACH` and `RUN` lines under `IF <condition>:` and its `ELSE`, or repeat them under `UNTIL <condition>:`, and nest further `IF`/`ELSE`/`UNTIL` inside them. The condition is prose, judged by whoever runs the flow; an `UNTIL` takes no mandatory bound — write it in the condition when there is one.
+A flow itself may put its `STEP` and `RUN` lines under `IF <condition>:` and its `ELSE`, or repeat them under `UNTIL <condition>:`, and nest further `IF`/`ELSE`/`UNTIL` inside them. The condition is prose, judged by whoever runs the flow; an `UNTIL` takes no mandatory bound — write it in the condition when there is one.
 
 ```
 FLOW build-change:
@@ -318,11 +319,11 @@ FLOW build-change:
 
 A flow needs at least one `STEP`, directly or under its `IF`/`ELSE`/`UNTIL`. A flow in a team's `flows.ap` is checked like one in a flow file.
 
-A step needs at least one `DO`, `DELEGATE`, `FORK`, `WAIT` or `RUN`, directly or under its `IF`/`ELSE`: a rule line says how to act, never what to do.
+A step needs at least one `DO`, `DELEGATE`, `FORK`, `WAIT`, `MARK`, `EACH` or `RUN`, directly or under its `IF`/`ELSE`: a rule line says how to act, never what to do.
 
 A step takes no `MEM`, nor do its `IF`/`ELSE` branches or its `DELEGATE` blocks: whoever runs the flow may have no memory in its harness.
 
-The old forms fail the build with their rewrite: `BY` and `AS` lines in a step, `CONTEXT`, a bare `PARALLEL:` and `ASK`.
+The old forms fail the build with their rewrite: `BY` and `AS` lines in a step, `CONTEXT`, `PARALLEL` (bare or `PARALLEL EACH`) and `ASK`.
 
 ## Rules
 

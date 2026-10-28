@@ -67,12 +67,12 @@ export function judgeState(rule: JudgeRule, text: string): string {
  * The keywords a body line is stored under — `ApLine.primitive` (src/apdoc/document.ts):
  * the force-level families and the bullet keywords (a directive's keyword), the
  * control and sequence heads, and the heads with a node of their own (VAR, IN,
- * PARALLEL — src/apdoc/nodes.ts). Never a block's metadata: AS is the shape of
+ * EACH — src/apdoc/nodes.ts). Never a block's metadata: AS is the shape of
  * its step or block, not a line.
  */
 const LINE_KEYWORDS: ReadonlySet<string> = new Set([
   ...getFamilyBases(), ...FORCE_LEVEL_PRIMITIVES.map(p => p.keyword), ...ACTION_VERBS,
-  ...CHECK_KINDS, ...SEQUENCE_PRIMITIVES.map(p => p.keyword), 'VAR', 'IN', 'PARALLEL',
+  ...CHECK_KINDS, ...SEQUENCE_PRIMITIVES.map(p => p.keyword), 'VAR', 'IN', 'EACH',
 ].filter(k => !(AGENT_METADATA_KEYWORDS as string[]).includes(k)));
 
 /**

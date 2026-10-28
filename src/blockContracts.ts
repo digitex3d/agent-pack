@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Giuseppe Federico
 import { DIMENSION_LINES, DOMAIN_LINES, type Keyword } from './lexer.js';
 import { ACTION_VERBS } from './actionVerbs.js';
-import { FORK_VERB, WAIT_VERB, MARK_VERB } from './delegation.js';
+import { DELEGATE_VERB, FORK_VERB, WAIT_VERB, MARK_VERB } from './delegation.js';
 import { getFamilyBases } from './forceLevelConfig.js';
 import { VERBATIM_REGIONS } from './shapeCompiler.js';
 import { PLUGIN_KEY, OPERATION_KEY } from './blockTypes.js';
@@ -21,8 +21,8 @@ const STEP_EXCLUDED: Partial<Record<Keyword, string>> = {
   AS: 'a step hands nothing over itself — the shape of what is handed over is its DELEGATE\'s: `DELEGATE <task> BY <agent> AS <template>`',
 };
 const STEP_FAMILIES = familiesWithout(STEP_EXCLUDED);
-/** The actions only a flow STEP takes, beside the action verbs: a fork, the WAIT that takes back what a `~` started, the MARK that binds zones to contracts. */
-const STEP_ACTIONS = [FORK_VERB, WAIT_VERB, MARK_VERB] as const;
+/** The actions only a flow STEP takes, beside the action verbs: a fork, the WAIT that takes back what a `~` started, the MARK that binds zones to contracts, the EACH that runs delegations per element. */
+const STEP_ACTIONS = [FORK_VERB, WAIT_VERB, MARK_VERB, 'EACH'] as const;
 const BRANCH_FAMILIES = STEP_FAMILIES;
 
 /**
@@ -118,10 +118,10 @@ export const BLOCK_CONTRACTS: Record<string, BlockContract> = {
   FLOW: {
     // `IF <condition>:` (and its `ELSE`) and `UNTIL <condition>:` put some of
     // the flow's steps under a condition or in a loop; they hold what the flow
-    // holds — STEP, PARALLEL, RUN — and nest further IF/ELSE/UNTIL. The
-    // condition is prose, judged by whoever runs the flow.
-    allows: ['STEP', 'PARALLEL', 'RUN'] as const,
-    branches: { keywords: ['IF', 'ELSE', 'UNTIL'], allows: ['STEP', 'PARALLEL', 'RUN'], nests: true },
+    // holds — STEP, RUN — and nest further IF/ELSE/UNTIL. The condition is
+    // prose, judged by whoever runs the flow.
+    allows: ['STEP', 'RUN'] as const,
+    branches: { keywords: ['IF', 'ELSE', 'UNTIL'], allows: ['STEP', 'RUN'], nests: true },
     requiresAll: ['STEP'] as const,
   },
   STEP: {
@@ -142,11 +142,11 @@ export const BLOCK_CONTRACTS: Record<string, BlockContract> = {
     branches: { keywords: ['IF', 'ELSE'], allows: ['DO', 'COMPUTE', 'RUN', ...BRANCH_FAMILIES] },
     excluded: { MEM: STEP_EXCLUDED.MEM! },
   },
-  // `PARALLEL EACH <item> IN <list> MAX <n>`: one step, run once per element.
-  'PARALLEL EACH': {
-    allows: ['STEP'] as const,
-    requiresAll: ['STEP'] as const,
-    unique: ['STEP'] as const,
+  // `EACH <item> IN {{<list>}} MAX <n>:` — the delegations run once per element of the list (D56): only DELEGATE and FORK.
+  // Keyed apart from a DIMENSION's EACH line, which is no block (src/lint.ts EACH_BLOCK).
+  'EACH IN': {
+    allows: [DELEGATE_VERB, FORK_VERB] as const,
+    requiresAnyOf: [DELEGATE_VERB, FORK_VERB] as const,
   },
   // A store is a named working table an agent reads and writes. TYPE names the
   // backing plugin — required even while one type exists, so a second one is an

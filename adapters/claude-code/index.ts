@@ -52,6 +52,19 @@ export default function claudeCodeAdapter(opts: ClaudeCodeOptions = {}): Adapter
       SKILL: {
         harness: 'Load it when you need it with the Skill tool: `{name}`.',
       },
+      // Work in the background is a background agent: Claude Code tells the session when one ends.
+      DELEGATE: {
+        background: ' — launch it as a background agent (the Agent tool, run_in_background: true) and go on: its WAIT takes it back',
+      },
+      // A fork is Claude Code's own: it inherits the conversation; working as another agent, it first reads who that agent is (D61).
+      FORK: {
+        self: '{text} — a native fork of yourself (the Agent tool, subagent_type: "fork"), with this whole conversation{shaped}{background}',
+        agent: '{text} — a native fork (the Agent tool, subagent_type: "fork") that works as `{agent}`: tell it to read who `{agent}` is first, with {definition}, and to follow that agent\'s rules from there{shaped}{background}',
+      },
+      // The word that a background agent ended arrives between turns: a WAIT never blocks the session on a command (D60).
+      WAIT: {
+        run: ' — do not go on until the notification of each one has come (Claude Code sends one when a background agent ends): one that ended without delivering is `{apx} delegate ended <id>`; then `{apx} wait {ids} --now{max}`: each one\'s state, its limit counted from its start — one still running past it is yours to decide: wait for its notification, `{apx} delegate take <dlg-id>`, `{apx} delegate reassign <dlg-id> <agent>` or `{apx} delegate block <dlg-id> "<why>"`',
+      },
     },
   };
 }

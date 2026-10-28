@@ -6,7 +6,8 @@
  * outlives the conversation that started it. Two kinds of piece, one table:
  *
  *   - a background delegation (`dlg-…`, `DELEGATE~` / `FORK~`): started by the
- *     lead, delivered or blocked by whoever carries it out;
+ *     lead, delivered or blocked by whoever carries it out — inside an EACH, one
+ *     piece per run (`dlg-…-<k>`), their results collected at the WAIT;
  *   - a contract (`ctr-…`, D16–18): a zone of the code a MARK bound to a spec —
  *     a promise that waits (`marked`) until a `DELEGATE <list> BY <agent>`
  *     starts it in a copy of its own; delivered from that copy, then merged.
@@ -62,8 +63,20 @@ export interface DelegationRecord {
 
 const FIELDS: (keyof DelegationRecord)[] = ['dlg', 'flow', 'step', 'into', 'assignee', 'state', 'result', 'reason', 'started_at', 'author', 'mark', 'spec', 'zone', 'writes', 'left_out', 'why'];
 
-/** The id of a background piece. */
-export const DELEGATION_ID_RE = /^dlg-[0-9a-f]{8}$/;
+/** The id of a background piece — or of one run of one inside an EACH (`dlg-<8 hex>-<k>`, D56). */
+export const DELEGATION_ID_RE = /^dlg-[0-9a-f]{8}(?:-[1-9]\d*)?$/;
+
+/** A piece id's background delegation, and its run inside an EACH — null when it is none. */
+export function pieceOf(id: string): { work: string; run: number | null } {
+  const m = /^(dlg-[0-9a-f]{8})(?:-([1-9]\d*))?$/.exec(id);
+  return m ? { work: m[1], run: m[2] ? Number(m[2]) : null } : { work: id, run: null };
+}
+
+/** The records of one background delegation: the piece itself, or every run of it an EACH started. */
+export function runsOf(all: readonly DelegationRecord[], work: string): DelegationRecord[] {
+  return all.filter(r => r.dlg === work || pieceOf(r.dlg).work === work && pieceOf(r.dlg).run !== null)
+    .sort((a, b) => (pieceOf(a.dlg).run ?? 0) - (pieceOf(b.dlg).run ?? 0));
+}
 /** The id of a contract. */
 export const CONTRACT_ID_RE = /^ctr-[0-9a-f]{8}$/;
 /** The id of a MARK — what a contract list is started and waited for by. */

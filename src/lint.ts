@@ -25,7 +25,7 @@ import { SLOT_LINE_RE, VERBATIM_REGIONS } from './shapeCompiler.js';
 import { STORE_LIFETIMES } from './storeTypes/types.js';
 import { stripTrailingColon, buildTree, type Node as TreeNode } from './bundlers/renderTree.js';
 import { condCheckOf, checkedKeyword, sugaredHead, splitMax, maxIssue, type CheckKind, type CheckSite } from './check.js';
-import { parseVarLine, parseParallelHead, isVarKeyword, splitBy, splitInto, takesInto, readsOf } from './vars.js';
+import { parseVarLine, parseEachHead, isVarKeyword, splitBy, splitInto, takesInto, readsOf } from './vars.js';
 import { splitList, spacedListError, WORD_LIST_LINES } from './lists.js';
 
 export interface LintError {
@@ -486,7 +486,7 @@ const roleIdentityEntries = ROLE_IDENTITY_KEYWORDS.map(
  * These keywords are only valid in a flow. Every other file kind must
  * reject them with a clear error pointing at the correct home.
  */
-const FLOW_ONLY_KEYWORDS: Keyword[] = ['FLOW', 'STEP', 'PARALLEL'];
+const FLOW_ONLY_KEYWORDS: Keyword[] = ['FLOW', 'STEP'];
 
 /** The metadata every unit's file opens with — its ABOUT, its SCOPE, its APPLIES line. */
 const unitMetadataEntries: [Keyword, KeywordHandler][] = [
@@ -757,9 +757,8 @@ function notAllowed(keyword: Keyword, parent: string, contract: BlockContract, w
   return `${what} is not allowed inside ${parent}${why ? ` — ${why}` : ''} (expected one of: ${expected})`;
 }
 
-const PARALLEL_EACH = 'PARALLEL EACH';
-/** What a bare `PARALLEL:` is told: the work of its steps starts in the background now. */
-const PARALLEL_REWRITE = 'PARALLEL was removed — in one STEP, start each piece with `DELEGATE~ <task> INTO <name> BY <agent>`, then `WAIT ALL` (PARALLEL EACH stays)';
+/** The contract of an `EACH <item> IN {{<list>}} MAX <n>:` block — keyed apart from a DIMENSION's EACH line. */
+const EACH_BLOCK = 'EACH IN';
 
 /** Whether `keyword` opens a branch (IF/ELSE, UNTIL) of a block under `contract`. */
 function isBranch(contract: BlockContract, keyword: Keyword): boolean {
@@ -817,12 +816,11 @@ export function validateBlockContracts(
         contract: { allows: branches.allows, excluded: parent.contract.excluded, branches: branches.nests ? branches : undefined },
         host: parent.host ?? parent,
       });
-    } else if (t.keyword === 'PARALLEL' && contracts[PARALLEL_EACH]) {
-      // `PARALLEL EACH <item> IN <list> MAX <n>` holds its one step; a bare PARALLEL is gone — its steps' work starts with `~`.
-      const head = parseParallelHead(t.rest);
-      if (!head) errors.push({ file, line: t.line, message: PARALLEL_REWRITE });
-      else if ('error' in head) errors.push({ file, line: t.line, message: head.error });
-      else stack.push({ keyword: PARALLEL_EACH, line: t.line, indent: t.indent, children: new Map(), contract: contracts[PARALLEL_EACH] });
+    } else if (t.keyword === 'EACH' && contracts[EACH_BLOCK] && parseEachHead(t.rest)) {
+      // `EACH <item> IN {{<list>}} MAX <n>:` holds its delegations; a malformed head is the vocabulary check's to name.
+      const head = parseEachHead(t.rest)!;
+      if ('error' in head) errors.push({ file, line: t.line, message: head.error });
+      stack.push({ keyword: 'EACH', line: t.line, indent: t.indent, children: new Map(), contract: contracts[EACH_BLOCK] });
     } else if (contracts[t.keyword]) {
       stack.push({ keyword: t.keyword, line: t.line, indent: t.indent, children: new Map(), contract: contracts[t.keyword] });
     }
@@ -1390,6 +1388,7 @@ const REMOVED_KEYWORDS: Record<string, string> = {
   LEAD: `LEAD was removed — whoever runs a flow leads it: ${CONTRACTS_REWRITE}`,
   CONTRACT: `CONTRACT blocks were removed — a contract is what a MARK makes: ${CONTRACTS_REWRITE}`,
   WITHIN: 'a WITHIN line was a CONTRACT\'s — a contract may write beyond its zones by its MARK: `MARK … AS <spec> WITHIN <domain>`; work is put within a domain by `@WITHIN <domain>`',
+  PARALLEL: 'PARALLEL was removed — in one STEP, start each piece with `DELEGATE~ <task> INTO <name> BY <agent>`, then `WAIT ALL`; one run per element of a list: `EACH <item> IN {{<list>}} MAX <n>:` with its DELEGATE or FORK lines beneath',
   CONTEXT: 'CONTEXT was removed — the form of a DELEGATE says the context: `DELEGATE … BY <agent>` hands over all of it, `DELEGATE … BY <agent> AS <template>` only what the template holds, `FORK …` the conversation itself',
 };
 
@@ -1547,13 +1546,15 @@ export function checkVocabulary(file: string, body: string): LintError[] {
         const base = forceLevelBaseOf(word);
         // A keyword alone on its line — `FOR`, `EACH`, `MUST` — lacks what it says.
         // A retired word alone on its line (`PARALLEL:`, `STRATEGY`) is told its rewrite, not what it lacks.
-        const retired = word === 'PARALLEL' ? PARALLEL_REWRITE : REMOVED_KEYWORDS[word];
+        const retired = REMOVED_KEYWORDS[word];
         if (retired) err(t.line, `${retired}: "${t.raw.trim()}"`);
         else if (KEYWORDS.includes(word) || (base && getIntroByKeyword(word) !== null)) err(t.line, `${word} needs ${BARE_NEEDS[base ?? word] ?? 'its text on the same line'}`);
         else err(t.line, base ? unknownLevel(word, base) : unknownKeyword(word));
       }
     }
-    const placed = placementError(key, parent?.key, t.kind === 'blockOpener' || opensBlock(t));
+    // `EACH <item> IN {{<list>}}` opens a flow's block, no DIMENSION line (src/vars.ts parseEachHead).
+    const eachBlock = key === 'EACH' && t.kind === 'keyword' && parseEachHead(t.rest) !== null;
+    const placed = eachBlock ? null : placementError(key, parent?.key, t.kind === 'blockOpener' || opensBlock(t));
     if (placed) err(t.line, placed);
     stack.push({ indent: t.indent, key, line: t.line });
   }
@@ -1674,7 +1675,7 @@ function lintByKind(file: string, body: string, options: LintOptions): LintError
   // blocks that are NOT the file's kind and may sit under a build-output
   // `templates/` ancestor that the dir switch would misread.
   // Their FLOW blocks (a team's file) take the same block contracts as a
-  // flow file: FLOW, STEP, PARALLEL and their branches, wherever they live.
+  // flow file: FLOW, STEP, EACH and their branches, wherever they live.
   if (isAgentOrOrchestration(file, body)) {
     const blocks = parseBlocks(body).blocks;
     return [...lintAgentBlocks(file, body), ...validateBlockContracts(desugar(lex(body)), file), ...dimensionBlockErrors(file, blocks), ...pluginBlockErrors(file, blocks), ...teamBlockErrors(file, blocks)];

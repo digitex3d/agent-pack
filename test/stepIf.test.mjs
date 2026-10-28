@@ -68,7 +68,7 @@ try {
   assert.deepEqual(lintShip(...FLOW.slice(1)), [], 'a flow file lints clean — a step whose DO all sit under an IF included');
 
   // --- lint: an IF with nothing under it is the error it is anywhere else, and lends the step no action ---
-  const STEP_WANTS = 'DO, DELEGATE, COMPUTE, FORK, WAIT, MARK, RUN';
+  const STEP_WANTS = 'DO, DELEGATE, COMPUTE, FORK, WAIT, MARK, EACH, RUN';
   const BRANCH_WANTS = `expected one of: ${STEP_WANTS}, MUST, ALWAYS, SHOULD, MAY`;
   const empty = lintShip('    STEP close it:', '        IF the audit passed:', '    STEP next:', '        DO  go');
   assert.deepEqual(empty.map(e => [e.line, e.message]), [
@@ -97,7 +97,7 @@ try {
   assert.deepEqual(lintShip('    STEP s:', '        DO  x', '        IF a:', '            DO  y', '    STEP t:', '        ELSE', '            DO  z')
     .map(e => [e.line, e.message]), [[11, 'ELSE must follow an IF in the same body']], 'an IF of another step lends it nothing');
 
-  // --- lint: a FLOW holds IF/ELSE and UNTIL, which hold STEP/PARALLEL/RUN and nest further ---
+  // --- lint: a FLOW holds IF/ELSE and UNTIL, which hold STEP/RUN and nest further ---
   const FLOW_BRANCHES = [
     '    STEP plan it:',                                 // 6
     '        DELEGATE write the plan BY builder',        // 7
@@ -124,7 +124,7 @@ try {
   assert.deepEqual(lintShip('    UNTIL done:', '        IF a:', '            STEP s:', '                DO  x'), []);
   assert.deepEqual(lintShip('    IF a:', '        RUN ship').map(e => [e.line, e.message]), [[5, 'FLOW block requires at least one STEP']]);
   // Wrong children under a flow-level branch are rejected, at any depth.
-  const flowBranchWants = 'expected one of: STEP, PARALLEL, RUN, IF, ELSE, UNTIL';
+  const flowBranchWants = 'expected one of: STEP, RUN, IF, ELSE, UNTIL';
   assert.deepEqual(lintShip('    STEP s:', '        DO  x', '    UNTIL done:', '        DO  y', '        DELEGATE z BY builder',
     '        IF a:', '            WAIT ALL', '            STEP t:', '                DO  z').map(e => [e.line, e.message]), [
     [9, `DO is not allowed inside UNTIL (${flowBranchWants})`],

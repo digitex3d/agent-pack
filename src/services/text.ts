@@ -383,7 +383,7 @@ export function renderKeywordBlock(intro: string, values: string[]): string {
  * Driven by the lexer's keyword recognition rather than ad-hoc regex.
  */
 export const CONTROL_FLOW_HEADS: Partial<Record<string, string>> = Object.fromEntries(
-  (['IF', 'ELSE', 'UNTIL', 'STEP', 'PARALLEL', 'IN'] as const).map(k => [k, FORMULAS.keywords[k].head]),
+  (['IF', 'ELSE', 'UNTIL', 'STEP', 'IN'] as const).map(k => [k, FORMULAS.keywords[k].head]),
 );
 
 export function renderControlFlow(text: string): string {

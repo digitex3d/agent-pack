@@ -17,7 +17,7 @@
  * opening with `[` must never continue the one before it. A flow the script
  * cannot express — a step with a line of its own for whoever runs the flow
  * (a DO, an IF, a FORK), a delegation to a team or to the default delegate, a
- * `PARALLEL EACH` (its list is a variable the script does not hold), or
+ * an `EACH` (its list is a variable the script does not hold), or
  * anything but steps at its top level — compiles to null, and its steps are
  * carried out as written.
  */

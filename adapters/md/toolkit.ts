@@ -28,6 +28,8 @@ export interface MdEnv {
   forceLevels: Record<string, Record<string, string>>;
   /** The reference suffix of a block address in this projection (md ` (tpl-…)`), '' when unknown. */
   refOf(target: string): string;
+  /** The adapter's own words for the delegation lines (`meta.phrases`) — absent: the neutral ones. */
+  phrases?: Record<string, Record<string, string>>;
   /** `{{var}}` → value — the body substitution. */
   substitute(text: string): string;
   /** The command that launches an agent's apx (null = the document's own agent). */
@@ -116,14 +118,17 @@ export function executorHow(env: MdEnv | undefined, exe: string | undefined, exe
  * with what context (src/delegation.ts), and a line with a contract says how
  * to have it carried out.
  */
-export function directiveText(n: { text: string; by?: string; keyword?: string; exe?: string; as?: ApShape; async?: true; work?: string; waits?: string[]; mark?: string; list?: string; max?: number; within?: string }, env?: MdEnv): string {
+export function directiveText(n: { text: string; by?: string; keyword?: string; exe?: string; as?: ApShape; async?: true; work?: string; element?: true; waits?: string[]; mark?: string; list?: string; max?: number; within?: string }, env?: MdEnv): string {
   // A DELEGATE without BY goes to the default delegate: the prompt names it.
   const agent = n.by ?? (n.keyword === DELEGATE_VERB ? env?.delegate : undefined);
   const shaped = n.as ? { name: refName(n.as.ref), ref: env ? env.refOf(n.as.ref.target) : '' } : undefined;
   const apx = env && (n.work || n.waits?.length || n.mark) ? env.apxOf(null) : undefined;
   const text = delegationText({
-    keyword: n.keyword ?? '', text: n.text, agent, async: n.async, shaped, contract: !!n.exe, apx, work: n.work, waits: n.waits,
+    keyword: n.keyword ?? '', text: n.text, agent, async: n.async, shaped, contract: !!n.exe, apx, work: n.work, element: n.element, waits: n.waits,
     mark: n.mark, list: n.list, max: n.max, within: n.within, spec: shaped,
+    phrases: env?.phrases,
+    // A fork that works as another agent first reads who that agent is: its apx's `scope`.
+    ...(n.keyword === 'FORK' && n.by && env ? { definition: `\`${env.apxOf(n.by)} scope\`` } : {}),
   });
   return text + executorHow(env, n.exe, verbRank(n.keyword ?? '') ?? 1);
 }

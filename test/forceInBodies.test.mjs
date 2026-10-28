@@ -98,12 +98,12 @@ try {
   const lintShip = (...lines) => lintFlow(flowFile, ['# ship', '', 'ABOUT  ship it', '', 'FLOW ship', ...lines, ''].join('\n'));
   assert.deepEqual(lintShip(...FLOW.slice(1)), [], 'a flow file lints clean');
   assert.deepEqual(lintShip('    STEP s:', '        NEVER  guess', '        IF a:', '            MUST  check').map(e => [e.line, e.message]),
-    [[6, 'STEP block requires at least one of: DO, DELEGATE, COMPUTE, FORK, WAIT, MARK, RUN']], 'force lines alone are no action');
+    [[6, 'STEP block requires at least one of: DO, DELEGATE, COMPUTE, FORK, WAIT, MARK, EACH, RUN']], 'force lines alone are no action');
   // AS is a DELEGATE's, never a step's; the removed DISTILL is no word of a step.
   assert.deepEqual(lintShip('    STEP s:', '        DO  x', '        IF a:', '            AS  plan', '            DO  y').map(e => e.message),
-    ["AS is not allowed inside IF — a step hands nothing over itself — the shape of what is handed over is its DELEGATE's: `DELEGATE <task> BY <agent> AS <template>` (expected one of: DO, DELEGATE, COMPUTE, FORK, WAIT, MARK, RUN, MUST, ALWAYS, SHOULD, MAY)"]);
+    ["AS is not allowed inside IF — a step hands nothing over itself — the shape of what is handed over is its DELEGATE's: `DELEGATE <task> BY <agent> AS <template>` (expected one of: DO, DELEGATE, COMPUTE, FORK, WAIT, MARK, EACH, RUN, MUST, ALWAYS, SHOULD, MAY)"]);
   assert.deepEqual(lintShip('    STEP s:', '        DO  x', '        DISTILL').map(e => e.message),
-    ['DISTILL is not allowed inside STEP (expected one of: DO, DELEGATE, COMPUTE, FORK, WAIT, MARK, RUN, MUST, ALWAYS, SHOULD, MAY, IF, ELSE)']);
+    ['DISTILL is not allowed inside STEP (expected one of: DO, DELEGATE, COMPUTE, FORK, WAIT, MARK, EACH, RUN, MUST, ALWAYS, SHOULD, MAY, IF, ELSE)']);
 
   // --- the document: force lines are directive nodes with their force, in source order ---
   const { structure } = await bundleAgentObject({

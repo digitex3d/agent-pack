@@ -32,12 +32,12 @@ export interface Formulas {
       question: Text; shapedRead: Text; field: Text; fieldSeparator: Text; state: Text; stateSeparator: Text;
     };
     WHEN: { head: Text; handed: Text };
-    PARALLEL: { head: Text; each: Text };
+    EACH: { head: Text; waited: Text };
     IN: { head: Text; store: Text; unresolved: Text };
     STEP: { head: Text; list: Text };
     RUN: { line: Text; flow: Text; unresolved: Text; bare: Text; sequence: Text; name: Text };
     DO: { intro: Text };
-    DELEGATE: { intro: Text; to: Text; full: Text; shaped: Text; background: Text; started: Text; contracts: Text; contractsRun: Text; contractsWait: Text };
+    DELEGATE: { intro: Text; to: Text; full: Text; shaped: Text; background: Text; started: Text; element: Text; elements: Text; contracts: Text; contractsRun: Text; contractsWait: Text };
     MARK: { intro: Text; text: Text; within: Text; none: Text };
     FORK: { intro: Text; self: Text; agent: Text; shaped: Text };
     WAIT: { intro: Text; named: Text; all: Text; run: Text; max: Text };

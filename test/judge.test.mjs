@@ -178,7 +178,8 @@ try {
       ]);
       return () => loadJudgeRules({ libraryRoot: dir, sharedLibraries: [], userRoot: '' }).find(r => r.template.name === 'body-rule');
     };
-    for (const keyword of ['ABOUT', 'APPLIES', 'EXPERTISE', 'FOR', 'EACH', 'TYPE', 'LASTS', 'KEY', 'AS', 'CONTEXT', 'ELSE']) {
+    // EACH starts a body line now: a flow's EACH block (D56) — a DIMENSION's EACH line is no body line, and is never judged (below).
+    for (const keyword of ['ABOUT', 'APPLIES', 'EXPERTISE', 'FOR', 'TYPE', 'LASTS', 'KEY', 'AS', 'CONTEXT', 'ELSE']) {
       for (const tags of ['#judge', '#judge, #agent']) {
         assert.throws(bodyRule(join(root, `body-${keyword}-${tags.length}`), `${keyword} {x}`, tags),
           new RegExp(`body-rule.*BODY starts with \`${keyword}\`, which never starts a body line`), `BODY ${keyword} (${tags}) is a load error`);
@@ -190,7 +191,7 @@ try {
         new RegExp(`body-rule.*BODY starts with \`${keyword.replace(/[!*]/g, '\\$&')}\`, but lines written .* are stored under \`${stored}\` — write \`${stored}\``),
         `BODY ${keyword} points to ${stored}`);
     }
-    for (const keyword of ['DO', 'DELEGATE', 'FORK', 'WAIT', 'COMPUTE', 'MUST', 'ALWAYS', 'SHOULD', 'MAY', 'MEM', 'RUN', 'VAR', 'IF', 'UNTIL', 'WHEN', 'STEP', 'PARALLEL', 'IN']) {
+    for (const keyword of ['DO', 'DELEGATE', 'FORK', 'WAIT', 'COMPUTE', 'MUST', 'ALWAYS', 'SHOULD', 'MAY', 'MEM', 'RUN', 'VAR', 'IF', 'UNTIL', 'WHEN', 'STEP', 'EACH', 'IN']) {
       assert.deepEqual(bodyRule(join(root, `body-ok-${keyword}`), `${keyword} {x}`)().primitives, [keyword], `BODY ${keyword} names its lines`);
     }
     assert.deepEqual(bodyRule(join(root, 'body-ok-line'), '{x}', '#judge, #agent')().primitives, [], 'a scoped rule may lay out a slot alone');

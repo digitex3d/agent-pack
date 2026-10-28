@@ -53,8 +53,8 @@ import {
 } from '../services/teamMetadata.js';
 import { parseBlocks, type Block } from '../parseBlocks.js';
 import type { ApNode, ApRef, ApShape, ApSlotType, ApStepNode, ApIfNode, ApDocumentMeta, ApStoreProjection } from './types.js';
-import { parseVarLine, parallelEachOf, readsOf, splitInto, takesInto, constantOf, type VarScope } from '../vars.js';
-import { isDelegationVerb, parseDelegation, bindBackgroundWork, parseMark, contractListOf, MARK_VERB, type ApMark } from '../delegation.js';
+import { parseVarLine, eachHeadOf, readsOf, splitInto, takesInto, constantOf, type VarScope } from '../vars.js';
+import { isDelegationVerb, parseDelegation, bindBackgroundWork, parseMark, contractListOf, delegationPhrases, MARK_VERB, type ApMark } from '../delegation.js';
 import { shortId } from './ids.js';
 import type { PlacedVariable } from '../exportedVars.js';
 import { introOf, fill, refSuffix, FORMULAS } from '../formulas.js';
@@ -78,7 +78,7 @@ import {
 } from './blocks.js';
 import { ApDocument, BlockProvenance } from './document.js';
 import { COMPUTE_SECTIONS, executorMark, executorSpecs, returnShape } from '../executor.js';
-import { DirectiveNode, RunNode, TextNode, IfNode, UntilNode, WhenNode, StepNode, ParallelNode, InNode, VarNode } from './nodes.js';
+import { DirectiveNode, RunNode, TextNode, IfNode, UntilNode, WhenNode, StepNode, EachNode, InNode, VarNode } from './nodes.js';
 import { splitList } from '../lists.js';
 
 
@@ -158,8 +158,12 @@ export class DocumentBuilder implements BlockCx {
   private varSites: VarSite[] = [];
   /** Every assignment of a variable — a `VAR x:` block, a `DO … INTO x` — in walk order. */
   private varWrites: { name: string; node: VarNode | DirectiveNode | RunNode; path: string }[] = [];
-  /** Every `PARALLEL EACH … IN <list>` — its list must be a variable typed with one LIST slot. */
-  private eachLists: { name: string; node: ParallelNode; path: string }[] = [];
+  /** Every `EACH … IN {{<list>}}` — its list must be a variable typed with one LIST slot (D56). */
+  private eachLists: { name: string; node: EachNode; path: string }[] = [];
+  /** The INTO of each delegation inside an EACH — it collects one result per run, a list (D56). */
+  private eachInto: { name: string; node: DirectiveNode; path: string }[] = [];
+  /** How deep the walk is inside EACH blocks: their delegations' INTOs collect lists. */
+  private eachDepth = 0;
   /** What is wrong with the variables: a compile error each, reported by the caller. */
   readonly varErrors: { path: string; name: string; line: number | null; message: string }[] = [];
   /** The checked conditions this agent's apx answers for, in walk order — their questions are built at finish. */
@@ -320,15 +324,19 @@ export class DocumentBuilder implements BlockCx {
         continue;
       }
 
-      if (kw === 'PARALLEL') {
-        // `PARALLEL EACH <item> IN <list> MAX <n>`: a malformed head is the lint's to report.
-        const each = parallelEachOf(t.rest);
-        const node = this.at(new ParallelNode(each ? { item: each.item, list: VarBlock.ref(each.list), max: each.max } : undefined), t);
-        if (each) this.eachLists.push({ name: each.list, node, path: this.sourcePath });
-        sink.push(node);
-        this.visit(n.children, node.steps as unknown as ApNode[], host, steps);
-        i++;
-        continue;
+      if (kw === 'EACH') {
+        // `EACH <item> IN {{<list>}} MAX <n>:` — a malformed head is the lint's to report; a DIMENSION's EACH line is no block.
+        const each = eachHeadOf(t.rest);
+        if (each) {
+          const node = this.at(new EachNode({ item: each.item, list: VarBlock.ref(each.list), max: each.max }, t.indent), t);
+          this.eachLists.push({ name: each.list, node, path: this.sourcePath });
+          sink.push(node);
+          this.eachDepth++;
+          this.visit(n.children, node.body, host, steps);
+          this.eachDepth--;
+          i++;
+          continue;
+        }
       }
 
       if (kw === 'IF') {
@@ -578,6 +586,7 @@ export class DocumentBuilder implements BlockCx {
       if (d.into) {
         node.into = VarBlock.ref(d.into);
         this.varWrites.push({ name: d.into, node, path: this.sourcePath });
+        if (this.eachDepth > 0) this.eachInto.push({ name: d.into, node, path: this.sourcePath });
       }
       if (d.by) this.delegationScopes.push({ by: d.by, scope: this.scope, path: this.sourcePath, line: token ? this.fileLine(token) : null });
       return node;
@@ -983,19 +992,25 @@ export class DocumentBuilder implements BlockCx {
           fail(w.path, site.name, line, `\`${site.name}\` is a \`${refName(type)}\`, but this ${w.node.type === 'var' ? 'block' : 'procedure'} yields a \`${refName(yielded)}\` — a variable keeps one type for its whole life`);
         }
       }
-      if (type) for (const w of writes) w.node.shape = { force: 1, ref: type };
+      // A run of an EACH answers one element, not the list its INTO collects.
+      if (type) for (const w of writes) if (!this.eachInto.some(e => e.node === w.node)) w.node.shape = { force: 1, ref: type };
       types.set(site.name, type);
       return VarBlock.fromDeclaration(site.name, site.scope, type, site.where);
     });
-    // `PARALLEL EACH … IN <list>`: the list is a variable whose template holds one LIST slot — the elements.
+    // `EACH … IN {{<list>}}`: the list is a variable whose template holds one LIST slot — the elements.
+    const oneList = (type: ApRef) => (doc.slotsOf(type) ?? []).filter(s => s.spec.kind === 'list').length;
     for (const { name, node, path } of this.eachLists) {
-      const at = (message: string) => fail(path, name, node.pos?.line ?? null, `PARALLEL EACH ${node.each!.item} IN ${name}: ${message}`);
+      const at = (message: string) => fail(path, name, node.pos?.line ?? null, `EACH ${node.each.item} IN {{${name}}}: ${message}`);
       const type = types.get(name);
       if (type === undefined) at(`no variable \`${name}\` — IMPORT the module that exports it, or declare it with \`VAR ${name} AS <template>\``);
       else if (!type) at(`\`${name}\` has no type — declare it \`AS <template>\`, a template with one LIST slot`);
-      else {
-        const lists = (doc.slotsOf(type) ?? []).filter(s => s.spec.kind === 'list');
-        if (lists.length !== 1) at(`\`${refName(type)}\` has ${lists.length} LIST slots — the list to run over is its one LIST slot`);
+      else if (oneList(type) !== 1) at(`\`${refName(type)}\` has ${oneList(type)} LIST slots — the list to run over is its one LIST slot`);
+    }
+    // An INTO inside an EACH collects one result per run: a plain variable, or a template with one LIST slot.
+    for (const { name, node, path } of this.eachInto) {
+      const type = types.get(name);
+      if (type && oneList(type) !== 1) {
+        fail(path, name, node.pos?.line ?? null, `INTO ${name} inside EACH collects one result per run — \`${refName(type)}\` has ${oneList(type)} LIST slots: declare \`${name}\` with no type, or with a template of one LIST slot`);
       }
     }
     return blocks;
@@ -1037,11 +1052,13 @@ export class DocumentBuilder implements BlockCx {
     }
 
     const flowRun = ctx.renderings?.['FLOW']?.['run'];
+    const phrases = delegationPhrases(ctx.renderings);
     return {
       root: `${AgentBlock.NAMESPACE}/${ctx.agentName}`,
       forceLevels,
       enums,
       ...(flowRun ? { flowRun } : {}),
+      ...(phrases ? { phrases } : {}),
       ...(ctx.sessionEnv ? { sessionEnv: ctx.sessionEnv } : {}),
     };
   }

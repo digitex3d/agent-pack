@@ -22,7 +22,7 @@ import { refName } from '../../../adapters/md/phrases.js';
 import { jsonExample } from '../../shapeSchema.js';
 import { sha256Hex } from '../../apdoc/ids.js';
 import { parseDuration, DURATION_FORM } from '../../delegation.js';
-import { DelegationTable, DELEGATION_ID_RE, CONTRACT_ID_RE, MARK_ID_RE, SETTLED_STATES, pieceRecord, type DelegationRecord, type DelegationState } from '../delegations.js';
+import { DelegationTable, DELEGATION_ID_RE, CONTRACT_ID_RE, MARK_ID_RE, SETTLED_STATES, pieceRecord, pieceOf, runsOf, type DelegationRecord, type DelegationState } from '../delegations.js';
 import { countOf, type ApxHost, type ApxService } from '../service.js';
 
 /** The service's old name: what it says to whoever still calls it. */
@@ -113,11 +113,23 @@ function line(r: DelegationRecord): string {
   return `${r.dlg}  ${r.into || r.step}  ${r.state === 'ended' ? 'ended without delivery' : r.state}  → ${r.assignee || 'a fork'}${r.reason ? `  — ${r.reason}` : ''}`;
 }
 
-/** A piece the flows of this agent start, by id — or null after saying why. */
+/**
+ * A piece the flows of this agent start, by id — or null after saying why. A
+ * delegation inside an EACH is started once per run, `<dlg-id>-<k>`: a run past
+ * the EACH's MAX is the list running longer than its bound (D57).
+ */
 function known(host: ApxHost, id: string | undefined, usage: string): string | null {
   if (id && CONTRACT_ID_RE.test(id)) return id;
   if (!id || !DELEGATION_ID_RE.test(id)) { host.lastCode = host.fail(2, `a piece id is needed (dlg-… or ctr-…) — ${host.cmd} delegate ${usage}`); return null; }
-  if (!host.doc.meta.background?.[id]) { host.lastCode = host.fail(1, `no flow of ${host.root.name} starts ${id} — the ids are in its compiled flows`); return null; }
+  const { work: base, run } = pieceOf(id);
+  const work = host.doc.meta.background?.[base];
+  if (!work) { host.lastCode = host.fail(1, `no flow of ${host.root.name} starts ${base} — the ids are in its compiled flows`); return null; }
+  if (work.each && run === null) { host.lastCode = host.fail(2, `${id} runs once per element of an EACH — name the run: ${host.cmd} delegate ${usage.split(' ')[0]} ${id}-<k>, <k> the run's number from 1`); return null; }
+  if (!work.each && run !== null) { host.lastCode = host.fail(2, `${base} is in no EACH — it is one piece: ${host.cmd} delegate ${usage.split(' ')[0]} ${base}`); return null; }
+  if (work.each && run! > work.each.max) {
+    host.lastCode = host.fail(3, `${id}: the list runs longer than the EACH's MAX ${work.each.max} — an error: stop the flow and report it`);
+    return null;
+  }
   return id;
 }
 
@@ -151,7 +163,7 @@ const REGISTRY_OPS: Record<string, RegistryOp> = {
   start(host, table, [id]) {
     if (id && CONTRACT_ID_RE.test(id)) return host.fail(2, `a contract starts with the rest of its list — ${host.cmd} contract start <mrk-id> --by <agent>`);
     if (!known(host, id, 'start <dlg-id>')) return host.lastCode;
-    const work = host.doc.meta.background![id!];
+    const work = host.doc.meta.background![pieceOf(id!).work];
     const fresh = pieceRecord({
       dlg: id!, flow: work.flow, step: work.step, into: work.into ?? '', assignee: work.by ?? '',
       state: 'running', started_at: new Date().toISOString(), author: host.root.name,
@@ -172,7 +184,8 @@ const REGISTRY_OPS: Record<string, RegistryOp> = {
     if (CONTRACT_ID_RE.test(r.dlg)) return host.contracts.deliver(table, r, [from, ...rest].filter((a): a is string => a !== undefined));
     if (r.state !== 'running') return host.fail(1, `${id} is ${r.state} — only a running piece is delivered`);
     const text = (from === '-' || from === undefined ? readFileSync(0, 'utf-8') : from).trim();
-    if (r.into) {
+    // One run of an EACH keeps its result: the WAIT collects the runs' into the list its INTO names.
+    if (r.into && pieceOf(r.dlg).run === null) {
       const block = host.variable(r.into);
       const failed = block ? host.storeVariable(block, text) : null;
       if (failed) return host.fail(6, `${id} delivers into \`${r.into}\`: ${failed.reason} — deliver it again; nothing was stored`);
@@ -224,7 +237,7 @@ const REGISTRY_OPS: Record<string, RegistryOp> = {
 };
 
 /**
- * `wait <dlg-id | var> … [--max <duration>]`, `wait all` — take back what was
+ * `wait <dlg-id | var> … [--max <duration>] [--now]`, `wait all` — take back what was
  * started: it returns when every piece it names is delivered, blocked or ended
  * without delivery, or when the limit is reached — and leaves what is still
  * running as it is (D52). Then each one's state (D48): exit 0 when all were
@@ -232,12 +245,15 @@ const REGISTRY_OPS: Record<string, RegistryOp> = {
  */
 export function waitFor(host: ApxHost, argv: string[], pollMs = 500): number | Promise<number> {
   const args = [...argv];
+  // `--now`: no waiting — each one's state at once, its limit counted from when it started (a harness that is told when work ends, D60).
+  const now = args.includes('--now');
+  if (now) args.splice(args.indexOf('--now'), 1);
   const at = args.indexOf('--max');
   const max = at >= 0 ? args.splice(at, 2)[1] : host.build.waitMax ?? DEFAULT_WAIT_MAX;
   const ms = max ? parseDuration(max) : null;
   if (ms === null) return host.fail(2, `--max ${max ?? ''}: a duration is ${DURATION_FORM}`);
   const names = args.flatMap(a => a.split(',')).map(a => a.trim()).filter(Boolean);
-  if (names.length === 0) return host.fail(2, `wait takes what to wait for — ${host.cmd} wait <dlg-id | mrk-id | var> … [--max <duration>] | ${host.cmd} wait all`);
+  if (names.length === 0) return host.fail(2, `wait takes what to wait for — ${host.cmd} wait <dlg-id | mrk-id | var> … [--max <duration>] [--now] | ${host.cmd} wait all`);
   return withRegistry(host, 'wait', async table => {
     const pick = (): DelegationRecord[] | string => {
       const all = table.all();
@@ -246,16 +262,17 @@ export function waitFor(host: ApxHost, argv: string[], pollMs = 500): number | P
       for (const name of names) {
         // A MARK's id: the contracts its latest DELEGATE started — none started: nothing to wait for.
         if (MARK_ID_RE.test(name)) { out.push(...table.batchOf(name)); continue; }
-        const r = DELEGATION_ID_RE.test(name) ? all.find(x => x.dlg === name) : [...all].reverse().find(x => x.into === name);
+        const r = DELEGATION_ID_RE.test(name) ? all.find(x => x.dlg === name || pieceOf(x.dlg).work === name) : [...all].reverse().find(x => x.into === name);
         if (!r) return `${name} was never started in this session — ${DELEGATION_ID_RE.test(name) ? `${host.cmd} delegate start ${name}` : `no background piece fills \`${name}\``}`;
-        out.push(r);
+        // A delegation of an EACH: every run of it; a run named alone, that run.
+        out.push(...(r.dlg === name ? [r] : runsOf(all, pieceOf(r.dlg).work)));
       }
       return out;
     };
     const first = pick();
     if (typeof first === 'string') return host.fail(1, first);
     const ids = [...new Set(first.map(r => r.dlg))];
-    const deadline = Date.now() + ms;
+    const deadline = now ? Date.now() : Date.now() + ms;
     let pieces = first;
     while (pieces.some(r => !SETTLED_STATES.includes(r.state)) && Date.now() < deadline) {
       await new Promise(done => setTimeout(done, Math.min(pollMs, Math.max(0, deadline - Date.now()))));
@@ -264,15 +281,72 @@ export function waitFor(host: ApxHost, argv: string[], pollMs = 500): number | P
     }
     // What the contracts delivered is merged and lands; then each one's state.
     pieces = host.contracts.fold(table, pieces);
+    collectRuns(host, pieces);
+    contractStates(host, table, pieces);
+    // Past its limit: the time it has run, from its start — with --now; else the wait itself.
+    const past = (r: DelegationRecord) => !now || Date.now() - Date.parse(r.started_at) >= ms;
     for (const r of pieces) {
-      host.out(r.state === 'running' ? `${line(r)}  — still running after ${max}` : line(r));
+      host.out(r.state !== 'running' ? line(r) : past(r) ? `${line(r)}  — still running after ${max}` : `${line(r)}  — running, within its ${max}`);
       if (r.state === 'delivered' && !r.into && r.result) host.out(`  result: ${JSON.parse(r.result)}`);
     }
     const open = pieces.filter(r => r.state !== 'delivered' && r.state !== 'merged');
     if (open.length === 0) return host.print(`# ${countOf(pieces.length, 'piece', 'pieces')} delivered — go on with each one's result`);
+    // Still within their limit, and nothing else open: wait for the word of each one.
+    if (open.every(r => r.state === 'running' && !past(r))) {
+      host.out(`# ${countOf(open.length, 'piece', 'pieces')} still running, within the limit — wait for the word that each one ended, then look again`);
+      host.lastCode = 1;
+      return 1;
+    }
     host.out(`# ${countOf(open.length, 'piece', 'pieces')} not delivered — you decide: wait again (${host.cmd} wait ${open.map(r => r.dlg).join(' ')}),`);
     host.out(`#   ${host.cmd} delegate take <dlg-id>, ${host.cmd} delegate reassign <dlg-id> <agent>, or ${host.cmd} delegate block <dlg-id> "<why>"`);
     host.lastCode = 1;
     return 1;
   });
+}
+
+/**
+ * The runs of an EACH, taken back: once every run of a delegation is settled,
+ * its INTO holds one result per run, in run order (D56) — a plain variable the
+ * list as JSON, a run not delivered as its state; a variable typed with one
+ * LIST slot that slot, only when every run delivered.
+ */
+function collectRuns(host: ApxHost, pieces: readonly DelegationRecord[]): void {
+  const works = new Map<string, DelegationRecord[]>();
+  for (const r of pieces) {
+    const { work, run } = pieceOf(r.dlg);
+    if (run !== null) works.set(work, [...(works.get(work) ?? []), r]);
+  }
+  for (const [work, runs] of works) {
+    const into = host.doc.meta.background?.[work]?.into;
+    if (!into || runs.some(r => !SETTLED_STATES.includes(r.state))) continue;
+    const block = host.variable(into);
+    if (!block) continue;
+    const result = (r: DelegationRecord) => { try { return JSON.parse(JSON.parse(r.result)); } catch { return r.result ? JSON.parse(r.result) : ''; } };
+    const list = runs.map(r => (r.state === 'delivered' ? result(r) : { state: r.state === 'ended' ? 'ended without delivery' : r.state, ...(r.reason ? { reason: r.reason } : {}) }));
+    const slot = block.type ? (host.doc.slotsOf(block.type) ?? []).find(x => x.spec.kind === 'list') : undefined;
+    if (block.type && runs.some(r => r.state !== 'delivered')) {
+      host.out(`# \`${into}\` not stored: not every run of ${work} delivered, and its template takes only results`);
+      continue;
+    }
+    const failed = host.storeVariable(block, JSON.stringify(slot ? { [slot.name]: list } : list));
+    host.out(failed ? `# \`${into}\` not stored: ${failed.reason}` : `# \`${into}\` holds the ${countOf(runs.length, 'run', 'runs')} of ${work}, in order — read it: ${host.cmd} get ${into}`);
+  }
+}
+
+/**
+ * The contracts of a MARK, taken back: its list's variable holds each one's
+ * state (D50) — what `{{<list>}}` reads after the WAIT: its id, its state, why
+ * it was blocked. Before the WAIT it holds their ids.
+ */
+function contractStates(host: ApxHost, table: DelegationTable, pieces: readonly DelegationRecord[]): void {
+  const marks = new Set(pieces.filter(r => CONTRACT_ID_RE.test(r.dlg) && r.mark).map(r => r.mark));
+  for (const mark of marks) {
+    const batch = table.batchOf(mark);
+    const list = batch[0]?.into;
+    const block = list ? host.variable(list) : null;
+    if (!block) continue;
+    const states = batch.map(r => ({ id: r.dlg, state: r.state === 'ended' ? 'ended without delivery' : r.state, ...(r.reason ? { reason: r.reason } : {}) }));
+    const failed = host.storeVariable(block, JSON.stringify(states));
+    if (failed) host.out(`# \`${list}\` not stored: ${failed.reason}`);
+  }
 }

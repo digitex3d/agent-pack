@@ -13,7 +13,7 @@
  *   - sequence blocks (STEP, via SEQUENCE_PRIMITIVES) collapse consecutive
  *                   siblings into an ordered/unordered list whose items each
  *                   recurse into their own body;
- *   - PARALLEL EACH renders its STEP as an unordered list ("container forces
+ *   - EACH renders its head, then its delegation lines ("container forces
  *                   order");
  *   - control heads (IF/ELSE/UNTIL) render the head and recurse the body,
  *                   keeping it at its original indentation.
@@ -32,8 +32,8 @@ import { forceLevelBaseOf } from '../forceLevelConfig.js';
 import { FORMULAS, fill, refSuffix } from '../formulas.js';
 import { checkHead, condCheckOf, type CheckKind } from '../check.js';
 import { apxCommand } from '../apx/paths.js';
-import { executorHead, parallelHead } from '../../adapters/md/phrases.js';
-import { parallelEachOf } from '../vars.js';
+import { executorHead, eachHead } from '../../adapters/md/phrases.js';
+import { eachHeadOf } from '../vars.js';
 import { WAIT_VERB, MARK_VERB, isDelegationVerb, parseDelegation, delegationText } from '../delegation.js';
 
 const CONTROL_HEADS: Record<string, string> = { IF: 'If', ELSE: 'Else', UNTIL: 'Until' };
@@ -182,7 +182,8 @@ function delegationLine(t: Token, ctx?: BundleContext): string | null {
   const template = d.as ? ctx?.templates.find(tp => tp.name === d.as!.name.replace(/`/g, '')) : undefined;
   const shaped = d.as ? { name: d.as.name.replace(/`/g, '').replace(/\s+\(.*\)$/, ''), ref: template ? refSuffix(template.refId) : '' } : undefined;
   // Its INTO stays as written: no store line follows it here.
-  const text = delegationText({ keyword, text: d.into ? `${d.task} INTO ${d.into}` : d.task, agent: d.by ?? undefined, async: t.async, shaped });
+  const text = delegationText({ keyword, text: d.into ? `${d.task} INTO ${d.into}` : d.task, agent: d.by ?? undefined, async: t.async, shaped,
+    phrases: ctx?.renderings, ...(keyword === 'FORK' && d.by ? { definition: `\`${apxCommand(d.by, 'scope')}\`` } : {}) });
   return `${indent}${keyword} ${text}${d.opens ? ':' : ''}`;
 }
 
@@ -205,7 +206,7 @@ export function isStructural(t: Token, hasChildren: boolean): boolean {
   if (t.kind === 'decorator') return true;
   if (t.kind !== 'keyword') return false;
   const kw = t.keyword as string;
-  return !!sequencePrimitiveFor(kw) || kw === 'PARALLEL' || !!CONTROL_HEADS[kw];
+  return !!sequencePrimitiveFor(kw) || (kw === 'EACH' && !!eachHeadOf(t.rest)) || !!CONTROL_HEADS[kw];
 }
 
 /** `by`: the agent of the DELEGATE block being rendered — who checks a checked condition in it. */
@@ -268,12 +269,12 @@ function renderNodes(nodes: Node[], ctx: BundleContext | undefined, ordered: boo
       continue;
     }
 
-    // PARALLEL container: its STEP children render as an unordered list. With
-    // EACH, its head says how the runs go; the list's read resolves with the flow's reads.
-    if (kw === 'PARALLEL') {
-      out.push(`${' '.repeat(S)}${parallelHead(parallelEachOf(t.rest))}`);
-      const body = renderNodes(n.children, ctx, false);
-      out.push(...reindent(body, minIndent(body), S));
+    // EACH block: its head says how the runs go; its delegation lines render as any. The list's read resolves with the flow's reads.
+    const each = kw === 'EACH' ? eachHeadOf(t.rest) : null;
+    if (each) {
+      const waited = n.children.some(c => c.token.kind === 'keyword' && isDelegationVerb(c.token.keyword as string) && !c.token.async);
+      out.push(`${' '.repeat(S)}${eachHead(each, waited)}`);
+      out.push(...renderNodes(n.children, ctx, ordered, by));
       i++;
       continue;
     }

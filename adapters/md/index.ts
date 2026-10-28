@@ -63,6 +63,7 @@ export function mdEnv(
   return {
     ...(doc.meta.delegate ? { delegate: doc.meta.delegate } : {}),
     forceLevels: doc.meta.forceLevels,
+    ...(doc.meta.phrases ? { phrases: doc.meta.phrases } : {}),
     refOf,
     // Substitution: a constant's `{{name}}` → its value; a variable's → how to read it.
     substitute: text => resolveReads(text, r => (r.template ? undefined : constantOf(src.vars, r.name)) ?? read(r)),

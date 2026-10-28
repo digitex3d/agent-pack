@@ -9,6 +9,7 @@
  *   WAIT     <var>, …   |   WAIT ALL
  *   MARK     <criterion> INTO <var> AS <spec> [MAX <n>] [WITHIN <domain>]
  *   DELEGATE <var> BY <agent>              — the contracts a MARK filled <var> with
+ *   EACH     <item> IN {{<list>}} MAX <n>:  — its DELEGATE / FORK lines once per element
  *
  * The form says how much context is passed: `DELEGATE … BY x` all of it,
  * `DELEGATE … AS t` only what the template holds, `FORK` the conversation
@@ -23,6 +24,12 @@
  * them, one each, all at once, in copies of their own — `~` and WAIT as for any
  * delegation. One agent for the whole list: other agents, other MARKs (D64).
  *
+ * One run per element (D56): an `EACH` block holds delegations only; each runs
+ * once per element of a list of data, all the runs at once — without `~` the
+ * flow waits for every run, with `~` it goes on until the WAIT. An INTO inside
+ * collects one result per run, a list. A list of contracts is no EACH's: it is
+ * delegated as it is.
+ *
  * Structured: what a `~` starts is waited for before the block it is written
  * in ends — a STEP, an IF or ELSE branch, an UNTIL — and its variable is read
  * only after its WAIT.
@@ -30,7 +37,7 @@
  * Every reader of these forms — the lexer, the lint, the document builder, the
  * renderers — asks this module. No imports from the compiler: the apx bundles it.
  */
-import { splitBy, splitInto, readsOf } from './vars.js';
+import { splitBy, splitInto, readsOf, parseEachHead } from './vars.js';
 import { splitList } from './lists.js';
 import { FORMULAS, fill } from './formulas.js';
 
@@ -106,6 +113,27 @@ export function delegationLineErrors(verb: string, rest: string): string[] {
   return errors;
 }
 
+/** The keywords whose words an adapter may give its own (`renderings.<KEYWORD>.<key>`): how its harness hands work out and waits. */
+const PHRASED = [DELEGATE_VERB, FORK_VERB, WAIT_VERB] as const;
+type Phrased = typeof PHRASED[number];
+/** An adapter's own words for the delegation lines, by keyword then key — over the formulas. */
+export type DelegationPhrases = Record<string, Record<string, string>>;
+
+/** The adapter's words for the delegation lines, out of all its renderings — null when it gives none. */
+export function delegationPhrases(renderings: Record<string, Record<string, string>> | undefined): DelegationPhrases | null {
+  const out: DelegationPhrases = {};
+  for (const k of PHRASED) if (renderings?.[k]) out[k] = renderings[k];
+  return Object.keys(out).length ? out : null;
+}
+
+/** The formulas of the delegation lines, with an adapter's words over them. */
+function phrasesOf(phrases: DelegationPhrases | undefined): typeof FORMULAS.keywords {
+  const K = FORMULAS.keywords;
+  if (!phrases) return K;
+  const over = <T extends Phrased>(k: T) => ({ ...K[k], ...phrases[k] }) as typeof K[T];
+  return { ...K, DELEGATE: over(DELEGATE_VERB), FORK: over(FORK_VERB), WAIT: over(WAIT_VERB) };
+}
+
 /**
  * A delegation line's text as rendered — who it goes to, with what context,
  * whether it runs in the background; a WAIT's what it waits for. `agent` is
@@ -117,10 +145,14 @@ export function delegationText(n: {
   keyword: string; text: string; agent?: string; async?: boolean; shaped?: { name: string; ref: string }; contract?: boolean;
   /** The apx command the lines name, and the registry ids: a background piece's own, a WAIT's — absent, no commands. */
   apx?: string; work?: string; waits?: string[];
+  /** A background piece inside an EACH: one id per run, `<work>-<k>`. */
+  element?: boolean;
   /** A MARK's id, or the MARK a DELEGATE of a contract list starts; a MARK's spec (`AS`), its limit, its domain. */
   mark?: string; list?: string; spec?: { name: string; ref: string }; max?: number; within?: string;
+  /** The adapter's own words (`meta.phrases`); a FORK BY's command that reads its agent's definition. */
+  phrases?: DelegationPhrases; definition?: string;
 }): string {
-  const K = FORMULAS.keywords;
+  const K = phrasesOf(n.phrases);
   if (n.keyword === MARK_VERB) {
     const m = parseMark(n.text);
     const within = n.within ?? m.within;
@@ -135,7 +167,8 @@ export function delegationText(n: {
     const wait = !n.async && n.apx && n.mark ? fill(K.DELEGATE.contractsWait, { apx: n.apx, mark: n.mark }) : '';
     return fill(K.DELEGATE.contracts, { list: n.list, agent: n.agent, background: n.async ? K.DELEGATE.background : '' }) + run + wait;
   }
-  const started = n.apx && n.work ? fill(K.DELEGATE.started, { apx: n.apx, id: n.work }) : '';
+  const id = n.work && n.element ? fill(K.DELEGATE.element, { work: n.work }) : n.work;
+  const started = n.apx && id ? fill(K.DELEGATE.started, { apx: n.apx, id }) + (n.element ? K.DELEGATE.elements : '') : '';
   const background = n.async ? K.DELEGATE.background + started : '';
   if (n.keyword === DELEGATE_VERB && n.agent) {
     // A line with a contract (`exe-…`) hands over its input, as the contract says: no context phrase.
@@ -145,7 +178,8 @@ export function delegationText(n: {
   if (n.keyword === FORK_VERB) {
     // A fork inherits the conversation; an AS says the shape of what it is handed on top of it (D58).
     const shaped = n.shaped ? fill(K.FORK.shaped, { name: n.shaped.name, ref: n.shaped.ref }) : '';
-    return n.agent ? fill(K.FORK.agent, { text: n.text, agent: n.agent, shaped, background }) : fill(K.FORK.self, { text: n.text, shaped, background });
+    return n.agent ? fill(K.FORK.agent, { text: n.text, agent: n.agent, shaped, background, definition: n.definition ?? `the definition of \`${n.agent}\`` })
+      : fill(K.FORK.self, { text: n.text, shaped, background });
   }
   if (n.keyword === WAIT_VERB) {
     const wait = parseWait(n.text);
@@ -249,6 +283,8 @@ export interface ApBackgroundWork {
   into: string | null;
   /** Its BY — null: a fork of whoever runs the flow. */
   by: string | null;
+  /** Inside an EACH: one run per element, at most `max` — each run its own piece, `<id>-<k>`. */
+  each?: { max: number };
 }
 
 /** A MARK of a flow, as the apx keeps it (`meta.marks`): where it is written, the list it fills, the spec of each zone, its limit, its domain. */
@@ -280,6 +316,10 @@ interface FlowNode {
   list?: string;
   /** Set here, on a WAIT: the ids of what it takes back. */
   waits?: string[];
+  /** Set here: a background delegation inside an EACH — one piece per run, `<work>-<k>`. */
+  element?: true;
+  /** An EACH's head: its bound. */
+  each?: { max: number };
   body?: FlowNode[];
   then?: FlowNode[];
   else?: FlowNode[];
@@ -302,7 +342,7 @@ export function bindBackgroundWork(
   // The flow's lists of contracts, by name: the MARK that last filled each one.
   const lists = new Map<string, string>();
   const nameOf = (into: { target: string } | undefined) => (into ? into.target.split('/').pop() ?? null : null);
-  const walk = (nodes: readonly FlowNode[], step: string, running: { id: string; name: string | null }[]): void => {
+  const walk = (nodes: readonly FlowNode[], step: string, running: { id: string; name: string | null }[], each: { max: number } | null = null): void => {
     for (const node of nodes) {
       if (node.type === 'directive' && node.keyword === MARK_VERB) {
         const mark = markOf(node, step);
@@ -322,8 +362,9 @@ export function bindBackgroundWork(
       } else if (node.type === 'directive' && isDelegationVerb(node.keyword ?? '') && node.async) {
         const id = idOf(JSON.stringify([flow.address, n++]), 'dlg');
         node.work = id;
+        if (each) node.element = true;
         running.push({ id, name: nameOf(node.into) });
-        found[id] = { flow: flow.name, step, verb: node.keyword!, task: node.text ?? '', into: nameOf(node.into), by: node.by ?? null };
+        found[id] = { flow: flow.name, step, verb: node.keyword!, task: node.text ?? '', into: nameOf(node.into), by: node.by ?? null, ...(each ? { each } : {}) };
       } else if (node.type === 'directive' && node.keyword === WAIT_VERB) {
         const wait = parseWait(node.text ?? '');
         const taken = 'all' in wait ? [...running] : running.filter(r => r.name !== null && wait.names.includes(r.name));
@@ -334,7 +375,8 @@ export function bindBackgroundWork(
       if (node.type === 'step') walk(node.body ?? [], node.title ?? '', []);
       else if (node.type === 'if') { walk(node.then ?? [], step, []); walk(node.else ?? [], step, []); }
       else if (node.type === 'until') walk(node.body ?? [], step, []);
-      else if (node.type === 'parallel') walk(node.steps ?? [], step, []);
+      // An EACH is no scope: what its runs start is waited for in its step.
+      else if (node.type === 'each') walk(node.body ?? [], step, running, node.each ?? null);
       else if (node.body && node.type === 'directive' && !isDelegationVerb(node.keyword ?? '')) walk(node.body, step, running);
     }
   };
@@ -379,6 +421,13 @@ export function concurrencyErrors(tree: readonly DelegationTreeNode[]): { line: 
         if (running && !(kw === WAIT_VERB)) at(t.line, `\`{{${name}}}\` is read before its WAIT — it was started with ${ASYNC_MARK} at line ${running.line}: write \`WAIT ${name}\` above this line`);
       }
       if (kw === FORK_VERB && !inStep) at(t.line, 'FORK hands work to a fork of whoever runs a flow — it stands in a flow STEP; here, write DELEGATE');
+      const each = kw === 'EACH' ? parseEachHead(t.rest ?? '') : null;
+      if (each) {
+        if (!inStep) at(t.line, 'EACH hands work out once per element of a list, for a flow — it stands in a flow STEP');
+        if (!('error' in each) && marked.has(each.list)) {
+          at(t.line, `EACH ${each.item} IN {{${each.list}}}: \`${each.list}\` holds the contracts a MARK made — a list of contracts is delegated as it is: \`DELEGATE ${each.list} BY <agent>\``);
+        }
+      }
       if (kw === MARK_VERB) {
         if (!inStep) at(t.line, 'MARK binds zones of the code to contracts for a flow to hand out — it stands in a flow STEP');
         const into = parseMark(t.rest ?? '').into;

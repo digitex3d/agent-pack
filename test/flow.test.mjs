@@ -119,7 +119,7 @@ FLOW no-action
 
   const errors = lintFlow('no-action.flow.ap', noAction);
   assert.ok(
-    errors.some(e => /STEP block requires at least one of: DO, DELEGATE, COMPUTE, FORK, WAIT, MARK, RUN/.test(e.message)),
+    errors.some(e => /STEP block requires at least one of: DO, DELEGATE, COMPUTE, FORK, WAIT, MARK, EACH, RUN/.test(e.message)),
     `step without DO/RUN produces contract error, got: ${JSON.stringify(errors)}`,
   );
 
@@ -232,7 +232,8 @@ FLOW nested-parallel
         RUN deep-step
 `;
 
-  const errors = lintFlow('nested-parallel.flow.ap', nestedParallel);
+  // A retired word is the vocabulary check's to name, once (lintFile runs it with the block contracts).
+  const errors = checkVocabulary('nested-parallel.flow.ap', nestedParallel);
   assert.ok(
     errors.some(e => e.line === 8 && /PARALLEL was removed — in one STEP, start each piece with `DELEGATE~/.test(e.message)),
     `a bare PARALLEL is told its rewrite, got: ${JSON.stringify(errors)}`,

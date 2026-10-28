@@ -91,8 +91,23 @@ try {
   const [style, tests] = ids;
   const APX = 'node .agent-pack/apx/lead.apx';
   assert.ok(!md.includes('store the result as `style`'), 'delivering stores it: no set to tell');
+  // Claude Code's own words (D60): a background agent, and a WAIT that never blocks the session — the notifications, then `wait --now`.
   has(md, `\`${APX} delegate deliver ${style} -\``, `\`${APX} delegate block ${tests} "<why>"\``,
-    `\`${APX} wait ${style}\`: it returns when each one is delivered`, `\`${APX} wait ${tests} --max 1s\``);
+    'launch it as a background agent (the Agent tool, run_in_background: true)',
+    'do not go on until the notification of each one has come', `\`${APX} delegate ended <id>\``,
+    `\`${APX} wait ${style} --now\`: each one's state, its limit counted from its start`, `\`${APX} wait ${tests} --now --max 1s\``);
+  // Any other harness: the neutral words — the wait blocks until each one is settled or the limit.
+  const { delegationText } = await import('../dist/src/delegation.js');
+  has(delegationText({ keyword: 'WAIT', text: 'style', apx: APX, waits: [style] }), `\`${APX} wait ${style}\`: it returns when each one is delivered`);
+  // A FORK in Claude Code is its native fork; working as another agent, it first reads who that agent is (D61).
+  const { delegationPhrases } = await import('../dist/src/delegation.js');
+  const { default: claudeCode } = await import('../dist/adapters/claude-code/index.js');
+  const phrases = delegationPhrases(claudeCode().renderings);
+  has(delegationText({ keyword: 'FORK', text: 'write the article', agent: 'writer', phrases, definition: '`node .agent-pack/apx/writer.apx scope`' }),
+    'a native fork (the Agent tool, subagent_type: "fork") that works as `writer`: tell it to read who `writer` is first, with `node .agent-pack/apx/writer.apx scope`');
+  has(delegationText({ keyword: 'FORK', text: 'draft it', phrases }), 'a native fork of yourself (the Agent tool, subagent_type: "fork"), with this whole conversation');
+  // Any other harness: the neutral words.
+  has(delegationText({ keyword: 'FORK', text: 'draft it', agent: 'writer' }), 'to `writer`, forked with this whole conversation');
 
   // --- start, and a piece cannot start twice while it runs ---
   r = apx(['wait', style]);
@@ -127,6 +142,13 @@ try {
   r = apx(['wait', tests]);
   has(r.out, 'still running after 2s');
   has(apx(['wait', tests, '--max', 'soon']).out, '--max soon: a duration is');
+
+  // --- --now: no waiting, the limit counted from the start (D60) ---
+  r = apx(['wait', tests, '--now', '--max', '1h']);
+  assert.equal(r.code, 1);
+  has(r.out, `${tests}  check  running  → checker-b  — running, within its 1h`, 'still running, within the limit — wait for the word that each one ended');
+  r = apx(['wait', tests, '--now', '--max', '1s']);
+  has(r.out, 'still running after 1s', 'you decide');
 
   // --- ended without delivery, then reassigned, then blocked: each wait returns at once ---
   assert.equal(apx(['delegate', 'ended', tests]).code, 0);

@@ -76,6 +76,8 @@ export interface ApDirectiveNode {
   exe?: string;
   /** A flow's `DELEGATE~` / `FORK~`: its id in the apx's registry (`dlg-…`, `meta.background`) — src/delegation.ts. */
   work?: string;
+  /** A `DELEGATE~` / `FORK~` inside an EACH: one piece per run, `<work>-<k>`. */
+  element?: true;
   /** A flow's WAIT: the ids of the background work it takes back. */
   waits?: string[];
   /** A flow's MARK: its id (`mrk-…`, `meta.marks`); a DELEGATE of a contract list: the MARK it starts. */
@@ -214,18 +216,20 @@ export interface ApInNode {
   body: ApNode[];
 }
 
-export interface ApParallelNode {
-  type: 'parallel';
+export interface ApEachNode {
+  type: 'each';
   /** Where the node was written — provenance, never serialized. */
   pos?: ApPos;
   chars: number;
-  /** `PARALLEL EACH <item> IN <list> MAX <n>`: its step runs once per element of the list variable. */
-  each?: ApParallelEach;
-  steps: ApStepNode[];
+  indent?: number;
+  /** `EACH <item> IN {{<list>}} MAX <n>`: its delegations run once per element of the list variable (D56). */
+  each: ApEachHead;
+  /** The delegations — DELEGATE and FORK lines — one run of each per element. */
+  body: ApNode[];
 }
 
-export interface ApParallelEach {
-  /** The name `{{item}}` reads in the step: the run's element. */
+export interface ApEachHead {
+  /** The name `{{item}}` reads beneath: the run's element. */
   item: string;
   /** The variable holding the list. */
   list: ApRef;
@@ -282,7 +286,7 @@ export type ApNode =
   | ApVarNode
   | ApWhenNode
   | ApStepNode
-  | ApParallelNode;
+  | ApEachNode;
 
 /** Machine-resolved slot type (mirror of shapeSchema's SlotTypeSpec, JSON-safe). */
 export type ApSlotType =
@@ -411,6 +415,12 @@ export interface ApDocumentMeta {
    * read the steps). Absent = the flow's steps are carried out as written.
    */
   flowRun?: string;
+  /**
+   * The active adapter's own words for the delegation lines (`renderings.DELEGATE`,
+   * `.FORK`, `.WAIT`), over the formulas: how its harness starts work in the
+   * background, forks, waits. Absent = the neutral words.
+   */
+  phrases?: Record<string, Record<string, string>>;
   /**
    * The environment variable the active adapter's harness puts its session id
    * in — where the apx finds the session its variables live in. Absent = no

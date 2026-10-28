@@ -40,7 +40,8 @@ FLOW complex-task:
 - A `DELEGATE`'s form says how much context it hands over: `DELEGATE … BY x` all of it, `DELEGATE … BY x AS <template>` only what the template holds; `FORK …` hands over the conversation itself — a fork of whoever runs the flow, or `BY y` that agent on it.
 - A step may carry rules — `MUST`, `NEVER`, `SHOULD`, … (write `NEVER skip a finding`, not `DO never skip a finding`) — and put some of its lines under `IF <condition>:` and its `ELSE`. A rule is not an action: the step still needs one. Written `DELEGATE … BY x:`, a delegation's own lines are what `x` is told.
 - `DELEGATE~` and `FORK~` start the work in the background; `WAIT <name>, …` or `WAIT ALL` takes it back, every piece delivered or blocked — in the same step.
-- The flow itself may put its `STEP`, `PARALLEL EACH` and `RUN` lines under `IF <condition>:` and its `ELSE`, or repeat them under `UNTIL <condition>:` — a fix round, a plan revision — nesting further `IF`/`ELSE`/`UNTIL` inside. The condition is prose, judged by whoever runs the flow; see [Language reference — FLOW](/reference/language#flow).
+- `EACH <item> IN {{<list>}} MAX <n>:` runs the `DELEGATE` and `FORK` lines beneath it once per element of a list, all the runs at once — see [Orchestration](/guide/orchestration#each-one-delegation-per-item).
+- The flow itself may put its `STEP` and `RUN` lines under `IF <condition>:` and its `ELSE`, or repeat them under `UNTIL <condition>:` — a fix round, a plan revision — nesting further `IF`/`ELSE`/`UNTIL` inside. The condition is prose, judged by whoever runs the flow; see [Language reference — FLOW](/reference/language#flow).
 
 ```
 FLOW assess:

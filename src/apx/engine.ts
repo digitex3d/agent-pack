@@ -107,7 +107,7 @@ const HELP: [string, string][] = [
   ['run <exe-id> [in-json] [--into <var>]', 'run a program: its tests when it is new, then the program on its input — its answer back, or kept in <var>'],
   ['check <cnd-id>', 'a checked condition (IF!, IF!!, UNTIL!, UNTIL!!), put to the judge on this session\'s variables: open or closed'],
   ['contract mark|start|get|within|merge|land|list …', 'the contracts a flow\'s MARKs bind: mark a zone, start a MARK\'s with --by <agent>, read one, merge and land after a conflict'],
-  ['wait <dlg-id | mrk-id | var> … [--max <duration>] | all', 'take back what a flow started in the background: each one delivered, blocked or ended — or the limit reached; then each one\'s state'],
+  ['wait <dlg-id | mrk-id | var> … [--max <duration>] [--now] | all', 'take back what a flow started in the background: each one delivered, blocked or ended — or the limit reached; then each one\'s state. --now: at once, the limit counted from each one\'s start'],
   ['version', 'agent, build date, agent-pack version, hash, block count'],
 ];
 

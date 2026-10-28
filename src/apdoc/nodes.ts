@@ -18,7 +18,7 @@
 import type {
   ApNode, ApRef, ApShape,
   ApDirectiveNode, ApRunNode, ApTextNode,
-  ApIfNode, ApUntilNode, ApWhenNode, ApStepNode, ApParallelNode, ApParallelEach, ApInNode, ApVarNode,
+  ApIfNode, ApUntilNode, ApWhenNode, ApStepNode, ApEachNode, ApEachHead, ApInNode, ApVarNode,
   ApPos, ApLine,
 } from './types.js';
 import { checkHead, type ApCondCheck, type CheckKind } from '../check.js';
@@ -28,7 +28,7 @@ import {
 } from '../../adapters/md/toolkit.js';
 import {
   controlHead, executorHead, executorRounds, refName, runLine, unresolvedRun,
-  parallelHead, stepsHeader, storeScopeLine, varBlockHead,
+  eachHead, stepsHeader, storeScopeLine, varBlockHead,
 } from '../../adapters/md/phrases.js';
 
 /** What a node answers as a line: its primitive and the text after it. */
@@ -63,6 +63,7 @@ export class DirectiveNode extends NodeBase implements ApDirectiveNode {
   async?: true;
   exe?: string;
   work?: string;
+  element?: true;
   waits?: string[];
   mark?: string;
   list?: string;
@@ -94,6 +95,7 @@ export class DirectiveNode extends NodeBase implements ApDirectiveNode {
       ...(this.async ? { async: this.async } : {}),
       ...(this.exe ? { exe: this.exe } : {}),
       ...(this.work ? { work: this.work } : {}),
+      ...(this.element ? { element: this.element } : {}),
       ...(this.waits ? { waits: this.waits } : {}),
       ...(this.mark ? { mark: this.mark } : {}),
       ...(this.list ? { list: this.list } : {}),
@@ -112,6 +114,7 @@ export class DirectiveNode extends NodeBase implements ApDirectiveNode {
     if (n.async) node.async = n.async;
     if (n.exe) node.exe = n.exe;
     if (n.work) node.work = n.work;
+    if (n.element) node.element = n.element;
     if (n.waits) node.waits = n.waits;
     if (n.mark) node.mark = n.mark;
     if (n.list) node.list = n.list;
@@ -517,37 +520,35 @@ export class InNode extends NodeBase implements ApInNode {
   }
 }
 
-export class ParallelNode extends NodeBase implements ApParallelNode {
-  readonly type = 'parallel';
-  steps: ApStepNode[] = [];
+export class EachNode extends NodeBase implements ApEachNode {
+  readonly type = 'each';
+  body: ApNode[] = [];
 
-  constructor(public each?: ApParallelEach) {
-    super();
+  constructor(public each: ApEachHead, indent?: number) {
+    super(indent);
   }
 
-  static fromData(n: ApParallelNode): ParallelNode {
-    const node = new ParallelNode(n.each);
-    node.steps = reviveNodes(n.steps) as ApStepNode[];
+  static fromData(n: ApEachNode): EachNode {
+    const node = new EachNode(n.each, n.indent);
+    node.body = reviveNodes(n.body);
     node.chars = n.chars;
     return node;
   }
 
-  toJSON(): ApParallelNode {
-    return { type: this.type, chars: this.chars, ...(this.each ? { each: this.each } : {}), steps: this.steps };
+  toJSON(): ApEachNode {
+    return { type: this.type, chars: this.chars, ...(this.indent ? { indent: this.indent } : {}), each: this.each, body: this.body };
   }
 
-  asMdLines(env: MdEnv): string[] {
-    const each = this.each;
+  asMdLines(env: MdEnv, ordered: boolean): string[] {
+    const waited = this.body.some(n => n.type === 'directive' && !n.async);
     return [
-      parallelHead(each && { ...each, list: refName(each.list) }, t => env.substitute(t)),
-      stepsHeader(),
-      ...this.steps.flatMap((s, i) => (s as StepNode).asMdItem(env, i, false)),
+      ...indentLines([eachHead({ ...this.each, list: refName(this.each.list) }, waited, t => env.substitute(t))], this.indent ?? 0),
+      ...renderNodes(env, this.body, ordered),
     ];
   }
 
   asLine(): LineHead {
-    const each = this.each;
-    return { primitive: 'PARALLEL', text: each ? `EACH ${each.item} IN ${refName(each.list)} MAX ${each.max}` : '' };
+    return { primitive: 'EACH', text: `${this.each.item} IN {{${refName(this.each.list)}}} MAX ${this.each.max}` };
   }
 }
 
@@ -566,7 +567,7 @@ const REVIVERS: Record<string, Reviver> = {
   until:     d => UntilNode.fromData(d as ApUntilNode),
   when:      d => WhenNode.fromData(d as ApWhenNode),
   step:      d => StepNode.fromData(d as ApStepNode),
-  parallel:  d => ParallelNode.fromData(d as ApParallelNode),
+  each:      d => EachNode.fromData(d as ApEachNode),
   in:        d => InNode.fromData(d as ApInNode),
   var:       d => VarNode.fromData(d as ApVarNode),
 };

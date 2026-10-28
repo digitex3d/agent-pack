@@ -13,7 +13,7 @@
  *   {{best-pizza}}                reads one — a constant's value, or a variable's
  *   {{report AS dividend-table}}  reads a variable, keeping only what fits a template
  *   DELEGATE~ … INTO gaps BY x   started in the background, its value there after `WAIT gaps`
- *   PARALLEL EACH part IN parts MAX 5   one run per element of a list variable, `{{part}}` the run's element
+ *   EACH part IN {{parts}} MAX 5:     one delegation per element of a list variable, `{{part}}` the run's element
  *
  * Every reader of these forms — the lint, the compiler, the document builder,
  * the md renderer, the apx — asks this module; none writes its own pattern.
@@ -139,9 +139,9 @@ export function varNameError(name: string): string | null {
   return null;
 }
 
-/** The head of a `PARALLEL` that runs its step once per element of a list variable. */
-export interface ParallelEach {
-  /** The name `{{item}}` reads in the step: the run's element. */
+/** The head of an `EACH` block: its delegations run once per element of a list variable (D56). */
+export interface EachHead {
+  /** The name `{{item}}` reads beneath: the run's element. */
   item: string;
   /** The variable holding the list. */
   list: string;
@@ -149,29 +149,40 @@ export interface ParallelEach {
   max: number;
 }
 
-const EACH_RE = new RegExp(`^EACH\\s+(${NAME})\\s+IN\\s+(${NAME})(?:\\s+MAX\\s+(\\S+))?$`);
+/** What an `EACH` block's head looks like — `<item> IN …`: a DIMENSION's EACH line never does. */
+const EACH_HEAD_RE = new RegExp(`^(${NAME})\\s+IN\\s+(.*)$`);
+const EACH_LIST_RE = new RegExp(`^\\{\\{(${NAME})\\}\\}(?:\\s+MAX\\s+(\\S+))?$`);
+
+/** The form an `EACH` block's head is written in. */
+export const EACH_FORM = 'EACH <item> IN {{<list>}} MAX <n>:';
 
 /**
- * The text after `PARALLEL` — `EACH <item> IN <list> MAX <n>`, with an optional
- * trailing `:` — or null for a bare `PARALLEL`. The bound is always written: a
- * list nobody bounds starts as many agents as it has elements.
+ * The text after `EACH` — `<item> IN {{<list>}} MAX <n>`, with an optional
+ * trailing `:` — or null when it is no block head (a DIMENSION's EACH line).
+ * The bound is always written (D57): a list nobody bounds starts as many
+ * agents as it has elements.
  */
-export function parseParallelHead(rest: string): ParallelEach | { error: string } | null {
+export function parseEachHead(rest: string): EachHead | { error: string } | null {
   const text = rest.trim().replace(/\s*:$/, '');
-  if (!text) return null;
-  const m = EACH_RE.exec(text);
-  if (!m) return { error: `\`PARALLEL ${text}\`: PARALLEL takes nothing, or \`EACH <item> IN <list> MAX <n>\`` };
-  const [, item, list, max] = m;
-  if (max === undefined) return { error: `\`PARALLEL ${text}\`: write the bound — \`PARALLEL EACH ${item} IN ${list} MAX <n>\`` };
-  if (!/^[1-9]\d*$/.test(max)) return { error: `\`PARALLEL ${text}\`: MAX takes a whole number of runs, at least 1` };
-  if (item === list) return { error: `\`PARALLEL ${text}\`: the element needs a name of its own, not the list's` };
+  const head = EACH_HEAD_RE.exec(text);
+  if (!head) return null;
+  const [, item, after] = head;
+  const m = EACH_LIST_RE.exec(after.trim());
+  if (!m) {
+    const bare = /^(\S+)/.exec(after.trim())?.[1] ?? '<list>';
+    return { error: `\`EACH ${text}\`: the list is read like any variable — \`EACH ${item} IN {{${bare.replace(/^\{\{|\}\}$/g, '')}}} MAX <n>:\`` };
+  }
+  const [, list, max] = m;
+  if (max === undefined) return { error: `\`EACH ${text}\`: write the bound — \`EACH ${item} IN {{${list}}} MAX <n>:\`` };
+  if (!/^[1-9]\d*$/.test(max)) return { error: `\`EACH ${text}\`: MAX takes a whole number of runs, at least 1` };
+  if (item === list) return { error: `\`EACH ${text}\`: the element needs a name of its own, not the list's` };
   const error = varNameError(item);
   return error ? { error } : { item, list, max: Number(max) };
 }
 
-/** The head after `PARALLEL` when it is a well-formed EACH — else null (a malformed one is the lint's to report). */
-export function parallelEachOf(rest: string): ParallelEach | null {
-  const head = parseParallelHead(rest);
+/** The head after `EACH` when it is a well-formed block head — else null (a malformed one is the lint's to report). */
+export function eachHeadOf(rest: string): EachHead | null {
+  const head = parseEachHead(rest);
   return head && !('error' in head) ? head : null;
 }
 

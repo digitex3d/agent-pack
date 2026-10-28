@@ -32,14 +32,14 @@ export function executorRounds(rounds: number): string {
 }
 
 /**
- * A PARALLEL head: bare, or `EACH <item> IN <list> MAX <n>` — one run per
- * element, the bound, what a run's failure does. `read` renders the list
- * variable's read as the projection does (now, or left for a later pass); the
- * element reads as written, `{{item}}`.
+ * An EACH head (D56): one run per element, the bound, what a run's failure
+ * does — and, when a line beneath is not started in the background, that the
+ * runs are waited for. `read` renders the list variable's read as the
+ * projection does (now, or left for a later pass); the element reads as
+ * written, `{{item}}`.
  */
-export function parallelHead(each: { item: string; list: string; max: number } | null | undefined, read: (text: string) => string = t => t): string {
-  if (!each) return `${controlHead('PARALLEL')}:`;
-  return `${fill(K.PARALLEL.each, { head: controlHead('PARALLEL'), list: read(`{{${each.list}}}`), max: each.max, item: `{{${each.item}}}` })}:`;
+export function eachHead(each: { item: string; list: string; max: number }, waited: boolean, read: (text: string) => string = t => t): string {
+  return `${fill(K.EACH.head, { list: read(`{{${each.list}}}`), max: each.max, item: `{{${each.item}}}`, waited: waited ? K.EACH.waited : '' })}:`;
 }
 
 /** The STEP list header (`Steps:`). */
