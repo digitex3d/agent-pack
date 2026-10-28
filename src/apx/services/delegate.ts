@@ -157,6 +157,13 @@ function move(host: ApxHost, table: DelegationTable, r: DelegationRecord, from: 
   return true;
 }
 
+/** A background piece handed to someone else keeps its step's `@WITHIN` and takes its new assignee's own perimeter; a contract keeps its zones. */
+function rebound(host: ApxHost, r: DelegationRecord, assignee: string): Partial<DelegationRecord> {
+  if (CONTRACT_ID_RE.test(r.dlg)) return {};
+  const work = host.doc.meta.background?.[pieceOf(r.dlg).work];
+  return { perimeter: host.workPerimeter(work?.within ?? [], assignee) };
+}
+
 type RegistryOp = (host: ApxHost, table: DelegationTable, args: string[]) => number;
 
 const REGISTRY_OPS: Record<string, RegistryOp> = {
@@ -167,6 +174,7 @@ const REGISTRY_OPS: Record<string, RegistryOp> = {
     const fresh = pieceRecord({
       dlg: id!, flow: work.flow, step: work.step, into: work.into ?? '', assignee: work.by ?? '',
       state: 'running', started_at: new Date().toISOString(), author: host.root.name,
+      perimeter: host.workPerimeter(work.within ?? [], work.by ?? ''),
     });
     const prior = table.get(id!);
     // A loop starts the same piece on every round: only a piece still running cannot start again.
@@ -214,7 +222,7 @@ const REGISTRY_OPS: Record<string, RegistryOp> = {
   take(host, table, [id]) {
     const r = recorded(host, table, id, 'take <dlg-id>');
     if (!r) return host.lastCode;
-    if (!move(host, table, r, ['running', 'ended'], 'running', { assignee: host.root.name })) return host.lastCode;
+    if (!move(host, table, r, ['running', 'ended'], 'running', { assignee: host.root.name, ...rebound(host, r, host.root.name) })) return host.lastCode;
     host.out(line({ ...r, state: 'running', assignee: host.root.name }));
     if (CONTRACT_ID_RE.test(r.dlg)) return host.print(`# it is yours: work in its copy, ${host.contracts.copy(r.dlg)}, then ${host.cmd} delegate deliver ${id}`);
     return host.print(`# it is yours: carry it out, then ${host.cmd} delegate deliver ${id} -`);
@@ -224,7 +232,7 @@ const REGISTRY_OPS: Record<string, RegistryOp> = {
     const r = recorded(host, table, id, 'reassign <dlg-id> <agent>');
     if (!r) return host.lastCode;
     if (!agent) return host.fail(2, `name who takes ${id} over — ${host.cmd} delegate reassign ${id} <agent>`);
-    if (!move(host, table, r, ['running', 'ended'], 'running', { assignee: agent })) return host.lastCode;
+    if (!move(host, table, r, ['running', 'ended'], 'running', { assignee: agent, ...rebound(host, r, agent) })) return host.lastCode;
     host.out(line({ ...r, state: 'running', assignee: agent }));
     return host.print(`# hand it to ${agent}: it ends with ${host.cmd} delegate deliver ${id} -   — or: ${host.cmd} delegate block ${id} "<why>"`);
   },

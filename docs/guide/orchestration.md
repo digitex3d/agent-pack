@@ -118,6 +118,7 @@ FLOW deliver:
 - The work writes only the domain's `WRITES` files and reads only its `READS` files.
 - A nested `@WITHIN` narrows, and only by naming domains the outer one names. Naming one outside fails the build — never a silent intersection.
 - No `@WITHIN`, no perimeter: the agent writes where it needs.
+- The perimeter is kept, not only written down: a piece of work carries its step's and its assignee's, and a harness hook stops a write outside it before it happens — see [The apx — The perimeter](/guide/apx#the-perimeter).
 
 **A domain can be described in words.** A judge decides, at compile time, which files match:
 
@@ -239,7 +240,7 @@ See [The apx — Background work](/guide/apx#background-work).
 
 The flow is the same everywhere. How it runs differs.
 
-- **Claude Code.** A `~` runs as a background agent, and the session hears when it finishes — but only between turns. So a `WAIT` does not block the session: the lead does not go on until the notifications of the pieces it waits for have come, records one that ended without delivering, then checks the states with `apx wait … --now` — the limit counted from when each piece started. A `FORK` runs as a native fork; a `FORK … BY y` is one that reads `y`'s definition first (`y.apx scope`) and follows `y`'s rules from there.
+- **Claude Code.** A `~` runs as a background agent, and the session hears when it finishes — but only between turns. So a `WAIT` does not block the session: the lead does not go on until the notifications of the pieces it waits for have come, records one that ended without delivering, then checks the states with `apx wait … --now` — the limit counted from when each piece started. A `FORK` runs as a native fork; a `FORK … BY y` is one that reads `y`'s definition first (`y.apx scope`) and follows `y`'s rules from there. One hook of the project, in `.claude/settings.json`, keeps every perimeter: it runs inside subagents too, and a write outside the work in progress is denied before it happens. A fork shares the session of whoever started it, so it is held to every piece in progress that has a perimeter.
 - **Other harnesses.** `apx wait` blocks until the pieces settle or the limit is reached. A `FORK … BY y` becomes a `DELEGATE … BY y` with all the context.
 
 Today a flow made only of `DELEGATE` lines can also run as a Claude Code Workflow script — see [The apx — Flows](/guide/apx#flows).

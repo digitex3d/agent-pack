@@ -15,7 +15,6 @@ import { AdapterPlugin, AgentBundle, Emitter } from '../types.js';
 import { makeClaudeSkillEmitter } from '../claude-code/emitters/claude-skill.js';
 import claudeCodeAdapter, { ClaudeCodeOptions } from '../claude-code/index.js';
 import { buildAgentFrontmatter } from '../claude-code/emitters/agent-md.js';
-import { withinHookFiles } from '../claude-code/emitters/within-hook.js';
 import { apxPath, apxCommand } from '../../src/apx/paths.js';
 import { ApxEngine } from '../../src/apx/engine.js';
 import type { ApDocument } from '../../src/apdoc/document.js';
@@ -39,7 +38,6 @@ export default function claudeCodeApxAdapter(opts: ClaudeCodeOptions = {}): Adap
 function makeApxAgentEmitter(agentsDir: string, tools: string): Emitter<AgentBundle> {
   return (b, ctx) => [
     { path: resolve(ctx.projectRoot, agentsDir, `${b.name}.md`), content: buildAgentFrontmatter(b, tools) + usageBody(b.name, b.structure) },
-    ...withinHookFiles(b.structure, ctx.projectRoot),
   ];
 }
 

@@ -4,6 +4,7 @@ import { AdapterPlugin } from '../types.js';
 import { makeAgentMdEmitter } from './emitters/agent-md.js';
 import { makeClaudeSkillEmitter } from './emitters/claude-skill.js';
 import { compileWorkflow } from './workflow.js';
+import { installGuardHook } from './emitters/guard-hook.js';
 
 export interface ClaudeCodeOptions {
   agentsDir?: string;
@@ -27,6 +28,8 @@ export default function claudeCodeAdapter(opts: ClaudeCodeOptions = {}): Adapter
     // Claude Code reads CLAUDE.md; `@AGENTS.md` imports the project context and
     // the orchestration agent-pack writes there.
     projectPointer: { file: 'CLAUDE.md', content: '@AGENTS.md' },
+    // The perimeter is kept by one hook of the project, which runs inside subagents too (D65).
+    projectSettings: (projectRoot, { guarded }) => installGuardHook(projectRoot, guarded),
     // Claude Code exports its session id to every command it runs: the apx keeps
     // session variables under it.
     sessionEnv: 'CLAUDE_CODE_SESSION_ID',

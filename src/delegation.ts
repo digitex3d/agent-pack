@@ -39,6 +39,7 @@
  */
 import { splitBy, splitInto, readsOf, parseEachHead } from './vars.js';
 import { splitList } from './lists.js';
+import { DECORATOR_MARK, WITHIN_DECORATOR } from './decorators.js';
 import { FORMULAS, fill } from './formulas.js';
 
 export const DELEGATE_VERB = 'DELEGATE';
@@ -285,6 +286,8 @@ export interface ApBackgroundWork {
   by: string | null;
   /** Inside an EACH: one run per element, at most `max` — each run its own piece, `<id>-<k>`. */
   each?: { max: number };
+  /** The domains of the `@WITHIN` closest around it (the flow's, its step's) — the perimeter its work is handed under (D65). */
+  within?: string[];
 }
 
 /** A MARK of a flow, as the apx keeps it (`meta.marks`): where it is written, the list it fills, the spec of each zone, its limit, its domain. */
@@ -320,11 +323,16 @@ interface FlowNode {
   element?: true;
   /** An EACH's head: its bound. */
   each?: { max: number };
+  /** A decorator's node: the blocks it names. */
+  uses?: { target: string }[];
   body?: FlowNode[];
   then?: FlowNode[];
   else?: FlowNode[];
   steps?: FlowNode[];
 }
+
+/** The node a `@WITHIN` decorator leaves in a flow's body. */
+const WITHIN_MARK = `${DECORATOR_MARK}${WITHIN_DECORATOR.key}`;
 
 /**
  * Bind a flow's background work: each `DELEGATE~` / `FORK~` gets its id
@@ -342,7 +350,7 @@ export function bindBackgroundWork(
   // The flow's lists of contracts, by name: the MARK that last filled each one.
   const lists = new Map<string, string>();
   const nameOf = (into: { target: string } | undefined) => (into ? into.target.split('/').pop() ?? null : null);
-  const walk = (nodes: readonly FlowNode[], step: string, running: { id: string; name: string | null }[], each: { max: number } | null = null): void => {
+  const walk = (nodes: readonly FlowNode[], step: string, running: { id: string; name: string | null }[], each: { max: number } | null = null, within: string[] | null = null): void => {
     for (const node of nodes) {
       if (node.type === 'directive' && node.keyword === MARK_VERB) {
         const mark = markOf(node, step);
@@ -364,7 +372,7 @@ export function bindBackgroundWork(
         node.work = id;
         if (each) node.element = true;
         running.push({ id, name: nameOf(node.into) });
-        found[id] = { flow: flow.name, step, verb: node.keyword!, task: node.text ?? '', into: nameOf(node.into), by: node.by ?? null, ...(each ? { each } : {}) };
+        found[id] = { flow: flow.name, step, verb: node.keyword!, task: node.text ?? '', into: nameOf(node.into), by: node.by ?? null, ...(each ? { each } : {}), ...(within ? { within } : {}) };
       } else if (node.type === 'directive' && node.keyword === WAIT_VERB) {
         const wait = parseWait(node.text ?? '');
         const taken = 'all' in wait ? [...running] : running.filter(r => r.name !== null && wait.names.includes(r.name));
@@ -372,12 +380,14 @@ export function bindBackgroundWork(
         node.waits = taken.map(r => r.id);
       }
       // A step, a branch, a loop body: a scope of its own. Any other body (a decorator's) is the enclosing one's.
-      if (node.type === 'step') walk(node.body ?? [], node.title ?? '', []);
-      else if (node.type === 'if') { walk(node.then ?? [], step, []); walk(node.else ?? [], step, []); }
-      else if (node.type === 'until') walk(node.body ?? [], step, []);
+      if (node.type === 'step') walk(node.body ?? [], node.title ?? '', [], null, within);
+      else if (node.type === 'if') { walk(node.then ?? [], step, [], null, within); walk(node.else ?? [], step, [], null, within); }
+      else if (node.type === 'until') walk(node.body ?? [], step, [], null, within);
       // An EACH is no scope: what its runs start is waited for in its step.
-      else if (node.type === 'each') walk(node.body ?? [], step, running, node.each ?? null);
-      else if (node.body && node.type === 'directive' && !isDelegationVerb(node.keyword ?? '')) walk(node.body, step, running);
+      else if (node.type === 'each') walk(node.body ?? [], step, running, node.each ?? null, within);
+      // A `@WITHIN`'s body works within its domains — the closest one holds, the compiler keeps it inside the outer (D32).
+      else if (node.body && node.type === 'directive' && node.keyword === WITHIN_MARK) walk(node.body, step, running, each, (node.uses ?? []).map(r => r.target.split('/').pop() ?? r.target));
+      else if (node.body && node.type === 'directive' && !isDelegationVerb(node.keyword ?? '')) walk(node.body, step, running, each, within);
     }
   };
   walk(flow.body as FlowNode[], '', []);

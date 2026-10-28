@@ -263,9 +263,29 @@ node .agent-pack/apx/lead.apx wait mrk-5b0e2a71                           # merg
 
 - `contract mark <mrk-id> -` checks the spec against the `MARK`'s `AS` (exit `6` when it breaks it), refuses past its `MAX` or the `mark.max` config key (exit `3`), and adds the contract's id to the list's variable — what `{{<list>}}` reads.
 - `contract start <mrk-id> --by <agent>` finds each waiting contract's zones by their marks, lands what was merged since the last round, and opens a copy for each. A contract with no zone is refused, unless its `MARK` has a `WITHIN`. None waiting: nothing to start, exit `0`.
-- A contract writes its zones, the files it creates and its `MARK`'s `WITHIN` domain. `delegate deliver <ctr-id>` keeps that from its copy; anything else is left out, and only with a reason: `--why "<reason>"`. With Claude Code, a hook warns the agent as soon as it writes outside (`contract within`).
+- A contract writes its zones, the files it creates and its `MARK`'s `WITHIN` domain. `delegate deliver <ctr-id>` keeps that from its copy; anything else is left out, and only with a reason: `--why "<reason>"`. With Claude Code, the project's hook warns the agent as soon as it writes outside (see [The perimeter](#the-perimeter)), and stops it when it writes in the project folder instead of its copy.
 - `delegate block`, `ended`, `take`, `reassign` and `list` work on a contract as on any piece; `take` names the copy to finish it in.
 - `wait <mrk-id>` takes back the contracts the latest `start` of that `MARK` opened: each delivered one is merged and what was merged lands in the working folder, uncommitted. A merge that conflicts is left delivered, for `contract merge <ctr-id> --prefer ours|theirs`, then `contract land`. `contract list [mrk-id]` shows the contracts.
+
+## The perimeter
+
+A piece started in the background carries its perimeter, set by `delegate start`: the `WRITES` files of its step's `@WITHIN`, and those of its assignee's own `@WITHIN`. A file it writes must be in both. A domain that only `READS` writes nothing. `take` and `reassign` set it again for the new assignee.
+
+`guard <path> [--agent <name>] [--subagent]` says whether a write keeps to it — exit `0`, or `3` with who, which file, which perimeter, and what to do: not write it, and say so in the delivery. A harness hook asks it before every write:
+
+```bash
+node .agent-pack/apx/lead.apx guard src/api/x.ts --agent builder --subagent
+src/api/x.ts: outside builder's own perimeter (src/web/**) — do not write it; if the work needs it, say so in your delivery
+```
+
+Which work a write belongs to, the harness says only by who writes:
+
+- **the main conversation** — whoever runs the flow — is held to no piece;
+- **a subagent named as the assignee** of pieces in progress is held to theirs;
+- **a subagent no piece names** — a fork, an agent the flow did not start — is held to every piece in progress that has a perimeter: the narrowest reading, never the widest;
+- **every agent** is held to its own `@WITHIN`, pieces or not. No `@WITHIN` and no piece: no perimeter.
+
+A contract's assignee writes in its copy, never in the project folder. In the copy, `guard <path> --after` asks, once the file is written, whether it stays within the contract — the same answer as `contract within`.
 
 ## Compression
 

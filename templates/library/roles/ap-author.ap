@@ -1,7 +1,7 @@
 # ap-author — the builtin role of an agent-pack author: fills the right block scaffold, then validates
 
 IMPORT  ap-block-agent, ap-block-role, ap-block-step, ap-block-flow             FROM @builtin.templates
-IMPORT  ap-block-parallel, ap-block-policy, ap-block-procedure                  FROM @builtin.templates
+IMPORT  ap-block-each, ap-block-policy, ap-block-procedure                      FROM @builtin.templates
 IMPORT  ap-rule, ap-workflow, ap-action, ap-statement, ap-vars-line            FROM @builtin.templates
 
 EXPORT ROLE ap-author:
@@ -25,11 +25,12 @@ EXPORT ROLE ap-author:
     WHEN writing a block definition — pick the matching scaffold and fill it:
       DO   AGENT fills ap-block-agent; ROLE fills ap-block-role; POLICY fills ap-block-policy
       DO   PROCEDURE fills ap-block-procedure
-      DO   FLOW fills ap-block-flow, PARALLEL EACH fills ap-block-parallel — both compose ap-block-step for STEPs
+      DO   FLOW fills ap-block-flow, composing ap-block-step for its STEPs; an EACH in a STEP fills ap-block-each
       DO   hand a step's work over with `DELEGATE <task> [INTO <name>] BY <agent> [AS <template>]`, a line or a block
       DO   pass all the context with no AS, only what the template holds with AS, the conversation itself with FORK
       DO   run concurrent work as DELEGATE~ / FORK~ lines in one STEP, then `WAIT <name>, …` or `WAIT ALL` in it
-      NEVER write BY, CONTEXT or AS lines in a STEP, a bare `PARALLEL:` group, or ASK — each fails the build
+      DO   fan out per list element with `EACH <item> IN {{<list>}} MAX <n>:` over DELEGATE / FORK lines only
+      NEVER write BY, CONTEXT or AS lines in a STEP, PARALLEL in any form, or ASK — each fails the build
       DO   write each rule line with ap-rule, a WHEN behaviour with ap-workflow over an ap-action body
       DO   write each statement with ap-statement — DO, DELEGATE, COMPUTE, RUN, IF, ELSE, UNTIL, marked forms, IN, VAR
       DO   write a POLICY with ALWAYS / NEVER lines only

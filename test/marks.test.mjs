@@ -104,7 +104,9 @@ try {
   const text = ok(apx('lead', ['get', flwId]), 'get flow');
   const mrk = text.match(/contract mark (mrk-[0-9a-f]{8})/)[1];
   has(text, `contract start ${mrk} --by web-dev`, `wait ${mrk}`, "At most the project's `mark.max` zones");
-  has(readFileSync(join(proj, '.claude', 'agents', 'web-dev.md'), 'utf-8'), 'PostToolUse', 'claude-code-within.mjs');
+  // The perimeter is the project's hook (D65): in its settings, before and after every write — no agent carries one.
+  has(readFileSync(join(proj, '.claude', 'settings.json'), 'utf-8'), 'PreToolUse', 'PostToolUse', 'claude-code-guard.mjs before', 'claude-code-guard.mjs after');
+  assert.ok(!readFileSync(join(proj, '.claude', 'agents', 'web-dev.md'), 'utf-8').includes('hooks:'), 'no hook in the frontmatter');
 
   // Nothing marked yet: starting has nothing to start.
   has(ok(apx('lead', ['contract', 'start', mrk, '--by', 'web-dev']), 'start empty'), 'no zone was marked — nothing to start');
@@ -149,6 +151,15 @@ try {
   assert.equal(r.code, 3, r.out);
   has(r.out, 'it will be left out of the delivery');
   assert.equal(apx('web-dev', ['contract', 'within', a, 'src/login.css.ts']).code, 0, 'a file it created is its own');
+  // The hook's guard: in the copy, before a write it lets it be; after, it asks the contract — outside the copy, its assignee is stopped.
+  const guard = (...args) => apx('web-dev', ['guard', ...args, '--agent', 'web-dev', '--subagent']);
+  assert.equal(guard(`${copy}/styles/app.css`).code, 0, 'before a write in its copy: the contract checks after');
+  r = guard(`${copy}/styles/app.css`, '--after');
+  assert.equal(r.code, 3, r.out);
+  has(r.out, 'it will be left out of the delivery');
+  r = guard('src/login.ts');
+  assert.equal(r.code, 3, r.out);
+  has(r.out, 'src/login.ts:', `web-dev carries out ${a} in its copy`, 'say so in your delivery');
   r = apx('web-dev', ['delegate', 'deliver', a]);
   assert.equal(r.code, 3, r.out);
   has(r.out, 'left out: styles/app.css', '--why');

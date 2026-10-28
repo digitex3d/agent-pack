@@ -60,6 +60,8 @@ An adapter may word how its harness hands work out and waits, over the neutral w
 
 Every other adapter keeps the neutral words: `apx wait` blocks until each piece is settled or the limit is reached.
 
+An adapter may keep the project's settings too (`projectSettings`, called once per build, after every agent): `claude-code` keeps the perimeter there. When some agent works under one — an `@WITHIN`, a `DELEGATE~`, a `MARK` — `bundle all` adds two hooks to `.claude/settings.json`, on `Write|Edit|MultiEdit|NotebookEdit`: before a write, `.agent-pack/hooks/claude-code-guard.mjs before` asks the apx (`guard`) and denies a write outside the perimeter of the work in progress; after one in a contract's copy, `… after` warns when the file is outside the contract. The settings' hooks run inside subagents too, with `agent_id` and `agent_type` in their input: that is how the apx knows who writes. Only agent-pack's own entries are written or removed — the rest of the file stays as it is — and they go when no agent works under a perimeter. A write the hook cannot check is denied: the check failing never lets a write through.
+
 ## Writing an adapter
 
 An adapter is an object:

@@ -6,7 +6,6 @@ import { collectFrontmatter, serializeFrontmatter, FrontmatterField } from '../.
 import { someNode } from '../../../src/apdoc/nodes.js';
 import { DEFAULT_DELEGATE } from '../../../src/config.js';
 import type { AgentBlock } from '../../../src/apdoc/blocks.js';
-import { withinHookFiles, withinHookYaml, worksInCopies } from './within-hook.js';
 
 const DEFAULT_TOOLS = '*';
 
@@ -26,8 +25,6 @@ export function makeAgentMdEmitter(opts: AgentMdOptions): Emitter<AgentBundle> {
       path: resolve(ctx.projectRoot, opts.agentsDir, `${b.name}.md`),
       content: buildAgentFrontmatter(b, tools) + b.body,
     },
-    // An agent of a team whose flows MARK contracts works in copies: its hook warns it when it writes outside its contract.
-    ...withinHookFiles(b.structure, ctx.projectRoot),
   ];
 }
 
@@ -49,11 +46,8 @@ export function buildAgentFrontmatter(b: AgentBundle, tools: string): string {
     ...(remembers(b) ? [{ key: 'memory', value: 'project' }] : []),
   ].map(f => Array.isArray(f.value) || f.value === NO_TOOLS ? f : { ...f, value: quoteIfNeeded(f.value as string) });
 
-  const frontmatter = serializeFrontmatter(fields);
-  if (!worksInCopies(b.structure)) return frontmatter + '\n';
-  // The hook's YAML is nested: it goes in before the closing `---`.
-  const at = frontmatter.lastIndexOf('---');
-  return `${frontmatter.slice(0, at)}${withinHookYaml(b.name).join('\n')}\n${frontmatter.slice(at)}\n`;
+  // The perimeter's hook is the project's, in its settings (emitters/guard-hook.ts): no agent carries one.
+  return serializeFrontmatter(fields) + '\n';
 }
 
 /**

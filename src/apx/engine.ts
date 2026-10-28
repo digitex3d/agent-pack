@@ -23,7 +23,7 @@ import { KIND_STRATEGIES, type AgentBlock, type TeamBlock, type StoreBlock, type
 import { mdEnv, renderPreamble, renderEntry, renderMd } from '../../adapters/md/index.js';
 import type { MdEnv } from '../../adapters/md/toolkit.js';
 import { FORMULAS, fill, type QuizQuestion } from '../formulas.js';
-import { DISTILLED_DIR, FLOWS_DIR, flowScriptStem, projectRootOf, projectStoreDir } from './paths.js';
+import { DISTILLED_DIR, FLOWS_DIR, WORK_DIR, apxPath, flowScriptStem, projectRootOf, projectStoreDir } from './paths.js';
 import { type ApxVerb } from './verbs.js';
 import { openSessionVars, type SessionVars, type CheckRecord, type ExecutorRecord } from './sessionVars.js';
 import { checkedKeyword, roundLine, roundOf, stateOf, type ApCheckSpec } from '../check.js';
@@ -108,6 +108,7 @@ const HELP: [string, string][] = [
   ['check <cnd-id>', 'a checked condition (IF!, IF!!, UNTIL!, UNTIL!!), put to the judge on this session\'s variables: open or closed'],
   ['contract mark|start|get|within|merge|land|list …', 'the contracts a flow\'s MARKs bind: mark a zone, start a MARK\'s with --by <agent>, read one, merge and land after a conflict'],
   ['wait <dlg-id | mrk-id | var> … [--max <duration>] [--now] | all', 'take back what a flow started in the background: each one delivered, blocked or ended — or the limit reached; then each one\'s state. --now: at once, the limit counted from each one\'s start'],
+  ['guard <path> [--agent <name>] [--subagent] [--after]', 'whether a write stays within the perimeter of the work in progress in this session: exit 0, or 3 with why — what the harness hook asks before each write (--after: after it, for a contract\'s copy)'],
   ['version', 'agent, build date, agent-pack version, hash, block count'],
 ];
 
@@ -213,6 +214,7 @@ export class ApxEngine {
     check: args => this.check(args),
     contract: args => this.contract(args),
     wait: args => waitFor(this, args),
+    guard: args => this.guard(args),
     version: () => this.version(),
     help: () => this.help(),
   };
@@ -1134,6 +1136,87 @@ export class ApxEngine {
     } catch (e) {
       return this.fail(2, `the contracts could not be read or written: ${e instanceof Error ? e.message : e}`);
     }
+  }
+
+  /** An agent's own perimeter — this one's, or a fellow member's from its apx beside this one; null when it has none or no apx. */
+  private agentPerimeter(agent: string): PerimeterGlobs | null {
+    if (agent === this.root.name) return this.doc.perimeter();
+    const file = resolve(this.projectRoot, apxPath(agent));
+    if (!existsSync(file)) return null;
+    try {
+      return ApDocumentClass.fromJson(parsePayload(readFileSync(file, 'utf-8')).document).perimeter();
+    } catch {
+      return null;
+    }
+  }
+
+  /** The perimeter a piece is handed under (D65) — see ApxHost.workPerimeter. */
+  workPerimeter(within: readonly string[], assignee: string): string {
+    const sets: string[][] = [];
+    if (within.length > 0) sets.push([...new Set(within.flatMap(name => this.domainGlobs(name)))]);
+    const own = assignee ? this.agentPerimeter(assignee) : null;
+    if (own) sets.push(own.writes);
+    return sets.length > 0 ? JSON.stringify(sets) : '';
+  }
+
+  /**
+   * `guard <path> [--agent <name>] [--subagent] [--after]` — whether a write
+   * stays within the perimeter of the work in progress (D65): exit 0, or 3 with
+   * who, which file, which perimeter, and what to do. What a harness hook asks
+   * before every write (adapters/claude-code).
+   *
+   * Which work a write belongs to: the harness says only who writes — the main
+   * conversation, or a subagent of a given name. A subagent named as the
+   * assignee of pieces in progress is held to theirs; one it cannot tell apart
+   * (a fork, an agent no piece names) to every piece in progress that has a
+   * perimeter — the narrowest reading, never the widest. The main conversation
+   * — whoever runs the flow — is held to none. Every agent is held to its own
+   * `@WITHIN` as well. A contract's work goes in its copy: `--after`, there,
+   * says whether the file stays within the contract.
+   */
+  private guard(args: string[]): number {
+    const at = (flag: string) => { const k = args.indexOf(flag); return k >= 0 ? args[k + 1] ?? '' : null; };
+    const agent = at('--agent') || '';
+    const subagent = args.includes('--subagent');
+    const path = args.find((a, k) => !a.startsWith('--') && args[k - 1] !== '--agent');
+    if (!path) return this.fail(2, `a path is needed, from the project root — ${this.cmd} guard <path> [--agent <name>] [--subagent]`);
+    const copy = new RegExp(`^${WORK_DIR}/(ctr-[0-9a-f]{8})/(.+)$`).exec(path);
+    if (args.includes('--after')) {
+      if (!copy) return 0;
+      const cx = this.contractCx();
+      if (!cx) return this.lastCode;
+      return this.contractWithin(cx, [copy[1], copy[2]]);
+    }
+    const blocked = (why: string) => { this.out(`${path}: ${why} — do not write it; if the work needs it, say so in your delivery`); return 3; };
+    if (agent) {
+      const own = this.agentPerimeter(agent);
+      if (own && !matchesAnyGlob(path, own.writes)) return blocked(`outside ${agent}'s own perimeter (${own.writes.join(', ') || 'it writes nothing'})`);
+    }
+    if (!subagent) return 0;
+    const session = this.sessionIdOrReason('guard needs');
+    if ('reason' in session) return 0;   // no session, no work recorded in it
+    const table = DelegationTable.open(this.projectRoot, session.id, this.build.tabeli);
+    if (typeof table === 'string') return this.fail(2, `${table} — the perimeter could not be checked`);
+    const running = table.all().filter(r => r.state === 'running');
+    const mine = agent ? running.filter(r => r.assignee === agent) : [];
+    // A write in a contract's copy is that contract's: its zones are checked once written (--after).
+    if (copy && running.some(r => r.dlg === copy[1])) return 0;
+    const held = mine.length > 0 ? mine : running;
+    for (const r of held) {
+      if (CONTRACT_ID_RE.test(r.dlg)) {
+        // Its assignee works in its copy, never in the project folder; whoever else writes is not bound by it.
+        if (mine.length > 0) return blocked(`${agent} carries out ${r.dlg} in its copy, ${WORK_DIR}/${r.dlg}/ — not in the project folder`);
+        continue;
+      }
+      if (!r.perimeter) continue;
+      const sets = JSON.parse(r.perimeter) as string[][];
+      const miss = sets.find(globs => !matchesAnyGlob(path, globs));
+      if (miss) {
+        const who = mine.length > 0 ? `${agent}, carrying out ${r.dlg} (${r.step})` : `the work in progress ${r.dlg} (${r.step}${r.assignee ? `, ${r.assignee}` : ''}) — this write could not be told apart from it`;
+        return blocked(`outside the perimeter of ${who}: ${miss.join(', ') || 'it writes nothing'}`);
+      }
+    }
+    return 0;
   }
 
   /** A MARK of this agent's flows by id — or null after saying why. */

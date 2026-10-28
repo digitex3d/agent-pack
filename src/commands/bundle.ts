@@ -143,6 +143,8 @@ export async function bundleAllOnce(
     return false;
   }
   const programIds = new Set<string>();
+  /** Whether some agent works under a perimeter — the harness then keeps it (D65). */
+  let guarded = false;
   /** The defhash of every dimension the build compiles — the cache folders still in use. */
   const defhashes = new Set<string>();
   /** path → the adapter that wrote it and what: each file is written and listed once. */
@@ -161,6 +163,8 @@ export async function bundleAllOnce(
         const { bundle, files } = await bundleAndEmit(agent.name, config, adapter, ctx, { judge });
         for (const spec of Object.values(bundle.structure?.meta.executors ?? {})) if (spec.program) programIds.add(spec.program);
         if (bundle.structure) for (const hash of documentDefHashes(bundle.structure)) defhashes.add(hash);
+        const meta = bundle.structure?.meta;
+        if (bundle.structure && (bundle.structure.perimeter() || meta?.background || meta?.marks)) guarded = true;
         const delegate = bundle.structure?.meta.delegate;
         if (delegate && !queue.some(a => a.name === delegate)) queue.push({ name: delegate });
         for (const f of files) {
@@ -193,6 +197,15 @@ export async function bundleAllOnce(
   }
   for (const file of ensureProjectPointers(ctx.projectRoot, adapters)) {
     report.info(`${file} → points at ${AGENTS_MD}`);
+  }
+  // A build with errors may not have seen every perimeter: it installs the hook, never removes it.
+  if (guarded || totalErrors === 0) {
+    for (const adapter of adapters) {
+      if (!adapter.projectSettings) continue;
+      const { touched, problem } = adapter.projectSettings(ctx.projectRoot, { guarded });
+      if (problem) { report.info(problem); totalErrors++; }
+      for (const file of touched) report.info(`${file} → ${guarded ? 'keeps the perimeter of the work in progress' : 'perimeter hook removed'}`);
+    }
   }
 
   try {

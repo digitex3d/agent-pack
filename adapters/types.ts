@@ -93,6 +93,14 @@ export interface AdapterPlugin {
    */
   projectPointer?: { file: string; content: string };
   /**
+   * Optional: what the harness keeps in the project's own settings, written
+   * once per build after every agent — `guarded`: some agent works under a
+   * perimeter (an `@WITHIN`, background work, a MARK), so the harness should
+   * stop the writes outside it (D65). Returns the files written, and a problem
+   * to report when the settings could not be read.
+   */
+  projectSettings?: (projectRoot: string, needs: { guarded: boolean }) => { touched: string[]; problem: string | null };
+  /**
    * Optional: harness-native renderings, keyed by keyword then value — the
    * values of an enum primitive (e.g. `{ BUDGET: { cheap: '…' } }`) or the
    * levels of a force-level family (e.g. `{ MEM: { '0': '…' } }`).

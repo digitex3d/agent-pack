@@ -100,21 +100,21 @@ EXPORT TEMPLATE ap-block-step:
                 DO report the step as clean
 
 EXPORT TEMPLATE ap-block-flow:
-  ABOUT   scaffold for a FLOW — ordered STEP, PARALLEL EACH and RUN nodes, IF/ELSE/UNTIL around them; referenced by RUN
+  ABOUT   scaffold for a FLOW — ordered STEP and RUN nodes, IF/ELSE/UNTIL around them; referenced by RUN
   APPLIES #agent-pack, #authoring, #scaffold, #block
 
   SLOTS:
     flow-name: TEXT MAX_WORDS 1  "kebab-case flow name, referenced by RUN"
-    steps:     TEXT  "one node per line — STEP, PARALLEL EACH, RUN, or IF/ELSE/UNTIL around them"
+    steps:     TEXT  "one node per line — STEP, RUN, or IF/ELSE/UNTIL around them"
       MUST   order nodes as they execute
       MUST   run concurrent work as DELEGATE~ or FORK~ lines in one STEP, then WAIT for them in that STEP
-      MAY    fan one STEP out per list element with `PARALLEL EACH <item> IN <list> MAX <n>:`
+      MAY    fan DELEGATE / FORK lines out per list element with `EACH <item> IN {{<list>}} MAX <n>:` in a STEP
       MUST   head a branch `IF <condition>:` and a loop `UNTIL <condition>:` — the condition is prose
       MUST   not check a condition at the flow's own level — put IF! or UNTIL! in a `DELEGATE … BY <agent>:` block
-      MUST   indent STEP, PARALLEL EACH, RUN or a nested IF/ELSE/UNTIL under an IF, ELSE or UNTIL head
+      MUST   indent STEP, RUN or a nested IF/ELSE/UNTIL under an IF, ELSE or UNTIL head
       MUST   place a bare ELSE right after an IF in the same body
       MAY    nest IF/ELSE/UNTIL at any depth — a step under them still counts as the flow's step
-      NEVER  write a bare `PARALLEL:` group or an ASK — both fail the build
+      NEVER  write PARALLEL — a group or PARALLEL EACH — or an ASK; each fails the build
   BODY:
     FLOW {flow-name}:
         {steps}
@@ -136,25 +136,25 @@ EXPORT TEMPLATE ap-block-flow:
         ELSE
             RUN escalate-to-maintainer
 
-EXPORT TEMPLATE ap-block-parallel:
-  ABOUT   scaffold for a PARALLEL EACH — one STEP run once per element of a list, all at the same time
+EXPORT TEMPLATE ap-block-each:
+  ABOUT   scaffold for an EACH — inside a STEP, its DELEGATE and FORK lines run once per list element, all at once
   APPLIES #agent-pack, #authoring, #scaffold, #block
 
   SLOTS:
-    item:  TEXT MAX_WORDS 1  "the name each run reads its element by, as {{<item>}}"
-    list:  TEXT MAX_WORDS 1  "the list variable — typed AS a template with exactly one LIST slot"
+    item:   TEXT MAX_WORDS 1  "the name each run reads its element by, as {{<item>}}"
+    list:   TEXT MAX_WORDS 1  "the list variable — typed AS a template with exactly one LIST slot"
       MUST   fill <list> in an earlier step with `DELEGATE … INTO <list> BY <agent>`
-    max:   NUMBER 1..1000  "the most runs — a longer list at run time stops the flow"
-    step:  <ap-block-step>  "the one STEP each run carries out"
+      MUST   read the list with double braces — `EACH <item> IN {{<list>}} MAX <n>:`
+    max:    NUMBER 1..1000  "the most runs — required; a longer list at run time stops the flow"
+    lines:  TEXT  "one DELEGATE or FORK line per line, with or without ~ — nothing else stands in an EACH"
       MUST   keep the runs independent — they run concurrently, with no ordering dependence
       MUST   read the run's element as {{<item>}}; clone the splitter with `FORK … BY <splitter>`
+      MUST   take a ~ back with a WAIT in the step that holds the EACH; without ~ the flow waits where it stands
+      MAY    collect one result per run with INTO — a list in element order
+      NEVER  run a list of contracts through an EACH — delegate it as it is, `DELEGATE <list> BY <agent>`
   BODY:
-    PARALLEL EACH {item} IN {list} MAX {max}:
-        {step}
-  EXAMPLE:
-    PARALLEL EACH subtask IN subtasks MAX 5:
-        STEP work the subtask:
-            FORK work only on the subtask of this run BY developer
+    EACH {item} IN {list} MAX {max}:
+        {lines}
 
 EXPORT TEMPLATE ap-block-agent:
   ABOUT   scaffold for an agent-pack AGENT block — fill the slots to emit a valid `AGENT … AS …:` definition

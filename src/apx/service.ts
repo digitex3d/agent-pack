@@ -65,6 +65,12 @@ export interface ApxHost {
   answerShape(spec: ApExecutorSpec): ApRef | null;
   deliver(id: string, spec: ApExecutorSpec, text: string, outcome: ExecutorRecord['outcome'], fingerprint: string): string | null;
   delivered(id: string, spec: ApExecutorSpec, text: string): number;
+  /**
+   * The perimeter a piece is handed under, as the registry keeps it (D65): the
+   * WRITES globs of the domains of its `@WITHIN`, and those of its assignee's
+   * own — JSON, one glob list each; '' when neither has one.
+   */
+  workPerimeter(within: readonly string[], assignee: string): string;
   /** The contracts' own steps, on their copies (src/apx/engine.ts): delivering one, where its copy is, folding a WAIT's back in. */
   readonly contracts: {
     deliver(table: DelegationTable, r: DelegationRecord, args: string[]): number;

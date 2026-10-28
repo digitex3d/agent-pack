@@ -59,9 +59,15 @@ export interface DelegationRecord {
   left_out: string;
   /** Why it left that out — the assignee's word. */
   why: string;
+  /**
+   * A background delegation's perimeter, set when it starts (D65): JSON, a list
+   * of glob lists — a file it writes must match one glob of each (its step's
+   * `@WITHIN`, its assignee's own); `[]` in it writes nothing. '' when none.
+   */
+  perimeter: string;
 }
 
-const FIELDS: (keyof DelegationRecord)[] = ['dlg', 'flow', 'step', 'into', 'assignee', 'state', 'result', 'reason', 'started_at', 'author', 'mark', 'spec', 'zone', 'writes', 'left_out', 'why'];
+const FIELDS: (keyof DelegationRecord)[] = ['dlg', 'flow', 'step', 'into', 'assignee', 'state', 'result', 'reason', 'started_at', 'author', 'mark', 'spec', 'zone', 'writes', 'left_out', 'why', 'perimeter'];
 
 /** The id of a background piece — or of one run of one inside an EACH (`dlg-<8 hex>-<k>`, D56). */
 export const DELEGATION_ID_RE = /^dlg-[0-9a-f]{8}(?:-[1-9]\d*)?$/;

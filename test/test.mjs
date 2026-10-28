@@ -299,6 +299,7 @@ await import('./team.test.mjs');
 // --- Background work and contracts: DELEGATE~ / WAIT on the registry; MARK, a DELEGATE of a list, copies, merge and land ---
 await import('./delegations.test.mjs');
 await import('./marks.test.mjs');
+await import('./guard.test.mjs');
 
 // --- User-level config cascade (default → user → project), reserved @user alias ---
 await import('./userConfigCascade.test.mjs');
