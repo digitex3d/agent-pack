@@ -25,11 +25,17 @@ export interface ApxPayload {
   document: string;
 }
 
+/** The project's limits an apx carries: `wait.max`, `mark.max` from the config. */
+export interface ApxLimits {
+  waitMax?: string | null;
+  markMax?: number | null;
+}
+
 /**
  * The whole `.apx` file: the bundled engine, then the data line. The build
  * hash is the document's own content hash — same sources, same hash.
  */
-export function apxFile(engine: string, document: string, agentPackVersion: string, tabeli: string, compress: boolean, checks: ApxChecks | null = null, waitMax: string | null = null): string {
+export function apxFile(engine: string, document: string, agentPackVersion: string, tabeli: string, compress: boolean, checks: ApxChecks | null = null, limits: ApxLimits = {}): string {
   const compact = JSON.stringify(JSON.parse(document));
   const build: ApxBuild = {
     builtAt: new Date().toISOString(),
@@ -37,7 +43,8 @@ export function apxFile(engine: string, document: string, agentPackVersion: stri
     hash: sha256Hex(compact).slice(0, 12),
     tabeli,
     ...(checks ? { checks } : {}),
-    ...(waitMax ? { waitMax } : {}),
+    ...(limits.waitMax ? { waitMax: limits.waitMax } : {}),
+    ...(limits.markMax ? { markMax: limits.markMax } : {}),
   };
   const payload = `{"build":${JSON.stringify(build)},"document":${compact}}`;
   const data = compress

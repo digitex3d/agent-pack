@@ -116,12 +116,15 @@ export function executorHow(env: MdEnv | undefined, exe: string | undefined, exe
  * with what context (src/delegation.ts), and a line with a contract says how
  * to have it carried out.
  */
-export function directiveText(n: { text: string; by?: string; keyword?: string; exe?: string; as?: ApShape; async?: true; work?: string; waits?: string[] }, env?: MdEnv): string {
+export function directiveText(n: { text: string; by?: string; keyword?: string; exe?: string; as?: ApShape; async?: true; work?: string; waits?: string[]; mark?: string; list?: string; max?: number; within?: string }, env?: MdEnv): string {
   // A DELEGATE without BY goes to the default delegate: the prompt names it.
   const agent = n.by ?? (n.keyword === DELEGATE_VERB ? env?.delegate : undefined);
   const shaped = n.as ? { name: refName(n.as.ref), ref: env ? env.refOf(n.as.ref.target) : '' } : undefined;
-  const apx = env && (n.work || n.waits?.length) ? env.apxOf(null) : undefined;
-  const text = delegationText({ keyword: n.keyword ?? '', text: n.text, agent, async: n.async, shaped, contract: !!n.exe, apx, work: n.work, waits: n.waits });
+  const apx = env && (n.work || n.waits?.length || n.mark) ? env.apxOf(null) : undefined;
+  const text = delegationText({
+    keyword: n.keyword ?? '', text: n.text, agent, async: n.async, shaped, contract: !!n.exe, apx, work: n.work, waits: n.waits,
+    mark: n.mark, list: n.list, max: n.max, within: n.within, spec: shaped,
+  });
   return text + executorHow(env, n.exe, verbRank(n.keyword ?? '') ?? 1);
 }
 

@@ -64,6 +64,10 @@ export class DirectiveNode extends NodeBase implements ApDirectiveNode {
   exe?: string;
   work?: string;
   waits?: string[];
+  mark?: string;
+  list?: string;
+  max?: number;
+  within?: string;
 
   constructor(
     public keyword: string,
@@ -91,6 +95,10 @@ export class DirectiveNode extends NodeBase implements ApDirectiveNode {
       ...(this.exe ? { exe: this.exe } : {}),
       ...(this.work ? { work: this.work } : {}),
       ...(this.waits ? { waits: this.waits } : {}),
+      ...(this.mark ? { mark: this.mark } : {}),
+      ...(this.list ? { list: this.list } : {}),
+      ...(this.max ? { max: this.max } : {}),
+      ...(this.within ? { within: this.within } : {}),
     };
   }
 
@@ -105,6 +113,10 @@ export class DirectiveNode extends NodeBase implements ApDirectiveNode {
     if (n.exe) node.exe = n.exe;
     if (n.work) node.work = n.work;
     if (n.waits) node.waits = n.waits;
+    if (n.mark) node.mark = n.mark;
+    if (n.list) node.list = n.list;
+    if (n.max) node.max = n.max;
+    if (n.within) node.within = n.within;
     node.chars = n.chars;
     return node;
   }
@@ -116,7 +128,8 @@ export class DirectiveNode extends NodeBase implements ApDirectiveNode {
    */
   asMdLines(env: MdEnv, ordered: boolean): string[] {
     // A delegated or computed line: `answer` / `run` stores its result — no `set` to tell; a background piece's `delegate deliver` alike.
-    if (this.into && (this.exe || this.work)) return indentLines(renderDirectiveGroup(env, this.keyword, this.force, [directiveText(this, env)]), this.indent ?? 0);
+    // A MARK's list is filled by `contract mark` alike.
+    if (this.into && (this.exe || this.work || this.keyword === 'MARK')) return indentLines(renderDirectiveGroup(env, this.keyword, this.force, [directiveText(this, env)]), this.indent ?? 0);
     if (this.into) {
       return [
         ...indentLines(renderDirectiveGroup(env, this.keyword, this.force, [directiveText(this, env)]), this.indent ?? 0),

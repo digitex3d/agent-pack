@@ -7,6 +7,8 @@
  *   DELEGATE <task> [INTO <var>] [BY <agent | team>] [AS <template>]
  *   FORK     <task> [INTO <var>] [BY <agent>] [AS <template>]
  *   WAIT     <var>, …   |   WAIT ALL
+ *   MARK     <criterion> INTO <var> AS <spec> [MAX <n>] [WITHIN <domain>]
+ *   DELEGATE <var> BY <agent>              — the contracts a MARK filled <var> with
  *
  * The form says how much context is passed: `DELEGATE … BY x` all of it,
  * `DELEGATE … AS t` only what the template holds, `FORK` the conversation
@@ -15,6 +17,11 @@
  * the verb (`DELEGATE~`, `FORK~`) starts the work and goes on; `WAIT` takes
  * it back, every piece it names delivered or blocked. In a flow, these are the
  * actions of a STEP: whoever runs the flow carries them out.
+ *
+ * A contract is a promise (D16–18): `MARK` binds zones of the code to a spec
+ * and leaves each one waiting; `DELEGATE <var> BY <agent>` starts every one of
+ * them, one each, all at once, in copies of their own — `~` and WAIT as for any
+ * delegation. One agent for the whole list: other agents, other MARKs (D64).
  *
  * Structured: what a `~` starts is waited for before the block it is written
  * in ends — a STEP, an IF or ELSE branch, an UNTIL — and its variable is read
@@ -30,6 +37,7 @@ import { FORMULAS, fill } from './formulas.js';
 export const DELEGATE_VERB = 'DELEGATE';
 export const FORK_VERB = 'FORK';
 export const WAIT_VERB = 'WAIT';
+export const MARK_VERB = 'MARK';
 /** The verbs that hand work out. */
 export const DELEGATION_VERBS = [DELEGATE_VERB, FORK_VERB] as const;
 /** The mark after a verb that starts the work without waiting for it: `DELEGATE~`. */
@@ -109,8 +117,24 @@ export function delegationText(n: {
   keyword: string; text: string; agent?: string; async?: boolean; shaped?: { name: string; ref: string }; contract?: boolean;
   /** The apx command the lines name, and the registry ids: a background piece's own, a WAIT's — absent, no commands. */
   apx?: string; work?: string; waits?: string[];
+  /** A MARK's id, or the MARK a DELEGATE of a contract list starts; a MARK's spec (`AS`), its limit, its domain. */
+  mark?: string; list?: string; spec?: { name: string; ref: string }; max?: number; within?: string;
 }): string {
   const K = FORMULAS.keywords;
+  if (n.keyword === MARK_VERB) {
+    const m = parseMark(n.text);
+    const within = n.within ?? m.within;
+    return fill(K.MARK.text, {
+      criterion: m.criterion, spec: n.spec?.name ?? m.spec ?? '', ref: n.spec?.ref ?? '', apx: n.apx ?? '<apx>', mark: n.mark ?? '<mrk-id>',
+      max: String(n.max ?? m.max ?? 'the project\'s `mark.max`'), within: within ? fill(K.MARK.within, { domain: within }) : '', list: m.into ?? '',
+    });
+  }
+  if (n.keyword === DELEGATE_VERB && n.list && n.agent) {
+    const run = n.apx && n.mark ? fill(K.DELEGATE.contractsRun, { apx: n.apx, mark: n.mark, agent: n.agent }) : '';
+    // Not in the background: it waits for them where it stands.
+    const wait = !n.async && n.apx && n.mark ? fill(K.DELEGATE.contractsWait, { apx: n.apx, mark: n.mark }) : '';
+    return fill(K.DELEGATE.contracts, { list: n.list, agent: n.agent, background: n.async ? K.DELEGATE.background : '' }) + run + wait;
+  }
   const started = n.apx && n.work ? fill(K.DELEGATE.started, { apx: n.apx, id: n.work }) : '';
   const background = n.async ? K.DELEGATE.background + started : '';
   if (n.keyword === DELEGATE_VERB && n.agent) {
@@ -164,6 +188,57 @@ export function waitLineErrors(rest: string): string[] {
   return [];
 }
 
+/** A MARK line, read: what to mark, the list it fills, the spec of each zone, how many at most, the domain a contract may write beyond its zones. */
+export interface Mark {
+  criterion: string;
+  into: string | null;
+  spec: string | null;
+  /** `MAX <n>` — null: the project's `mark.max`. */
+  max: number | null;
+  /** What follows MAX, when it is no whole number — the lint's to name. */
+  badMax: string | null;
+  within: string | null;
+}
+
+const MARK_WITHIN_RE = /^(.*?)\s+WITHIN\s+(\S+)\s*$/;
+const MARK_MAX_RE = /^(.*?)\s+MAX\s+(\S+)\s*$/;
+
+/** A MARK line's rest as its parts — taken from its end, in the order the line writes them. */
+export function parseMark(rest: string): Mark {
+  let text = rest.trim();
+  const w = MARK_WITHIN_RE.exec(text);
+  const within = w ? w[2] : null;
+  if (w) text = w[1].trim();
+  const m = MARK_MAX_RE.exec(text);
+  const max = m && /^[1-9]\d*$/.test(m[2]) ? Number(m[2]) : null;
+  const badMax = m && max === null ? m[2] : null;
+  if (m) text = m[1].trim();
+  const as = splitAs(text);
+  if (as) text = as.text;
+  const into = splitInto(text);
+  if (into) text = into.text;
+  return { criterion: text.trim(), into: into?.name ?? null, spec: as?.name ?? null, max, badMax, within };
+}
+
+/** What is wrong with a MARK line as written: a missing INTO or AS (D18), a MAX that is no count, an empty criterion. */
+export function markLineErrors(rest: string): string[] {
+  const m = parseMark(rest);
+  const shape = 'MARK <criterion> INTO <name> AS <spec> [MAX <n>] [WITHIN <domain>]';
+  const errors: string[] = [];
+  if (!m.criterion) errors.push(`MARK needs what to mark — \`${shape}\``);
+  if (!m.into) errors.push(`MARK needs the list its contracts make up — \`${shape}\``);
+  if (!m.spec) errors.push(`MARK needs the spec of each zone — every contract is one \`AS <template>\`: \`${shape}\``);
+  if (m.badMax !== null) errors.push(`MARK … MAX ${m.badMax}: MAX is how many zones at most — a whole number`);
+  if (/\bWITHIN\s*$/.test(rest.trim())) errors.push('MARK … WITHIN: name the domain a contract may write beyond its zones');
+  return errors;
+}
+
+/** A DELEGATE whose task is one bare name: the contracts a MARK filled that list with — the name, else null. */
+export function contractListOf(task: string): string | null {
+  const t = task.trim();
+  return /^[a-z][a-z0-9_-]*$/.test(t) ? t : null;
+}
+
 /** A delegation a flow starts in the background, as the apx keeps it (`meta.background`): where it is written and who it goes to. */
 export interface ApBackgroundWork {
   flow: string;
@@ -174,6 +249,18 @@ export interface ApBackgroundWork {
   into: string | null;
   /** Its BY — null: a fork of whoever runs the flow. */
   by: string | null;
+}
+
+/** A MARK of a flow, as the apx keeps it (`meta.marks`): where it is written, the list it fills, the spec of each zone, its limit, its domain. */
+export interface ApMark {
+  flow: string;
+  step: string;
+  list: string;
+  /** The AS template's name — what `contract mark` checks a spec against. */
+  spec: string;
+  max: number;
+  /** The domain a contract may write beyond its zones — null when none. */
+  within: string | null;
 }
 
 /** The lines of a flow the binding reads and marks — the document's nodes, loosely. */
@@ -187,6 +274,10 @@ interface FlowNode {
   into?: { target: string };
   /** Set here: a background delegation's id (`dlg-…`). */
   work?: string;
+  /** Set here: a MARK's id (`mrk-…`) — on a DELEGATE of a contract list, the MARK it starts. */
+  mark?: string;
+  /** A DELEGATE of a contract list: the list. */
+  list?: string;
   /** Set here, on a WAIT: the ids of what it takes back. */
   waits?: string[];
   body?: FlowNode[];
@@ -202,14 +293,34 @@ interface FlowNode {
  * scopes are the ones the concurrency check reads: a STEP, an IF or ELSE
  * branch, an UNTIL. Returns what the apx keeps of each, by id.
  */
-export function bindBackgroundWork(flow: { address: string; name: string; body: readonly unknown[] }, idOf: (text: string) => string): Record<string, ApBackgroundWork> {
+export function bindBackgroundWork(
+  flow: { address: string; name: string; body: readonly unknown[] }, idOf: (text: string, prefix: 'dlg' | 'mrk') => string,
+  marks: Record<string, ApMark> = {}, markOf: (node: FlowNode, step: string) => ApMark | null = () => null,
+): Record<string, ApBackgroundWork> {
   const found: Record<string, ApBackgroundWork> = {};
   let n = 0;
+  // The flow's lists of contracts, by name: the MARK that last filled each one.
+  const lists = new Map<string, string>();
   const nameOf = (into: { target: string } | undefined) => (into ? into.target.split('/').pop() ?? null : null);
   const walk = (nodes: readonly FlowNode[], step: string, running: { id: string; name: string | null }[]): void => {
     for (const node of nodes) {
-      if (node.type === 'directive' && isDelegationVerb(node.keyword ?? '') && node.async) {
-        const id = idOf(JSON.stringify([flow.address, n++]));
+      if (node.type === 'directive' && node.keyword === MARK_VERB) {
+        const mark = markOf(node, step);
+        if (mark) {
+          const id = idOf(JSON.stringify([flow.address, 'mark', n++]), 'mrk');
+          node.mark = id;
+          marks[id] = mark;
+          lists.set(mark.list, id);
+        }
+      } else if (node.type === 'directive' && node.keyword === DELEGATE_VERB && node.list) {
+        // The contracts of a list, started: waited for by their MARK's id.
+        const id = lists.get(node.list);
+        if (id) {
+          node.mark = id;
+          if (node.async) running.push({ id, name: node.list });
+        }
+      } else if (node.type === 'directive' && isDelegationVerb(node.keyword ?? '') && node.async) {
+        const id = idOf(JSON.stringify([flow.address, n++]), 'dlg');
         node.work = id;
         running.push({ id, name: nameOf(node.into) });
         found[id] = { flow: flow.name, step, verb: node.keyword!, task: node.text ?? '', into: nameOf(node.into), by: node.by ?? null };
@@ -251,6 +362,8 @@ export function concurrencyErrors(tree: readonly DelegationTreeNode[]): { line: 
   const at = (line: number, message: string) => errors.push({ line, message });
 
   interface Started { name: string | null; line: number }
+  // The lists a MARK fills, in the order the body writes them.
+  const marked = new Set<string>();
   // `pending`: the scopes enclosing a point, outermost first — each with what it started and has not waited for.
   const walk = (nodes: readonly DelegationTreeNode[], inStep: boolean, pending: Started[][], key: string | null): void => {
     const own: Started[] = [];
@@ -266,12 +379,25 @@ export function concurrencyErrors(tree: readonly DelegationTreeNode[]): { line: 
         if (running && !(kw === WAIT_VERB)) at(t.line, `\`{{${name}}}\` is read before its WAIT — it was started with ${ASYNC_MARK} at line ${running.line}: write \`WAIT ${name}\` above this line`);
       }
       if (kw === FORK_VERB && !inStep) at(t.line, 'FORK hands work to a fork of whoever runs a flow — it stands in a flow STEP; here, write DELEGATE');
+      if (kw === MARK_VERB) {
+        if (!inStep) at(t.line, 'MARK binds zones of the code to contracts for a flow to hand out — it stands in a flow STEP');
+        const into = parseMark(t.rest ?? '').into;
+        if (into) marked.add(into);
+      }
+      // A DELEGATE of one bare name hands out the contracts a MARK filled that list with.
+      const list = kw === DELEGATE_VERB && inStep ? contractListOf(parseDelegation(kw, t.rest ?? '').task) : null;
+      if (list && marked.has(list)) {
+        const d = parseDelegation(kw, t.rest ?? '');
+        if (d.as) at(t.line, `DELEGATE ${list} … AS: every contract carries its spec, the AS of its MARK — drop the AS`);
+        if (d.into) at(t.line, `DELEGATE ${list} … INTO: the contracts report into \`${list}\` itself — drop the INTO`);
+        if (d.opens) at(t.line, `DELEGATE ${list}: the contracts carry their own spec — a DELEGATE of a list takes no lines beneath it`);
+      }
       if (kw === DELEGATE_VERB && inStep && !parseDelegation(kw, t.rest ?? '').by) {
         at(t.line, 'DELEGATE in a flow names who it goes to — end it with `BY <agent | team>`');
       }
       if (isDelegationVerb(kw) && t.async) {
         if (!inStep) at(t.line, `${kw}${ASYNC_MARK}: starting work without waiting for it is a flow STEP's — here, write ${kw} and wait for it`);
-        else mine.push({ name: parseDelegation(kw, t.rest ?? '').into, line: t.line });
+        else mine.push({ name: parseDelegation(kw, t.rest ?? '').into ?? list, line: t.line });
       } else if (kw === WAIT_VERB) {
         if (!inStep) at(t.line, 'WAIT takes back what a STEP started with ~ — it stands in a flow STEP');
         else {

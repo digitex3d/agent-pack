@@ -34,6 +34,8 @@ export interface Perimeter {
 export interface Allowed {
   globs: string[];
   marks?: { open: string; close: string; files: string[]; only: boolean };
+  /** A file the base does not hold — one the copy created — is kept too, wherever it is. */
+  created?: boolean;
 }
 
 /** What a delivery kept, what it left out, and what changed in the working folder instead of the copy. */

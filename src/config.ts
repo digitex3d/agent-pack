@@ -281,6 +281,8 @@ export interface Config {
   domains?: DomainThresholds;
   /** How long an `apx wait` waits at most, when its WAIT names no `MAX` — `{ max: '30m' }` by default (src/delegation.ts). */
   wait?: WaitConfig;
+  /** How many zones a MARK binds at most, when its line names no `MAX` — `{ max: 20 }` by default (src/delegation.ts). */
+  mark?: MarkConfig;
   /** Who a DELEGATE without BY is handed to, and the models delegates run on (src/executor.ts). */
   delegate?: DelegateConfig;
   /** The plugins the project activates (`plugins: ['./plugins/checklist']`), installed — src/plugins.ts. */
@@ -383,6 +385,24 @@ function resolveDomainThresholds(raw: unknown): DomainThresholds {
   for (const k of ['in', 'out']) if (!isProbability(t[k])) throw new Error(`domains.${k} must be a number between 0 and 1`);
   if ((t.out as number) >= (t.in as number)) throw new Error('domains.out must be below domains.in — between them the agent decides');
   return { in: t.in as number, out: t.out as number };
+}
+
+/** The `mark` key: how many zones a MARK binds at most, when its line names no `MAX`. */
+export interface MarkConfig {
+  max: number;
+}
+
+export const MARK_DEFAULTS: MarkConfig = { max: 20 };
+
+/** The `mark` key resolved: `max` a whole number ≥ 1 — absent, the default. */
+function resolveMarkConfig(raw: unknown): MarkConfig {
+  if (raw === undefined || raw === null) return { ...MARK_DEFAULTS };
+  if (!isPlainObject(raw)) throw new Error('mark must be an object, e.g. { max: 20 }');
+  const unknown = Object.keys(raw).filter(k => k !== 'max');
+  if (unknown.length) throw new Error(`mark: unknown key ${unknown.map(k => `\`${k}\``).join(', ')} — it takes \`max\``);
+  const max = (raw as Record<string, unknown>).max ?? MARK_DEFAULTS.max;
+  if (!Number.isInteger(max) || (max as number) < 1) throw new Error('mark.max must be a whole number ≥ 1');
+  return { max: max as number };
 }
 
 /** The `wait` key: how long a WAIT waits at most, as a duration. */
@@ -513,6 +533,7 @@ export async function loadConfig(args: string[]): Promise<Config> {
     checks: resolveChecksConfig(userConfig.checks),
     domains: resolveDomainThresholds(userConfig.domains),
     wait: resolveWaitConfig(userConfig.wait),
+    mark: resolveMarkConfig(userConfig.mark),
     delegate: resolveDelegateConfig(userConfig.delegate),
     // Each plugin folder, from the project root — loaded and installed before any agent compiles.
     plugins: await loadPlugins(((userConfig.plugins ?? []) as string[]).map(dir => resolve(projectRoot, expandHome(dir)))),

@@ -11,6 +11,7 @@
  * the engine's dispatch read them here — and serves one call. What it may use
  * of the engine is `ApxHost`: the document, the output, the shared checks.
  */
+import type { DelegationTable, DelegationRecord } from './delegations.js';
 import type { ApDocument } from '../apdoc/document.js';
 import type { AgentBlock, VarBlock } from '../apdoc/blocks.js';
 import type { ApRef } from '../apdoc/types.js';
@@ -64,6 +65,12 @@ export interface ApxHost {
   answerShape(spec: ApExecutorSpec): ApRef | null;
   deliver(id: string, spec: ApExecutorSpec, text: string, outcome: ExecutorRecord['outcome'], fingerprint: string): string | null;
   delivered(id: string, spec: ApExecutorSpec, text: string): number;
+  /** The contracts' own steps, on their copies (src/apx/engine.ts): delivering one, where its copy is, folding a WAIT's back in. */
+  readonly contracts: {
+    deliver(table: DelegationTable, r: DelegationRecord, args: string[]): number;
+    copy(ctr: string): string | null;
+    fold(table: DelegationTable, pieces: DelegationRecord[]): DelegationRecord[];
+  };
 }
 
 /** `1 entry`, `3 entries`. */

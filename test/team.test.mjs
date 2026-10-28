@@ -164,10 +164,10 @@ try {
   write(join(ops, 'ops.ap'), teamSource('ops', ['deployer'], ['ABOUT  a crew that deploys', '', 'WHEN asked to deploy:', '    RUN deploy', '', 'FLOW deploy:', '    STEP deploy it:', '        DELEGATE push the build BY deployer']));
   const handOff = ['    STEP hand it to ops:', '        DELEGATE deploy what was built BY ops'];
   writeTeam([...TEAM_BODY, ...handOff]);
-  const { buildContractIndex } = await import('../dist/src/services/teamMetadata.js');
+  const { teamNamesUnder } = await import('../dist/src/services/teamMetadata.js');
   const withTeams = () => bundleAgentObject({
     agentName: 'builder', agentFile: builder, agentDir: team, libraryRoot: lib, libraryRoots: [lib],
-    libraries: { '@main': lib }, bundleConfig: { runtime: false }, contractIndex: buildContractIndex(teams, null),
+    libraries: { '@main': lib }, bundleConfig: { runtime: false }, teams: teamNamesUnder(teams),
   });
   const handed = (await withTeams()).structure.byKind('flow').find(f => f.name === 'ship').body[2].body[0];
   assert.equal(handed.by, 'ops', 'a delegation may name a team');

@@ -9,7 +9,7 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { PACKAGE_ROOT, TABELI_ENGINE, JUDGE_LOCK_DEFAULT, packageVersion, type Config } from '../config.js';
 import type { EmittedFile } from '../../adapters/types.js';
-import { apxFile } from './payload.js';
+import { apxFile, type ApxLimits } from './payload.js';
 import type { ApxChecks } from './engine.js';
 import { JudgeLock } from '../judge/lock.js';
 
@@ -22,10 +22,10 @@ let engine: string | null = null;
  * run every `.apx` in the directory as CommonJS — even inside a project whose
  * own package.json says `"type": "module"`.
  */
-export function apxFiles(agent: string, document: string, projectRoot: string, compress: boolean, checks: ApxChecks | null = null, waitMax: string | null = null): EmittedFile[] {
+export function apxFiles(agent: string, document: string, projectRoot: string, compress: boolean, checks: ApxChecks | null = null, limits: ApxLimits = {}): EmittedFile[] {
   engine ??= readFileSync(resolve(PACKAGE_ROOT, 'dist/apx-engine.js'), 'utf-8');
   return [
-    { path: resolve(projectRoot, apxPath(agent)), content: apxFile(engine, document, packageVersion(), TABELI_ENGINE, compress, checks, waitMax) },
+    { path: resolve(projectRoot, apxPath(agent)), content: apxFile(engine, document, packageVersion(), TABELI_ENGINE, compress, checks, limits) },
     { path: resolve(projectRoot, APX_DIR, 'package.json'), content: '{ "type": "commonjs" }\n' },
   ];
 }

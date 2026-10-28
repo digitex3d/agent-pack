@@ -110,7 +110,7 @@ items on the left more.
 ## 3. Primitives
 
 The shared vocabulary of the paradigm. Each primitive has a stable
-identifier (`D1`–`D44`) for external citation as `Agent Pack §D<n>`.
+identifier (`D1`–`D48`) for external citation as `Agent Pack §D<n>`.
 These terms have precise meaning and are not interchangeable.
 Wherever a primitive takes several items on one line — names, globs,
 tags, values — they are separated by commas, one form for the whole
@@ -605,8 +605,8 @@ language; a space-separated list is a compilation error.
   probabilities travel with the block; the verdicts are cached like the
   judge's others, so only new or changed files — or all, when the
   formula changes — are asked again. A domain holds nothing else and never names another
-  domain. It is named by `@WITHIN` (D29, D45) and by a contract's
-  `DOMAIN` line. Declared and imported like a dimension (`domains/`,
+  domain. It is named by `@WITHIN` (D29, D45) and by a `MARK`'s
+  `WITHIN` (D48). Declared and imported like a dimension (`domains/`,
   `@main.domains`), or at the top of an agent's file. (Amended in 1.3:
   `FOR` gives way to `WRITES` and `READS`.)
 
@@ -661,6 +661,22 @@ language; a space-separated list is a compilation error.
   settled by itself: at the limit, and for a piece ended without
   delivery, the lead decides — wait again, take it over, reassign it, or
   block it. (New in 1.3.)
+- **D48 — contract** — a promise: work with an id the apx knows, its
+  spec, its zones, who carries it out and its state. `DELEGATE <task>`
+  creates one and starts it; `MARK <criterion> INTO <list> AS <spec>
+  [MAX <n>] [WITHIN <domain>]`, in a flow step, binds zones of the code to
+  contracts and leaves them waiting — whoever runs the flow picks the
+  zones, fills each spec as the template says, and writes the marks,
+  `agent-pack <ctr-id>` and `agent-pack end <ctr-id>`, in comments; they
+  stay in the code. The list is a declared variable, like any `INTO`'s.
+  `DELEGATE[~] <list> BY <agent>` starts every contract waiting in it —
+  one each, all at once, all to that agent — each in a copy of its own;
+  its delivery keeps its zones, the files it created and its `WITHIN`
+  domain, which stays inside the work's perimeter. Waited for, the
+  deliveries are merged and land in the working folder. One registry
+  holds them with the background pieces (D47). (New in 1.3: replaces the
+  team strategy of contracts — `STRATEGY`, `LEAD`, `CONTRACT` blocks —
+  which fails the compilation with the rewrite.)
 
 ## 4. Citation
 

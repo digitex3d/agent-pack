@@ -63,19 +63,18 @@ const STATIC_KEYWORDS = [
   'ELSE', 'WHEN', 'OWNS', 'WITH',
   'RUN', 'VAR', 'IF',
   ...ACTION_VERBS,
-  // FORK hands work to a copy of whoever runs it, WAIT takes back what a `~` started (src/delegation.ts).
-  // ASK became DELEGATE, and a step's CONTEXT its DELEGATE's form: still lexed, so the lint names the rewrite.
-  'FORK', 'WAIT', 'ASK',
+  // FORK hands work to a copy of whoever runs it, WAIT takes back what a `~` started, MARK binds
+  // zones to contracts (src/delegation.ts). ASK became DELEGATE, a step's CONTEXT its DELEGATE's form,
+  // and STRATEGY, LEAD and CONTRACT MARK + DELEGATE: still lexed, so the lint names the rewrite.
+  'FORK', 'WAIT', 'MARK', 'ASK', 'CONTRACT',
   // A variable's scope, right before VAR (`SESSION VAR plan`) — vars.ts parses it.
   ...VAR_SCOPE_WORDS,
   'ROLE', 'EXPERTISE', 'MANDATE', 'BUDGET', 'LENS-OUT', 'LENS-IN',
   'FLOW', 'STEP', 'PARALLEL', 'CONTEXT', 'BY',
-  // TEAM body: MEMBER names the agents of the team (`MEMBER a, b`; lines add up);
-  // STRATEGY the builtin strategy it runs by, LEAD the agent that prepares the
-  // work. A CONTRACT block's DOMAIN names the DOMAIN block its work is in.
-  // DOMAINS is gone: still lexed, so the lint names the rewrite.
+  // TEAM body: MEMBER names the agents of the team (`MEMBER a, b`; lines add up).
+  // DOMAINS, STRATEGY, LEAD, and a CONTRACT's DOMAIN and WITHIN lines are gone:
+  // still lexed, so the lint names the rewrite.
   'MEMBER', 'STRATEGY', 'LEAD', 'DOMAINS', 'DOMAIN',
-  // A CONTRACT's WITHIN: how far its assignee may write — its zones, their files, or its domain.
   'WITHIN',
   // STORE body: TYPE names the backing plugin, LASTS its lifetime, KEY the
   // field that identifies a record (so re-ingesting the same thing updates it

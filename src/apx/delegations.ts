@@ -1,15 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
 /**
- * The registry of what a flow started in the background (`DELEGATE~`,
- * `FORK~`): one record per piece, in the session's folder, shared by every
- * agent of the session — the lead starts a piece, whoever carries it out
- * delivers or blocks it, the lead waits for it (`apx wait`). On disk, so it
- * outlives the conversation that started it.
+ * The registry of the work a flow hands out, one record per piece, in the
+ * session's folder, shared by every agent of the session. On disk, so it
+ * outlives the conversation that started it. Two kinds of piece, one table:
  *
- *   running ──deliver──▶ delivered
- *      │  └──block────▶ blocked
- *      └──ended───────▶ ended        (the agent stopped without a word: the lead decides)
+ *   - a background delegation (`dlg-…`, `DELEGATE~` / `FORK~`): started by the
+ *     lead, delivered or blocked by whoever carries it out;
+ *   - a contract (`ctr-…`, D16–18): a zone of the code a MARK bound to a spec —
+ *     a promise that waits (`marked`) until a `DELEGATE <list> BY <agent>`
+ *     starts it in a copy of its own; delivered from that copy, then merged.
+ *
+ *   marked ──start──▶ running ──deliver──▶ delivered ──merge──▶ merged   (a contract)
+ *                        │  └──block────▶ blocked
+ *                        └──ended───────▶ ended        (the agent stopped without a word: the lead decides)
  *   ended / running ──take | reassign──▶ running
  *
  * Nothing moves a piece by itself: a WAIT that reaches its limit leaves what is
@@ -17,42 +21,71 @@
  */
 import { RecordTable } from './recordTable.js';
 
-export const DELEGATION_STATES = ['running', 'delivered', 'blocked', 'ended'] as const;
+export const DELEGATION_STATES = ['marked', 'running', 'delivered', 'merged', 'blocked', 'ended'] as const;
 export type DelegationState = typeof DELEGATION_STATES[number];
 
 /** The states a WAIT returns on: the piece will not move without the lead. */
-export const SETTLED_STATES: readonly DelegationState[] = ['delivered', 'blocked', 'ended'];
+export const SETTLED_STATES: readonly DelegationState[] = ['delivered', 'merged', 'blocked', 'ended'];
 
 /** One piece, as the table holds it. Every field is text: tabeli is flat. */
 export interface DelegationRecord {
-  /** `dlg-<8 hex>` — the id the compiled flow gives it (`meta.background`). */
+  /** The piece's id: `dlg-<8 hex>` for a background delegation (the compiled flow's, `meta.background`), `ctr-<8 hex>` for a contract. */
   dlg: string;
   flow: string;
   step: string;
-  /** Its INTO variable; '' when it fills none. */
+  /** Its INTO variable — for a contract, the list its MARK fills; '' when none. */
   into: string;
-  /** Who carries it out; '' for a fork of whoever runs the flow. (Not `by`: tabeli keeps that name for itself.) */
+  /** Who carries it out; '' for a fork of whoever runs the flow, or a contract not started yet. (Not `by`: tabeli keeps that name for itself.) */
   assignee: string;
   state: DelegationState;
   /** What it delivered, as JSON text — '' until then. */
   result: string;
   /** Why it was blocked; '' otherwise. */
   reason: string;
-  /** ISO time it was last started. */
+  /** ISO time it was last started — the contracts one DELEGATE started share it. */
   started_at: string;
-  /** The agent that started it. */
+  /** The agent that started it — or, for a contract, marked it. */
   author: string;
+  /** A contract's MARK (`mrk-…`); '' for a background delegation. */
+  mark: string;
+  /** A contract's spec, JSON — an instance of its MARK's AS template. */
+  spec: string;
+  /** A contract's zones, in the base: `file:open-close;…` — set when it starts. */
+  zone: string;
+  /** The globs a contract may write beyond its zones — its MARK's WITHIN domain, comma separated. */
+  writes: string;
+  /** What a contract's delivery left out, `; ` separated; '' when nothing. */
+  left_out: string;
+  /** Why it left that out — the assignee's word. */
+  why: string;
 }
 
-const FIELDS: (keyof DelegationRecord)[] = ['dlg', 'flow', 'step', 'into', 'assignee', 'state', 'result', 'reason', 'started_at', 'author'];
+const FIELDS: (keyof DelegationRecord)[] = ['dlg', 'flow', 'step', 'into', 'assignee', 'state', 'result', 'reason', 'started_at', 'author', 'mark', 'spec', 'zone', 'writes', 'left_out', 'why'];
 
 /** The id of a background piece. */
 export const DELEGATION_ID_RE = /^dlg-[0-9a-f]{8}$/;
+/** The id of a contract. */
+export const CONTRACT_ID_RE = /^ctr-[0-9a-f]{8}$/;
+/** The id of a MARK — what a contract list is started and waited for by. */
+export const MARK_ID_RE = /^mrk-[0-9a-f]{8}$/;
+
+/** A fresh record: every field empty but those given. */
+export function pieceRecord(fields: Partial<DelegationRecord> & Pick<DelegationRecord, 'dlg' | 'state'>): DelegationRecord {
+  const out = Object.fromEntries(FIELDS.map(f => [f, ''])) as unknown as DelegationRecord;
+  return { ...out, ...fields };
+}
 
 export class DelegationTable extends RecordTable<DelegationRecord> {
   /** Open (create on first use) the registry of `sessionId` under `projectRoot` — or the reason it cannot be. */
   static open(projectRoot: string, sessionId: string, engine: string | undefined): DelegationTable | string {
     const at = RecordTable.place(projectRoot, sessionId, engine, 'delegations.tbl', 'delegations');
     return typeof at === 'string' ? at : new DelegationTable(at.path, at.dir, FIELDS, 'dlg');
+  }
+
+  /** The contracts of a MARK the latest DELEGATE of it started — or, before any started, none. */
+  batchOf(mark: string): DelegationRecord[] {
+    const started = this.all().filter(r => r.mark === mark && r.state !== 'marked');
+    const latest = started.reduce((max, r) => (r.started_at > max ? r.started_at : max), '');
+    return started.filter(r => r.started_at === latest);
   }
 }

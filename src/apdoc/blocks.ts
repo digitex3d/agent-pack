@@ -37,7 +37,7 @@ import { deslugifyRole } from '../services/role.js';
 import { readFileSync, existsSync } from 'fs';
 import { resolve, basename, dirname } from 'path';
 import type { Block } from '../parseBlocks.js';
-import { isTeamFile, CONTRACTS_STRATEGY, type TeamFile, type ContractDecl, type ContractLimit } from '../services/teamMetadata.js';
+import { isTeamFile, type TeamFile } from '../services/teamMetadata.js';
 import { splitList } from '../lists.js';
 import { domainLines, formulaFiles, DEFAULT_DOMAIN_THRESHOLDS, type DomainFormula, type DomainThresholds } from '../domains.js';
 import type { DomainLine } from '../lexer.js';
@@ -62,8 +62,6 @@ export interface BlockCx {
   templateRef(name: string, report?: boolean): ApRef;
   agentRef(name: string): ApRef;
   runnableRef(name: string): ApRef;
-  /** A contract of the agent's team, by name. */
-  contractRef(name: string): ApRef;
   refFromAddress(address: string, expectedKind?: string): ApRef;
   /** Namespace of a library file path, or null when outside every root. */
   namespaceOfPath(path: string): string | null;
@@ -717,11 +715,11 @@ export interface TeamScan {
   name: string;
   /** The team's file, read once (services/teamMetadata.ts). */
   file: TeamFile;
-  /** The members' names: the roster of the file, less the teams a BY hands a contract to. */
+  /** The members' names: the roster of the file. */
   members: string[];
   /** The blocks of the TEAM block — its routing WHENs and its FLOWs. */
   blocks: Block[];
-  /** The FLOW blocks sliced back to raw text, de-indented as a flow file writes them — `block` null for the flow a strategy runs (no source line of its own). */
+  /** The FLOW blocks sliced back to raw text, de-indented as a flow file writes them. */
   flows: { name: string; body: string; block: Block | null }[];
 }
 
@@ -733,21 +731,10 @@ export class TeamBlock extends ApBlock {
   members: ApRef[] = [];
   routing: { when: string; run: ApRef }[] | null = null;
   shared: string | null = null;
-  /** `STRATEGY <name>` — the builtin strategy the team runs by, or null. */
-  strategy: string | null = null;
-  /** `LEAD <agent>` under a strategy. */
-  lead: ApRef | null = null;
-  /** The team's CONTRACT blocks, in order. */
-  contracts: ApRef[] = [];
 
   /** The namespace a team's own flows live under. */
   static flowsNamespace(teamName: string): string {
     return `@main.flows.${teamName}`;
-  }
-
-  /** The namespace a team's own contracts live under. */
-  static contractsNamespace(teamName: string): string {
-    return `@main.contracts.${teamName}`;
   }
 
   static fromData(data: ApBlockData): TeamBlock {
@@ -755,9 +742,6 @@ export class TeamBlock extends ApBlock {
     block.members = (data.args['members'] as ApRef[] | undefined) ?? [];
     block.routing = (data.args['routing'] as { when: string; run: ApRef }[] | undefined) ?? null;
     block.shared = (data.args['shared'] as string | undefined) ?? null;
-    block.strategy = (data.args['strategy'] as string | undefined) ?? null;
-    block.lead = (data.args['lead'] as ApRef | undefined) ?? null;
-    block.contracts = (data.args['contracts'] as ApRef[] | undefined) ?? [];
     return block;
   }
 
@@ -769,11 +753,6 @@ export class TeamBlock extends ApBlock {
       about: scan.file.about || null,
     });
     block.members = scan.members.map(name => cx.agentRef(name));
-    if (scan.file.strategy) {
-      block.strategy = scan.file.strategy.name;
-      block.lead = scan.file.lead ? cx.agentRef(scan.file.lead.name) : null;
-      block.contracts = scan.file.contracts.map(c => cx.contractRef(c.name));
-    }
 
     // The `WHEN … : RUN <flow>` routing entries of the TEAM block.
     const routing: { when: string; run: ApRef }[] = [];
@@ -801,75 +780,7 @@ export class TeamBlock extends ApBlock {
       members: this.members,
       ...(this.routing ? { routing: this.routing } : {}),
       ...(this.shared ? { shared: this.shared } : {}),
-      ...(this.strategy ? { strategy: this.strategy } : {}),
-      ...(this.lead ? { lead: this.lead } : {}),
-      ...(this.contracts.length ? { contracts: this.contracts } : {}),
     };
-  }
-}
-
-/**
- * A contract: a piece of work a lead hands out under `STRATEGY contracts`.
- * ABOUT and DOMAIN are what the lead reads to pick it for a zone; its shape
- * (`AS`) is the template of the spec the lead fills; `by` names the agents
- * that carry it out — or, handed to a team, that team's lead, with the team in
- * `byTeam`. An instance lives in the apx, never in the source.
- */
-export class ContractBlock extends ApBlock {
-  static readonly PREFIX = 'con';
-  /** The namespace of the contracts of the project file — the ones that hand a request to a team. */
-  static readonly PROJECT_NAMESPACE = '@main.contracts';
-  readonly kind = 'contract';
-  protected readonly idPrefix = ContractBlock.PREFIX;
-  domain: string | null = null;
-  /** `WITHIN`: how far whoever carries an instance out may write. */
-  within: ContractLimit = 'domain';
-  by: ApRef[] = [];
-  byTeam: ApRef | null = null;
-
-  static fromData(data: ApBlockData): ContractBlock {
-    const block = restore(new ContractBlock(initOf(data)), data);
-    block.domain = (data.args['domain'] as string | undefined) ?? null;
-    block.within = (data.args['within'] as ContractLimit | undefined) ?? 'domain';
-    block.by = (data.args['by'] as ApRef[] | undefined) ?? [];
-    block.byTeam = (data.args['byTeam'] as ApRef | undefined) ?? null;
-    block.shape = (data.args['shape'] as ApShape | undefined) ?? null;
-    return block;
-  }
-
-  /** Build from its declaration: `by` agents resolved by the builder (a team's lead when the BY names a team). */
-  static fromDecl(decl: ContractDecl, namespace: string, by: ApRef[], byTeam: ApRef | null, cx: BlockCx): ContractBlock {
-    const block = new ContractBlock({ name: decl.name, namespace, about: decl.about || null });
-    block.domain = decl.domain;
-    block.within = decl.within;
-    block.by = by;
-    block.byTeam = byTeam;
-    if (decl.as) block.shape = { force: 0, ref: cx.templateRef(decl.as) };
-    return block;
-  }
-
-  protected override argsJson(): Record<string, unknown> {
-    return {
-      ...(this.domain ? { domain: this.domain } : {}),
-      ...(this.within !== 'domain' ? { within: this.within } : {}),
-      by: this.by,
-      ...(this.byTeam ? { byTeam: this.byTeam } : {}),
-      ...(this.shape ? { shape: this.shape } : {}),
-    };
-  }
-
-  /** Its domain, its form and who carries it out — what the lead reads to hand it out. */
-  override asMdBody(env: MdEnv): string {
-    const C = FORMULAS.blocks.contract;
-    const lines: string[] = [];
-    if (this.domain) lines.push(fill(C.domain, { domain: this.domain }));
-    if (!this.byTeam) lines.push(fill(C.within, { limit: enumPrimitiveFor('WITHIN')!.values[this.within]() }));
-    if (this.shape) lines.push(fill(C.form, { name: refName(this.shape.ref), ref: env.refOf(this.shape.ref.target) }));
-    const who = this.by.map(r => `\`${refName(r)}\`${env.refOf(r.target)}`).join(', ');
-    lines.push(this.byTeam
-      ? fill(C.byTeam, { team: refName(this.byTeam), ref: env.refOf(this.byTeam.target), lead: who })
-      : fill(C.by, { who }));
-    return lines.join('\n');
   }
 }
 
@@ -1016,9 +927,6 @@ export const KIND_STRATEGIES: KindStrategy[] = [
   // Named by `@WITHIN`: the perimeter reads its WRITES and READS globs.
   { kind: 'domain', revive: DomainBlock.fromData, folder: 'domains', chapterTitle: FORMULAS.blocks.domain.chapter, prefix: DomainBlock.PREFIX, ref: null,
     entries: ctx => ctx.domains, from: DomainBlock.fromDefinition },
-  // A team's contracts — built from the team file, not collected from a library: a chapter the lead and its members read.
-  { kind: 'contract', revive: ContractBlock.fromData, folder: 'contracts', chapterTitle: FORMULAS.blocks.contract.chapter, prefix: ContractBlock.PREFIX, ref: null,
-    entries: () => [] },
   // Non-chapter kinds — referenceable identities only.
   { kind: 'team', revive: TeamBlock.fromData, folder: 'teams',      prefix: TeamBlock.PREFIX,                ref: null },
   { kind: 'agent', revive: AgentBlock.fromData, folder: 'agents',     prefix: AgentBlock.PREFIX,               ref: null },

@@ -296,14 +296,9 @@ await import('./teamMembership.test.mjs');
 // --- The team block: EXPORT TEAM <name> in <team>.ap — roster, routing, flows, the retired flows.ap ---
 await import('./team.test.mjs');
 
-// --- The contracts strategy (D44), language side: STRATEGY/LEAD/DOMAINS/CONTRACT, WHEN handed, the project contract ---
-await import('./contracts.test.mjs');
-
-// --- The domains of a project's files at build time (D44): decideChoice, the lock's choices, jev's choice question, the lead's tagging ---
-
-// --- The contracts strategy (D44), apx side: a real project, bundle all, the agents' apx in one session ---
-await import('./contractsApx.test.mjs');
+// --- Background work and contracts: DELEGATE~ / WAIT on the registry; MARK, a DELEGATE of a list, copies, merge and land ---
 await import('./delegations.test.mjs');
+await import('./marks.test.mjs');
 
 // --- User-level config cascade (default → user → project), reserved @user alias ---
 await import('./userConfigCascade.test.mjs');

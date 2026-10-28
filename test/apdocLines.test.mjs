@@ -111,10 +111,10 @@ const flowsFile = write(join(team, 'crew.ap'), teamSource('crew', ['builder'], [
   '',                                  // 5
   'FLOW ship:',                        // 6
   '    STEP build it:',                // 7
-  '        BY builder',                // 8
+  '        DELEGATE prepare it BY builder', // 8
   '        DO  compile the code',      // 9
   '    STEP check it:',                // 10
-  '        BY builder',                // 11
+  '        DELEGATE review it BY builder',  // 11
   '        DO  run the checks',        // 12
   '        DO  sign off',              // 13
   '',

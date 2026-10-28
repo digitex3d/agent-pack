@@ -9,7 +9,7 @@ import { SourceRegistry, type SourceSpan } from '../sources.js';
 import { AGENT_KEYS, TEAM_KEY } from '../blockTypes.js';
 export { TEAM_KEY };
 import { apFilesUnder } from './fs.js';
-import { parseBlocks, type Block } from '../parseBlocks.js';
+import type { Block } from '../parseBlocks.js';
 import { splitList } from '../lists.js';
 
 /**
@@ -47,83 +47,21 @@ export interface TeamFile {
   name: string;
   /** Its ABOUT, '' when absent. */
   about: string;
-  /**
-   * Its members, in order, each with the line that lists it: the MEMBER lines —
-   * or, under `STRATEGY contracts`, the LEAD and the agents the CONTRACT blocks'
-   * BY lines name, once each.
-   */
+  /** Its members, in order, each with the line that lists it: the MEMBER lines. */
   members: { name: string; line: number }[];
-  /** `STRATEGY <name>` — the builtin strategy the team runs by, or null (its routing and flows are its own). */
-  strategy: { name: string; line: number } | null;
-  /** `LEAD <agent>` — the agent that prepares the work under a strategy. */
-  lead: { name: string; line: number } | null;
-  /** The CONTRACT blocks of the team. */
-  contracts: ContractDecl[];
   /** The indent of the block's lines — what `unit` de-indents them by. */
   childIndent: number;
   /**
-   * The team as the pipeline reads it: the file with the TEAM opener, its
-   * MEMBER/STRATEGY/LEAD/DOMAINS lines and its CONTRACT blocks blanked and the
-   * block's lines de-indented to column 0 — so a routing WHEN, a FLOW, a LENS-IN
+   * The team as the pipeline reads it: the file with the TEAM opener and its
+   * MEMBER lines blanked and the block's lines de-indented to column 0 — so a routing WHEN, a FLOW, a LENS-IN
    * stand at the top as they did in `flows.ap`, the prologue IMPORTs stay where
    * they are, and every line keeps its number.
    */
   unit: string;
 }
 
-/** A `CONTRACT <name>:` block as written: its form (`AS`), who carries it out (`BY`), the domain the lead picks it for. */
-export interface ContractDecl {
-  name: string;
-  /** The header line. */
-  line: number;
-  about: string;
-  domain: string | null;
-  domainLine: number | null;
-  /** `WITHIN zone | file | domain` — how far its assignee may write; `domain` when absent. */
-  within: ContractLimit;
-  withinLine: number | null;
-  /** The template `AS` names — the shape of the spec the lead fills. */
-  as: string | null;
-  asLine: number | null;
-  /** True when the AS line carries a level (`AS!`): an error, a contract's shape takes none. */
-  asLevelled: boolean;
-  /** The names `BY` lists: agents of the team, or one team. */
-  by: string[];
-  byLine: number | null;
-}
-
 /** The lines a TEAM block holds besides its routing and flows — blanked in its unit. */
-const TEAM_HEAD_LINES = new Set(['MEMBER', 'STRATEGY', 'LEAD']);
-
-/** The block that declares a contract. */
-export const CONTRACT_KEY = 'CONTRACT';
-
-/** How far whoever carries an instance out may write — the values of WITHIN, the narrowest first. */
-export const CONTRACT_LIMITS = ['zone', 'file', 'domain'] as const;
-export type ContractLimit = typeof CONTRACT_LIMITS[number];
-
-/** The strategy a team of contracts declares. */
-export const CONTRACTS_STRATEGY = 'contracts';
-
-/** Read one CONTRACT block. */
-function readContract(block: Block): ContractDecl {
-  const decl: ContractDecl = { name: block.name ?? '', line: block.startLine, about: '', domain: null, domainLine: null, within: 'domain', withinLine: null, as: null, asLine: null, asLevelled: false, by: [], byLine: null };
-  for (const child of block.children) {
-    if (child.type !== 'line') continue;
-    const rest = child.rest.trim();
-    if (child.keyword === 'ABOUT' && !decl.about) decl.about = rest;
-    else if (child.keyword === 'DOMAIN' && decl.domain === null) { decl.domain = rest; decl.domainLine = child.line; }
-    else if (child.keyword === 'WITHIN' && decl.withinLine === null && (CONTRACT_LIMITS as readonly string[]).includes(rest)) { decl.within = rest as ContractLimit; decl.withinLine = child.line; }
-    else if (/^!?AS!{0,2}$/.test(child.keyword) && decl.as === null) { decl.as = rest; decl.asLine = child.line; decl.asLevelled = child.keyword !== 'AS'; }
-    else if (child.keyword === 'BY' && decl.byLine === null) { decl.by = splitList(rest); decl.byLine = child.line; }
-  }
-  return decl;
-}
-
-/** The CONTRACT blocks directly under `blocks` — a file's top (PROJECT.ap) or a TEAM block's children. */
-export function readContractBlocks(blocks: readonly (Block | { type: string })[]): ContractDecl[] {
-  return blocks.filter((b): b is Block => b.type === 'block' && (b as Block).key === CONTRACT_KEY).map(readContract);
-}
+const TEAM_HEAD_LINES = new Set(['MEMBER']);
 
 /** The `.ap` file under `dir` holding an `EXPORT TEAM` block, or null — the one discriminator of a team folder. */
 export function teamFileOf(dir: string): string | null {
@@ -150,8 +88,6 @@ export function readTeamFile(root: string, sources: SourceRegistry = new SourceR
   const lines = source.split(/\r?\n/);
   const listed: { name: string; line: number }[] = [];
   let about = '';
-  let strategy: TeamFile['strategy'] = null;
-  let lead: TeamFile['lead'] = null;
   for (const child of block.children) {
     if (child.type !== 'line') continue;
     const rest = child.rest.trim();
@@ -159,23 +95,13 @@ export function readTeamFile(root: string, sources: SourceRegistry = new SourceR
       listed.push(...splitList(rest).map(name => ({ name, line: child.line })));
     } else if (child.keyword === 'ABOUT' && !about) {
       about = rest;
-    } else if (child.keyword === 'STRATEGY' && !strategy) {
-      strategy = { name: rest, line: child.line };
-    } else if (child.keyword === 'LEAD' && !lead) {
-      lead = { name: rest, line: child.line };
     }
   }
-  const contracts = readContractBlocks(block.children);
-  // Under the contracts strategy the roster is derived: the lead, then whoever a BY names, once each.
-  const members = strategy?.name === CONTRACTS_STRATEGY
-    ? [...(lead ? [lead] : []), ...contracts.flatMap(c => c.by.map(name => ({ name, line: c.byLine ?? c.line })))]
-      .filter((m, i, all) => all.findIndex(o => o.name === m.name) === i)
-    : listed;
   const childIndent = block.children[0]?.indent ?? 0;
-  return { root, path, source, block, name: block.name ?? basename(root), about, members, strategy, lead, contracts, childIndent, unit: teamUnit(lines, block, childIndent) };
+  return { root, path, source, block, name: block.name ?? basename(root), about, members: listed, childIndent, unit: teamUnit(lines, block, childIndent) };
 }
 
-/** See {@link TeamFile.unit}: the opener, the head lines and the CONTRACT blocks blanked, the block's lines de-indented, numbers kept. */
+/** See {@link TeamFile.unit}: the opener and the head lines blanked, the block's lines de-indented, numbers kept. */
 function teamUnit(lines: string[], block: Block, childIndent: number): string {
   const end = blockEnd(block, lines.length);
   const out = lines.slice();
@@ -185,17 +111,7 @@ function teamUnit(lines: string[], block: Block, childIndent: number): string {
   }
   for (const child of block.children) {
     if (child.type === 'line' && TEAM_HEAD_LINES.has(child.keyword)) out[child.line - 1] = '';
-    if (child.type === 'block' && child.key === CONTRACT_KEY) {
-      for (let i = child.startLine - 1; i < blockEnd(child, lines.length); i++) out[i] = '';
-    }
   }
-  return out.join('\n');
-}
-
-/** `source` with the lines of `blocks` blanked — numbers kept: how the project file sheds its CONTRACT blocks before it renders. */
-export function withoutBlocks(source: string, blocks: readonly Block[]): string {
-  const out = source.split(/\r?\n/);
-  for (const b of blocks) for (let i = b.startLine - 1; i < blockEnd(b, out.length); i++) out[i] = '';
   return out.join('\n');
 }
 
@@ -220,14 +136,13 @@ export interface TeamIssue { file: string; line: number; message: string }
  * agent file the MEMBER lines leave out, a block named unlike its folder. The
  * one check of the roster, run by the compiler and by the orchestration.
  */
-export function teamRosterIssues(team: TeamFile, index: ContractIndex | null = null): TeamIssue[] {
+export function teamRosterIssues(team: TeamFile): TeamIssue[] {
   const issues: TeamIssue[] = [];
   const files = findAgentFiles(team.root).map(path => ({ path, name: agentNameOf(path) }));
   const folder = basename(team.root);
   if (team.name !== folder) {
     issues.push({ file: team.path, line: team.block.startLine, message: `TEAM ${team.name}: a team is named like its folder — \`${folder}\`` });
   }
-  if (team.strategy?.name === CONTRACTS_STRATEGY) return [...issues, ...contractIssues(team, files, index)];
   const seen = new Set<string>();
   for (const m of team.members) {
     if (seen.has(m.name)) issues.push({ file: team.path, line: m.line, message: `MEMBER ${m.name}: listed twice` });
@@ -240,103 +155,6 @@ export function teamRosterIssues(team: TeamFile, index: ContractIndex | null = n
     if (!seen.has(f.name)) {
       issues.push({ file: team.path, line: team.block.startLine, message: `TEAM ${team.name}: the agent \`${f.name}\` (${basename(f.path)}) is in the folder but not among its MEMBER lines` });
     }
-  }
-  return issues;
-}
-
-/**
- * The contracts of a project, read once for every compilation of the run: the
- * teams (with their strategy and lead) and every CONTRACT block — in a team or
- * at the top of the project file — with who it names. What a `BY <team>`
- * resolves against, and what says whether some contract hands work to a team.
- */
-export interface ContractIndex {
-  teams: { name: string; strategy: string | null; lead: string | null }[];
-  /** Every contract, with its file, the team it is written in (null: the project file) and the IMPORT line that brings in its AS template there, when one does. */
-  contracts: (ContractDecl & { file: string; team: string | null; asImport: string | null })[];
-}
-
-/** The `IMPORT <name> FROM <module>` a file would need to see `name` — from the IMPORT line of `source` that lists it, or null. */
-function importLineFor(source: string, name: string | null): string | null {
-  if (!name) return null;
-  for (const line of source.split(/\r?\n/)) {
-    const m = line.match(/^IMPORT\s+(.+?)\s+FROM\s+(\S+)\s*$/);
-    if (m && splitList(m[1]).includes(name)) return `IMPORT ${name} FROM ${m[2]}`;
-  }
-  return null;
-}
-
-/** Build the index: the teams under `teamsDir` and the CONTRACT blocks of `projectFile` (null, or absent: none). */
-export function buildContractIndex(teamsDir: string, projectFile: string | null): ContractIndex {
-  const index: ContractIndex = { teams: [], contracts: [] };
-  for (const root of teamRootsUnder(teamsDir)) {
-    const team = readTeamFile(root);
-    if (!team) continue;
-    index.teams.push({ name: team.name, strategy: team.strategy?.name ?? null, lead: team.lead?.name ?? null });
-    index.contracts.push(...team.contracts.map(c => ({ ...c, file: team.path, team: team.name, asImport: importLineFor(team.source, c.as) })));
-  }
-  if (projectFile && existsSync(projectFile)) {
-    const source = readFileSync(projectFile, 'utf-8');
-    index.contracts.push(...readContractBlocks(parseBlocks(source).blocks).map(c => ({ ...c, file: projectFile, team: null, asImport: importLineFor(source, c.as) })));
-  }
-  return index;
-}
-
-/** A team of the index that runs by contracts, by name — or null. */
-export function contractsTeamOf(index: ContractIndex | null, name: string): { name: string; lead: string | null } | null {
-  const team = index?.teams.find(t => t.name === name && t.strategy === CONTRACTS_STRATEGY);
-  return team ?? null;
-}
-
-/**
- * What a team of contracts gets wrong: a LEAD with no agent file; a BY that names
- * nothing of the folder and no team of contracts, or mixes agents and a team,
- * or names the team itself; an agent file no contract hands work to; and — given
- * the index — no CONTRACT anywhere that names this team in its BY.
- */
-function contractIssues(team: TeamFile, files: { path: string; name: string }[], index: ContractIndex | null): TeamIssue[] {
-  const issues: TeamIssue[] = [];
-  const folder = basename(team.root);
-  const at = (line: number | null, message: string) => issues.push({ file: team.path, line: line ?? team.block.startLine, message });
-  if (team.lead && !files.some(f => f.name === team.lead!.name)) {
-    at(team.lead.line, `LEAD ${team.lead.name}: no agent file in \`${folder}/\` declares \`EXPORT AGENT ${team.lead.name}\``);
-  }
-  const handed = new Set<string>(team.lead ? [team.lead.name] : []);
-  for (const c of team.contracts) {
-    const agents = c.by.filter(name => files.some(f => f.name === name));
-    const teams = c.by.filter(name => !files.some(f => f.name === name) && (index ? contractsTeamOf(index, name) !== null : false));
-    const unknown = c.by.filter(name => !agents.includes(name) && !teams.includes(name));
-    for (const name of unknown) {
-      at(c.byLine, `BY ${name}: no agent file in \`${folder}/\` declares \`EXPORT AGENT ${name}\`${index ? ', and no team runs by contracts under that name' : ''}`);
-    }
-    if (teams.includes(team.name)) at(c.byLine, `BY ${team.name}: a contract is not handed to its own team`);
-    if (teams.length > 0 && agents.length > 0) at(c.byLine, `BY ${c.by.join(', ')}: a contract is carried out by agents of the team, or handed to one team — not both`);
-    if (teams.length > 1) at(c.byLine, `BY ${c.by.join(', ')}: a contract is handed to one team`);
-    for (const name of agents) handed.add(name);
-  }
-  for (const f of files) {
-    if (!handed.has(f.name)) at(null, `TEAM ${team.name}: the agent \`${f.name}\` (${basename(f.path)}) is in the folder but no CONTRACT names it in its BY, nor is it the LEAD`);
-  }
-  if (index && !index.contracts.some(c => c.team !== team.name && c.by.includes(team.name))) {
-    at(null, `TEAM ${team.name}: no CONTRACT hands work to this team — write one with \`BY ${team.name}\` in PROJECT.ap, or in a team that delegates to it`);
-  }
-  return issues;
-}
-
-/**
- * What a CONTRACT outside a team (the project file) gets wrong: it hands work to
- * exactly one team of contracts, carries no DOMAIN, and names a template of the
- * compilation as its form.
- */
-export function projectContractIssues(file: string, decls: ContractDecl[], index: ContractIndex, templates: ReadonlySet<string>): TeamIssue[] {
-  const issues: TeamIssue[] = [];
-  for (const c of decls) {
-    const at = (line: number | null, message: string) => issues.push({ file, line: line ?? c.line, message });
-    if (c.domain !== null) at(c.domainLine, `CONTRACT ${c.name}: DOMAIN is a team contract's — the lead picks it by domain; a project contract hands the whole request to a team`);
-    if (c.withinLine !== null) at(c.withinLine, `CONTRACT ${c.name}: WITHIN is a team contract's — it bounds what a member writes; a project contract hands the whole request to a team`);
-    if (c.by.length !== 1) at(c.byLine, `CONTRACT ${c.name}: BY names the one team that takes the request — found ${c.by.length || 'none'}`);
-    else if (!contractsTeamOf(index, c.by[0])) at(c.byLine, `BY ${c.by[0]}: no team runs by contracts under that name — a project contract is handed to a team with \`STRATEGY contracts\``);
-    if (c.as && !templates.has(c.as)) at(c.asLine, `CONTRACT ${c.name}: AS \`${c.as}\` names no template of this file — declare it here or IMPORT it`);
   }
   return issues;
 }
@@ -531,6 +349,11 @@ function teamRootsUnder(teamsDir: string): string[] {
     .sort()
     .map(team => resolve(teamsDir, team))
     .filter(teamDir => statSync(teamDir).isDirectory());
+}
+
+/** The names of the teams under `teamsDir` — what a flow's `BY <team>` resolves against. */
+export function teamNamesUnder(teamsDir: string): string[] {
+  return teamRootsUnder(teamsDir).map(root => readTeamFile(root)?.name).filter((n): n is string => !!n);
 }
 
 /**

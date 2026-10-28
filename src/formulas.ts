@@ -37,7 +37,8 @@ export interface Formulas {
     STEP: { head: Text; list: Text };
     RUN: { line: Text; flow: Text; unresolved: Text; bare: Text; sequence: Text; name: Text };
     DO: { intro: Text };
-    DELEGATE: { intro: Text; to: Text; full: Text; shaped: Text; background: Text; started: Text };
+    DELEGATE: { intro: Text; to: Text; full: Text; shaped: Text; background: Text; started: Text; contracts: Text; contractsRun: Text; contractsWait: Text };
+    MARK: { intro: Text; text: Text; within: Text; none: Text };
     FORK: { intro: Text; self: Text; agent: Text; shaped: Text };
     WAIT: { intro: Text; named: Text; all: Text; run: Text; max: Text };
     COMPUTE: { intro: Text; require: Text; return: Text; ensure: Text; rule: { require: Text; ensure: Text; never: Text } };
@@ -67,11 +68,6 @@ export interface Formulas {
     store: {
       chapter: Text; home: Text; lasts: Record<'project' | 'session', Text>; field: Text; key: Text;
       reject: Text; create: Text; usage: Text; noType: Text; unknownType: Text;
-    } & KindGuide;
-    contract: {
-      chapter: Text; domain: Text; within: Text; form: Text; by: Text; byTeam: Text;
-      flow: { when: Text; prepare: Text; prepareDo: Text[]; work: Text; workOf: Text; workDo: Text[]; merge: Text; mergeDo: Text[] };
-      team: { strategy: Text; contracts: Text; entry: Text; domain: Text };
     } & KindGuide;
     dimension: { chapter: Text; covers: Text; eachShape: Text; read: Text; write: Text } & KindGuide;
     domain: { chapter: Text; writes: Text; reads: Text; formula: Text } & KindGuide;

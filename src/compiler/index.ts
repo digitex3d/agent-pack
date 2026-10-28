@@ -13,10 +13,10 @@ import { unappliedBlocks, unappliedIssue, withScopeLine } from '../withUse.js';
 import { readDecorator } from '../decoratorUse.js';
 import { resolveBundleDefaults, resolveTeamShared } from '../bundleDefaults.js';
 import { resolveTeamMembership } from '../services/teamMembership.js';
-import { findAgentFiles, readAgentFile, standaloneDir, agentNameOf, teamRootForAgentFile, readTeamFile, teamRosterIssues, legacyTeamIssue, buildContractIndex, readContractBlocks, projectContractIssues, withoutBlocks, CONTRACTS_STRATEGY, type ContractIndex, type TeamFile } from '../services/teamMetadata.js';
+import { findAgentFiles, readAgentFile, standaloneDir, agentNameOf, teamRootForAgentFile, readTeamFile, teamRosterIssues, legacyTeamIssue, teamNamesUnder } from '../services/teamMetadata.js';
 import { delegateTargetErrors, executorErrors, usesPrograms, WRITE_PROGRAM, type AgentIndexEntry } from '../executor.js';
-import { BUILTIN_AGENTS_DIR, resolveDelegateConfig, PROJECT_SOURCE, type DelegateConfig } from '../config.js';
-import { LintError, checkVocabulary, lineOfName, checkedHeadIssues, dimensionBlockErrors, domainBlockErrors, pluginBlockErrors, teamBlockErrors, contractBlockErrors } from '../lint.js';
+import { BUILTIN_AGENTS_DIR, resolveDelegateConfig, type DelegateConfig } from '../config.js';
+import { LintError, checkVocabulary, lineOfName, checkedHeadIssues, dimensionBlockErrors, domainBlockErrors, pluginBlockErrors, teamFileErrors } from '../lint.js';
 import { CompileError, reporter } from '../report.js';
 import { extractInlineDefinitions } from '../dispatch/inlineBlocks.js';
 import { renderTree } from '../bundlers/renderTree.js';
@@ -70,8 +70,8 @@ export interface BundleOptions {
   checks?: ChecksConfig | null;
   /** Every agent of the project and its team — what `DELEGATE … BY` may name. Absent: not checked. */
   agentIndex?: AgentIndexEntry[];
-  /** The project's contracts and teams — what a `BY <team>` resolves against, and whether some contract hands work to the agent's team. Absent: not checked. */
-  contractIndex?: ContractIndex | null;
+  /** The project's teams, by name — what a flow's `BY <team>` resolves against. Absent: not known. */
+  teams?: readonly string[];
   /** The `delegate` config key: the default delegate and the agents' models. */
   delegate?: DelegateConfig;
 }
@@ -169,14 +169,9 @@ function buildBundleOpts(
     judge: overrides.judge,
     checks: config.checks ?? null,
     agentIndex: agentIndexOf(config),
-    contractIndex: contractIndexOf(config, overrides.projectRoot),
+    teams: teamNamesUnder(config.teamsDir),
     ...(config.delegate ? { delegate: config.delegate } : {}),
   };
-}
-
-/** The project's contracts: the teams under the config's teams folder and the CONTRACT blocks of its PROJECT.ap. */
-function contractIndexOf(config: Config, projectRoot = process.cwd()): ContractIndex {
-  return buildContractIndex(config.teamsDir, resolve(projectRoot, PROJECT_SOURCE));
 }
 
 /** A name that resolves to no block fails the compilation (D30): what is missing, and how to bring it in. */
@@ -506,32 +501,6 @@ function dimensionErrors(doc: ApDocument, ctx: BundleContext): LintError[] {
 }
 
 /**
- * Under `STRATEGY contracts`: a CONTRACT's DOMAIN is one the agent its BY names
- * works within (`@WITHIN <domain>` — a DOMAIN block, D44); a member some BY names
- * declares `WHEN handed <contract>:` for each such contract, and no LENS-IN —
- * its input is the contract it is handed.
- */
-function contractErrors(doc: ApDocument, team: TeamFile, agentName: string, lensInFile: string | null): LintError[] {
-  if (team.strategy?.name !== CONTRACTS_STRATEGY) return [];
-  const errors: LintError[] = [];
-  const at = (line: number | null, message: string) => errors.push({ file: team.path, line: line ?? team.block.startLine, message });
-  const within = (doc.domains() ?? []).map(d => d.name);
-  for (const c of team.contracts.filter(c => c.domain !== null && c.by.includes(agentName))) {
-    if (!within.includes(c.domain!)) at(c.domainLine, `CONTRACT ${c.name}: DOMAIN \`${c.domain}\` — \`${agentName}\`, its BY, does not work within it: write \`@WITHIN ${c.domain}\` above its AGENT, or hand the contract to an agent within it`);
-  }
-  const handed = team.contracts.filter(c => c.by.includes(agentName));
-  if (handed.length > 0) {
-    const root = doc.root();
-    const inputs = new Set(doc.nodes().filter(n => n.block === root && n.node.type === 'when').map(n => (n.node as { input?: { target: string } }).input?.target.split('/').pop()).filter(Boolean));
-    for (const c of handed) {
-      if (!inputs.has(c.name)) at(c.byLine, `BY ${agentName}: \`${agentName}\` declares no \`WHEN handed ${c.name}:\` — the trigger a member starts a contract from`);
-    }
-    if (lensInFile) errors.push({ file: lensInFile, line: lineOfName(lensInFile, 'LENS-IN'), message: `LENS-IN is not written in a team of contracts — the member's input is the contract it is handed (\`WHEN handed <contract>:\`)` });
-  }
-  return errors;
-}
-
-/**
  * A dimension is an agent's — read and written through that agent's apx. One a
  * compilation that is no agent's reaches (PROJECT.ap, a standalone skill, a
  * team's file), from `from` on in `ctx.dimensions`, fails it at `file`.
@@ -721,17 +690,10 @@ export async function bundleStandaloneToString(
     libraries: { ...librariesAliasMap(config), ...(opts.extraLibraries ?? {}) },
     renderings: opts.adapter?.renderings,
   });
-  // The file's CONTRACT blocks hand a request to a team: checked here, held by the apx, never rendered.
-  const source = ctx.sources.read(absolute);
-  const contractBlocks = ctx.sources.tree(absolute).blocks.filter(b => b.key === 'CONTRACT');
-  const header = parseStandaloneHeader(contractBlocks.length ? withoutBlocks(source, contractBlocks) : source);
+  const header = parseStandaloneHeader(ctx.sources.read(absolute));
   lintSource(absolute, ctx);
 
   let body = await resolveInlineBlocks(header.stripped, ctx, absolute);
-  if (contractBlocks.length) {
-    const index = contractIndexOf(config, dirname(absolute));
-    ctx.lintErrors.push(...contractBlockErrors(absolute, contractBlocks), ...projectContractIssues(absolute, readContractBlocks(contractBlocks), index, new Set(ctx.templates.map(t => t.name))));
-  }
   ctx.lintErrors.push(...standaloneDecoratorErrors(ctx, absolute, body), ...strayDimensionErrors(ctx, absolute));
   body = `${emitCollectedSections(ctx)}${tidyBlankLines(body)}\n`;
   noExecutableChecks(absolute, ctx);
@@ -799,17 +761,11 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
   if (teamFile) {
     lintSource(teamFile.path, ctx);
     // The block's own contract (ABOUT, MEMBER, what a team holds) and its roster against the folder.
-    ctx.lintErrors.push(...teamBlockErrors(teamFile.path, ctx.sources.tree(teamFile.path).blocks), ...teamRosterIssues(teamFile, opts.contractIndex ?? null));
+    ctx.lintErrors.push(...teamFileErrors(teamFile.path, teamFile.source), ...teamRosterIssues(teamFile));
     // The team's flows travel in every member's document; so do the blocks
     // the team file imports (a step's AS template), or their ids would lead nowhere.
     const imports = teamFile.source.split(/\r?\n/).filter(l => /^IMPORT\s/.test(l)).join('\n');
     if (imports) await expandImports(imports, ctx, teamFile.path);
-    // A contract handed to the team from outside brings its form along: the template its file imports.
-    if (teamFile.strategy?.name === CONTRACTS_STRATEGY && opts.contractIndex) {
-      for (const c of opts.contractIndex.contracts.filter(c => c.team !== teamFile.name && c.by.includes(teamFile.name))) {
-        if (c.asImport && !ctx.templates.some(t => t.name === c.as)) await expandImports(c.asImport, ctx, c.file);
-      }
-    }
   }
 
   const metadata = new Map<string, string[]>();
@@ -853,7 +809,7 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     bootstrap,
     vars: variables.constants,
     declaredVars: variables.variables,
-    contractIndex: opts.contractIndex ?? null,
+    teams: opts.teams ?? [],
   });
   // A DELEGATE without BY goes to the default delegate; the config may set this agent's model.
   const delegate = opts.delegate ?? resolveDelegateConfig(undefined);
@@ -877,7 +833,6 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     ...judgedDomains.errors,
     ...domainFileErrors(ctx, structure, projectRoot, judgedDomains.unjudged),
     ...pluginFileErrors(ctx),
-    ...(teamFile ? contractErrors(structure, teamFile, agentName, agentFile.info.lensIn ? agentFilePath : null) : []),
     ...builder.varErrors.map(located),
     ...builder.checkIssues.map(located),
     ...(opts.agentIndex ? delegateTargetErrors(structure, opts.agentIndex, teamRoot ? basename(teamRoot) : null) : []),

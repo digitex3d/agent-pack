@@ -434,6 +434,12 @@ export const WaitPrimitive = createBulletGroupPrimitive({
   intro: FORMULAS.keywords.WAIT.intro,
 });
 
+/** `MARK <criterion> INTO <var> AS <spec>` — zones of the code bound to contracts that wait (src/delegation.ts). */
+export const MarkPrimitive = createBulletGroupPrimitive({
+  keyword: 'MARK',
+  intro: FORMULAS.keywords.MARK.intro,
+});
+
 /** `COMPUTE <action>` — an action left to a program (src/executor.ts); grouped like DO. */
 export const ComputePrimitive = createBulletGroupPrimitive({
   keyword: 'COMPUTE',
@@ -473,6 +479,7 @@ export const FORCE_LEVEL_PRIMITIVES: BulletGroupPrimitive[] = [
   DelegatePrimitive,
   ForkPrimitive,
   WaitPrimitive,
+  MarkPrimitive,
   ComputePrimitive,
   ByPrimitive,
 ];
@@ -532,22 +539,6 @@ export const ENUM_PRIMITIVES: EnumPrimitive[] = [
       cheap:    () => 'fast, shallow work — the cheapest model',
       moderate: () => 'balanced work — a mid-range model',
       costly:   () => 'deep reasoning — the strongest model',
-    },
-  },
-  // `STRATEGY <name>` in a TEAM: the builtin way the team organises its work.
-  // `WITHIN <limit>` in a CONTRACT: how far whoever carries an instance out may write. Absent: domain.
-  {
-    keyword: 'WITHIN',
-    values: {
-      zone:   () => 'only between the marks of its zones',
-      file:   () => 'only in the files that hold its zones',
-      domain: () => 'anywhere in the domains it writes',
-    },
-  },
-  {
-    keyword: 'STRATEGY',
-    values: {
-      contracts: () => 'the lead prepares the work and hands each piece out as a contract; the members carry the pieces out in parallel; the lead merges',
     },
   },
 ];

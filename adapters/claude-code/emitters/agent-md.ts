@@ -26,7 +26,7 @@ export function makeAgentMdEmitter(opts: AgentMdOptions): Emitter<AgentBundle> {
       path: resolve(ctx.projectRoot, opts.agentsDir, `${b.name}.md`),
       content: buildAgentFrontmatter(b, tools) + b.body,
     },
-    // An agent of a team of contracts works in copies: its hook warns it when it writes outside its contract.
+    // An agent of a team whose flows MARK contracts works in copies: its hook warns it when it writes outside its contract.
     ...withinHookFiles(b.structure, ctx.projectRoot),
   ];
 }

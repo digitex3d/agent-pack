@@ -17,7 +17,7 @@ import type { ApCondCheck, ApCheckSpec } from '../check.js';
 import type { RuleCriteria } from '../shapeCompiler.js';
 import type { ApExecutorSpec } from '../executor.js';
 import type { PluginSpec } from '../plugins.js';
-import type { ApBackgroundWork } from '../delegation.js';
+import type { ApBackgroundWork, ApMark } from '../delegation.js';
 
 /**
  * A pointer to another block. `id` is the stable identity of the target
@@ -78,6 +78,14 @@ export interface ApDirectiveNode {
   work?: string;
   /** A flow's WAIT: the ids of the background work it takes back. */
   waits?: string[];
+  /** A flow's MARK: its id (`mrk-…`, `meta.marks`); a DELEGATE of a contract list: the MARK it starts. */
+  mark?: string;
+  /** A DELEGATE of a contract list: the list (`DELEGATE <list> BY <agent>`). */
+  list?: string;
+  /** A MARK's `MAX <n>` — absent: the project's `mark.max`. */
+  max?: number;
+  /** A MARK's `WITHIN <domain>`: where its contracts may write beyond their zones. */
+  within?: string;
 }
 
 /** `RUN <name>` — invocation of a runnable (procedure/flow), always a Ref. */
@@ -426,6 +434,12 @@ export interface ApDocumentMeta {
    * (src/delegation.ts, src/apx/services/delegate.ts).
    */
   background?: Record<string, ApBackgroundWork>;
+  /**
+   * What this agent's flows MARK, by id (`mrk-…`): the flow, the step, the list
+   * it fills, the spec of each zone, its limit (0: the project's `mark.max`) and
+   * its domain — the contracts it binds start from here (src/delegation.ts).
+   */
+  marks?: Record<string, ApMark>;
   /** The plugins whose blocks this agent holds, by name — the apx serves them from here (src/plugins.ts). */
   plugins?: Record<string, PluginSpec>;
   /** The agent a DELEGATE without BY is handed to — set when this agent has one (src/executor.ts). */

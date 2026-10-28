@@ -22,7 +22,7 @@
  *             returns typed ApBlock subclasses. The JSON/md shape of every
  *             kind lives in its class, never here.
  */
-import { readDecorator, decoratorPhrase } from '../decoratorUse.js';
+import { readDecorator, decoratorPhrase, lookupIn } from '../decoratorUse.js';
 import { DecoratorScope, DECORATOR_MARK, escapeMessage, workless, type DecoratorLine } from '../decorators.js';
 import { plugins, pluginOf } from '../plugins.js';
 import { existsSync } from 'fs';
@@ -50,17 +50,11 @@ import {
   readTeamMembers,
   readTeamFile,
   teamRootForAgentFile,
-  contractsTeamOf,
-  CONTRACTS_STRATEGY,
-  type ContractIndex,
-  type ContractDecl,
-  type TeamFile,
 } from '../services/teamMetadata.js';
 import { parseBlocks, type Block } from '../parseBlocks.js';
-import { contractsFlowSource, contractWorkers } from '../services/contractsFlow.js';
 import type { ApNode, ApRef, ApShape, ApSlotType, ApStepNode, ApIfNode, ApDocumentMeta, ApStoreProjection } from './types.js';
 import { parseVarLine, parallelEachOf, readsOf, splitInto, takesInto, constantOf, type VarScope } from '../vars.js';
-import { isDelegationVerb, parseDelegation, bindBackgroundWork } from '../delegation.js';
+import { isDelegationVerb, parseDelegation, bindBackgroundWork, parseMark, contractListOf, MARK_VERB, type ApMark } from '../delegation.js';
 import { shortId } from './ids.js';
 import type { PlacedVariable } from '../exportedVars.js';
 import { introOf, fill, refSuffix, FORMULAS } from '../formulas.js';
@@ -79,7 +73,7 @@ function stripColon(s: string): string {
 }
 import { ApBlock, ApBlockInit } from './block.js';
 import {
-  BlockCx, RuleBlock, TeamBlock, AgentBlock, VarBlock, ContractBlock,
+  BlockCx, RuleBlock, TeamBlock, AgentBlock, VarBlock,
   TemplateBlock, TeamScan, KIND_STRATEGIES, strategyOf, kindOfFolder, refId, namespaceOf, RefClass,
 } from './blocks.js';
 import { ApDocument, BlockProvenance } from './document.js';
@@ -112,8 +106,8 @@ export interface RecorderFinishOpts {
   vars: Record<string, string>;
   /** The variables the agent imports, with where (`` `@main.vars` ``). */
   declaredVars: PlacedVariable[];
-  /** The project's contracts and teams — what a `BY <team>` resolves against, and which contracts hand work to the agent's team. Absent: not known. */
-  contractIndex?: ContractIndex | null;
+  /** The project's teams, by name — what a `BY <team>` resolves against. Absent: not known. */
+  teams?: readonly string[];
 }
 
 /** A variable's declaration: its name, scope, template, and where it was written. */
@@ -140,11 +134,12 @@ export class DocumentBuilder implements BlockCx {
   private goals = new Map<string, IndexedBlock>();
   private stores = new Map<string, IndexedBlock>();
   private agents = new Map<string, IndexedBlock>();
-  /** The contracts the agent's team holds, and those handed to it from outside. */
-  private contracts = new Map<string, IndexedBlock>();
-  /** The contracts handed to the agent's team from outside it (the project file, another team), with the team each was written in. */
-  private handedIn: ContractIndex['contracts'] = [];
-  private contractIndex: ContractIndex | null = null;
+  /** The project's teams, by name. */
+  private projectTeams: readonly string[] = [];
+  /** The lists a MARK of a flow fills, by name — what a `DELEGATE <list>` hands out. */
+  private markedLists = new Set<string>();
+  /** A flow's DELEGATE of one bare name no MARK above it fills — an error when that name is a variable (D63). */
+  private bareDelegations: { name: string; path: string; line: number | null }[] = [];
 
   private team: TeamScan | null = null;
   /** The team's roles, each bound to the member that takes it — `BY <role>` names that member, as in AGENTS.md. */
@@ -388,9 +383,6 @@ export class DocumentBuilder implements BlockCx {
       }
       if (base === 'WHEN') {
         const node = this.at(new WhenNode(rest, t.indent), t);
-        // `WHEN handed <contract>:` in a team of contracts — the instance of that contract is the trigger's input.
-        const handed = this.team?.file.strategy?.name === CONTRACTS_STRATEGY ? rest.match(/^handed\s+(\S+)$/) : null;
-        if (handed) node.input = this.contractRef(handed[1]);
         sink.push(node);
         const first = n.children.find(c => c.token.kind !== 'blank')?.token;
         const prior = this.sugared;
@@ -567,6 +559,7 @@ export class DocumentBuilder implements BlockCx {
    * a flow, the perimeter it is handed under.
    */
   private directive(base: string, force: number | null, text: string, indent: number, token?: Token, host?: ApBlock | null): DirectiveNode {
+    if (base === MARK_VERB) return this.mark(force, text, indent, token);
     if (isDelegationVerb(base)) {
       const d = parseDelegation(base, text);
       const node = new DirectiveNode(base, force, d.task, indent);
@@ -578,6 +571,10 @@ export class DocumentBuilder implements BlockCx {
       } else if (d.by) node.by = d.by;
       if (d.as) node.as = { force: d.as.force, ref: this.templateRef(d.as.name) };
       if (token?.kind === 'keyword' && token.async) node.async = true;
+      // `DELEGATE <list> BY <agent>`: the contracts a MARK of this flow filled the list with.
+      const list = host?.kind === 'flow' && base === 'DELEGATE' ? contractListOf(d.task) : null;
+      if (list && this.markedLists.has(list)) node.list = list;
+      else if (list) this.bareDelegations.push({ name: list, path: this.sourcePath, line: token ? this.fileLine(token) : null });
       if (d.into) {
         node.into = VarBlock.ref(d.into);
         this.varWrites.push({ name: d.into, node, path: this.sourcePath });
@@ -590,6 +587,35 @@ export class DocumentBuilder implements BlockCx {
     if (into) {
       node.into = VarBlock.ref(into.name);
       this.varWrites.push({ name: into.name, node, path: this.sourcePath });
+    }
+    return node;
+  }
+
+  /**
+   * `MARK <criterion> INTO <list> AS <spec> [MAX <n>] [WITHIN <domain>]` — the
+   * list is a declared variable like any INTO's (D63); the spec a template;
+   * the domain one that exists and, under an `@WITHIN`, stays inside it (D32).
+   * Its form is the lint's.
+   */
+  private mark(force: number | null, text: string, indent: number, token?: Token): DirectiveNode {
+    const m = parseMark(text);
+    const node = new DirectiveNode(MARK_VERB, force, text, indent);
+    if (m.spec) node.as = { force: 0, ref: this.templateRef(m.spec) };
+    if (m.max) node.max = m.max;
+    if (m.into) {
+      node.into = VarBlock.ref(m.into);
+      this.varWrites.push({ name: m.into, node, path: this.sourcePath });
+      this.markedLists.add(m.into);
+    }
+    if (m.within) {
+      node.within = m.within;
+      const line = token ? this.fileLine(token) : null;
+      const known = this.ctx ? lookupIn(this.ctx)('domain').some(d => d.name === m.within) : true;
+      const enclosing = this.scope.get('WITHIN');
+      if (!known) this.decoratorProblems.push({ path: this.sourcePath, line, message: `MARK … WITHIN ${m.within}: no imported domain is called \`${m.within}\` — IMPORT it, or declare it here` });
+      else if (enclosing && !enclosing.some(u => u.name === m.within)) {
+        this.decoratorProblems.push({ path: this.sourcePath, line, message: `MARK … WITHIN ${m.within}: the work here is within ${enclosing.map(u => `\`${u.name}\``).join(', ')} — a contract's domain stays inside it` });
+      }
     }
     return node;
   }
@@ -739,13 +765,9 @@ export class DocumentBuilder implements BlockCx {
   /** A flow delegation's BY: an agent, a role bound to one — or a team, which takes the work by its own routing. */
   private byRef(name: string): ApRef {
     const agent = (this.roles && resolveRole(this.roles, name)?.name) ?? name;
-    const team = this.agents.has(agent) ? undefined : this.contractIndex?.teams.find(t => t.name === name);
-    if (team) return this.ref({ kind: 'team', name: team.name, namespace: TeamBlock.NAMESPACE }, name, 'team');
+    const team = this.agents.has(agent) ? undefined : this.projectTeams.find(t => t === name);
+    if (team) return this.ref({ kind: 'team', name: team, namespace: TeamBlock.NAMESPACE }, name, 'team');
     return this.ref(this.agents.get(agent), agent, 'agent');
-  }
-
-  contractRef(name: string): ApRef {
-    return this.ref(this.contracts.get(name), name, 'contract');
   }
 
   agentRef(name: string): ApRef {
@@ -836,21 +858,7 @@ export class DocumentBuilder implements BlockCx {
     const flows: TeamScan['flows'] = written
       .filter(b => b.key === 'FLOW' && b.name !== null)
       .map(b => ({ name: b.name!, block: b, body: sources.nestedSpan(file.path, file.block, b).lines.slice(1).map(l => l.text.slice(file.childIndent)).join('\n') }));
-    // Under STRATEGY contracts the routing and the flow are the strategy's (src/services/contractsFlow.ts).
-    const synthetic = file.strategy?.name === CONTRACTS_STRATEGY && file.lead
-      ? strategySource(file, name => contractsTeamOf(this.contractIndex, name)?.lead ?? null) : null;
-    const synthBlocks = synthetic ? parseBlocks(synthetic).blocks : [];
-    if (synthetic) {
-      const lines = synthetic.split('\n');
-      for (const b of synthBlocks.filter(b => b.key === 'FLOW' && b.name !== null)) {
-        const end = synthBlocks.find(n => n.startLine > b.startLine)?.startLine ?? lines.length + 1;
-        flows.push({ name: b.name!, block: null, body: lines.slice(b.startLine, end - 1).join('\n') });
-      }
-    }
-    const blocks = [...written, ...synthBlocks];
-    // A BY may hand a contract to a team: that team is no member of this one.
-    const members = file.members.map(m => m.name).filter(name => !contractsTeamOf(this.contractIndex, name));
-    return { root, name: file.name, file, members, blocks, flows };
+    return { root, name: file.name, file, members: file.members.map(m => m.name), blocks: written, flows };
   }
 
   private buildRefIndex(ctx: BundleContext, opts: RecorderFinishOpts): void {
@@ -871,31 +879,7 @@ export class DocumentBuilder implements BlockCx {
       for (const f of this.team.flows) {
         this.runnables.set(f.name, { kind: 'flow', name: f.name, namespace: TeamBlock.flowsNamespace(this.team.name) });
       }
-      // The team's contracts, and those handed to it from outside: each lead of a team handed one is an agent of the document too.
-      const own = TeamBlock.contractsNamespace(this.team.name);
-      for (const c of this.team.file.contracts) {
-        this.contracts.set(c.name, { kind: 'contract', name: c.name, namespace: own });
-        for (const name of c.by) {
-          const lead = contractsTeamOf(this.contractIndex, name)?.lead;
-          if (lead) this.agents.set(lead, { kind: 'agent', name: lead, namespace: AgentBlock.NAMESPACE });
-        }
-      }
-      if (this.team.file.strategy?.name === CONTRACTS_STRATEGY && this.contractIndex) {
-        const team = this.team.name;
-        this.handedIn = this.contractIndex.contracts.filter(c => c.team !== team && c.by.includes(team));
-        for (const c of this.handedIn) {
-          this.contracts.set(c.name, { kind: 'contract', name: c.name, namespace: c.team ? TeamBlock.contractsNamespace(c.team) : ContractBlock.PROJECT_NAMESPACE });
-        }
-      }
     }
-  }
-
-  /** A contract block from its declaration: its BY agents, or the lead of the team it is handed to. */
-  private contractBlock(decl: ContractDecl, namespace: string): ContractBlock {
-    const handed = decl.by.length === 1 ? contractsTeamOf(this.contractIndex, decl.by[0]) : null;
-    const byTeam = handed ? { id: refId('team', TeamBlock.NAMESPACE, handed.name), target: `${TeamBlock.NAMESPACE}/${handed.name}`, kind: 'team' } : null;
-    const by = handed ? (handed.lead ? [this.agentRef(handed.lead)] : []) : decl.by.map(name => this.agentRef(name));
-    return ContractBlock.fromDecl(decl, namespace, by, byTeam, this);
   }
 
   // ------------------------------------------------------ producers (pass 2)
@@ -939,23 +923,6 @@ export class DocumentBuilder implements BlockCx {
       // The team is its EXPORT TEAM block.
       this.fromSource(sources.blockSpan(path, team.file.block), () => TeamBlock.fromScan(team, this), []),
     ];
-  }
-
-  /** The team's contracts, where they are written; then those handed to it from outside, from their file. */
-  private contractBlocks(): ApBlock[] {
-    if (!this.team) return [];
-    const team = this.team;
-    const sources = this.ctx!.sources;
-    const path = team.file.path;
-    const contractBlocks = team.file.block.children.filter((c): c is Block => c.type === 'block' && c.key === 'CONTRACT');
-    const own = TeamBlock.contractsNamespace(team.name);
-    this.sourcePath = path;
-    const ownBlocks = team.file.contracts.map((c, i) => this.fromSource(sources.nestedSpan(path, team.file.block, contractBlocks[i]), () => this.contractBlock(c, own)));
-    const handed = this.handedIn.map(c => {
-      this.sourcePath = c.file;
-      return this.fromSource(sources.span(c.file, 'contract', c.name), () => this.contractBlock(c, c.team ? TeamBlock.contractsNamespace(c.team) : ContractBlock.PROJECT_NAMESPACE));
-    });
-    return [...ownBlocks, ...handed];
   }
 
   /** The agent root block — built by its class from the pipeline's state. */
@@ -1137,15 +1104,13 @@ export class DocumentBuilder implements BlockCx {
    */
   finish(ctx: BundleContext, opts: RecorderFinishOpts): ApDocument {
     this.ctx = ctx;
-    this.contractIndex = opts.contractIndex ?? null;
+    this.projectTeams = opts.teams ?? [];
     this.team = this.scanTeam(opts.agentFilePath);
     this.buildRefIndex(ctx, opts);
 
     const doc = new ApDocument(this.buildMeta(ctx));
     const producers: [BlockProvenance, () => ApBlock[]][] = [
       ['definition', () => this.definitionBlocks(ctx, opts)],
-      // The team's contracts read as a chapter of the definition: the lead picks among them, a member starts from one.
-      ['definition', () => this.contractBlocks()],
       ['team',       () => this.teamBlocks()],
       ['agent',      () => [this.agentBlock(ctx, opts)]],
       // Last: a variable's type may come from any procedure the others hold.
@@ -1159,11 +1124,24 @@ export class DocumentBuilder implements BlockCx {
       }
     }
     this.checkSpecs(doc, opts.vars);
+    // A DELEGATE of a variable hands out contracts only when a MARK above it filled that variable.
+    const variables = new Set(doc.byKind('var').map(b => b.name));
+    for (const d of this.bareDelegations.filter(d => variables.has(d.name))) {
+      this.varErrors.push({ path: d.path, name: d.name, line: d.line, message: `DELEGATE ${d.name}: \`${d.name}\` is a variable no MARK above it fills — a DELEGATE of a variable hands out the contracts a MARK made; MARK it first, or say the task in words` });
+    }
     const executors = executorSpecs(doc, opts.vars ?? {}, this.ctx!.agentName, name => templateClosure(name, this.ctx?.templates ?? []));
     if (Object.keys(executors).length > 0) doc.meta.executors = executors;
     // What the flows start in the background: an id for each, and on each WAIT the ids it takes back.
-    const background = Object.assign({}, ...doc.byKind('flow').map(f => bindBackgroundWork(f as unknown as { address: string; name: string; body: unknown[] }, text => shortId('dlg', text))));
+    // And what their MARKs bind: an id for each, the list it fills, its spec, its limit and its domain.
+    const marks: Record<string, ApMark> = {};
+    const markOf = (node: { text?: string; as?: ApShape; max?: number; within?: string }, step: string, flow: string): ApMark | null => {
+      const m = parseMark(node.text ?? '');
+      return m.into && node.as ? { flow, step, list: m.into, spec: refName(node.as.ref), max: node.max ?? 0, within: node.within ?? null } : null;
+    };
+    const background = Object.assign({}, ...doc.byKind('flow').map(f => bindBackgroundWork(f as unknown as { address: string; name: string; body: unknown[] },
+      (text, prefix) => shortId(prefix, text), marks, (node, step) => markOf(node, step, f.name))));
     if (Object.keys(background).length > 0) doc.meta.background = background;
+    if (Object.keys(marks).length > 0) doc.meta.marks = marks;
     const used = Object.fromEntries(plugins().filter(p => doc.byKind(p.name).length > 0).map(p => [p.name, p]));
     if (Object.keys(used).length > 0) doc.meta.plugins = used;
     doc.seal();
@@ -1174,11 +1152,6 @@ export class DocumentBuilder implements BlockCx {
     if (Object.keys(stores).length > 0) md.stores = stores;
     return doc;
   }
-}
-
-/** The routing and flow a team of contracts runs, as source — its workers the agents its BY lines hand work to. */
-function strategySource(file: TeamFile, leadOf: (name: string) => string | null): string {
-  return contractsFlowSource(file.name, file.lead!.name, contractWorkers(file, leadOf));
 }
 
 /** A definition's body nested in the decorators above it, outermost first — each opening the block the next one, then the body, stands in. */

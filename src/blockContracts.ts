@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Giuseppe Federico
 import { DIMENSION_LINES, DOMAIN_LINES, type Keyword } from './lexer.js';
 import { ACTION_VERBS } from './actionVerbs.js';
-import { FORK_VERB, WAIT_VERB } from './delegation.js';
+import { FORK_VERB, WAIT_VERB, MARK_VERB } from './delegation.js';
 import { getFamilyBases } from './forceLevelConfig.js';
 import { VERBATIM_REGIONS } from './shapeCompiler.js';
 import { PLUGIN_KEY, OPERATION_KEY } from './blockTypes.js';
@@ -21,8 +21,8 @@ const STEP_EXCLUDED: Partial<Record<Keyword, string>> = {
   AS: 'a step hands nothing over itself — the shape of what is handed over is its DELEGATE\'s: `DELEGATE <task> BY <agent> AS <template>`',
 };
 const STEP_FAMILIES = familiesWithout(STEP_EXCLUDED);
-/** The actions only a flow STEP takes, beside the action verbs: a fork, and the WAIT that takes back what a `~` started. */
-const STEP_ACTIONS = [FORK_VERB, WAIT_VERB] as const;
+/** The actions only a flow STEP takes, beside the action verbs: a fork, the WAIT that takes back what a `~` started, the MARK that binds zones to contracts. */
+const STEP_ACTIONS = [FORK_VERB, WAIT_VERB, MARK_VERB] as const;
 const BRANCH_FAMILIES = STEP_FAMILIES;
 
 /**
@@ -211,22 +211,11 @@ export const BLOCK_CONTRACTS: Record<string, BlockContract> = {
   // regions: a flow takes the FLOW/STEP contracts line by line as it does in a
   // flow file, and a routing WHEN holds what a WHEN holds. Checked on the
   // parsed block (teamBlockErrors): the EXPORT form is not the token pass's.
-  // Under `STRATEGY contracts` the team declares a LEAD and CONTRACT blocks
-  // instead of MEMBER, WHEN and FLOW — which of the two sets
-  // holds is the lint's (teamBlockErrors); the contract admits both.
   TEAM: {
-    allows: ['ABOUT', 'MEMBER', 'LENS-IN', 'WHEN', 'FLOW', 'STRATEGY', 'LEAD', 'CONTRACT'] as const,
+    allows: ['ABOUT', 'MEMBER', 'LENS-IN', 'WHEN', 'FLOW'] as const,
     requiresAll: ['ABOUT'] as const,
-    unique: ['ABOUT', 'STRATEGY', 'LEAD'] as const,
-    regions: ['WHEN', 'FLOW', 'CONTRACT'] as const,
-  },
-  // A contract: ABOUT and DOMAIN, what the lead reads to pick it for a zone; AS,
-  // the template of the spec it fills; BY, the agents that carry it out, or the
-  // one team it is handed to. Checked on the parsed block (contractBlockErrors).
-  CONTRACT: {
-    allows: ['ABOUT', 'DOMAIN', 'WITHIN', 'AS', 'BY'] as const,
-    requiresAll: ['ABOUT', 'AS', 'BY'] as const,
-    unique: ['ABOUT', 'DOMAIN', 'WITHIN', 'AS', 'BY'] as const,
+    unique: ['ABOUT'] as const,
+    regions: ['WHEN', 'FLOW'] as const,
   },
   // First-class `EXPORT AGENT <name> AS <role>:` block. `AS` here is a
   // *signature* argument on the header line (the role binding) — NOT the same

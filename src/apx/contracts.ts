@@ -1,79 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
 /**
- * The instances of a team's contracts (D44) — what the apx keeps of the work a
- * lead hands out under `STRATEGY contracts`: one table per session, shared by
- * every agent of it (beside the session's variables), each instance a record
- * whose state the code moves, never the text — a transition is a tabeli
- * compare-and-swap, so two agents never move the same instance twice.
- *
- * The zones: pairs of comments, `agent-pack <ctr-id>` opening and
- * `agent-pack end <ctr-id>` closing, found by their text in any comment syntax
- * — where the lead tells an instance "write here". An instance may have none
- * (new code: its limit is its assignee's domains) or several, in several files.
- * Each instance works in a copy of its own (src/workspace): what it wrote is
- * the copy's diff, so its delivery keeps exactly what its contract's WITHIN
- * admits, and names the rest.
+ * The zones of the contracts a MARK binds (D16, D55): pairs of comments,
+ * `agent-pack <ctr-id>` opening and `agent-pack end <ctr-id>` closing, found by
+ * their text in any comment syntax — where whoever runs the flow tells a
+ * contract "write here". A contract has one zone or several, in several files.
+ * Each contract works in a copy of its own (src/workspace): what it wrote is
+ * the copy's diff, so its delivery keeps its zones, the files it created and
+ * its MARK's WITHIN domain, and names the rest. The marks stay in the code.
  */
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { RecordTable } from './recordTable.js';
 import { projectFiles } from '../services/fs.js';
 import { matchesAnyGlob } from '../services/glob.js';
-
-/** The states an instance passes through: assigned the moment it is written, delivered by its assignee, merged by the lead — or blocked by its assignee. */
-export const CONTRACT_STATES = ['assigned', 'delivered', 'merged', 'blocked'] as const;
-export type ContractState = typeof CONTRACT_STATES[number];
-
-/** One instance, as the table holds it. Every field is text: tabeli is flat. */
-export interface ContractRecord {
-  /** `ctr-<8 hex>`. */
-  ctr: string;
-  /** The CONTRACT block's id (`con-…`). */
-  contract: string;
-  /** The spec, JSON — an instance of the block's AS template. */
-  spec: string;
-  /** The agent that carries it out. */
-  assignee: string;
-  /** The instances merged before this one — ids, comma separated; '' when none. */
-  depends: string;
-  /** The instance the lead started from; '' for the one it was handed. */
-  parent: string;
-  /** Where its zones are, in the base: `file:open-close;file:open-close`; '' when it has none, or until dispatched. */
-  zone: string;
-  state: ContractState;
-  reason: string;
-  /** ISO time of the dispatch; '' until then. */
-  dispatched_at: string;
-  /** The globs the assignee wrote at dispatch, comma separated — a domain limit, kept if the lead takes it over. */
-  writes: string;
-  /** What its delivery left out, `; ` separated; '' when nothing. */
-  left_out: string;
-  /** Why it left that out — the assignee's word; '' when nothing was. */
-  why: string;
-  /** The agent that wrote it. */
-  author: string;
-}
-
-const FIELDS: (keyof ContractRecord)[] = ['ctr', 'contract', 'spec', 'assignee', 'depends', 'parent', 'zone', 'state', 'reason', 'dispatched_at', 'writes', 'left_out', 'why', 'author'];
-
-/** The id prefix of an instance. */
-export const CONTRACT_ID_RE = /^ctr-[0-9a-f]{8}$/;
-
-/** The table of a session's instances, and the session folder it lives in. */
-export class ContractTable extends RecordTable<ContractRecord> {
-  /** Open (create on first use) the table of `sessionId` under `projectRoot` — or the reason it cannot be. */
-  static open(projectRoot: string, sessionId: string, engine: string | undefined): ContractTable | string {
-    const at = RecordTable.place(projectRoot, sessionId, engine, 'contracts.tbl', 'contracts');
-    return typeof at === 'string' ? at : new ContractTable(at.path, at.dir, FIELDS, 'ctr');
-  }
-}
-
-export interface Skeleton {
-  globs: string[];
-  /** file (from the project root) → fingerprint at dispatch. */
-  files: Record<string, string>;
-}
 
 /** The project's files the globs admit — where the lead's marks are looked for. */
 export function perimeterFiles(projectRoot: string, globs: string[]): string[] {

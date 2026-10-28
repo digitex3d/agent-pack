@@ -15,7 +15,7 @@ import { TEAM_KEY } from './services/teamMetadata.js';
 import { parseBlocks, agentNestedBlocks, exportedVar, readExportedVar, isExportedVar, type Block, type Node, type Line } from './parseBlocks.js';
 import { isExportFile } from './services/text.js';
 import { parseAgentSignature } from './definitionArgs.js';
-import { isDelegationVerb, delegationLineErrors, waitLineErrors, concurrencyErrors, parseDelegation, WAIT_VERB } from './delegation.js';
+import { isDelegationVerb, delegationLineErrors, waitLineErrors, markLineErrors, concurrencyErrors, parseDelegation, WAIT_VERB, MARK_VERB } from './delegation.js';
 import { kindFromDir, unitNameFromPath } from './ingest.js';
 import { plugins, pluginOf, pluginOfKey, recordOfLines, lineIssues } from './plugins.js';
 import { BLOCK_TYPES, blockTypeOf, EXPORT_MODIFIER, AGENT_KEYS, PLUGIN_KEY, OPERATION_KEY } from './blockTypes.js';
@@ -767,7 +767,7 @@ function isBranch(contract: BlockContract, keyword: Keyword): boolean {
 }
 
 /** The contracts checked line by line — a DIMENSION, a DOMAIN and a TEAM are checked on their parsed block (coveringBlockErrors, teamBlockErrors). */
-const { DIMENSION: _parsed, DOMAIN: _domain, TEAM: _team, CONTRACT: _contract, [PLUGIN_KEY]: _plugin, [OPERATION_KEY]: _operation, ...TOKEN_CONTRACTS } = BLOCK_CONTRACTS;
+const { DIMENSION: _parsed, DOMAIN: _domain, TEAM: _team, [PLUGIN_KEY]: _plugin, [OPERATION_KEY]: _operation, ...TOKEN_CONTRACTS } = BLOCK_CONTRACTS;
 /** The blocks checked on their parsed block: their contract names every line they do not hold, so no other check repeats it. */
 const PARSED_CONTRACTS = new Set(Object.keys(BLOCK_CONTRACTS).filter(key => !(key in TOKEN_CONTRACTS)));
 
@@ -1045,62 +1045,23 @@ export function teamBlockErrors(file: string, blocks: readonly Block[]): LintErr
   const errors = teams.flatMap(b => [
     ...(b.exported ? [] : [{ file, line: b.startLine, message: `TEAM ${b.name ?? ''}: a team is exported — write \`EXPORT TEAM ${b.name ?? '<name>'}:\`` }]),
     ...checkBlockContract(file, b, TEAM_KEY),
-    ...strategyErrors(file, b),
-    ...contractBlockErrors(file, b.children.filter((c): c is Block => c.type === 'block')),
+    ...memberErrors(file, b),
   ]);
   if (teams.length > 1) errors.push({ file, line: teams[1].startLine, message: `a file declares one team — found ${teams.length} TEAM blocks` });
   return errors;
 }
 
 /**
- * The two shapes of a team: with `STRATEGY contracts` it declares a LEAD and
- * CONTRACT blocks and leaves MEMBER, WHEN, FLOW and LENS-IN out (the strategy
- * runs it, the roster is the lead and the BY lines); without one it declares
- * MEMBER and may hold WHEN and FLOW, and none of LEAD, CONTRACT.
+ * A team's file as a compilation checks it: its TEAM block, and its flows line
+ * by line — a STEP holds what a STEP holds wherever its flow is written.
  */
-function strategyErrors(file: string, team: Block): LintError[] {
-  const errors: LintError[] = [];
-  const lines = team.children.filter((c): c is Line => c.type === 'line');
-  const blocks = team.children.filter((c): c is Block => c.type === 'block');
-  const strategy = lines.find(l => l.keyword === 'STRATEGY');
-  const name = team.name ?? '';
-  if (strategy) {
-    const value = strategy.rest.trim();
-    if (!STRATEGY_VALUES.includes(value)) return errors; // the vocabulary check names the unknown value
-    for (const l of lines.filter(l => ['MEMBER', 'LENS-IN'].includes(l.keyword))) {
-      errors.push({ file, line: l.line, message: `${l.keyword} is not written under STRATEGY ${value} — ${l.keyword === 'MEMBER' ? 'the members are the LEAD and the agents the CONTRACT blocks name in BY' : "a member's input is the contract it is handed"}` });
-    }
-    for (const b of blocks.filter(b => b.key === 'WHEN' || b.key === 'FLOW')) {
-      errors.push({ file, line: b.startLine, message: `${b.key} is not written under STRATEGY ${value} — the strategy says how the team runs` });
-    }
-    if (!lines.some(l => l.keyword === 'LEAD')) errors.push({ file, line: team.startLine, message: `TEAM ${name}: STRATEGY ${value} needs a LEAD — the agent that prepares the work` });
-    if (!blocks.some(b => b.key === 'CONTRACT')) errors.push({ file, line: team.startLine, message: `TEAM ${name}: STRATEGY ${value} needs at least one CONTRACT block` });
-  } else {
-    if (!lines.some(l => l.keyword === 'MEMBER')) errors.push({ file, line: team.startLine, message: `TEAM block requires at least one MEMBER` });
-    for (const l of lines.filter(l => l.keyword === 'LEAD')) {
-      errors.push({ file, line: l.line, message: `${l.keyword} is a line of a team with a STRATEGY — write \`STRATEGY contracts\` first` });
-    }
-    for (const b of blocks.filter(b => b.key === 'CONTRACT')) {
-      errors.push({ file, line: b.startLine, message: `CONTRACT ${b.name ?? ''}: a contract belongs to a team with \`STRATEGY contracts\` — or to the project file, where it hands a request to such a team` });
-    }
-  }
-  return errors;
+export function teamFileErrors(file: string, source: string): LintError[] {
+  return [...teamBlockErrors(file, parseBlocks(source).blocks), ...validateBlockContracts(desugar(lex(source)), file)];
 }
 
-/** The STRATEGY values the language knows — the enum primitive's. */
-const STRATEGY_VALUES = Object.keys(enumPrimitiveFor('STRATEGY')?.values ?? {});
-
-/**
- * Every CONTRACT block of `blocks` against its contract: ABOUT, AS and BY once
- * each, DOMAIN at most once, nothing else; its AS at no level — a contract's
- * form is a template, not a rule.
- */
-export function contractBlockErrors(file: string, blocks: readonly Block[]): LintError[] {
-  return blocks.filter(b => b.key === 'CONTRACT').flatMap(b => [
-    ...checkBlockContract(file, b, 'CONTRACT'),
-    ...b.children.flatMap((c): LintError[] => (c.type === 'line' && /^!?AS!{1,2}$|^!AS$/.test(c.keyword)
-      ? [{ file, line: c.line, message: `CONTRACT ${b.name ?? ''}: AS takes no level — its form is the template: write \`AS ${c.rest.trim()}\`` }] : [])),
-  ]);
+/** A team names its members: at least one MEMBER line. */
+function memberErrors(file: string, team: Block): LintError[] {
+  return team.children.some(c => c.type === 'line' && c.keyword === 'MEMBER') ? [] : [{ file, line: team.startLine, message: 'TEAM block requires at least one MEMBER' }];
 }
 
 /**
@@ -1234,9 +1195,6 @@ const LINE_OWNERS = new Map<string, LineOwner>([
   ...DOMAIN_LINES.map((l): [string, LineOwner] => [l, { owners: ['DOMAIN'], what: 'a line', hints: { AGENT: WITHIN_HINT } }]),
   ['EACH', { owners: ['DIMENSION'], what: 'a line' }],
   ['MEMBER', { owners: [TEAM_KEY], what: 'a line' }],
-  ['STRATEGY', { owners: [TEAM_KEY], what: 'a line' }],
-  ['LEAD', { owners: [TEAM_KEY], what: 'a line' }],
-  ['DOMAIN', { owners: ['CONTRACT'], what: 'a line' }],
 ]);
 
 /** A plugin's manifest against its contracts: the PLUGIN block, and each OPERATION block in it. */
@@ -1272,7 +1230,6 @@ function placementError(key: string, parent: string | undefined, opens: boolean)
     return `${key} is ${owned.what} of a ${owned.owners.join(' or a ')} block — found inside ${parent || 'the file top'}${hint ? `: ${hint}` : ''}`;
   }
   if (opens && (key === 'DIMENSION' || key === 'DOMAIN' || pluginOfKey(key)) && parent && !AGENT_KEYS.has(parent)) return `a ${key} is declared at the file top or directly in an agent's body — found inside ${parent}`;
-  if (opens && key === 'CONTRACT' && parent && parent !== TEAM_KEY) return `a CONTRACT is declared in a TEAM block, or at the top of the project file — found inside ${parent}`;
   return null;
 }
 
@@ -1425,8 +1382,14 @@ const WITH_REWRITE = 'WITH became a decorator — write `@WITH <names>` right ab
  * still lexed, so the vocabulary check names it once and no block contract
  * repeats it.
  */
+/** The rewrite every retired word of the contracts model points to (D16–18, D46). */
+const CONTRACTS_REWRITE = 'a flow marks the zones and hands them out itself — in a STEP, `MARK <criterion> INTO <list> AS <spec>`, then `DELEGATE <list> BY <agent>`';
 const REMOVED_KEYWORDS: Record<string, string> = {
   ASK: 'ASK became DELEGATE — write `DELEGATE <task> INTO <name> BY <agent>`',
+  STRATEGY: `STRATEGY was removed — a team runs by its own flows: ${CONTRACTS_REWRITE}`,
+  LEAD: `LEAD was removed — whoever runs a flow leads it: ${CONTRACTS_REWRITE}`,
+  CONTRACT: `CONTRACT blocks were removed — a contract is what a MARK makes: ${CONTRACTS_REWRITE}`,
+  WITHIN: 'a WITHIN line was a CONTRACT\'s — a contract may write beyond its zones by its MARK: `MARK … AS <spec> WITHIN <domain>`; work is put within a domain by `@WITHIN <domain>`',
   CONTEXT: 'CONTEXT was removed — the form of a DELEGATE says the context: `DELEGATE … BY <agent>` hands over all of it, `DELEGATE … BY <agent> AS <template>` only what the template holds, `FORK …` the conversation itself',
 };
 
@@ -1514,6 +1477,7 @@ export function checkVocabulary(file: string, body: string): LintError[] {
       // A delegation's parts, in their order (src/delegation.ts).
       if (isDelegationVerb(key)) for (const message of delegationLineErrors(key, t.rest)) err(t.line, message);
       if (key === WAIT_VERB) for (const message of waitLineErrors(t.rest)) err(t.line, message);
+      if (key === MARK_VERB) for (const message of markLineErrors(t.rest)) err(t.line, message);
       const removed = REMOVED_KEYWORDS[key];
       if (removed) err(t.line, `${removed}: "${quoteRaw(t)}"`);
       const base = forceLevelBaseOf(key);
@@ -1582,7 +1546,10 @@ export function checkVocabulary(file: string, body: string): LintError[] {
       } else if (word) {
         const base = forceLevelBaseOf(word);
         // A keyword alone on its line — `FOR`, `EACH`, `MUST` — lacks what it says.
-        if (KEYWORDS.includes(word) || (base && getIntroByKeyword(word) !== null)) err(t.line, `${word} needs ${BARE_NEEDS[base ?? word] ?? 'its text on the same line'}`);
+        // A retired word alone on its line (`PARALLEL:`, `STRATEGY`) is told its rewrite, not what it lacks.
+        const retired = word === 'PARALLEL' ? PARALLEL_REWRITE : REMOVED_KEYWORDS[word];
+        if (retired) err(t.line, `${retired}: "${t.raw.trim()}"`);
+        else if (KEYWORDS.includes(word) || (base && getIntroByKeyword(word) !== null)) err(t.line, `${word} needs ${BARE_NEEDS[base ?? word] ?? 'its text on the same line'}`);
         else err(t.line, base ? unknownLevel(word, base) : unknownKeyword(word));
       }
     }
@@ -1710,7 +1677,7 @@ function lintByKind(file: string, body: string, options: LintOptions): LintError
   // flow file: FLOW, STEP, PARALLEL and their branches, wherever they live.
   if (isAgentOrOrchestration(file, body)) {
     const blocks = parseBlocks(body).blocks;
-    return [...lintAgentBlocks(file, body), ...validateBlockContracts(desugar(lex(body)), file), ...dimensionBlockErrors(file, blocks), ...pluginBlockErrors(file, blocks), ...teamBlockErrors(file, blocks), ...contractBlockErrors(file, blocks)];
+    return [...lintAgentBlocks(file, body), ...validateBlockContracts(desugar(lex(body)), file), ...dimensionBlockErrors(file, blocks), ...pluginBlockErrors(file, blocks), ...teamBlockErrors(file, blocks)];
   }
 
   // A module's exported variables are its kind lint's no business: they are

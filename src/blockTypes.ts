@@ -59,12 +59,10 @@ export const BLOCK_TYPES: Record<string, BlockType> = {
   STORE:      { key: 'STORE'      },
   // `DIMENSION <name>:` — an answer about the code, worked out once and kept by the apx.
   DIMENSION:  { key: 'DIMENSION'  },
-  // `DOMAIN <name>:` — a region of the code by path (FOR), named by an agent's WRITES/READS and a CONTRACT's DOMAIN line.
+  // `DOMAIN <name>:` — a region of the code by path (WRITES/READS), named by `@WITHIN` and by a MARK's WITHIN.
   DOMAIN:     { key: 'DOMAIN'     },
   // `EXPORT TEAM <name>:` — a team: its ABOUT, MEMBER lines, routing and FLOW blocks (src/services/teamMetadata.ts).
   TEAM:       { key: 'TEAM'       },
-  // `CONTRACT <name>:` — a piece of work a lead hands out: its form (AS), who carries it out (BY), its DOMAIN.
-  CONTRACT:   { key: 'CONTRACT'   },
   // `PLUGIN <name>:` — a plugin's manifest: its block (AS) and its OPERATION blocks.
   [PLUGIN_KEY]:    { key: PLUGIN_KEY    },
   // `OPERATION <op>:` — an apx command of a plugin: ABOUT, and AS for its input.

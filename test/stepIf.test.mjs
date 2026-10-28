@@ -68,7 +68,7 @@ try {
   assert.deepEqual(lintShip(...FLOW.slice(1)), [], 'a flow file lints clean — a step whose DO all sit under an IF included');
 
   // --- lint: an IF with nothing under it is the error it is anywhere else, and lends the step no action ---
-  const STEP_WANTS = 'DO, DELEGATE, COMPUTE, FORK, WAIT, RUN';
+  const STEP_WANTS = 'DO, DELEGATE, COMPUTE, FORK, WAIT, MARK, RUN';
   const BRANCH_WANTS = `expected one of: ${STEP_WANTS}, MUST, ALWAYS, SHOULD, MAY`;
   const empty = lintShip('    STEP close it:', '        IF the audit passed:', '    STEP next:', '        DO  go');
   assert.deepEqual(empty.map(e => [e.line, e.message]), [

@@ -14,9 +14,8 @@ import {
   lintSource,
   strayDimensionErrors,
 } from './compiler/index.js';
-import { checkedHeadIssues, lineOfName, teamBlockErrors } from './lint.js';
-import { Config, PROJECT_SOURCE } from './config.js';
-import { contractsFlowSource, contractWorkers } from './services/contractsFlow.js';
+import { checkedHeadIssues, lineOfName, teamFileErrors } from './lint.js';
+import { Config } from './config.js';
 import { AGENTS_MD } from './projectContext.js';
 import { apxCommand } from './apx/paths.js';
 import { resolveReads, constantOf } from './vars.js';
@@ -33,11 +32,7 @@ import {
   readTeamFile,
   teamRosterIssues,
   legacyTeamIssue,
-  buildContractIndex,
-  contractsTeamOf,
-  CONTRACTS_STRATEGY,
   type TeamIssue,
-  type ContractIndex,
   type TeamFile,
   readAgentInfos,
   findAgentFiles,
@@ -104,8 +99,6 @@ interface TeamInfo {
   about: string;
   members: AgentInfo[];
   routingBody: string;
-  /** Under `STRATEGY contracts`: its lines in AGENTS.md (strategy, contracts) — null otherwise. */
-  strategy: string | null;
 }
 
 /** Build a fresh `BundleContext` for the orchestration section, over the project libraries. */
@@ -163,7 +156,7 @@ interface TeamSource {
  * retired `flows.ap`, or a roster that does not match its agent files, is an
  * issue handed to `fail`.
  */
-function readTeamFiles(teamsRoot: string, fail: (issue: TeamIssue) => void, index: ContractIndex): TeamSource[] {
+function readTeamFiles(teamsRoot: string, fail: (issue: TeamIssue) => void): TeamSource[] {
   if (!existsSync(teamsRoot)) return [];
   const out: TeamSource[] = [];
   for (const teamName of readdirSync(teamsRoot).sort()) {
@@ -173,11 +166,8 @@ function readTeamFiles(teamsRoot: string, fail: (issue: TeamIssue) => void, inde
     if (legacy) fail(legacy);
     const team = readTeamFile(teamDir);
     if (!team) continue;
-    for (const issue of [...teamBlockErrors(team.path, parseBlocks(team.source).blocks), ...teamRosterIssues(team, index)]) fail(issue);
-    // Under STRATEGY contracts the routing and the flow are the strategy's, read after the file's own lines.
-    const source = team.strategy?.name === CONTRACTS_STRATEGY && team.lead
-      ? `${team.unit}\n${contractsFlowSource(team.name, team.lead.name, contractWorkers(team, name => contractsTeamOf(index, name)?.lead ?? null))}`
-      : team.unit;
+    for (const issue of [...teamFileErrors(team.path, team.source), ...teamRosterIssues(team)]) fail(issue);
+    const source = team.unit;
     out.push({ teamName, teamDir, teamPath: team.path, about: team.about, source, blocks: parseBlocks(source).blocks, team });
   }
   return out;
@@ -226,8 +216,8 @@ function renderFlowReads(chapters: string, ctx: BundleContext, readsOf: Map<stri
  * variables a team's file imports are that team's alone: each team's
  * imports register in a list of its own.
  */
-async function collectTeams(teamsRoot: string, ctx: BundleContext, projectFile: string): Promise<TeamRaw[]> {
-  const files = readTeamFiles(teamsRoot, issue => ctx.lintErrors.push(issue), buildContractIndex(teamsRoot, projectFile));
+async function collectTeams(teamsRoot: string, ctx: BundleContext): Promise<TeamRaw[]> {
+  const files = readTeamFiles(teamsRoot, issue => ctx.lintErrors.push(issue));
 
   // Walk every team's members up front so their directory-anchored `AS <role>`
   // bindings feed the RoleIndex — that is what lets `BY <role>` resolve to a
@@ -394,7 +384,6 @@ function renderTeam(team: TeamInfo, ctx: BundleContext): string {
     '',
     `\`purpose\`: ${purpose}`,
     '',
-    ...(team.strategy ? [team.strategy, ''] : []),
     `\`members\`:`,
     members,
     '',
@@ -422,7 +411,7 @@ export async function buildOrchestrationContent(opts: OrchestrationSectionOption
   // Phase 1: collect every team's FLOWs into the shared ctx (routing kept raw,
   // with `BY <role>` resolved against the RoleIndex built from the same
   // single walk/read/parse of each team's file).
-  const teamRaws = await collectTeams(teamsDir, ctx, resolve(opts.cwd, PROJECT_SOURCE));
+  const teamRaws = await collectTeams(teamsDir, ctx);
   const readsOf = new Map(teamRaws.map(t => [t.teamPath, teamReads(t)]));
 
   reportLintIssues(ctx, 'Orchestration section');
@@ -442,7 +431,7 @@ export async function buildOrchestrationContent(opts: OrchestrationSectionOption
     ctx.flowCommand = member ? id => apxCommand(member, 'flow', id) : undefined;
     const routingBody = readsOf.get(t.teamPath)!(postProcessBody(t.routingRaw, ctx)).trim().replace(/\n{3,}/g, '\n\n');
     ctx.flowCommand = undefined;
-    return { name: t.name, about: t.about, members: t.members, routingBody, strategy: strategyLines(t.team) };
+    return { name: t.name, about: t.about, members: t.members, routingBody };
   });
 
   const parts: string[] = [
@@ -464,20 +453,4 @@ export async function ensureOrchestrationSection(opts: OrchestrationSectionOptio
   const filePath = opts.filePath ?? resolve(opts.cwd, AGENTS_MD);
   const result = ensureMdBlock({ filePath, key: 'orchestration', content });
   return { ...result, standalones, teams };
-}
-
-/** A team of contracts in AGENTS.md: the strategy line and its contracts — null for a team without a strategy. */
-function strategyLines(team: TeamFile): string | null {
-  if (team.strategy?.name !== CONTRACTS_STRATEGY || !team.lead) return null;
-  const T = FORMULAS.blocks.contract.team;
-  return [
-    fill(T.strategy, { lead: team.lead.name }),
-    '',
-    T.contracts,
-    ...team.contracts.map(c => fill(T.entry, {
-      name: c.name, about: c.about || '(no description)',
-      domain: c.domain ? fill(T.domain, { domain: c.domain }) : '',
-      by: c.by.map(b => `\`${b}\``).join(', '),
-    })),
-  ].join('\n');
 }

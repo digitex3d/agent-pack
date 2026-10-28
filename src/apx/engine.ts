@@ -19,7 +19,7 @@ import { spawnSync, type SpawnSyncOptionsWithStringEncoding } from 'child_proces
 import { ApDocument as ApDocumentClass, type ApDocument } from '../apdoc/document.js';
 import type { ApBlock } from '../apdoc/block.js';
 import type { ApRef, ApNode, ApWhenNode, ApRunNode, ApDirectiveNode } from '../apdoc/types.js';
-import { KIND_STRATEGIES, type AgentBlock, type TeamBlock, type StoreBlock, type VarBlock, type DimensionBlock, type TemplateBlock, type ContractBlock } from '../apdoc/blocks.js';
+import { KIND_STRATEGIES, type AgentBlock, type TeamBlock, type StoreBlock, type VarBlock, type DimensionBlock, type TemplateBlock, type DomainBlock } from '../apdoc/blocks.js';
 import { mdEnv, renderPreamble, renderEntry, renderMd } from '../../adapters/md/index.js';
 import type { MdEnv } from '../../adapters/md/toolkit.js';
 import { FORMULAS, fill, type QuizQuestion } from '../formulas.js';
@@ -36,11 +36,12 @@ import { SCOPED_KINDS } from '../services/tags.js';
 import { CREDIT } from '../credits.js';
 import { validateRecord, formatIssues, jsonExample } from '../shapeSchema.js';
 import { BLOCK_ID_RE, addressName, sha256Hex, shortId } from '../apdoc/ids.js';
-import { ContractTable, CONTRACT_ID_RE, perimeterFiles, scanZones, zoneMarks, zonesText, parseZones, type ContractRecord } from './contracts.js';
+import { perimeterFiles, scanZones, zoneMarks, zonesText, parseZones } from './contracts.js';
+import { DelegationTable, CONTRACT_ID_RE, MARK_ID_RE, pieceRecord, type DelegationRecord } from './delegations.js';
+import type { ApMark } from '../delegation.js';
 import { parsePayload } from './payload.js';
 import { resolveWorkspace } from '../workspace/registry.js';
-import type { Allowed, Perimeter, WorkspaceSession } from '../workspace/types.js';
-import type { ContractLimit } from '../services/teamMetadata.js';
+import type { Allowed, WorkspaceSession } from '../workspace/types.js';
 import { splitList } from '../lists.js';
 import { fingerprint } from './dimensions.js';
 import { constantOf, readsOf } from '../vars.js';
@@ -49,7 +50,7 @@ import { servicesOf, serviceOf } from './services/registry.js';
 import { waitFor, OLD_DELEGATE_KIND } from './services/delegate.js';
 import { countOf } from './service.js';
 import { enumPrimitiveFor, type PerimeterGlobs } from '../primitives.js';
-import { globRegExp, matchesAnyGlob } from '../services/glob.js';
+import { globRegExp, matchesAnyGlob, literalGlob } from '../services/glob.js';
 
 /** The exit of an UNTIL*'s answer at its round limit: the loop ends (src/check.ts roundLine). */
 const ROUND_LIMIT = 7;
@@ -68,6 +69,8 @@ export interface ApxBuild {
   checks?: ApxChecks;
   /** How long `wait` waits at most when a WAIT names no MAX — the `wait.max` config key; absent: the default. */
   waitMax?: string;
+  /** How many zones a MARK binds at most when its line names no MAX — the `mark.max` config key; absent: the default. */
+  markMax?: number;
 }
 
 /**
@@ -103,21 +106,23 @@ const HELP: [string, string][] = [
   ['flow <flw-id>', 'how to run a flow: by the harness, from its compiled script — or its steps, to carry out in order'],
   ['run <exe-id> [in-json] [--into <var>]', 'run a program: its tests when it is new, then the program on its input — its answer back, or kept in <var>'],
   ['check <cnd-id>', 'a checked condition (IF!, IF!!, UNTIL!, UNTIL!!), put to the judge on this session\'s variables: open or closed'],
-  ['wait <dlg-id | var> … [--max <duration>] | all', 'take back what a flow started in the background: each one delivered, blocked or ended — or the limit reached; then each one\'s state'],
+  ['contract mark|start|get|within|merge|land|list …', 'the contracts a flow\'s MARKs bind: mark a zone, start a MARK\'s with --by <agent>, read one, merge and land after a conflict'],
+  ['wait <dlg-id | mrk-id | var> … [--max <duration>] | all', 'take back what a flow started in the background: each one delivered, blocked or ended — or the limit reached; then each one\'s state'],
   ['version', 'agent, build date, agent-pack version, hash, block count'],
 ];
 
-/** What every contract verb works with: the team, the session's table, who leads. */
+/** What every contract verb works with: the session's registry, where the copies live. */
 interface ContractCx {
-  team: TeamBlock;
-  table: ContractTable;
+  table: DelegationTable;
   /** The project root — where the copies live. */
   root: string;
-  lead: string;
   session: string;
   /** The session's copies, opened on first use. */
   ws: () => WorkspaceSession;
 }
+
+/** How many zones a MARK binds at most when neither it nor the config says (`mark.max`). */
+export const DEFAULT_MARK_MAX = 20;
 
 /** The workspace engine the copies run on — one ships; a second one is a registry entry and a config key (src/workspace/registry.ts). */
 const CONTRACT_WORKSPACE = 'git';
@@ -210,6 +215,13 @@ export class ApxEngine {
     wait: args => waitFor(this, args),
     version: () => this.version(),
     help: () => this.help(),
+  };
+
+  /** The contracts' own steps, for the `delegate` service and `wait` (src/apx/services/delegate.ts). */
+  readonly contracts = {
+    deliver: (table: DelegationTable, r: DelegationRecord, args: string[]) => this.deliverContract(table, r, args),
+    copy: (ctr: string) => this.contractCopy(ctr),
+    fold: (table: DelegationTable, pieces: DelegationRecord[]) => this.foldContracts(table, pieces),
   };
 
   constructor(
@@ -1085,361 +1097,296 @@ export class ApxEngine {
     return { id };
   }
 
-  /** `contract <verb> …` — the instances of a team of contracts (D44). */
+  /** The session's registry and copies — or null after saying why there are none. */
+  private contractCx(): ContractCx | null {
+    const session = this.sessionIdOrReason();
+    if ('reason' in session) { this.lastCode = this.fail(2, `${session.reason} — nothing was read or written`); return null; }
+    const root = resolve(projectRootOf(this.exe));
+    const table = DelegationTable.open(root, session.id, this.build.tabeli);
+    if (typeof table === 'string') { this.lastCode = this.fail(2, `${table} — nothing was read or written`); return null; }
+    let ws: WorkspaceSession | null = null;
+    // The copies: opened on the first verb that needs them — a project outside git fails there, with the way out.
+    return { table, root, session: session.id, ws: () => ws ??= resolveWorkspace(CONTRACT_WORKSPACE).session(root, session.id) };
+  }
+
+  /**
+   * `contract <verb> …` — the contracts a flow's MARKs bind (D16–18): `mark`
+   * one, `start` a MARK's, `get` one's spec, `within` for the hook, `merge` and
+   * `land` after a conflict, `list`. Delivering, blocking, taking over — the
+   * life of any piece handed out — is `delegate`'s, on the same registry.
+   */
   private async contract(args: string[]): Promise<number> {
     const [verb, ...rest] = args;
-    const team = this.doc.byKind('team')[0] as TeamBlock | undefined;
-    if (!team || team.strategy !== 'contracts') return this.fail(2, `${this.root.name} is in no team with \`STRATEGY contracts\` — it has no contracts`);
-    const session = this.sessionIdOrReason();
-    if ('reason' in session) return this.fail(2, `${session.reason} — nothing was read or written`);
-    const root = resolve(projectRootOf(this.exe));
-    const table = ContractTable.open(root, session.id, this.build.tabeli);
-    if (typeof table === 'string') return this.fail(2, `${table} — nothing was read or written`);
-    let ws: WorkspaceSession | null = null;
-    const cx: ContractCx = {
-      team, table, root, lead: team.lead ? refName(team.lead) : '', session: session.id,
-      // The copies: opened on the first verb that needs them — a project outside git fails there, with the way out.
-      ws: () => ws ??= resolveWorkspace(CONTRACT_WORKSPACE).session(root, session.id),
-    };
+    const verbs = 'mark|start|get|within|merge|land|list';
+    if (!verb || !verbs.split('|').includes(verb)) return this.fail(2, `${verb ? `'${verb}' is no verb of contract` : 'contract takes a verb'} — ${this.cmd} contract ${verbs}`);
+    const cx = this.contractCx();
+    if (!cx) return this.lastCode;
     try {
       switch (verb) {
-        case 'list': return this.contractList(cx);
-        case 'get': return this.contractGet(cx, rest);
+        case 'mark': return this.contractMark(cx, rest);
         case 'start': return this.contractStart(cx, rest);
-        case 'new': return this.contractNew(cx, rest);
-        case 'dispatch': return this.contractDispatch(cx);
+        case 'get': return this.contractGet(cx, rest);
         case 'within': return this.contractWithin(cx, rest);
-        case 'deliver': return this.contractDeliver(cx, rest);
-        case 'block': return this.contractBlock(cx, rest);
-        case 'take': return this.contractTake(cx, rest);
         case 'merge': return this.contractMerge(cx, rest);
+        case 'land': return this.contractLand(cx);
+        default: return this.contractList(cx, rest);
       }
     } catch (e) {
       return this.fail(2, `the contracts could not be read or written: ${e instanceof Error ? e.message : e}`);
     }
-    return this.fail(2, `${verb ? `'${verb}' is no verb of contract` : 'contract takes a verb'} — ${this.cmd} contract list|get|start|new|dispatch|within|deliver|block|take|merge`);
   }
 
-  /** A contract block of this document by its id, or by its name — or null after saying why. */
-  private contractBlock_(id: string | undefined, usage: string): ContractBlock | null {
-    const named = id ? this.doc.byKind('contract').filter(b => b.name === id) : [];
-    const block = id ? this.byId.get(id) ?? (named.length === 1 ? named[0] : undefined) : undefined;
-    if (!block || block.kind !== 'contract') {
-      this.lastCode = this.fail(2, `${id ? `${id} is no contract of this agent` : 'a contract id is needed'} — ${this.cmd} contract ${usage}; the contracts: ${this.cmd} ls kind=contract`);
+  /** A MARK of this agent's flows by id — or null after saying why. */
+  private markArg(id: string | undefined, usage: string): (ApMark & { id: string }) | null {
+    const mark = id ? this.doc.meta.marks?.[id] : undefined;
+    if (!id || !MARK_ID_RE.test(id) || !mark) {
+      this.lastCode = this.fail(2, `${id ? `${id} is no MARK of this agent's flows` : 'a MARK id is needed (mrk-…)'} — ${this.cmd} contract ${usage}; the compiled flow names it`);
       return null;
     }
-    return block as ContractBlock;
+    return { ...mark, id };
   }
 
-  /** An instance by its id — or null after saying why. */
-  private instance(cx: ContractCx, id: string | undefined, usage: string): ContractRecord | null {
-    if (!id || !CONTRACT_ID_RE.test(id)) { this.lastCode = this.fail(2, `an instance id is needed (ctr-…) — ${this.cmd} contract ${usage}`); return null; }
+  /** A contract by its id — or null after saying why. */
+  private contractArg(cx: ContractCx, id: string | undefined, usage: string): DelegationRecord | null {
+    if (!id || !CONTRACT_ID_RE.test(id)) { this.lastCode = this.fail(2, `a contract id is needed (ctr-…) — ${this.cmd} contract ${usage}`); return null; }
     const r = cx.table.get(id);
-    if (!r) { this.lastCode = this.fail(1, `no instance ${id} in this session — ${this.cmd} contract list`); return null; }
+    if (!r) { this.lastCode = this.fail(1, `no contract ${id} in this session — ${this.cmd} contract list`); return null; }
     return r;
   }
 
-  /** The name of a contract block by id, for the eye. */
-  private contractName(id: string): string {
-    return this.byId.get(id)?.name ?? id;
+  /** The template a MARK's spec is shaped as, as a reference — null when this agent was compiled without it. */
+  private specRef(mark: ApMark): ApRef | null {
+    const t = this.doc.byKind('template').find(b => b.name === mark.spec);
+    return t ? { id: t.id, target: t.address, kind: 'template' } : null;
   }
 
-  /** How far an instance's contract lets it write — `domain` when its block is not in this document. */
-  private limitOf(r: ContractRecord): ContractLimit {
-    return (this.byId.get(r.contract) as ContractBlock | undefined)?.within ?? 'domain';
+  /** The globs a domain of this document writes — what a MARK's WITHIN lets its contracts write beyond their zones. */
+  private domainGlobs(name: string | null): string[] {
+    const d = name ? (this.doc.byKind('domain') as DomainBlock[]).find(b => b.name === name) : undefined;
+    if (!d) return [];
+    const p = d.side('WRITES');
+    return [...p.globs, ...[...p.within, ...Object.keys(p.uncertain)].map(literalGlob)];
   }
 
-  /** An agent's perimeter, from its own apx beside this one — null when it has none, or no apx. */
-  private perimeterOf(agent: string): PerimeterGlobs | null {
-    if (agent === this.root.name) return this.doc.perimeter();
-    const file = join(dirname(this.exe), `${agent}.apx`);
-    if (!existsSync(file)) return null;
-    return ApDocumentClass.fromJson(parsePayload(readFileSync(file, 'utf-8')).document).perimeter();
-  }
-
-  /** What an instance's delivery may keep: its WITHIN, read on its zones and on the globs its assignee wrote at dispatch. */
-  private allowedOf(r: ContractRecord): Allowed {
-    const zones = parseZones(r.zone);
-    const files = [...new Set(zones.map(z => z.file))];
-    const limit = this.limitOf(r);
-    const marks = files.length ? { ...zoneMarks(r.ctr), files, only: limit === 'zone' } : undefined;
-    return { globs: limit === 'domain' ? r.writes.split(',').filter(Boolean) : files, ...(marks ? { marks } : {}) };
-  }
-
-  /** Read a spec on stdin and check it against the contract's form — the JSON text, or null after saying why (exit 6). */
-  private specOf(block: ContractBlock): string | null {
-    const text = readFileSync(0, 'utf-8').trim();
-    if (!block.shape) return text;
-    const issues = this.contractIssues(text, block.shape.ref);
-    if (issues) {
-      const slots = this.doc.slotsOf(block.shape.ref);
-      const example = slots ? ` — a spec is JSON shaped like ${JSON.stringify(jsonExample(slots, this.doc.slotResolver()))}` : '';
-      this.lastCode = this.fail(6, `the spec breaks the form of ${block.name} (${refName(block.shape.ref)}): ${issues}${example}; nothing was written`);
-      return null;
-    }
-    return JSON.stringify(JSON.parse(text));
-  }
-
-  private contractList(cx: ContractCx): number {
-    const all = cx.table.all();
-    for (const r of all) {
-      this.out(`${r.ctr}  ${this.contractName(r.contract)}  ${r.state}  → ${r.assignee}${r.zone ? `  ${r.zone}` : ''}${r.depends ? `  depends: ${r.depends}` : ''}${r.left_out ? `  left out: ${r.left_out}` : ''}${r.reason ? `  — ${r.reason}` : ''}`);
-    }
-    this.out(`# ${countOf(all.length, 'instance', 'instances')} in this session — one: ${this.cmd} contract get <ctr-id>`);
-    return 0;
-  }
-
-  private contractGet(cx: ContractCx, args: string[]): number {
-    const r = this.instance(cx, args[0], 'get <ctr-id>');
-    if (!r) return this.lastCode;
-    const block = this.byId.get(r.contract) as ContractBlock | undefined;
-    const limit = this.limitOf(r);
-    this.out(`contract ${r.ctr} — ${this.contractName(r.contract)} — ${r.state} — assigned to ${r.assignee}`);
-    if (block?.domain) this.out(`domain: ${block.domain}`);
-    this.out(`within: ${limit} — write ${enumPrimitiveFor('WITHIN')!.values[limit]()}`);
-    this.out(`zones: ${r.zone ? r.zone.split(';').join(', ') : r.dispatched_at ? 'none — new code' : '(not dispatched yet)'}`);
-    if (r.dispatched_at) this.out(`copy: ${cx.ws().path(r.ctr)}`);
-    if (r.depends) this.out(`depends on: ${r.depends.split(',').map(d => `${d} (${cx.table.get(d)?.state ?? '?'})`).join(', ')}`);
-    if (r.parent) this.out(`part of: ${r.parent}`);
-    if (r.reason) this.out(`blocked: ${r.reason}`);
-    if (r.left_out) {
-      this.out(`left out: ${r.left_out} — why: ${r.why}`);
-      this.out(`# read them in its copy: ${r.left_out.split('; ').map(e => join(cx.ws().path(r.ctr), e.replace(/ \(.*\)$/, ''))).join(', ')}`);
-    }
-    this.out('spec:');
-    this.print(JSON.stringify(JSON.parse(r.spec || '{}'), null, 2));
-    if (r.assignee === this.root.name && r.state === 'assigned' && r.dispatched_at) {
-      this.out(`# work in your copy: cd ${cx.ws().path(r.ctr)} — read and write only there${r.zone ? '; leave the marks where they are, the delivery drops them' : ''}`);
-      this.out(`# when done: ${this.cmd} contract deliver ${r.ctr}`);
-      this.out(`# if it cannot be honoured as written: ${this.cmd} contract block ${r.ctr} "<why>"`);
-    }
-    return 0;
-  }
-
-  /** A new instance id: the session, the contract, the count of its instances, the spec. */
-  private instanceId(cx: ContractCx, contract: string, spec: string): string {
-    return shortId('ctr', JSON.stringify([cx.session, contract, cx.table.all().filter(r => r.contract === contract).length, spec]));
-  }
-
-  /** A record's empty fields — every field is text: tabeli is flat. */
-  private freshRecord(fields: Pick<ContractRecord, 'ctr' | 'contract' | 'spec' | 'assignee' | 'depends' | 'parent'>): ContractRecord {
-    return { ...fields, zone: '', state: 'assigned', reason: '', dispatched_at: '', writes: '', left_out: '', why: '', author: this.root.name };
-  }
-
-  private contractStart(cx: ContractCx, args: string[]): number {
-    if (cx.lead !== this.root.name) return this.fail(2, `only the lead (${cx.lead}) starts the team's work`);
-    const block = this.contractBlock_(args[0], 'start <con-id> -');
-    if (!block) return this.lastCode;
-    if (args[1] !== '-') return this.fail(2, `the spec comes on stdin — ${this.cmd} contract start ${block.id} - < spec.json`);
-    if (!block.byTeam || addressName(block.byTeam.target) !== cx.team.name) return this.fail(2, `${block.name} is not handed to ${cx.team.name} — start takes the contract that hands the request to your team`);
-    const mine = cx.table.all().filter(r => r.assignee === this.root.name && r.state === 'assigned');
-    if (mine.length) return this.fail(2, `you already work on ${mine.map(r => r.ctr).join(', ')} — finish it before starting another`);
-    const spec = this.specOf(block);
-    if (spec === null) return this.lastCode;
-    const ctr = this.instanceId(cx, block.id, spec);
-    cx.table.add(this.freshRecord({ ctr, contract: block.id, spec, assignee: this.root.name, depends: '', parent: '' }));
-    this.out(`${ctr}  ${block.name}  assigned  → ${this.root.name}`);
-    return 0;
-  }
-
-  private contractNew(cx: ContractCx, args: string[]): number {
-    if (cx.lead !== this.root.name) return this.fail(2, `only the lead (${cx.lead}) writes contracts`);
-    const usage = 'new <con-id> [depends=<ctr>,…] [parent=<ctr>] -';
-    const block = this.contractBlock_(args[0], usage);
-    if (!block) return this.lastCode;
-    if (!cx.team.contracts.some(r => r.id === block.id)) return this.fail(2, `${block.name} is no contract of ${cx.team.name} — the team's: ${cx.team.contracts.map(r => refName(r)).join(', ')}`);
-    const opts = args.slice(1);
-    if (opts[opts.length - 1] !== '-') return this.fail(2, `the spec comes on stdin — ${this.cmd} contract ${usage}`);
-    const all = cx.table.all();
-    const depends = splitList(opts.find(o => o.startsWith('depends='))?.slice(8) ?? '');
-    for (const d of depends) if (!all.some(r => r.ctr === d)) return this.fail(1, `depends: no instance ${d} in this session — nothing was written`);
-    const mine = all.filter(r => r.assignee === this.root.name && r.state === 'assigned' && !r.dispatched_at);
-    let parent = opts.find(o => o.startsWith('parent='))?.slice(7) ?? '';
-    if (!parent) {
-      if (mine.length !== 1) return this.fail(2, `${mine.length ? `you work on ${mine.map(r => r.ctr).join(', ')}` : 'you work on no instance yet'} — say which this is part of: parent=<ctr>${mine.length ? '' : ` (or start one: ${this.cmd} contract start <con-id> -)`}`);
-      parent = mine[0].ctr;
-    } else if (!mine.some(r => r.ctr === parent)) return this.fail(1, `parent: ${parent} is no instance you work on`);
-    if (block.by.length === 0) return this.fail(2, `${block.name} names no one to carry it out`);
-    const spec = this.specOf(block);
-    if (spec === null) return this.lastCode;
-    // Several agents in BY: each new instance to the next, in the order written.
-    const assignee = refName(block.by[all.filter(r => r.contract === block.id).length % block.by.length]);
-    const ctr = this.instanceId(cx, block.id, spec);
-    cx.table.add(this.freshRecord({ ctr, contract: block.id, spec, assignee, depends: depends.join(','), parent }));
-    this.out(`${ctr}  ${block.name}  assigned  → ${assignee}`);
-    const marks = zoneMarks(ctr);
-    this.out(block.within === 'domain'
-      ? `# to point it at code that exists, mark the zones: \`${marks.open}\` where one starts, \`${marks.close}\` where it ends, inside comments — then ${this.cmd} contract dispatch`
-      : `# WITHIN ${block.within}: mark its zones — \`${marks.open}\` where one starts, \`${marks.close}\` where it ends, inside comments, in any files — then ${this.cmd} contract dispatch`);
-    return 0;
+  /** What a contract's delivery may keep: its zones, the files it created, and its MARK's WITHIN domain (D49). */
+  private allowedOf(r: DelegationRecord): Allowed {
+    const files = [...new Set(parseZones(r.zone).map(z => z.file))];
+    return {
+      globs: [...files, ...r.writes.split(',').filter(Boolean)],
+      ...(files.length ? { marks: { ...zoneMarks(r.dlg), files, only: true } } : {}),
+      created: true,
+    };
   }
 
   /**
-   * `dispatch` — the lead hands the work out. Each new instance's zones are
-   * looked for in what the lead writes: marks in order, every zone in a file
-   * its assignee writes; a WITHIN zone or file instance needs one at least.
-   * What was merged since the last round lands first; then each instance gets
-   * its copy, from the working folder as it is.
+   * `mark <mrk-id> -` — whoever runs the flow binds a zone to a contract: the
+   * spec on stdin, checked against the MARK's AS; the contract waits, marked,
+   * until a DELEGATE of its list starts it. Its id joins the list's variable.
    */
-  private contractDispatch(cx: ContractCx): number {
-    if (cx.lead !== this.root.name) return this.fail(2, `only the lead (${cx.lead}) hands the work out`);
-    const pending = cx.table.all().filter(r => r.state === 'assigned' && !r.dispatched_at && r.assignee !== this.root.name);
-    if (pending.length === 0) return this.fail(1, `no instance to hand out — write them first: ${this.cmd} contract new <con-id> -`);
-    const globs = this.doc.perimeter()?.writes ?? [];
-    if (globs.length === 0) return this.fail(2, `${this.root.name} works within no domain it writes — the zones are marked in the files the lead writes: write \`@WITHIN <domain>\` above its AGENT, a domain with WRITES`);
-    const { zones, problems } = scanZones(cx.root, perimeterFiles(cx.root, globs), pending.map(r => r.ctr));
-    const refusals: string[] = [...problems].map(([ctr, why]) => `${ctr}: ${why}`);
-    const perimeters = new Map<string, Perimeter>();
+  private contractMark(cx: ContractCx, args: string[]): number {
+    const usage = 'mark <mrk-id> - < spec.json';
+    const mark = this.markArg(args[0], usage);
+    if (!mark) return this.lastCode;
+    if (args[1] !== '-') return this.fail(2, `the spec comes on stdin — ${this.cmd} contract ${usage}`);
+    const waiting = cx.table.all().filter(r => r.mark === mark.id && r.state === 'marked');
+    const max = mark.max || this.build.markMax || DEFAULT_MARK_MAX;
+    if (waiting.length >= max) return this.fail(3, `${mark.list} holds ${max} zones already — the MARK's limit; nothing was written`);
+    const ref = this.specRef(mark);
+    if (!ref) return this.fail(2, notCompiled(mark.list, mark.spec));
+    const text = readFileSync(0, 'utf-8').trim();
+    const issues = this.contractIssues(text, ref);
+    if (issues) {
+      const slots = this.doc.slotsOf(ref);
+      const example = slots ? ` — a spec is JSON shaped like ${JSON.stringify(jsonExample(slots, this.doc.slotResolver()))}` : '';
+      return this.fail(6, `the spec breaks the form of ${mark.spec}: ${issues}${example}; nothing was written`);
+    }
+    const spec = JSON.stringify(JSON.parse(text));
+    const ctr = shortId('ctr', JSON.stringify([cx.session, mark.id, cx.table.all().filter(r => r.mark === mark.id).length, spec]));
+    // The list's variable holds its contracts' ids — what `{{<list>}}` reads.
+    const list = this.variable(mark.list);
+    if (list) {
+      const ids = [...waiting.map(r => r.dlg), ctr];
+      const failed = this.storeVariable(list, JSON.stringify(ids));
+      if (failed) return this.fail(6, `\`${mark.list}\` holds the ids of its contracts: ${failed.reason} — declare it as a plain variable; nothing was written`);
+    }
+    cx.table.add(pieceRecord({ dlg: ctr, state: 'marked', flow: mark.flow, step: mark.step, into: mark.list, mark: mark.id, spec, author: this.root.name }));
+    const marks = zoneMarks(ctr);
+    this.out(`${ctr}  ${mark.list}  marked`);
+    return this.print(`# write \`${marks.open}\` where its zone starts and \`${marks.close}\` where it ends, each inside a comment — in any files; the marks stay`);
+  }
+
+  /**
+   * `start <mrk-id> --by <agent>` — a DELEGATE of a list starts every contract
+   * its MARK left waiting: each one's zones are found by their marks, what was
+   * merged since the last round lands, and each one gets its copy (D64: one
+   * agent for the whole list). None waiting: nothing to start, and it says so.
+   */
+  private contractStart(cx: ContractCx, args: string[]): number {
+    const usage = 'start <mrk-id> --by <agent>';
+    const mark = this.markArg(args[0], usage);
+    if (!mark) return this.lastCode;
+    const by = flagValue(args.slice(1), '--by');
+    if (!by) return this.fail(2, `say who carries the contracts out — ${this.cmd} contract ${usage}`);
+    const pending = cx.table.all().filter(r => r.mark === mark.id && r.state === 'marked');
+    if (pending.length === 0) return this.print(`# ${mark.list}: no zone was marked — nothing to start`);
+    const scope = this.doc.perimeter()?.writes;
+    const files = perimeterFiles(cx.root, scope && scope.length ? scope : ['**']);
+    const { zones, problems } = scanZones(cx.root, files, pending.map(r => r.dlg));
+    const refusals = [...problems].map(([ctr, why]) => `${ctr}: ${why}`);
+    const within = this.domainGlobs(mark.within);
     for (const r of pending) {
-      const limit = this.limitOf(r);
-      const zs = zones.get(r.ctr) ?? [];
-      if (limit !== 'domain' && zs.length === 0 && !problems.has(r.ctr)) refusals.push(`${r.ctr}: WITHIN ${limit} needs a zone — mark it: \`${zoneMarks(r.ctr).open}\` … \`${zoneMarks(r.ctr).close}\`, inside comments`);
-      const p = this.perimeterOf(r.assignee);
-      if (!p || p.writes.length === 0) { refusals.push(`${r.ctr}: ${r.assignee} works within no domain it writes — it has nothing to deliver; compile it with \`@WITHIN <domain>\` above its AGENT`); continue; }
-      perimeters.set(r.ctr, p);
-      for (const z of zs) if (!matchesAnyGlob(z.file, p.writes)) refusals.push(`${r.ctr}: ${z.file} holds a zone of it, and ${r.assignee} does not write that file`);
+      if (!zones.get(r.dlg) && !problems.has(r.dlg) && within.length === 0) {
+        refusals.push(`${r.dlg}: no zone is marked — write \`${zoneMarks(r.dlg).open}\` … \`${zoneMarks(r.dlg).close}\` inside comments, or give its MARK a WITHIN domain`);
+      }
     }
     if (refusals.length) {
       for (const line of refusals) this.out(`refused: ${line}`);
-      return this.fail(3, `nothing was handed out — fix the ${countOf(refusals.length, 'instance', 'instances')} above and dispatch again`);
+      return this.fail(3, `nothing was started — fix the ${countOf(refusals.length, 'contract', 'contracts')} above and start again`);
     }
     const landing = cx.ws().land();
-    if ('conflicts' in landing) return this.fail(3, `what was merged conflicts with the working folder: ${landing.conflicts.join(', ')} — make them agree there, then dispatch again`);
+    if ('conflicts' in landing) return this.fail(3, `what was merged conflicts with the working folder: ${landing.conflicts.join(', ')} — make them agree there, then start again`);
     if (landing.landed.length) this.out(`# landed in the working folder: ${landing.landed.join(', ')}`);
     const at = new Date().toISOString();
     for (const r of pending) {
-      const p = perimeters.get(r.ctr)!;
-      cx.ws().open(r.ctr, p);
-      cx.table.set(r.ctr, { zone: zonesText(zones.get(r.ctr) ?? []), dispatched_at: at, writes: p.writes.join(',') });
-      this.out(`${r.ctr}  ${this.contractName(r.contract)}  → ${r.assignee}  within ${this.limitOf(r)}${zones.get(r.ctr) ? `  ${zonesText(zones.get(r.ctr)!)}` : ''}  copy: ${cx.ws().path(r.ctr)}`);
+      const zs = zones.get(r.dlg) ?? [];
+      const writes = [...new Set([...zs.map(z => z.file), ...within])];
+      cx.ws().open(r.dlg, { reads: null, writes });
+      if (!cx.table.transition(r.dlg, 'marked', 'running', { assignee: by, zone: zonesText(zs), writes: within.join(','), started_at: at })) {
+        return this.fail(4, `${r.dlg} changed meanwhile — ${this.cmd} contract list ${mark.id}`);
+      }
+      this.out(`${r.dlg}  → ${by}${zs.length ? `  ${zonesText(zs)}` : ''}  copy: ${cx.ws().path(r.dlg)}`);
     }
-    this.out(`# ${countOf(pending.length, 'instance', 'instances')} handed out — merge each as it is delivered: ${this.cmd} contract merge <ctr-id>`);
+    return this.print(`# ${countOf(pending.length, 'contract', 'contracts')} started — hand each one to ${by} with its id; ${this.cmd} wait ${mark.id} takes them back`);
+  }
+
+  private contractList(cx: ContractCx, args: string[]): number {
+    const mark = args[0] ? this.markArg(args[0], 'list [mrk-id]') : null;
+    if (args[0] && !mark) return this.lastCode;
+    const all = cx.table.all().filter(r => CONTRACT_ID_RE.test(r.dlg) && (!mark || r.mark === mark.id));
+    for (const r of all) {
+      this.out(`${r.dlg}  ${r.into}  ${r.state === 'ended' ? 'ended without delivery' : r.state}${r.assignee ? `  → ${r.assignee}` : ''}${r.zone ? `  ${r.zone}` : ''}${r.left_out ? `  left out: ${r.left_out}` : ''}${r.reason ? `  — ${r.reason}` : ''}`);
+    }
+    return this.print(`# ${countOf(all.length, 'contract', 'contracts')} in this session — one: ${this.cmd} contract get <ctr-id>`);
+  }
+
+  private contractGet(cx: ContractCx, args: string[]): number {
+    const r = this.contractArg(cx, args[0], 'get <ctr-id>');
+    if (!r) return this.lastCode;
+    this.out(`contract ${r.dlg} — of ${r.into} — ${r.state}${r.assignee ? ` — carried out by ${r.assignee}` : ''}`);
+    this.out(`zones: ${r.zone ? r.zone.split(';').join(', ') : r.state === 'marked' ? '(not started yet)' : 'none'}`);
+    this.out(`may write: its zones, the files it creates${r.writes ? `, ${r.writes.split(',').join(', ')}` : ''}`);
+    if (r.state !== 'marked') this.out(`copy: ${cx.ws().path(r.dlg)}`);
+    if (r.reason) this.out(`blocked: ${r.reason}`);
+    if (r.left_out) this.out(`left out: ${r.left_out} — why: ${r.why}`);
+    this.out('spec:');
+    this.print(JSON.stringify(JSON.parse(r.spec || '{}'), null, 2));
+    if (r.state === 'running') {
+      this.out(`# work in your copy: cd ${cx.ws().path(r.dlg)} — read and write only there; write inside its zones, leave the marks where they are`);
+      this.out(`# when done: ${this.cmd} delegate deliver ${r.dlg}`);
+      this.out(`# if it cannot be honoured as written: ${this.cmd} delegate block ${r.dlg} "<why>"`);
+    }
     return 0;
   }
 
   /**
-   * `within <ctr> <path>` — whether a file the instance's copy changed stays
-   * within its contract: exit 0, or 3 with the warning. What a harness hook
-   * calls as soon as the file is written (adapters/claude-code).
+   * `within <ctr> <path>` — whether a file the contract's copy changed stays
+   * within it: exit 0, or 3 with the warning. What a harness hook calls as
+   * soon as the file is written (adapters/claude-code).
    */
   private contractWithin(cx: ContractCx, args: string[]): number {
-    const r = this.instance(cx, args[0], 'within <ctr-id> <path>');
+    const r = this.contractArg(cx, args[0], 'within <ctr-id> <path>');
     if (!r) return this.lastCode;
     const path = args[1];
-    if (!path) return this.fail(2, `a path is needed — ${this.cmd} contract within ${r.ctr} <path>`);
-    if (!r.dispatched_at) return this.fail(2, `${r.ctr} has no copy yet — it was not handed out`);
-    const d = cx.ws().deliver(r.ctr, this.allowedOf(r), { dryRun: true });
+    if (!path) return this.fail(2, `a path is needed — ${this.cmd} contract within ${r.dlg} <path>`);
+    if (r.state === 'marked') return this.fail(2, `${r.dlg} has no copy yet — it was not started`);
+    const d = cx.ws().deliver(r.dlg, this.allowedOf(r), { dryRun: true });
     const hit = (e: string) => e === path || e.startsWith(`${path} (`);
     const lost = d.lostZones.filter(hit);
-    if (lost.length) { this.out(`${lost.join(', ')}: the marks of ${r.ctr}'s zones are lost — put them back around your work, as the lead wrote them`); return 3; }
+    if (lost.length) { this.out(`${lost.join(', ')}: the marks of ${r.dlg}'s zones are lost — put them back around your work, as they were written`); return 3; }
     const out = d.leftOut.filter(hit);
-    if (out.length === 0) {
-      // A file a judge could not place: within the copy, and the assignee's to decide.
-      const judged = this.perimeterOf(r.assignee)?.judged;
-      const p = judged?.writes.uncertain[path];
-      if (p !== undefined) this.out(`${path}: a judge could not tell whether it belongs to your domain (p=${p.toFixed(2)}) — keep it only if the work needs it`);
-      return 0;
-    }
-    this.out(`${out.join(', ')} is outside ${r.ctr} (WITHIN ${this.limitOf(r)}): it will be left out of the delivery — keep it only with a good reason, you will be asked for it at deliver`);
+    if (out.length === 0) return 0;
+    this.out(`${out.join(', ')} is outside ${r.dlg} — its zones, the files it creates${r.writes ? ` and ${r.writes}` : ''}: it will be left out of the delivery — keep it only with a good reason, you will be asked for it at deliver`);
     return 3;
   }
 
   /**
-   * `deliver` — the assignee is done. An instance with a copy keeps what its
-   * WITHIN admits; anything else is left out, and only with a reason (`--why`).
-   * The instance the lead was handed is done when its parts are: delivering
-   * it lands the session's work in the working folder and closes the copies.
+   * A contract delivered from its copy (`delegate deliver <ctr-id>`): it keeps
+   * its zones, the files it created and its WITHIN domain; anything else is
+   * left out, and only with a reason (`--why`).
    */
-  private contractDeliver(cx: ContractCx, args: string[]): number {
-    const r = this.instance(cx, args[0], 'deliver <ctr-id> [--why "<reason>"]');
-    if (!r) return this.lastCode;
-    if (r.assignee !== this.root.name) return this.fail(2, `${r.ctr} is ${r.assignee}'s — only its assignee delivers it`);
-    if (r.state !== 'assigned') return this.fail(2, `${r.ctr} is ${r.state} — only an assigned instance is delivered`);
-    // The parts of an instance (those written with it as parent) are done first: merged, or blocked and taken over.
-    const open = cx.table.all().filter(p => p.parent === r.ctr && p.state !== 'merged');
-    if (open.length) return this.fail(3, `${r.ctr} still has parts to finish: ${open.map(p => `${p.ctr} (${p.state})`).join(', ')} — merge them first`);
-    if (!r.dispatched_at) {
-      // The instance the lead started from: done when its parts are; the request's, when it is the root.
-      if (!r.parent && cx.table.all().some(o => o.dispatched_at)) {
-        const landing = cx.ws().land({ close: true });
-        if ('conflicts' in landing) return this.fail(3, `the work conflicts with the working folder: ${landing.conflicts.join(', ')} — make them agree there, then deliver again`);
-        if (landing.landed.length) this.out(`# landed in the working folder: ${landing.landed.join(', ')} — uncommitted, for the developer to commit`);
-      }
-      if (!cx.table.transition(r.ctr, 'assigned', 'delivered')) return this.fail(4, `${r.ctr} changed meanwhile — read it: ${this.cmd} contract get ${r.ctr}`);
-      this.out(`${r.ctr}  delivered`);
-      return 0;
-    }
-    const why = flagValue(args.slice(1), '--why');
-    const d = cx.ws().deliver(r.ctr, this.allowedOf(r), { dryRun: true });
-    if (d.lostZones.length) return this.fail(3, `${r.ctr} was not delivered — the marks of its zones are lost in ${d.lostZones.join(', ')}: put them back around your work, as the lead wrote them`);
+  private deliverContract(table: DelegationTable, r: DelegationRecord, args: string[]): number {
+    const cx = this.contractCx();
+    if (!cx) return this.lastCode;
+    if (r.state !== 'running') return this.fail(1, `${r.dlg} is ${r.state} — only a running contract is delivered`);
+    const why = flagValue(args, '--why');
+    const d = cx.ws().deliver(r.dlg, this.allowedOf(r), { dryRun: true });
+    if (d.lostZones.length) return this.fail(3, `${r.dlg} was not delivered — the marks of its zones are lost in ${d.lostZones.join(', ')}: put them back around your work, as they were written`);
     if (d.committed.length === 0 && d.strayed.length) {
-      return this.fail(3, `${r.ctr}: nothing changed in your copy, and ${d.strayed.join(', ')} changed in the project folder — the work goes in your copy: ${cx.ws().path(r.ctr)}`);
+      return this.fail(3, `${r.dlg}: nothing changed in its copy, and ${d.strayed.join(', ')} changed in the project folder — the work goes in its copy: ${cx.ws().path(r.dlg)}`);
     }
     if (d.leftOut.length && !why) {
       for (const e of d.leftOut) this.out(`left out: ${e}`);
-      return this.fail(3, `${r.ctr} was not delivered — what is left out stays out only with a good reason: ${this.cmd} contract deliver ${r.ctr} --why "<reason>"; or undo it in your copy`);
+      return this.fail(3, `${r.dlg} was not delivered — what is left out stays out only with a good reason: ${this.cmd} delegate deliver ${r.dlg} --why "<reason>"; or undo it in the copy`);
     }
-    cx.ws().deliver(r.ctr, this.allowedOf(r));
-    if (!cx.table.transition(r.ctr, 'assigned', 'delivered', { left_out: d.leftOut.join('; '), why: d.leftOut.length ? (why ?? '').replace(/\s+/g, ' ') : '' })) {
-      return this.fail(4, `${r.ctr} changed meanwhile — read it: ${this.cmd} contract get ${r.ctr}`);
-    }
-    this.out(`${r.ctr}  delivered — ${d.committed.length ? d.committed.join(', ') : 'nothing changed'}`);
+    cx.ws().deliver(r.dlg, this.allowedOf(r));
+    const fields = { left_out: d.leftOut.join('; '), why: d.leftOut.length ? (why ?? '').replace(/\s+/g, ' ') : '' };
+    if (!table.transition(r.dlg, 'running', 'delivered', fields)) return this.fail(1, `${r.dlg} moved meanwhile — ${this.cmd} delegate list`);
+    this.out(`${r.dlg}  delivered — ${d.committed.length ? d.committed.join(', ') : 'nothing changed'}`);
     if (d.leftOut.length) this.out(`left out: ${d.leftOut.join(', ')} — why: ${why}`);
     return 0;
   }
 
-  private contractBlock(cx: ContractCx, args: string[]): number {
-    const r = this.instance(cx, args[0], 'block <ctr-id> <reason>');
-    if (!r) return this.lastCode;
-    const reason = args.slice(1).join(' ').trim();
-    if (!reason) return this.fail(2, `say why ${r.ctr} cannot be honoured — ${this.cmd} contract block ${r.ctr} "<why>"`);
-    if (r.assignee !== this.root.name) return this.fail(2, `${r.ctr} is ${r.assignee}'s — only its assignee blocks it`);
-    if (!cx.table.transition(r.ctr, 'assigned', 'blocked', { reason: reason.replace(/\s+/g, ' ') })) return this.fail(4, `${r.ctr} is no longer assigned — read it: ${this.cmd} contract get ${r.ctr}`);
-    this.out(`${r.ctr}  blocked — the lead takes it over`);
-    return 0;
+  /** A contract's copy, from the project root — where whoever carries it out works. */
+  private contractCopy(ctr: string): string | null {
+    return this.contractCx()?.ws().path(ctr) ?? null;
   }
 
   /**
-   * `take` — the lead takes over an instance its assignee blocked, in its copy:
-   * the work done so far is there, and the contract's limit stays the same. The
-   * lead must write what the copy may deliver.
+   * What a WAIT does with the contracts it took back: each delivered one merged
+   * into the session's result, then what was merged lands in the working
+   * folder. A conflict is named, and left to the lead (`contract merge`).
    */
-  private contractTake(cx: ContractCx, args: string[]): number {
-    if (cx.lead !== this.root.name) return this.fail(2, `only the lead (${cx.lead}) takes an instance over`);
-    const r = this.instance(cx, args[0], 'take <ctr-id>');
-    if (!r) return this.lastCode;
-    if (r.state !== 'blocked') return this.fail(2, `${r.ctr} is ${r.state} — only a blocked instance is taken over`);
-    if (!r.dispatched_at) return this.fail(2, `${r.ctr} was never handed out — it has no copy to take over`);
-    const mine = this.doc.perimeter()?.writes ?? [];
-    const allowed = this.allowedOf(r);
-    const beyond = allowed.globs.filter(g => !coversGlob(mine, g));
-    if (beyond.length) return this.fail(2, `${r.ctr} delivers ${beyond.join(', ')}, which ${this.root.name} does not write — hand it to an agent that writes it`);
-    if (!cx.table.transition(r.ctr, 'blocked', 'assigned', { assignee: this.root.name })) return this.fail(4, `${r.ctr} changed meanwhile — read it: ${this.cmd} contract get ${r.ctr}`);
-    this.out(`${r.ctr}  taken by ${this.root.name} — work in ${cx.ws().path(r.ctr)}`);
-    this.out(`why it was blocked: ${r.reason}`);
-    this.out(`# when done: ${this.cmd} contract deliver ${r.ctr}`);
-    return 0;
+  private foldContracts(table: DelegationTable, pieces: DelegationRecord[]): DelegationRecord[] {
+    const cx = this.contractCx();
+    if (!cx) return pieces;
+    const out: DelegationRecord[] = [];
+    let merged = 0;
+    for (const r of pieces) {
+      if (r.state !== 'delivered' || !CONTRACT_ID_RE.test(r.dlg)) { out.push(r); continue; }
+      const m = cx.ws().merge(r.dlg);
+      if (!m.merged) { this.out(`${r.dlg}  conflicts with what is merged in ${m.conflicts.join(', ')} — ${this.cmd} contract merge ${r.dlg} --prefer ours|theirs`); out.push(r); continue; }
+      table.transition(r.dlg, 'delivered', 'merged');
+      merged++;
+      out.push({ ...r, state: 'merged' });
+    }
+    if (merged > 0) {
+      const landing = cx.ws().land();
+      if ('conflicts' in landing) this.out(`# what was merged conflicts with the working folder: ${landing.conflicts.join(', ')} — make them agree there, then ${this.cmd} contract land`);
+      else if (landing.landed.length) this.out(`# landed in the working folder: ${landing.landed.join(', ')} — uncommitted, for the developer to commit`);
+    }
+    return out;
   }
 
-  /** `merge` — the lead folds a delivered instance into the round's result, as soon as it is delivered; a conflict names its files and who may win. */
+  /** `merge <ctr> [--prefer ours|theirs]` — a delivered contract that conflicted, merged with the side that wins. */
   private contractMerge(cx: ContractCx, args: string[]): number {
-    if (cx.lead !== this.root.name) return this.fail(2, `only the lead (${cx.lead}) merges`);
-    const r = this.instance(cx, args[0], 'merge <ctr-id> [--prefer ours|theirs]');
+    const r = this.contractArg(cx, args[0], 'merge <ctr-id> [--prefer ours|theirs]');
     if (!r) return this.lastCode;
-    if (r.state === 'blocked') return this.fail(2, `${r.ctr} is blocked — take it over (${this.cmd} contract take ${r.ctr}), finish it in its copy, deliver it, then merge`);
-    if (r.state !== 'delivered') return this.fail(2, `${r.ctr} is ${r.state} — only a delivered instance is merged`);
-    const waiting = r.depends.split(',').filter(Boolean).filter(d => cx.table.get(d)?.state !== 'merged');
-    if (waiting.length) return this.fail(3, `${r.ctr} depends on ${waiting.map(d => `${d} (${cx.table.get(d)?.state ?? '?'})`).join(', ')} — merge ${waiting.length > 1 ? 'those' : 'that'} first`);
+    if (r.state !== 'delivered') return this.fail(2, `${r.dlg} is ${r.state} — only a delivered contract is merged`);
     const prefer = flagValue(args.slice(1), '--prefer');
-    if (prefer !== undefined && prefer !== 'ours' && prefer !== 'theirs') return this.fail(2, `--prefer takes ours (keep what is merged) or theirs (take ${r.ctr}'s)`);
-    if (r.dispatched_at) {
-      const m = cx.ws().merge(r.ctr, prefer);
-      if (!m.merged) return this.fail(3, `${r.ctr} conflicts with what is merged in ${m.conflicts.join(', ')} — merge again with --prefer ours (keep what is merged) or --prefer theirs (take ${r.ctr}'s)`);
-    }
-    if (!cx.table.transition(r.ctr, 'delivered', 'merged')) return this.fail(4, `${r.ctr} changed meanwhile — read it: ${this.cmd} contract get ${r.ctr}`);
-    this.out(`${r.ctr}  merged`);
-    if (r.left_out) this.out(`left out: ${r.left_out} — why: ${r.why} — look at it, or let it be: ${this.cmd} contract get ${r.ctr}`);
-    return 0;
+    if (prefer !== undefined && prefer !== 'ours' && prefer !== 'theirs') return this.fail(2, `--prefer takes ours (keep what is merged) or theirs (take ${r.dlg}'s)`);
+    const m = cx.ws().merge(r.dlg, prefer);
+    if (!m.merged) return this.fail(3, `${r.dlg} conflicts with what is merged in ${m.conflicts.join(', ')} — merge again with --prefer ours (keep what is merged) or --prefer theirs (take ${r.dlg}'s)`);
+    if (!cx.table.transition(r.dlg, 'delivered', 'merged')) return this.fail(4, `${r.dlg} changed meanwhile — ${this.cmd} contract get ${r.dlg}`);
+    this.out(`${r.dlg}  merged`);
+    if (r.left_out) this.out(`left out: ${r.left_out} — why: ${r.why}`);
+    return this.print(`# then: ${this.cmd} contract land`);
+  }
+
+  /** `land` — what was merged, into the working folder, uncommitted. */
+  private contractLand(cx: ContractCx): number {
+    const landing = cx.ws().land();
+    if ('conflicts' in landing) return this.fail(3, `what was merged conflicts with the working folder: ${landing.conflicts.join(', ')} — make them agree there, then land again`);
+    return this.print(landing.landed.length ? `# landed in the working folder: ${landing.landed.join(', ')} — uncommitted, for the developer to commit` : '# nothing to land');
   }
 
 }

@@ -189,7 +189,9 @@ class GitSession implements WorkspaceSession {
       ...lines(git(dir, ['diff', '--name-only', '--no-renames', 'HEAD', '--', '.', ...skip])),
       ...lines(git(dir, ['ls-files', '--others', '--exclude-standard', '--', '.', ...skip])),
     ])];
-    const kept = changed.filter(p => matchesAnyGlob(p, globs));
+    // A file the copy created is the work's own, when the contract admits new files: the base holds none of it.
+    const inBase = allowed.created ? new Set(lines(git(dir, ['ls-tree', '-r', '--name-only', base]))) : null;
+    const kept = changed.filter(p => matchesAnyGlob(p, globs) || (inBase !== null && !inBase.has(p)));
     const leftOut = changed.filter(p => !kept.includes(p));
     const whole: string[] = [];
     const zoned: { file: string; text: string }[] = [];

@@ -240,8 +240,29 @@ dlg-1d06e0a6  check  running  → checker-b  — still running after 10m
 
 - `delegate start <dlg-id>` records the piece as `running`. A piece still running cannot start again; one that is settled starts afresh — a loop starts the same piece on every round.
 - `delegate deliver <dlg-id> -` takes its result on stdin and stores it in its `INTO` variable — checked against the variable's type: a value that breaks it is refused (exit `6`), nothing is stored. `delegate block <dlg-id> "<why>"` says it cannot be done as asked.
-- `wait <dlg-id | var> … [--max <duration>]`, `wait all` returns when every piece it names is delivered, blocked or ended without delivery — or when the limit is reached: `--max`, written by the WAIT's `MAX`, else the `wait.max` config key (`30m` by default). Then each one's state: exit `0` when all were delivered, `1` otherwise.
+- `wait <dlg-id | mrk-id | var> … [--max <duration>]`, `wait all` returns when every piece it names is delivered, blocked or ended without delivery — or when the limit is reached: `--max`, written by the WAIT's `MAX`, else the `wait.max` config key (`30m` by default). Then each one's state: exit `0` when all were delivered, `1` otherwise.
 - Nothing moves by itself: at the limit what still runs is left running, and the lead decides — wait again, `delegate take <dlg-id>` (it carries the piece out itself), `delegate reassign <dlg-id> <agent>`, or `delegate block <dlg-id> "<why>"`. When the harness says the agent of a piece stopped without delivering, the lead records it with `delegate ended <dlg-id>`, and decides the same way. `delegate list` shows every piece of the session.
+
+## Contracts
+
+A flow's `MARK` has an id like `mrk-5b0e2a71`, and each contract it binds an id like `ctr-4a1f0c92` — a record in the same registry, `delegations.tbl`, beside the background pieces. The compiled flow names the commands:
+
+```bash
+node .agent-pack/apx/lead.apx contract mark mrk-5b0e2a71 - < spec.json    # whoever runs the flow: one zone, its spec on stdin
+ctr-4a1f0c92  screens  marked
+# … writes `agent-pack ctr-4a1f0c92` and `agent-pack end ctr-4a1f0c92` in comments around the zone
+node .agent-pack/apx/lead.apx contract start mrk-5b0e2a71 --by web-dev    # the DELEGATE of the list: a copy each
+ctr-4a1f0c92  → web-dev  src/login.ts:2-4  copy: .agent-pack/work/ctr-4a1f0c92
+node .agent-pack/apx/web-dev.apx contract get ctr-4a1f0c92                # the agent: its spec, its zones, its copy
+node .agent-pack/apx/web-dev.apx delegate deliver ctr-4a1f0c92            # from the copy
+node .agent-pack/apx/lead.apx wait mrk-5b0e2a71                           # merged, then landed in the working folder
+```
+
+- `contract mark <mrk-id> -` checks the spec against the `MARK`'s `AS` (exit `6` when it breaks it), refuses past its `MAX` or the `mark.max` config key (exit `3`), and adds the contract's id to the list's variable — what `{{<list>}}` reads.
+- `contract start <mrk-id> --by <agent>` finds each waiting contract's zones by their marks, lands what was merged since the last round, and opens a copy for each. A contract with no zone is refused, unless its `MARK` has a `WITHIN`. None waiting: nothing to start, exit `0`.
+- A contract writes its zones, the files it creates and its `MARK`'s `WITHIN` domain. `delegate deliver <ctr-id>` keeps that from its copy; anything else is left out, and only with a reason: `--why "<reason>"`. With Claude Code, a hook warns the agent as soon as it writes outside (`contract within`).
+- `delegate block`, `ended`, `take`, `reassign` and `list` work on a contract as on any piece; `take` names the copy to finish it in.
+- `wait <mrk-id>` takes back the contracts the latest `start` of that `MARK` opened: each delivered one is merged and what was merged lands in the working folder, uncommitted. A merge that conflicts is left delivered, for `contract merge <ctr-id> --prefer ours|theirs`, then `contract land`. `contract list [mrk-id]` shows the contracts.
 
 ## Compression
 

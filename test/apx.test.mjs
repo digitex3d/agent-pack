@@ -197,7 +197,7 @@ assert.equal(renderMd(doc), compiled.body, 'the round-tripped document renders t
 
 // --- version and help ---
 has(run('version').out, `# pm  ${idOf('agent', 'pm')}`, 'built 2026-09-24T10:00:00Z by agent-pack 0.26.0  hash c0ffee');
-has(run('help').out, `${CMD} start`, `${CMD} get <id> [json]`, `${CMD} store a <sto-id> <field>=<value> …`, `${CMD} delegate input <exe-id>`, `${CMD} wait <dlg-id | var>`);
+has(run('help').out, `${CMD} start`, `${CMD} get <id> [json]`, `${CMD} store a <sto-id> <field>=<value> …`, `${CMD} delegate input <exe-id>`, `${CMD} wait <dlg-id | mrk-id | var>`);
 
 // --- errors: one line, the command that fixes it, exit 1 (missing) or 2 (usage) ---
 {

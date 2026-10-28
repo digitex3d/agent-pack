@@ -34,7 +34,7 @@ import { checkHead, condCheckOf, type CheckKind } from '../check.js';
 import { apxCommand } from '../apx/paths.js';
 import { executorHead, parallelHead } from '../../adapters/md/phrases.js';
 import { parallelEachOf } from '../vars.js';
-import { WAIT_VERB, isDelegationVerb, parseDelegation, delegationText } from '../delegation.js';
+import { WAIT_VERB, MARK_VERB, isDelegationVerb, parseDelegation, delegationText } from '../delegation.js';
 
 const CONTROL_HEADS: Record<string, string> = { IF: 'If', ELSE: 'Else', UNTIL: 'Until' };
 
@@ -176,7 +176,7 @@ function delegationLine(t: Token, ctx?: BundleContext): string | null {
   if (t.kind !== 'keyword') return null;
   const keyword = t.keyword as string;
   const indent = ' '.repeat(t.indent);
-  if (keyword === WAIT_VERB) return `${indent}${keyword} ${delegationText({ keyword, text: t.rest })}`;
+  if (keyword === WAIT_VERB || keyword === MARK_VERB) return `${indent}${keyword} ${delegationText({ keyword, text: t.rest })}`;
   if (!isDelegationVerb(keyword)) return null;
   const d = parseDelegation(keyword, t.rest);
   const template = d.as ? ctx?.templates.find(tp => tp.name === d.as!.name.replace(/`/g, '')) : undefined;

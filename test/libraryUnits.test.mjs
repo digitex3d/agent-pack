@@ -62,7 +62,7 @@ try {
   write(join(lib, 'vars', 't.ap'), ['EXPORT VAR source-url = https://example.org/data', 'EXPORT SESSION VAR notes']);
   write(join(team, 't.ap'), teamSource('t', ['m'], [
     'IMPORT source-url, notes FROM @main.vars', '', 'ABOUT  a team', '', 'WHEN asked to fetch:', '    RUN fetch', '',
-    'FLOW fetch:', '    STEP fetch the source:', '        BY m', '        DO download {{source-url}} into {{notes}}',
+    'FLOW fetch:', '    STEP fetch the source:', '        DELEGATE download {{source-url}} into {{notes}} BY m',
   ]));
   write(join(team, 'm.ap'), ['EXPORT AGENT m AS mr:', '    ABOUT  a member', '', 'ROLE mr:', '    ABOUT   a member', '    ALWAYS  be exact']);
   const { content } = await buildOrchestrationContent({
@@ -77,7 +77,7 @@ try {
   write(join(lib, 'more', 'u.ap'), ['EXPORT SESSION VAR notes']);
   write(join(other, 'u.ap'), teamSource('u', ['n'], [
     'IMPORT notes FROM @main.more', '', 'ABOUT  another team', '', 'WHEN asked to note:', '    RUN note', '',
-    'FLOW note:', '    STEP note it:', '        BY n', '        DO keep {{notes}}',
+    'FLOW note:', '    STEP note it:', '        DELEGATE keep {{notes}} BY n',
   ]));
   write(join(other, 'n.ap'), ['EXPORT AGENT n AS nr:', '    ABOUT  a member', '', 'ROLE nr:', '    ABOUT   a member', '    ALWAYS  be exact']);
   const both = (await buildOrchestrationContent({
@@ -89,7 +89,7 @@ try {
   // --- A team shares constants and SESSION variables: a private one would be each member's own ---
   write(join(lib, 'more', 'own.ap'), ['EXPORT VAR mine']);
   write(join(other, 'u.ap'), teamSource('u', ['n'], ['IMPORT notes FROM @main.more', 'IMPORT mine FROM @main.more', '', 'ABOUT  another team', '', 'WHEN asked to note:', '    RUN note', '',
-    'FLOW note:', '    STEP note it:', '        BY n', '        DO keep {{notes}}']));
+    'FLOW note:', '    STEP note it:', '        DELEGATE keep {{notes}} BY n']));
   await assert.rejects(buildOrchestrationContent({
     cwd: tmp, standaloneAgentsDir: join(tmp, 'standalone'), teamsDir: join(tmp, 'teams'), libraryRoots: [lib], libraries: { '@main': lib },
   }), /u\.ap:2  IMPORT mine: `mine` is a private variable — each member would have its own/);

@@ -33,6 +33,7 @@ export default {
 | `domains.in` | `0.8` | a file a judge answers at or above this probability belongs to the [domain formula](/reference/language#domain) |
 | `domains.out` | `0.2` | at or below this probability it does not; between the two, under `WRITES!`/`READS!`, the agent decides — `out` must be below `in` |
 | `wait.max` | `'30m'` | how long a [`WAIT`](/reference/language#flow) waits at most when it writes no `MAX` — a duration: `90s`, `10m`, `2h`; at the limit the lead decides for what is still running |
+| `mark.max` | `20` | how many zones a [`MARK`](/reference/language#flow) binds at most when it writes no `MAX` — a whole number ≥ 1; past it `contract mark` refuses the zone |
 | `delegate.default` | `'quick'` | the agent a `DELEGATE` line without `BY` is handed to — see below |
 | `delegate.models` | `{}` | the model each agent runs on, by agent name — see below |
 
