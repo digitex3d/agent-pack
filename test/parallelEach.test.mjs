@@ -56,14 +56,13 @@ const flowsAp = (...parallel) => teamSource('crew', ['builder'], [
   '',                                                  // 7
   'FLOW ship:',                                        // 8
   '    STEP split:',                                   // 9
-  '        BY builder',                                // 10
-  '        DO  split the task INTO parts',             // 11
-  ...parallel,                                         // 12…
+  '        DELEGATE split the task INTO parts BY builder', // 10
+  ...parallel,                                         // 11…
   '    STEP merge:',
-  '        BY builder',
-  '        DO  merge every report',
+  '        DELEGATE merge every report BY builder',
 ]);
-const WORK = ['        STEP work:', '            BY builder', '            CONTEXT inherited', '            DO  work only on {{part}}'];
+// To clone an agent over the parts: its step forks it, on the conversation itself.
+const WORK = ['        STEP work:', '            FORK work only on {{part}} BY builder'];
 const lint = (...parallel) => lintFile(join(team, 'crew.ap'), flowsAp(...parallel).join('\n') + '\n').map(e => [e.line, e.message]);
 const compile = async (...parallel) => {
   write(join(team, 'crew.ap'), flowsAp(...parallel));
@@ -74,27 +73,29 @@ const compile = async (...parallel) => {
 try {
   // --- lint: a well-formed head with its one step is clean ---
   assert.deepEqual(lint('    PARALLEL EACH part IN parts MAX 5:', ...WORK), []);
-  assert.deepEqual(lint('    PARALLEL', ...WORK, '        STEP more:', '            DO  more'), [], 'a bare PARALLEL still holds several steps');
+  assert.deepEqual(lint('    PARALLEL', ...WORK, '        STEP more:', '            DO  more'),
+    [[14, 'PARALLEL was removed — in one STEP, start each piece with `DELEGATE~ <task> INTO <name> BY <agent>`, then `WAIT ALL` (PARALLEL EACH stays)']],
+    'a bare PARALLEL is gone: its rewrite');
 
   // --- lint: a malformed head, a missing or bad bound, more than one step ---
   assert.deepEqual(lint('    PARALLEL EACH part IN parts:', ...WORK),
-    [[15, '`PARALLEL EACH part IN parts`: write the bound — `PARALLEL EACH part IN parts MAX <n>`']]);
+    [[14, '`PARALLEL EACH part IN parts`: write the bound — `PARALLEL EACH part IN parts MAX <n>`']]);
   assert.deepEqual(lint('    PARALLEL EACH part IN parts MAX 0:', ...WORK),
-    [[15, '`PARALLEL EACH part IN parts MAX 0`: MAX takes a whole number of runs, at least 1']]);
-  assert.deepEqual(lint('    PARALLEL now', ...WORK), [[15, '`PARALLEL now`: PARALLEL takes nothing, or `EACH <item> IN <list> MAX <n>`']]);
+    [[14, '`PARALLEL EACH part IN parts MAX 0`: MAX takes a whole number of runs, at least 1']]);
+  assert.deepEqual(lint('    PARALLEL now', ...WORK), [[14, '`PARALLEL now`: PARALLEL takes nothing, or `EACH <item> IN <list> MAX <n>`']]);
   assert.deepEqual(lint('    PARALLEL EACH part IN parts MAX 3:', ...WORK, '        STEP more:', '            DO  more'),
-    [[15, 'PARALLEL EACH block has 2 occurrences of STEP (expected at most 1)']]);
+    [[14, 'PARALLEL EACH block has 2 occurrences of STEP (expected at most 1)']]);
   assert.deepEqual(lint('    PARALLEL EACH part IN parts MAX 3:', '        RUN ship'), [
-    [16, 'RUN is not allowed inside PARALLEL EACH (expected one of: STEP)'],
-    [15, 'PARALLEL EACH block requires at least one STEP'],
+    [15, 'RUN is not allowed inside PARALLEL EACH (expected one of: STEP)'],
+    [14, 'PARALLEL EACH block requires at least one STEP'],
   ]);
 
   // --- the compiler: the list is a declared variable, typed, with one LIST slot ---
   const fails = async (re, ...parallel) => assert.rejects(() => compile(...parallel), re);
-  await fails(/crew\.ap:15  PARALLEL EACH part IN nope: no variable `nope` — IMPORT the module that exports it/, '    PARALLEL EACH part IN nope MAX 3:', ...WORK);
-  await fails(/crew\.ap:15  PARALLEL EACH part IN loose: `loose` has no type — declare it `AS <template>`, a template with one LIST slot/,
+  await fails(/crew\.ap:14  PARALLEL EACH part IN nope: no variable `nope` — IMPORT the module that exports it/, '    PARALLEL EACH part IN nope MAX 3:', ...WORK);
+  await fails(/crew\.ap:14  PARALLEL EACH part IN loose: `loose` has no type — declare it `AS <template>`, a template with one LIST slot/,
     '    PARALLEL EACH part IN loose MAX 3:', ...WORK);
-  await fails(/crew\.ap:15  PARALLEL EACH part IN notes: `note` has 0 LIST slots — the list to run over is its one LIST slot/,
+  await fails(/crew\.ap:14  PARALLEL EACH part IN notes: `note` has 0 LIST slots — the list to run over is its one LIST slot/,
     '    PARALLEL EACH part IN notes MAX 3:', ...WORK);
 
   // --- the document: the node carries its head, the step its body ---
@@ -115,7 +116,7 @@ try {
   const { content } = await buildOrchestrationContent({
     cwd: tmp, standaloneAgentsDir: join(tmp, 'standalone'), teamsDir: join(tmp, 'teams'), libraryRoots: [lib], libraries: { '@main': lib },
   });
-  assert.ok(content.includes([head('node .agent-pack/apx/builder.apx get parts'), 'Steps:', '- work — by `builder`, inherited context', '  Do work only on {{part}}'].join('\n')),
+  assert.ok(content.includes([head('node .agent-pack/apx/builder.apx get parts'), 'Steps:', '- work', '  Fork: work only on {{part}} — to `builder`, forked with this whole conversation'].join('\n')),
     `AGENTS.md renders the head:\n${content}`);
   const lines = [];
   assert.equal(new ApxEngine(doc, { builtAt: 'x', agentPackVersion: 'x', hash: 'x' }, 'apx/builder.apx', l => lines.push(l)).run(['get', flow.id]), 0);
@@ -123,7 +124,7 @@ try {
 
   // --- the Workflow script cannot fan out over a list it does not hold: the flow runs as written ---
   assert.equal(compileWorkflow(doc.block(flow.address), doc), null);
-  const full = await compile('    PARALLEL EACH part IN parts MAX 5:', ...WORK.filter(l => !l.includes('CONTEXT')));
+  const full = await compile('    PARALLEL EACH part IN parts MAX 5:', '        STEP work:', '            DELEGATE work only on {{part}} BY builder');
   const fullDoc = ApDocument.fromJson(full.structure.asJson());
   assert.equal(compileWorkflow(fullDoc.block(flow.address), fullDoc), null, 'not even when every step could be scripted');
 

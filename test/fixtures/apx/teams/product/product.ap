@@ -9,5 +9,4 @@ EXPORT TEAM product:
 
     FLOW shape-idea:
         STEP evaluate the idea:
-            BY scout
-            DO score the idea
+            DELEGATE score the idea BY scout

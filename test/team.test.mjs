@@ -48,12 +48,10 @@ const TEAM_BODY = [
   '',
   'FLOW ship:',
   '    STEP build it:',
-  '        BY builder',
-  '        DO  compile the code',
+  '        DELEGATE compile the code BY builder',
   '    STEP check it:',
-  '        BY checker',
-  '        AS report',
-  '        DO  run the checks',
+  '        DELEGATE run the checks BY checker AS report:',
+  '            DO  run the linter first',
 ];
 const teamFile = join(team, 'crew.ap');
 const writeTeam = (lines, members = ['builder', 'checker']) => write(teamFile, teamSource('crew', members, lines));
@@ -98,9 +96,11 @@ try {
   assert.ok(ship, "the team's flow travels in the member's document");
   assert.deepEqual(ship.source, { file: teamFile, line: 10, col: 5 }, 'the flow is where it is written');
   assert.deepEqual(ship.body.map(s => s.title), ['build it', 'check it']);
-  assert.equal(ship.body[1].shape?.ref?.target?.split('/').pop(), 'report', "a step's AS resolves through the prologue's IMPORT");
-  assert.deepEqual(structure.lines('DO').filter(l => l.file === teamFile).map(l => [l.line, l.col, l.text]),
-    [[13, 13, 'compile the code'], [17, 13, 'run the checks']]);
+  const check = ship.body[1].body[0];
+  assert.deepEqual([check.keyword, check.by, check.as?.ref?.target?.split('/').pop()], ['DELEGATE', 'checker', 'report'], "a DELEGATE's AS resolves through the prologue's IMPORT");
+  assert.deepEqual(structure.lines('DELEGATE').filter(l => l.file === teamFile).map(l => [l.line, l.col, l.text]),
+    [[12, 13, 'compile the code'], [14, 13, 'run the checks']]);
+  assert.deepEqual(structure.lines('DO').filter(l => l.file === teamFile).map(l => [l.line, l.col, l.text]), [[15, 17, 'run the linter first']]);
 
   // --- MEMBER lines add up ---
   write(teamFile, ['EXPORT TEAM crew:', '    MEMBER  builder', '    MEMBER  checker', '    ABOUT   a crew']);
@@ -161,20 +161,19 @@ try {
   const ops = join(teams, 'ops');
   mkdirSync(ops);
   write(join(ops, 'deployer.ap'), ['EXPORT AGENT deployer AS deployer-role:', '    ABOUT  deploys', '    MANDATE  deploy', '', 'ROLE deployer-role:', '    ABOUT  a', '    ALWAYS  b']);
-  write(join(ops, 'ops.ap'), teamSource('ops', ['deployer'], ['ABOUT  a crew that deploys', '', 'WHEN asked to deploy:', '    RUN deploy', '', 'FLOW deploy:', '    STEP deploy it:', '        BY deployer', '        DO  push the build']));
-  const handOff = ['    STEP hand it to ops:', '        BY ops', '        DO  deploy what was built'];
+  write(join(ops, 'ops.ap'), teamSource('ops', ['deployer'], ['ABOUT  a crew that deploys', '', 'WHEN asked to deploy:', '    RUN deploy', '', 'FLOW deploy:', '    STEP deploy it:', '        DELEGATE push the build BY deployer']));
+  const handOff = ['    STEP hand it to ops:', '        DELEGATE deploy what was built BY ops'];
   writeTeam([...TEAM_BODY, ...handOff]);
   const { buildContractIndex } = await import('../dist/src/services/teamMetadata.js');
   const withTeams = () => bundleAgentObject({
     agentName: 'builder', agentFile: builder, agentDir: team, libraryRoot: lib, libraryRoots: [lib],
     libraries: { '@main': lib }, bundleConfig: { runtime: false }, contractIndex: buildContractIndex(teams, null),
   });
-  const handed = (await withTeams()).structure.byKind('flow').find(f => f.name === 'ship').body[2];
-  assert.equal(handed.by.kind, 'team');
-  assert.equal(handed.by.target, '@main.teams/ops');
+  const handed = (await withTeams()).structure.byKind('flow').find(f => f.name === 'ship').body[2].body[0];
+  assert.equal(handed.by, 'ops', 'a delegation may name a team');
   const routed = (await orchestration()).content;
-  assert.ok(routed.includes('3. hand it to ops — by `ops`'), routed);
-  assert.ok(routed.includes("when a step's `By` line names a team, hand the step to that team as to one agent"), routed);
+  assert.ok(routed.includes('3. hand it to ops\n   Delegate: deploy what was built — to `ops`, with all your context'), routed);
+  assert.ok(routed.includes('a team takes it as one agent: run the flow its routing picks'), routed);
   writeTeam([...TEAM_BODY, ...handOff.map(l => l.replace('BY ops', 'BY nobody'))]);
   await assert.rejects(withTeams(), /unknown agent `nobody` — BY names a member of this team, or a team/);
   await assert.rejects(orchestration(), /BY nobody: no team member, no role bound to one and no team is called `nobody`/);

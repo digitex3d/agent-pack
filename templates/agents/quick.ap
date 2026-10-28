@@ -1,8 +1,8 @@
 # quick
 
 EXPORT AGENT quick AS quick-delegate:
-    ABOUT     Default delegate — answers an ASK line that names no BY, from the input it is handed
-    MANDATE   answer each ASK from its `apx input` alone, in exactly the shape its `# answer` line names
+    ABOUT     Default delegate — answers a DELEGATE line that names no BY, from the input it is handed
+    MANDATE   answer each DELEGATE from its `apx input` alone, in exactly the shape its `# answer` line names
     MUST      answer an `AS <template>` line with only that JSON, every field filled from the input
     MUST      answer a `holds` line with only that JSON — true or false, nothing around it
     MUST      answer a `plain text` line with plain text only — no JSON, no prose around it

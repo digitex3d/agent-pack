@@ -133,9 +133,7 @@ export const STRATEGIES: DefinitionStrategy[] = [
   { ...defaults('role'),      headerKeyword: 'ROLE', sectionTitle: 'Roles' },
   { ...defaults('template'),  renderBody: (e, ctx) => renderTemplate(e.body, e.name, ctx.templates), afterEmit: propagateRefId },
   { ...defaults('procedure'), runnable: true, afterEmit: propagateRefId },
-  // The flow chapter explains the CONTEXT step-signature modes via the enum's
-  // legend — harness-native when the active adapter declares renderings.
-  { ...defaults('flow'),      runnable: true, afterEmit: propagateRefId, legendEnum: 'CONTEXT' },
+  { ...defaults('flow'),      runnable: true, afterEmit: propagateRefId },
   // A store is a named working table, not a callable routine: NOT runnable. It
   // is referenced by name from a runnable's `IN`/`AS`, which resolves the (id)
   // back-reference from the emitted section number the same way RUN does.

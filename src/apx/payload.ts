@@ -29,7 +29,7 @@ export interface ApxPayload {
  * The whole `.apx` file: the bundled engine, then the data line. The build
  * hash is the document's own content hash — same sources, same hash.
  */
-export function apxFile(engine: string, document: string, agentPackVersion: string, tabeli: string, compress: boolean, checks: ApxChecks | null = null): string {
+export function apxFile(engine: string, document: string, agentPackVersion: string, tabeli: string, compress: boolean, checks: ApxChecks | null = null, waitMax: string | null = null): string {
   const compact = JSON.stringify(JSON.parse(document));
   const build: ApxBuild = {
     builtAt: new Date().toISOString(),
@@ -37,6 +37,7 @@ export function apxFile(engine: string, document: string, agentPackVersion: stri
     hash: sha256Hex(compact).slice(0, 12),
     tabeli,
     ...(checks ? { checks } : {}),
+    ...(waitMax ? { waitMax } : {}),
   };
   const payload = `{"build":${JSON.stringify(build)},"document":${compact}}`;
   const data = compress

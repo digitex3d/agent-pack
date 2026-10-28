@@ -32,9 +32,6 @@ export default function claudeCodeAdapter(opts: ClaudeCodeOptions = {}): Adapter
     sessionEnv: 'CLAUDE_CODE_SESSION_ID',
     // Every flow compiles to a Workflow tool script: Claude Code runs the steps.
     flowScript: { ext: 'js', compile: compileWorkflow },
-    // CONTEXT modes compiled down to the concrete Claude Code delegation call.
-    // `inherited` is the one mode that trades executor identity for native
-    // context: a fork clones the caller, not the agent the step's By names.
     renderings: {
       // Claude Code's own memory: with `memory:` in the frontmatter (set for
       // every agent that uses MEM) the agent has a memory directory whose
@@ -54,12 +51,6 @@ export default function claudeCodeAdapter(opts: ClaudeCodeOptions = {}): Adapter
       // A skill of the harness (`IMPORT … FROM @harness.skills`) is loaded with the Skill tool.
       SKILL: {
         harness: 'Load it when you need it with the Skill tool: `{name}`.',
-      },
-      CONTEXT: {
-        isolated:  "launch the step's executor with the Agent tool, its prompt carrying only the step's own intent — no upstream context",
-        summary:   "launch the step's executor with the Agent tool, its prompt carrying a synthesized digest of the upstream context, provenance preserved",
-        full:      "launch the step's executor with the Agent tool, reproducing the full upstream context in the prompt",
-        inherited: 'launch with the Agent tool as subagent_type: "fork" — the fork natively inherits the whole conversation context; it is a clone of the caller, not of the agent the step names',
       },
     },
   };

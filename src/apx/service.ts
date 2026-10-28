@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Giuseppe Federico
 /**
  * A service of the apx — what the executable does, at run time, for one kind
- * the language declares: a store, a dimension, a delegation (`ASK`). One
+ * the language declares: a store, a dimension, a delegation (`DELEGATE`). One
  * service per kind, reached by the kind's own name in one form shared by all:
  *
  *   <apx> <kind> <operation> [<id>] …

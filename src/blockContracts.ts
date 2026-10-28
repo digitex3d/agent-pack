@@ -2,23 +2,28 @@
 // Copyright (c) 2026 Giuseppe Federico
 import { DIMENSION_LINES, DOMAIN_LINES, type Keyword } from './lexer.js';
 import { ACTION_VERBS } from './actionVerbs.js';
+import { FORK_VERB, WAIT_VERB } from './delegation.js';
 import { getFamilyBases } from './forceLevelConfig.js';
 import { VERBATIM_REGIONS } from './shapeCompiler.js';
 import { PLUGIN_KEY, OPERATION_KEY } from './blockTypes.js';
 
 /**
  * The force-level families (MUST, ALWAYS/NEVER, SHOULD, MAY, …) a step admits,
- * by base: the list roles admit, less MEM — a step's BY agent may have no
- * memory in its harness — and WITH — it loads the skills it imports itself. Listing a base admits every declared declension
- * (`MUST!`, `!ALWAYS`, …) — the validator normalises a child to its family
- * base. `AS` is among them as the step's shape signature, so a branch, which
- * holds only conditional lines, leaves it out.
+ * by base: the list roles admit, less MEM — whoever runs the flow may have no
+ * memory in its harness — and AS, a step handing nothing over itself. Listing
+ * a base admits every declared declension (`MUST!`, `!ALWAYS`, …) — the
+ * validator normalises a child to its family base.
  */
 const STEP_EXCLUDED: Partial<Record<Keyword, string>> = {
-  MEM: "a step's BY agent may have no memory in its harness; MEM goes in an agent, a role or a procedure",
+  MEM: "whoever runs a flow may have no memory in its harness; MEM goes in an agent, a role or a procedure",
+  // A step is a label: who does the work, with what context and in what shape, is its DELEGATE's to say (src/delegation.ts).
+  BY: 'a step names no one — whoever runs the flow carries it out: hand its work over with `DELEGATE <task> BY <agent> [AS <template>]`',
+  AS: 'a step hands nothing over itself — the shape of what is handed over is its DELEGATE\'s: `DELEGATE <task> BY <agent> AS <template>`',
 };
 const STEP_FAMILIES = familiesWithout(STEP_EXCLUDED);
-const BRANCH_FAMILIES = STEP_FAMILIES.filter(base => base !== 'AS');
+/** The actions only a flow STEP takes, beside the action verbs: a fork, and the WAIT that takes back what a `~` started. */
+const STEP_ACTIONS = [FORK_VERB, WAIT_VERB] as const;
+const BRANCH_FAMILIES = STEP_FAMILIES;
 
 /**
  * The force-level families an agent's top level admits, by base: every one —
@@ -120,24 +125,22 @@ export const BLOCK_CONTRACTS: Record<string, BlockContract> = {
     requiresAll: ['STEP'] as const,
   },
   STEP: {
-    // The force families come in by base, `AS` among them: every declension
-    // (AS, AS!, AS!!, !AS) is admitted — `AS` declares the step's shape.
-    // `BY` binds the step to its executor (agent or team); at most one.
-    // `MEM` is left out — `excluded` says why.
+    // A label over the lines whoever runs the flow carries out (src/delegation.ts):
+    // DO it, DELEGATE it, FORK it, WAIT for what a `~` started, RUN a procedure.
+    // `BY`, `AS` and `MEM` are left out — `excluded` says why.
     // A force-level line (`NEVER …`, `MUST! …`) is a rule of the step, never its
     // action: it does not count toward `requiresAnyOf`.
-    // `IF <condition>` (and its `ELSE`) puts some of the step's DO/RUN and rule
-    // lines under a condition; the signature lines (BY, CONTEXT, AS) stay
-    // unconditional.
-    allows: [...ACTION_VERBS, 'RUN', 'CONTEXT', 'BY', ...STEP_FAMILIES],
-    branches: { keywords: ['IF', 'ELSE'], allows: [...ACTION_VERBS, 'RUN', ...BRANCH_FAMILIES] },
+    // `IF <condition>` (and its `ELSE`) puts some of the step's lines under a condition.
+    allows: [...ACTION_VERBS, ...STEP_ACTIONS, 'RUN', ...STEP_FAMILIES],
+    branches: { keywords: ['IF', 'ELSE'], allows: [...ACTION_VERBS, ...STEP_ACTIONS, 'RUN', ...BRANCH_FAMILIES] },
     excluded: STEP_EXCLUDED,
-    unique: ['CONTEXT', 'BY'] as const,
-    requiresAnyOf: [...ACTION_VERBS, 'RUN'] as const,
+    requiresAnyOf: [...ACTION_VERBS, ...STEP_ACTIONS, 'RUN'] as const,
   },
-  PARALLEL: {
-    allows: ['STEP'] as const,
-    requiresAll: ['STEP'] as const,
+  // `DELEGATE <task> BY <agent>:` — the lines the one it goes to is told: what it does, its rules, its conditions.
+  DELEGATE: {
+    allows: ['DO', 'COMPUTE', 'RUN', ...BRANCH_FAMILIES] as const,
+    branches: { keywords: ['IF', 'ELSE'], allows: ['DO', 'COMPUTE', 'RUN', ...BRANCH_FAMILIES] },
+    excluded: { MEM: STEP_EXCLUDED.MEM! },
   },
   // `PARALLEL EACH <item> IN <list> MAX <n>`: one step, run once per element.
   'PARALLEL EACH': {

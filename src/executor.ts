@@ -4,11 +4,11 @@
  * Executors (I2) — who carries out a line. A line names it by its verb, a
  * condition head by its stars:
  *
- *   DO       the agent          no mark
- *   ASK      a delegate         `*`  (`IF*`, `UNTIL*`)
- *   COMPUTE  a program          `**` (`IF**`, `UNTIL**`)
+ *   DO        the agent          no mark
+ *   DELEGATE  a delegate         `*`  (`IF*`, `UNTIL*`)
+ *   COMPUTE   a program          `**` (`IF**`, `UNTIL**`)
  *
- * `ASK … BY <agent>` hands the line to an agent of the project: a standalone
+ * `DELEGATE … BY <agent>` hands the line to an agent of the project: a standalone
  * agent or a team — a team member only from inside its own team, since a
  * team's routing is for whoever comes from outside. This module holds the
  * checks that need the whole project; the forms themselves are the lexer's,
@@ -26,6 +26,7 @@ import { addressName, shortId } from './apdoc/ids.js';
 import { namesMatching } from './services/fs.js';
 import { resolve } from 'path';
 import { DISTILLED_DIR } from './apx/paths.js';
+import { isDelegationVerb, FORK_VERB } from './delegation.js';
 
 /** The ranks of the executors — a line or a head may raise its enclosing one, never lower it. */
 export const AGENT = 0, DELEGATE = 1, PROGRAM = 2;
@@ -69,9 +70,9 @@ export function returnShape(head: string): string | null {
   return head.trim().match(/^AS\s+(\S+)$/)?.[1] ?? null;
 }
 
-/** The verb's own executor rank: ASK a delegate, COMPUTE a program — any other line inherits. */
+/** The verb's own executor rank: DELEGATE and FORK a delegate, COMPUTE a program — any other line inherits. */
 export function verbRank(keyword: string): number | null {
-  return keyword === 'ASK' ? DELEGATE : keyword === 'COMPUTE' ? PROGRAM : null;
+  return isDelegationVerb(keyword) ? DELEGATE : keyword === 'COMPUTE' ? PROGRAM : null;
 }
 
 /** An agent of the project and the team it belongs to (null: standalone). */
@@ -81,22 +82,27 @@ export interface AgentIndexEntry {
 }
 
 /**
- * The `ASK … BY <name>` lines of a document whose agent is none the line may
- * name: unknown, or a member of another team than the asking agent's.
+ * The `DELEGATE … BY <name>` and `FORK … BY <name>` lines of a document whose
+ * agent is none the line may name: unknown, or a member of another team than
+ * the delegating agent's.
  */
-export function askTargetErrors(doc: ApDocument, index: readonly AgentIndexEntry[], ownTeam: string | null): LintError[] {
+export function delegateTargetErrors(doc: ApDocument, index: readonly AgentIndexEntry[], ownTeam: string | null): LintError[] {
   const teams = new Set(index.map(a => a.team).filter((t): t is string => t !== null));
   const errors: LintError[] = [];
   for (const { node, block } of doc.nodes()) {
-    if (node.type !== 'directive' || node.keyword !== 'ASK' || !node.by) continue;
+    if (node.type !== 'directive' || !isDelegationVerb(node.keyword) || !node.by) continue;
     const name = node.by;
-    if (teams.has(name)) continue;
+    const verb = node.keyword;
+    // A fork is an agent on the conversation itself: a team has no conversation to take.
+    if (teams.has(name) && verb !== FORK_VERB) continue;
     const agent = index.find(a => a.name === name);
-    const message = !agent
-      ? `unknown agent \`${name}\` — ASK … BY names a standalone agent or a team of the project`
-      : agent.team !== null && agent.team !== ownTeam
-        ? `BY ${name}: \`${name}\` is a member of team \`${agent.team}\` — ASK names a standalone agent, a team, or a member of its own team`
-        : null;
+    const message = teams.has(name)
+      ? `FORK … BY ${name}: \`${name}\` is a team — a fork is one agent on this conversation: name an agent, or DELEGATE to the team`
+      : !agent
+        ? `unknown agent \`${name}\` — ${verb} … BY names a standalone agent${verb === FORK_VERB ? '' : ' or a team'} of the project`
+        : agent.team !== null && agent.team !== ownTeam
+          ? `BY ${name}: \`${name}\` is a member of team \`${agent.team}\` — ${verb} names a standalone agent${verb === FORK_VERB ? '' : ', a team'}, or a member of its own team`
+          : null;
     if (message) errors.push({ file: block.source?.file ?? '', line: node.pos?.line ?? 0, message });
   }
   return errors;
@@ -127,7 +133,7 @@ export function executorKey(rank: number): '1' | '2' {
 
 /**
  * Inside a `PROCEDURE*` / `PROCEDURE**`, what would lower the executor: an
- * ASK under a program, a starred condition below the procedure's mark, a RUN
+ * DELEGATE under a program, a starred condition below the procedure's mark, a RUN
  * of a procedure carried out below it. (A checked condition there is the
  * builder's error: it never becomes a check.)
  */
@@ -166,7 +172,7 @@ export function executorErrors(doc: ApDocument): LintError[] {
 /**
  * The contract of one piece carried out away from the agent — a delegate or a
  * program receives `input` and answers `output`, nothing else (context
- * isolated). One per ASK / COMPUTE line, starred condition and starred
+ * isolated). One per DELEGATE / COMPUTE line, starred condition and starred
  * procedure (a COMPUTE block included); a line inside a starred procedure that
  * does not raise its executor is part of the procedure's own contract.
  */
@@ -177,7 +183,7 @@ export interface ApExecutorSpec {
   site: 'line' | 'condition' | 'procedure';
   /** The line's text, the condition, or the procedure's name. */
   text: string;
-  /** `ASK … BY <agent>`: who it is handed to; absent = the default delegate. */
+  /** `DELEGATE … BY <agent>`: who it is handed to; absent = the default delegate. */
   by?: string;
   /**
    * One key per `{{x}}` read — the variables, whose values the session holds,
@@ -245,11 +251,14 @@ export function executorSpecs(
     const own = node.type === 'directive' ? verbRank(node.keyword) : node.type === 'if' || node.type === 'until' ? node.executor ?? null : null;
     if (!own || (block.executor ?? AGENT) >= own) continue;   // the procedure's own work
     if (node.type === 'directive') {
+      // A flow's delegation is the flow runner's, with the context its form says; a fork takes the conversation, never an input.
+      if (block.kind === 'flow' || node.keyword === FORK_VERB) continue;
       const into = node.into ? addressName(node.into.target) : undefined;
       const template = into ? varTemplate(into) : undefined;
       add(block, {
         executor: own, site: 'line', text: node.text, ...(node.by ? { by: node.by } : {}),
-        input: inputOf([node.text]), output: { ...(into ? { into } : {}), ...(template ? { template } : {}) },
+        input: { ...inputOf([node.text]), ...(node.as ? { in: addressName(node.as.ref.target) } : {}) },
+        output: { ...(into ? { into } : {}), ...(template ? { template } : {}) },
       }, [`${node.keyword} ${node.text}`], node);
     } else if (node.type === 'if' || node.type === 'until') {
       add(block, {

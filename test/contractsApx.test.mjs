@@ -89,7 +89,8 @@ try {
     const how = spawnSync(process.execPath, [join(proj, '.agent-pack', 'apx', 'architect.apx'), 'flow', flowId], { cwd: proj, encoding: 'utf-8' });
     assert.equal(how.status, 0, how.stdout + how.stderr);
     const script = readFileSync(join(proj, '.agent-pack', 'flows', readdirSync(join(proj, '.agent-pack', 'flows')).find(f => f.startsWith(`${flowId}.`))), 'utf-8');
-    assert.ok(script.includes('parallel(') && /agentType: ['"]api-dev-2['"]/.test(script) && /agentType: ['"]db-dev['"]/.test(script), script);
+    // The workers start together, each settled on its own, and are awaited after: delivered or blocked.
+    assert.ok(/const d\d+ = agent\(.*agentType: ['"]api-dev-2['"]/.test(script) && /const d\d+ = agent\(.*agentType: ['"]db-dev['"]/.test(script) && /result: await d\d+ \}/.test(script), script);
   }
   const CHANGE = conId('change');
   const ENDPOINT = conId('endpoint');

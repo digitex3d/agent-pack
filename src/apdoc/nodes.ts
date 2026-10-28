@@ -28,7 +28,7 @@ import {
 } from '../../adapters/md/toolkit.js';
 import {
   controlHead, executorHead, executorRounds, refName, runLine, unresolvedRun,
-  parallelHead, stepSignature, stepsHeader, storeScopeLine, varBlockHead,
+  parallelHead, stepsHeader, storeScopeLine, varBlockHead,
 } from '../../adapters/md/phrases.js';
 
 /** What a node answers as a line: its primitive and the text after it. */
@@ -59,7 +59,11 @@ export class DirectiveNode extends NodeBase implements ApDirectiveNode {
   into?: ApRef;
   uses?: ApRef[];
   by?: string;
+  as?: ApShape;
+  async?: true;
   exe?: string;
+  work?: string;
+  waits?: string[];
 
   constructor(
     public keyword: string,
@@ -82,7 +86,11 @@ export class DirectiveNode extends NodeBase implements ApDirectiveNode {
       ...(this.into ? { into: this.into } : {}),
       ...(this.uses ? { uses: this.uses } : {}),
       ...(this.by ? { by: this.by } : {}),
+      ...(this.as ? { as: this.as } : {}),
+      ...(this.async ? { async: this.async } : {}),
       ...(this.exe ? { exe: this.exe } : {}),
+      ...(this.work ? { work: this.work } : {}),
+      ...(this.waits ? { waits: this.waits } : {}),
     };
   }
 
@@ -92,7 +100,11 @@ export class DirectiveNode extends NodeBase implements ApDirectiveNode {
     if (n.into) node.into = n.into;
     if (n.uses) node.uses = n.uses;
     if (n.by) node.by = n.by;
+    if (n.as) node.as = n.as;
+    if (n.async) node.async = n.async;
     if (n.exe) node.exe = n.exe;
+    if (n.work) node.work = n.work;
+    if (n.waits) node.waits = n.waits;
     node.chars = n.chars;
     return node;
   }
@@ -103,8 +115,8 @@ export class DirectiveNode extends NodeBase implements ApDirectiveNode {
    * by the sequence renderer.
    */
   asMdLines(env: MdEnv, ordered: boolean): string[] {
-    // A delegated or computed line: `answer` / `run` stores its result — no `set` to tell.
-    if (this.into && this.exe) return indentLines(renderDirectiveGroup(env, this.keyword, this.force, [directiveText(this, env)]), this.indent ?? 0);
+    // A delegated or computed line: `answer` / `run` stores its result — no `set` to tell; a background piece's `delegate deliver` alike.
+    if (this.into && (this.exe || this.work)) return indentLines(renderDirectiveGroup(env, this.keyword, this.force, [directiveText(this, env)]), this.indent ?? 0);
     if (this.into) {
       return [
         ...indentLines(renderDirectiveGroup(env, this.keyword, this.force, [directiveText(this, env)]), this.indent ?? 0),
@@ -408,51 +420,36 @@ export class WhenNode extends NodeBase implements ApWhenNode {
 
 export class StepNode extends NodeBase implements ApStepNode {
   readonly type = 'step';
-  shape: ApShape | null = null;
   body: ApNode[] = [];
 
-  constructor(
-    public title: string,
-    public by: ApRef | null,
-    public context: string | null,
-  ) {
+  constructor(public title: string) {
     super();
   }
 
   static fromData(n: ApStepNode): StepNode {
-    const node = new StepNode(n.title, n.by, n.context);
-    node.shape = n.shape;
+    const node = new StepNode(n.title);
     node.body = reviveNodes(n.body);
     node.chars = n.chars;
     return node;
   }
 
   toJSON(): ApStepNode {
-    return {
-      type: this.type, title: this.title, by: this.by, context: this.context,
-      shape: this.shape, chars: this.chars, body: this.body,
-    };
+    return { type: this.type, title: this.title, chars: this.chars, body: this.body };
   }
 
-  /** One item of a STEP list — marker + signature + reindented body. */
+  /** One item of a STEP list — marker, title, reindented body. */
   asMdItem(env: MdEnv, index: number, ordered: boolean): string[] {
     const marker = ordered ? `${index + 1}. ` : '- ';
-    const args = new Map<string, string>();
-    if (this.by) args.set('BY', refName(this.by));
-    if (this.context) args.set('CONTEXT', this.context);
-    const out = [`${marker}${env.substitute(this.title)}${stepSignature(args)}`];
+    const out = [`${marker}${env.substitute(this.title)}`];
     const body = this.bodyLines(env);
     if (body.length) out.push(...indentLines(body, marker.length));
     return out;
   }
 
-  /** What the step's executor is told: the shape its input takes, then the step's own lines. */
+  /** The step's lines, as whoever runs the flow carries them out. */
   bodyLines(env: MdEnv): string[] {
-    const body: string[] = [];
-    if (this.shape) body.push(shapeLine(env, this.shape));
-    // The body keeps its source indent; the shape line has none — align them.
-    body.push(...dedentLines(renderNodes(env, this.body, true)));
-    return body;
+    // The body keeps its source indent — aligned to the item.
+    return dedentLines(renderNodes(env, this.body, true));
   }
 
   /** Steps never render alone — the sequence renderer opens the list. */
@@ -562,7 +559,7 @@ const REVIVERS: Record<string, Reviver> = {
 };
 
 /** Lines shifted left by their common indentation. */
-function dedentLines(lines: string[]): string[] {
+export function dedentLines(lines: string[]): string[] {
   const indents = lines.filter(l => l.trim() !== '').map(l => l.length - l.trimStart().length);
   const base = indents.length ? Math.min(...indents) : 0;
   return base ? lines.map(l => l.slice(Math.min(base, l.length - l.trimStart().length))) : lines;

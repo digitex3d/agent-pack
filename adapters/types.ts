@@ -94,12 +94,12 @@ export interface AdapterPlugin {
   projectPointer?: { file: string; content: string };
   /**
    * Optional: harness-native renderings, keyed by keyword then value — the
-   * values of an enum primitive (e.g. `{ CONTEXT: { full: '…' } }`) or the
+   * values of an enum primitive (e.g. `{ BUDGET: { cheap: '…' } }`) or the
    * levels of a force-level family (e.g. `{ MEM: { '0': '…' } }`).
    * The core renders each declared value with the adapter's string instead of
    * the neutral prose, falling back to the neutral rendering for any value the
-   * adapter leaves out. This is how an abstract mode like `CONTEXT inherited`
-   * compiles down to the concrete tool call this harness expresses it with.
+   * adapter leaves out. This is how an abstract level like `MEM!` compiles
+   * down to the concrete memory this harness has.
    */
   renderings?: Record<string, Record<string, string>>;
   /**

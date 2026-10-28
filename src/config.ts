@@ -11,6 +11,7 @@ import { resolveAdapter, resolveJudge } from './adapter-registry.js';
 import type { ChecksConfig, JudgeConfig, JudgePlugin } from './judge/types.js';
 import { defaultBundleConfig } from './bundleDefaults.js';
 import { DEFAULT_MAX_LINE_LENGTH } from './lint.js';
+import { parseDuration, DURATION_FORM } from './delegation.js';
 import { DEFAULT_DOMAIN_THRESHOLDS, type DomainThresholds } from './domains.js';
 import { isProbability } from './judge/lock.js';
 
@@ -278,14 +279,16 @@ export interface Config {
   checks?: ChecksConfig | null;
   /** The thresholds that turn a domain formula's probabilities into files (src/domains.ts) — `{ in: 0.8, out: 0.2 }` by default. */
   domains?: DomainThresholds;
-  /** Who an ASK without BY is handed to, and the models delegates run on (src/executor.ts). */
+  /** How long an `apx wait` waits at most, when its WAIT names no `MAX` — `{ max: '30m' }` by default (src/delegation.ts). */
+  wait?: WaitConfig;
+  /** Who a DELEGATE without BY is handed to, and the models delegates run on (src/executor.ts). */
   delegate?: DelegateConfig;
   /** The plugins the project activates (`plugins: ['./plugins/checklist']`), installed — src/plugins.ts. */
   plugins?: PluginSpec[];
 }
 
 /**
- * The `delegate` key: `default` is the agent an `ASK` line without `BY` is
+ * The `delegate` key: `default` is the agent a `DELEGATE` line without `BY` is
  * handed to (`quick`, shipped with the package, unless the project names its
  * own); `models` sets an agent's model, by name — the source never does.
  */
@@ -382,6 +385,24 @@ function resolveDomainThresholds(raw: unknown): DomainThresholds {
   return { in: t.in as number, out: t.out as number };
 }
 
+/** The `wait` key: how long a WAIT waits at most, as a duration. */
+export interface WaitConfig {
+  max: string;
+}
+
+export const WAIT_DEFAULTS: WaitConfig = { max: '30m' };
+
+/** The `wait` key resolved: `max` a duration (`90s`, `30m`, `2h`) — absent, the default. */
+function resolveWaitConfig(raw: unknown): WaitConfig {
+  if (raw === undefined || raw === null) return { ...WAIT_DEFAULTS };
+  if (!isPlainObject(raw)) throw new Error("wait must be an object, e.g. { max: '30m' }");
+  const unknown = Object.keys(raw).filter(k => k !== 'max');
+  if (unknown.length) throw new Error(`wait: unknown key ${unknown.map(k => `\`${k}\``).join(', ')} — it takes \`max\``);
+  const max = (raw as Record<string, unknown>).max ?? WAIT_DEFAULTS.max;
+  if (typeof max !== 'string' || parseDuration(max) === null) throw new Error(`wait.max must be a duration — ${DURATION_FORM}`);
+  return { max };
+}
+
 /**
  * The `checks` key resolved — the judge of checked conditions while the agent
  * works (`IF!`, `IF!!`), apart from `judge`: a built-in judge by name or a
@@ -398,7 +419,7 @@ function resolveChecksConfig(raw: unknown): ChecksConfig | null {
   return { adapter, threshold: c.threshold as number };
 }
 
-/** The delegate shipped with the package (templates/agents/quick.ap): an ASK without BY goes to it, unless `delegate.default` names another. */
+/** The delegate shipped with the package (templates/agents/quick.ap): a DELEGATE without BY goes to it, unless `delegate.default` names another. */
 export const DEFAULT_DELEGATE = 'quick';
 
 /** The `delegate` key resolved: the default delegate and the models, both checked. Absent: the shipped delegate, no model set. */
@@ -491,6 +512,7 @@ export async function loadConfig(args: string[]): Promise<Config> {
     judge: resolveJudgeConfig(userConfig.judge, projectRoot),
     checks: resolveChecksConfig(userConfig.checks),
     domains: resolveDomainThresholds(userConfig.domains),
+    wait: resolveWaitConfig(userConfig.wait),
     delegate: resolveDelegateConfig(userConfig.delegate),
     // Each plugin folder, from the project root — loaded and installed before any agent compiles.
     plugins: await loadPlugins(((userConfig.plugins ?? []) as string[]).map(dir => resolve(projectRoot, expandHome(dir)))),

@@ -32,7 +32,7 @@ export async function bundleAndEmit(
     const document = bundle.structure.asJson();
     files.push({ path: resolve(config.outputDir, `${bundle.name}.ap.json`), content: document });
     // Every agent — and every skill, an agent too — gets its apx, whatever the adapter writes into its harness.
-    files.push(...apxFiles(bundle.name, document, ctx.projectRoot, config.bundle.apxCompress === true, apxChecks(config, ctx.projectRoot)));
+    files.push(...apxFiles(bundle.name, document, ctx.projectRoot, config.bundle.apxCompress === true, apxChecks(config, ctx.projectRoot), config.wait?.max ?? null));
     // The flows the agent's team runs, as the harness's own scripts.
     const runner = adapter?.flowScript;
     for (const flow of runner ? bundle.structure.byKind('flow') : []) {

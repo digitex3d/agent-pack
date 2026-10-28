@@ -8,7 +8,7 @@
  * read on demand, verb by verb, instead of being loaded whole.
  *
  * A skill's `SKILL.md` does the same. Everything else — the CLAUDE.md pointer
- * to AGENTS.md, the CONTEXT renderings — is the claude-code adapter's, taken as is.
+ * to AGENTS.md, the renderings — is the claude-code adapter's, taken as is.
  */
 import { resolve } from 'path';
 import { AdapterPlugin, AgentBundle, Emitter } from '../types.js';

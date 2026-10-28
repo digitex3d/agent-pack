@@ -46,6 +46,7 @@ import { fingerprint } from './dimensions.js';
 import { constantOf, readsOf } from '../vars.js';
 import { dimensionDefHash, dimensionTemplates } from './dimensions.js';
 import { servicesOf, serviceOf } from './services/registry.js';
+import { waitFor, OLD_DELEGATE_KIND } from './services/delegate.js';
 import { countOf } from './service.js';
 import { enumPrimitiveFor, type PerimeterGlobs } from '../primitives.js';
 import { globRegExp, matchesAnyGlob } from '../services/glob.js';
@@ -65,6 +66,8 @@ export interface ApxBuild {
   tabeli?: string;
   /** What `check` needs at run time, from the `checks` config key — absent: no judge was configured. */
   checks?: ApxChecks;
+  /** How long `wait` waits at most when a WAIT names no MAX — the `wait.max` config key; absent: the default. */
+  waitMax?: string;
 }
 
 /**
@@ -100,6 +103,7 @@ const HELP: [string, string][] = [
   ['flow <flw-id>', 'how to run a flow: by the harness, from its compiled script — or its steps, to carry out in order'],
   ['run <exe-id> [in-json] [--into <var>]', 'run a program: its tests when it is new, then the program on its input — its answer back, or kept in <var>'],
   ['check <cnd-id>', 'a checked condition (IF!, IF!!, UNTIL!, UNTIL!!), put to the judge on this session\'s variables: open or closed'],
+  ['wait <dlg-id | var> … [--max <duration>] | all', 'take back what a flow started in the background: each one delivered, blocked or ended — or the limit reached; then each one\'s state'],
   ['version', 'agent, build date, agent-pack version, hash, block count'],
 ];
 
@@ -203,6 +207,7 @@ export class ApxEngine {
     run: args => this.runProgram(args),
     check: args => this.check(args),
     contract: args => this.contract(args),
+    wait: args => waitFor(this, args),
     version: () => this.version(),
     help: () => this.help(),
   };
@@ -230,6 +235,7 @@ export class ApxEngine {
     if (Object.hasOwn(this.verbs, verb)) return this.verbs[verb as ApxVerb](args);
     const service = serviceOf(verb, this.doc);
     if (service) return service.serve(this, args[0], args.slice(1));
+    if (verb === OLD_DELEGATE_KIND) return this.fail(2, `'${verb}' is now 'delegate' — ${this.cmd} delegate ${args.join(' ')}`.trimEnd());
     return this.fail(2, `unknown verb '${verb}' — the verbs: ${this.cmd} help`);
   }
 

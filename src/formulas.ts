@@ -34,11 +34,12 @@ export interface Formulas {
     WHEN: { head: Text; handed: Text };
     PARALLEL: { head: Text; each: Text };
     IN: { head: Text; store: Text; unresolved: Text };
-    /** `args` is a list: the order the signature fragments read in is data too. */
-    STEP: { head: Text; list: Text; signature: Text; args: { keyword: string; formula: Text }[] };
+    STEP: { head: Text; list: Text };
     RUN: { line: Text; flow: Text; unresolved: Text; bare: Text; sequence: Text; name: Text };
     DO: { intro: Text };
-    ASK: { intro: Text; by: Text };
+    DELEGATE: { intro: Text; to: Text; full: Text; shaped: Text; background: Text; started: Text };
+    FORK: { intro: Text; self: Text; agent: Text; shaped: Text };
+    WAIT: { intro: Text; named: Text; all: Text; run: Text; max: Text };
     COMPUTE: { intro: Text; require: Text; return: Text; ensure: Text; rule: { require: Text; ensure: Text; never: Text } };
     EXECUTOR: Record<'1' | '2', Text> & { procedure: Record<'1' | '2', Text>; ask: Text; run: Text; who: Record<'1' | '2', Text>; answer: { holds: Text; shaped: Text; text: Text }; rounds: Text; loop: RoundWords; into: Record<'1' | '2', Text> };
     BY: { intro: Text; inline: Text };
@@ -69,7 +70,7 @@ export interface Formulas {
     } & KindGuide;
     contract: {
       chapter: Text; domain: Text; within: Text; form: Text; by: Text; byTeam: Text;
-      flow: { when: Text; prepare: Text; prepareDo: Text[]; work: Text; workDo: Text[]; merge: Text; mergeDo: Text[] };
+      flow: { when: Text; prepare: Text; prepareDo: Text[]; work: Text; workOf: Text; workDo: Text[]; merge: Text; mergeDo: Text[] };
       team: { strategy: Text; contracts: Text; entry: Text; domain: Text };
     } & KindGuide;
     dimension: { chapter: Text; covers: Text; eachShape: Text; read: Text; write: Text } & KindGuide;

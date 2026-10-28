@@ -176,7 +176,7 @@ try {
     }
     await fails(['    VAR x AS verdict', '    RUN  jot INTO x'], /`x` is a `verdict`, but this procedure yields a `note`/);
     await fails(['    RUN  judge INTO nowhere'], /a\.ap:4  INTO nowhere: no variable `nowhere`/);
-    await fails(['    VAR x', '    MUST  keep it INTO x'], /a\.ap:5  INTO ends only a DO, ASK, COMPUTE or RUN line — `MUST` takes none/);
+    await fails(['    VAR x', '    MUST  keep it INTO x'], /a\.ap:5  INTO ends only a DO, DELEGATE, FORK, COMPUTE or RUN line — `MUST` takes none/);
   }
 
   // --- 5. `VAR x:` blocks: the outcome of DO lines, a RUN, an IF/ELSE, an UNTIL ---

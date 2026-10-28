@@ -12,6 +12,7 @@
  *   DO … INTO best-pizza          assigns, or reassigns, a declared variable
  *   {{best-pizza}}                reads one — a constant's value, or a variable's
  *   {{report AS dividend-table}}  reads a variable, keeping only what fits a template
+ *   DELEGATE~ … INTO gaps BY x   started in the background, its value there after `WAIT gaps`
  *   PARALLEL EACH part IN parts MAX 5   one run per element of a list variable, `{{part}}` the run's element
  *
  * Every reader of these forms — the lint, the compiler, the document builder,
@@ -91,9 +92,9 @@ export function applyVars(text: string, vars: Record<string, string>): string {
 /** A trailing `INTO <name>` — uppercase, at the very end of the line: anywhere else it is prose. */
 const INTO_RE = new RegExp(`^(.*?)\\s+INTO\\s+(${NAME})\\s*$`);
 
-/** An action line assigns with a trailing INTO — DO, ASK, COMPUTE (src/executor.ts) — and RUN: its procedure's result. */
+/** An action line assigns with a trailing INTO — DO, DELEGATE, COMPUTE (src/executor.ts), FORK — and RUN: its procedure's result. */
 export function takesInto(keyword: string): boolean {
-  return (ACTION_VERBS as readonly string[]).includes(keyword) || keyword === 'RUN';
+  return (ACTION_VERBS as readonly string[]).includes(keyword) || keyword === 'FORK' || keyword === 'RUN';
 }
 
 /** A trailing `BY <name>` — uppercase, at the very end of the line: anywhere else it is prose. */

@@ -103,22 +103,18 @@ WHEN the task is big:
 
 FLOW simple-task:
     STEP implement the change:
-        BY senior
-        DO implement the change and run the tests
+        DELEGATE implement the change and run the tests BY senior
 
 FLOW complex-task:
     STEP implement end-to-end:
-        BY senior
-        DO implement the change and run the tests
+        DELEGATE implement the change and run the tests BY senior
     STEP review:
-        BY reviewer
-        CONTEXT full
-        DO review the change for duplicated logic
+        DELEGATE review the change for duplicated logic BY reviewer
 ```
 
 The routing and the flows go into `AGENTS.md`, where any harness's main agent reads them and delegates.
 
-A complete team you can bundle as it is — two members, routing, a two-step flow with a context mode and a step shape — is in [`templates/examples/team-example/`](./templates/examples/team-example/).
+A complete team you can bundle as it is — two members, routing, a two-step flow — is in [`templates/examples/team-example/`](./templates/examples/team-example/).
 
 ## The language
 
@@ -129,7 +125,7 @@ A complete team you can bundle as it is — two members, routing, a two-step flo
 | `POLICY` | rules every agent that imports them must respect |
 | `TEMPLATE` | a typed answer format — `SLOTS`, `BODY` layout, `EXAMPLE` |
 | `PROCEDURE` | reusable steps, invoked with `RUN` |
-| `FLOW`, `STEP`, `BY`, `CONTEXT` | how a team's members hand work to each other |
+| `FLOW`, `STEP`, `DELEGATE`, `FORK`, `WAIT` | how a team's members hand work to each other |
 | `STORE` | the data an agent keeps between sessions, declared like a schema |
 | `MUST`, `SHOULD`, `NEVER`, `ALWAYS` … | how binding each rule is |
 | `WHEN`, `IF` / `ELSE`, `UNTIL` | conditions and loops |

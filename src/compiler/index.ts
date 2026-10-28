@@ -14,7 +14,7 @@ import { readDecorator } from '../decoratorUse.js';
 import { resolveBundleDefaults, resolveTeamShared } from '../bundleDefaults.js';
 import { resolveTeamMembership } from '../services/teamMembership.js';
 import { findAgentFiles, readAgentFile, standaloneDir, agentNameOf, teamRootForAgentFile, readTeamFile, teamRosterIssues, legacyTeamIssue, buildContractIndex, readContractBlocks, projectContractIssues, withoutBlocks, CONTRACTS_STRATEGY, type ContractIndex, type TeamFile } from '../services/teamMetadata.js';
-import { askTargetErrors, executorErrors, usesPrograms, WRITE_PROGRAM, type AgentIndexEntry } from '../executor.js';
+import { delegateTargetErrors, executorErrors, usesPrograms, WRITE_PROGRAM, type AgentIndexEntry } from '../executor.js';
 import { BUILTIN_AGENTS_DIR, resolveDelegateConfig, PROJECT_SOURCE, type DelegateConfig } from '../config.js';
 import { LintError, checkVocabulary, lineOfName, checkedHeadIssues, dimensionBlockErrors, domainBlockErrors, pluginBlockErrors, teamBlockErrors, contractBlockErrors } from '../lint.js';
 import { CompileError, reporter } from '../report.js';
@@ -68,7 +68,7 @@ export interface BundleOptions {
   judge?: JudgeRun | null;
   /** The judge of checked conditions (`checks` config key) — absent: none. */
   checks?: ChecksConfig | null;
-  /** Every agent of the project and its team — what `ASK … BY` may name. Absent: not checked. */
+  /** Every agent of the project and its team — what `DELEGATE … BY` may name. Absent: not checked. */
   agentIndex?: AgentIndexEntry[];
   /** The project's contracts and teams — what a `BY <team>` resolves against, and whether some contract hands work to the agent's team. Absent: not checked. */
   contractIndex?: ContractIndex | null;
@@ -462,20 +462,20 @@ function domainFileErrors(ctx: BundleContext, doc: ApDocument, projectRoot: stri
 }
 
 /**
- * A step's perimeter stays within its agent's (D44): a step BY this agent,
- * under `@WITHIN`, names only domains the agent works within — when a
- * `@WITHIN` decorates the agent. A step is checked by its own agent's
- * compilation, so once.
+ * A delegation's perimeter stays within its agent's (D44): a `DELEGATE … BY`
+ * this agent, under a step's `@WITHIN`, names only domains the agent works
+ * within — when a `@WITHIN` decorates the agent. A delegation is checked by its
+ * own agent's compilation, so once.
  */
-function stepPerimeterErrors(doc: ApDocument, steps: DocumentBuilder['stepScopes'], agentName: string): LintError[] {
+function delegationPerimeterErrors(doc: ApDocument, delegations: DocumentBuilder['delegationScopes'], agentName: string): LintError[] {
   const mine = doc.domains();
   if (!mine) return [];
   const names = new Set(mine.map(d => d.name));
-  return steps.flatMap(s => {
+  return delegations.flatMap(s => {
     const within = s.by === agentName ? s.scope.get(WITHIN_DECORATOR.key) ?? [] : [];
     const outside = within.filter(u => !names.has(u.name));
     if (outside.length === 0) return [];
-    return [{ file: s.path, line: s.line ?? 1, message: `${DECORATOR_MARK}${WITHIN_DECORATOR.key} ${outside.map(u => u.name).join(', ')}: this step's agent \`${agentName}\` works within ${[...names].map(n => `\`${n}\``).join(', ')} — a step's ${DECORATOR_MARK}${WITHIN_DECORATOR.key} names only domains of its agent's` }];
+    return [{ file: s.path, line: s.line ?? 1, message: `${DECORATOR_MARK}${WITHIN_DECORATOR.key} ${outside.map(u => u.name).join(', ')}: \`${agentName}\`, whom this line delegates to, works within ${[...names].map(n => `\`${n}\``).join(', ')} — a step's ${DECORATOR_MARK}${WITHIN_DECORATOR.key} names only domains of the agents it delegates to` }];
   });
 }
 
@@ -855,7 +855,7 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     declaredVars: variables.variables,
     contractIndex: opts.contractIndex ?? null,
   });
-  // An ASK without BY goes to the default delegate; the config may set this agent's model.
+  // A DELEGATE without BY goes to the default delegate; the config may set this agent's model.
   const delegate = opts.delegate ?? resolveDelegateConfig(undefined);
   if (Object.values(structure.meta.executors ?? {}).some(e => e.executor === 1 && !e.by)) structure.meta.delegate = delegate.default;
   if (delegate.models[agentName]) structure.meta.model = delegate.models[agentName];
@@ -873,14 +873,14 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     ...unappliedErrors(ctx, builder.decoratorNamed, true),
     ...storeErrors(structure, ctx, agentFilePath),
     ...dimensionErrors(structure, ctx),
-    ...stepPerimeterErrors(structure, builder.stepScopes, agentName),
+    ...delegationPerimeterErrors(structure, builder.delegationScopes, agentName),
     ...judgedDomains.errors,
     ...domainFileErrors(ctx, structure, projectRoot, judgedDomains.unjudged),
     ...pluginFileErrors(ctx),
     ...(teamFile ? contractErrors(structure, teamFile, agentName, agentFile.info.lensIn ? agentFilePath : null) : []),
     ...builder.varErrors.map(located),
     ...builder.checkIssues.map(located),
-    ...(opts.agentIndex ? askTargetErrors(structure, opts.agentIndex, teamRoot ? basename(teamRoot) : null) : []),
+    ...(opts.agentIndex ? delegateTargetErrors(structure, opts.agentIndex, teamRoot ? basename(teamRoot) : null) : []),
     ...executorErrors(structure),
     ...variableUseErrors(ctx, agentFilePath, file => visibleIn(file, ctx.variables, everywhere), libraryReadRule(ctx, agentFilePath)),
     ...templateNameErrors(ctx, [...declared, ...Object.keys(variables.constants)]),

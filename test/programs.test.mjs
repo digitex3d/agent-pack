@@ -27,8 +27,8 @@ const apx = (args, input) => {
   });
   return { code: r.status, out: `${r.stdout}${r.stderr}` };
 };
-/** The JSON part of `apx ask input` — what follows it is the answer's shape. */
-const inputOf = id => JSON.parse(apx(['ask', 'input', id]).out.split('\n# answer')[0]);
+/** The JSON part of `apx delegate input` — what follows it is the answer's shape. */
+const inputOf = id => JSON.parse(apx(['delegate', 'input', id]).out.split('\n# answer')[0]);
 const program = (dir, script, manifest, tests) => {
   const folder = join(root, 'distilled', dir);
   mkdirSync(folder, { recursive: true });
@@ -49,13 +49,13 @@ try {
     'IMPORT dose-result FROM @main.templates', 'IMPORT tolerance, totals, document_total, weight_kg, dose, summary FROM @main.vars',
     'EXPORT AGENT clerk AS clerk-role:', '    ABOUT    clerk', '    MANDATE  check invoices',
     '    WHEN an invoice arrives:',
-    '        ASK  summarise the invoice for {{weight_kg}} INTO summary',
-    '        ASK  note anything odd about {{weight_kg}}',
+    '        DELEGATE  summarise the invoice for {{weight_kg}} INTO summary',
+    '        DELEGATE  note anything odd about {{weight_kg}}',
     '        IF** {{totals}} differ from {{document_total}} by more than {{tolerance}} cent:',
     '            DO  write to the supplier',
     '        VAR dose:', '            RUN  pediatric',
     '        UNTIL* {{summary}} is short enough MAX 3:', '            DO  shorten it',
-    '        ASK  estimate a dose for {{weight_kg}} INTO dose', '',
+    '        DELEGATE  estimate a dose for {{weight_kg}} INTO dose', '',
     'ROLE clerk-role:', '    ABOUT   a clerk', '    ALWAYS  check twice', '',
     'COMPUTE pediatric:', '    REQUIRE:', '        MUST  {{weight_kg}} be between 2 and 80', '    RETURN AS dose-result:', '        DO  mg = {{weight_kg}} × 15', '    ENSURE:', '        MUST  mg be a whole number',
   ];
@@ -70,12 +70,12 @@ try {
   const [proc, procSpec] = specs.find(([, s]) => s.site === 'procedure');
   const condSpec = doc.meta.executors[cond];
 
-  // --- the default delegate: an ASK without BY is handed to `quick`, shipped with the package, bundled with the project ---
+  // --- the default delegate: a DELEGATE without BY is handed to `quick`, shipped with the package, bundled with the project ---
   const quickMd = readFileSync(join(root, '.claude', 'agents', 'quick.md'), 'utf-8');
   assert.ok(/^model: haiku$/m.test(quickMd), 'quick runs on a fast model on Claude Code');
   assert.ok(/^tools: \[\]$/m.test(quickMd), 'quick gets no tool: it answers from the input it is handed alone');
   const clerkMd = readFileSync(join(root, '.claude', 'agents', 'clerk.md'), 'utf-8');
-  assert.ok(clerkMd.includes('— delegate: `quick` — hand it over its input and the shape of its answer, both from `node .agent-pack/apx/clerk.apx ask input exe-'), 'the prompt names the default delegate and how to hand it over');
+  assert.ok(clerkMd.includes('— to `quick` — hand it over its input and the shape of its answer, both from `node .agent-pack/apx/clerk.apx delegate input exe-'), 'the prompt names the default delegate and how to hand it over');
   assert.ok(/^model: inherit$/m.test(clerkMd), 'any other agent inherits the session\'s model');
   assert.ok(/^tools: "\*"$/m.test(clerkMd) || /^tools: \*$/m.test(clerkMd), 'any other agent keeps its tools');
 
@@ -85,11 +85,11 @@ try {
   assert.ok(scope.includes(`${ask}  a delegate  line: summarise the invoice for {{weight_kg}}`));
 
   // --- input: one key per variable read (as stored) and per constant (with its value) ---
-  assert.equal(apx(['ask', 'input', cond]).code, 1, 'an empty variable: nothing to carry out yet');
+  assert.equal(apx(['delegate', 'input', cond]).code, 1, 'an empty variable: nothing to carry out yet');
   apx(['set', 'totals', '349.48']);
   apx(['set', 'document_total', '350.48']);
   assert.deepEqual(inputOf(cond), { tolerance: 1, totals: 349.48, document_total: 350.48 });
-  assert.ok(apx(['ask', 'input', cond]).out.endsWith('# answer: {"holds": true | false} — JSON only\n'), 'a condition\'s answer shape');
+  assert.ok(apx(['delegate', 'input', cond]).out.endsWith('# answer: {"holds": true | false} — JSON only\n'), 'a condition\'s answer shape');
 
   // --- run, first time: no program yet — where to write it, and its contract ---
   let r = apx(['run', cond]);
@@ -147,19 +147,19 @@ try {
   // --- a delegate: its answer is checked against the contract, stored, recorded ---
   apx(['set', 'weight_kg', '18']);
   assert.deepEqual(inputOf(ask), { weight_kg: 18 });
-  assert.ok(apx(['ask', 'input', ask]).out.endsWith('# answer: plain text\n'), 'an untyped variable takes plain text');
-  r = apx(['ask', 'answer', ask, '-'], 'An invoice for 18 kg.');
+  assert.ok(apx(['delegate', 'input', ask]).out.endsWith('# answer: plain text\n'), 'an untyped variable takes plain text');
+  r = apx(['delegate', 'answer', ask, '-'], 'An invoice for 18 kg.');
   assert.equal(r.code, 0, r.out);
   assert.ok(apx(['get', 'summary']).out.includes('# value:\nAn invoice for 18 kg.'), 'stored as written in its INTO variable — no JSON needed');
   // A typed variable: the delegate is handed its template, AS <template>, with an example to fill.
   const [estimate] = specs.find(([, s]) => s.site === 'line' && s.text.startsWith('estimate a dose'));
-  assert.ok(apx(['ask', 'input', estimate]).out.endsWith('# answer AS `dose-result` — JSON only, shaped like:\n{"mg":0}\n'), apx(['ask', 'input', estimate]).out);
-  assert.equal(apx(['ask', 'answer', estimate, '-'], 'about 270 mg').code, 6, 'a typed answer must be its JSON');
-  assert.equal(apx(['ask', 'answer', estimate, '-'], '{"mg": 270}').code, 0);
-  assert.equal(apx(['ask', 'answer', cond, '-'], '{"holds":true}').code, 1, 'a program\'s piece takes no answer');
+  assert.ok(apx(['delegate', 'input', estimate]).out.endsWith('# answer AS `dose-result` — JSON only, shaped like:\n{"mg":0}\n'), apx(['delegate', 'input', estimate]).out);
+  assert.equal(apx(['delegate', 'answer', estimate, '-'], 'about 270 mg').code, 6, 'a typed answer must be its JSON');
+  assert.equal(apx(['delegate', 'answer', estimate, '-'], '{"mg": 270}').code, 0);
+  assert.equal(apx(['delegate', 'answer', cond, '-'], '{"holds":true}').code, 1, 'a program\'s piece takes no answer');
   // A delegated line that stores nothing takes any answer — prose included — and records it.
   const [note] = specs.find(([, s]) => s.site === 'line' && s.text.startsWith('note anything odd'));
-  r = apx(['ask', 'answer', note, '-'], 'Nothing odd: the weight is plausible.');
+  r = apx(['delegate', 'answer', note, '-'], 'Nothing odd: the weight is plausible.');
   assert.equal(r.code, 0, r.out);
   assert.equal(apx(['run', ask]).code, 1, 'a delegate\'s piece has no program');
 
@@ -167,15 +167,15 @@ try {
   const [loop] = specs.find(([, s]) => s.site === 'condition' && s.text.includes('short enough'));
   assert.equal(doc.meta.executors[loop].rounds, 3);
   assert.ok(clerkMd.includes(`answer ${loop} -\`; after each round, ask again — at most 3 rounds: at the limit, stop and report that the condition never held`), clerkMd);
-  r = apx(['ask', 'answer', loop, '-'], '{"holds":false}');
+  r = apx(['delegate', 'answer', loop, '-'], '{"holds":false}');
   assert.ok(r.out.includes('# round 1 of 3 — do the next round, then ask again'), r.out);
-  assert.ok(apx(['ask', 'answer', loop, '-'], '{"holds":false}').out.includes('# round 2 of 3'));
-  r = apx(['ask', 'answer', loop, '-'], '{"holds":false}');
+  assert.ok(apx(['delegate', 'answer', loop, '-'], '{"holds":false}').out.includes('# round 2 of 3'));
+  r = apx(['delegate', 'answer', loop, '-'], '{"holds":false}');
   assert.ok(r.out.includes('# round limit reached (3 of 3): stop and report that the condition never held'), r.out);
   assert.equal(r.code, 7, 'at the limit the loop ends: an exit of its own, so a chained command never runs another round');
-  r = apx(['ask', 'answer', loop, '-'], '{"holds":true}');
+  r = apx(['delegate', 'answer', loop, '-'], '{"holds":true}');
   assert.ok(!r.out.includes('round'), 'it holds: the loop ends');
-  assert.ok(apx(['ask', 'answer', loop, '-'], '{"holds":false}').out.includes('# round 1 of 3'), 'a new loop counts from its first round');
+  assert.ok(apx(['delegate', 'answer', loop, '-'], '{"holds":false}').out.includes('# round 1 of 3'), 'a new loop counts from its first round');
 
   // --- a COMPUTE block: its program answers in its RETURN AS template ---
   r = apx(['run', proc]);

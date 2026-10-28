@@ -22,10 +22,10 @@ let engine: string | null = null;
  * run every `.apx` in the directory as CommonJS — even inside a project whose
  * own package.json says `"type": "module"`.
  */
-export function apxFiles(agent: string, document: string, projectRoot: string, compress: boolean, checks: ApxChecks | null = null): EmittedFile[] {
+export function apxFiles(agent: string, document: string, projectRoot: string, compress: boolean, checks: ApxChecks | null = null, waitMax: string | null = null): EmittedFile[] {
   engine ??= readFileSync(resolve(PACKAGE_ROOT, 'dist/apx-engine.js'), 'utf-8');
   return [
-    { path: resolve(projectRoot, apxPath(agent)), content: apxFile(engine, document, packageVersion(), TABELI_ENGINE, compress, checks) },
+    { path: resolve(projectRoot, apxPath(agent)), content: apxFile(engine, document, packageVersion(), TABELI_ENGINE, compress, checks, waitMax) },
     { path: resolve(projectRoot, APX_DIR, 'package.json'), content: '{ "type": "commonjs" }\n' },
   ];
 }

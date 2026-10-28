@@ -32,7 +32,8 @@ export default {
 | `checks.threshold` | `0.7` | a condition answered at or above this probability is open; below, closed. A loop's round limit is no config key: each `UNTIL` a judge, a delegate or a program ends writes its own `MAX <n>` ([Rounds](/reference/language#rounds)) |
 | `domains.in` | `0.8` | a file a judge answers at or above this probability belongs to the [domain formula](/reference/language#domain) |
 | `domains.out` | `0.2` | at or below this probability it does not; between the two, under `WRITES!`/`READS!`, the agent decides — `out` must be below `in` |
-| `delegate.default` | `'quick'` | the agent an `ASK` line without `BY` is handed to — see below |
+| `wait.max` | `'30m'` | how long a [`WAIT`](/reference/language#flow) waits at most when it writes no `MAX` — a duration: `90s`, `10m`, `2h`; at the limit the lead decides for what is still running |
+| `delegate.default` | `'quick'` | the agent a `DELEGATE` line without `BY` is handed to — see below |
 | `delegate.models` | `{}` | the model each agent runs on, by agent name — see below |
 
 ## Judge
@@ -41,7 +42,7 @@ With a `judge` key, `bundle` and `bundle all` run a judge phase: a model checks 
 
 | Tag | The rule judges |
 |---|---|
-| `#executed` | the lines a delegate or a program carries out — `ASK` lines, starred conditions, the body of a starred procedure, every section of a `COMPUTE` block; never a `RUN` |
+| `#executed` | the lines a delegate or a program carries out — `DELEGATE` lines, starred conditions, the body of a starred procedure, every section of a `COMPUTE` block; never a `RUN` |
 | `#program` | only what a program carries out |
 | `#agent` | only what the agent carries out itself |
 
@@ -68,7 +69,7 @@ Only a judge that cannot be reached, times out, or has no key or a rejected one 
 
 ## Delegate
 
-The `delegate` key says who answers an `ASK` line without `BY` (see [Executors](/reference/language#executors)), and which model each agent runs on — the `.ap` source never names a model, only a `BUDGET` tier:
+The `delegate` key says who answers a `DELEGATE` line without `BY` (see [Executors](/reference/language#executors)), and which model each agent runs on — the `.ap` source never names a model, only a `BUDGET` tier:
 
 ```javascript
 export default {

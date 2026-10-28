@@ -303,6 +303,7 @@ await import('./contracts.test.mjs');
 
 // --- The contracts strategy (D44), apx side: a real project, bundle all, the agents' apx in one session ---
 await import('./contractsApx.test.mjs');
+await import('./delegations.test.mjs');
 
 // --- User-level config cascade (default → user → project), reserved @user alias ---
 await import('./userConfigCascade.test.mjs');

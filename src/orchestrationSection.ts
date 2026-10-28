@@ -25,6 +25,8 @@ import { varCommand } from '../adapters/md/phrases.js';
 import { BundleContext } from './dispatch/index.js';
 import { parseBlocks } from './parseBlocks.js';
 import { buildRoleIndex, resolveRole, RoleIndex } from './roleIndex.js';
+import { DELEGATION_VERBS, ASYNC_MARK } from './delegation.js';
+import { escapeRegex } from './lexer.js';
 import {
   AgentInfo,
   readTeamMembers,
@@ -115,7 +117,7 @@ function makeOrchestrationContext(opts: OrchestrationSectionOptions): BundleCont
     libraryRoots,
     libraries: opts.libraries ?? {},
     renderings: opts.renderings,
-    // A checked condition in a step names its BY agent's check — only when a judge is configured.
+    // A checked condition in a DELEGATE block names its agent's check — only when a judge is configured.
     checks: opts.config?.checks ?? null,
   });
 }
@@ -254,7 +256,7 @@ async function collectTeams(teamsRoot: string, ctx: BundleContext, projectFile: 
       byNames,
       (msg, line) => ctx.lintErrors.push({ file: teamPath, line, message: msg }),
     );
-    // Its checked heads as AGENTS.md renders them: a step's is its BY agent's, the routing's no one's.
+    // Its checked heads as AGENTS.md renders them: a DELEGATE block's are its agent's, the routing's no one's.
     ctx.lintErrors.push(...checkedHeadIssues(teamPath, raw, ctx.checks, by => (agentNames.has(by) ? by : null)));
     // `LENS-IN <agent> <template>` — the member's default input shape, declared
     // team-side and rendered into the members list for orchestrator discovery.
@@ -336,13 +338,16 @@ async function hoistLensInTemplates(teamDir: string, members: AgentInfo[], ctx: 
 // Role→agent binding (RoleIndex) — resolve `BY <role>` at bundle time
 // ---------------------------------------------------------------------------
 
-const BY_LINE_RE = /^([ \t]*)BY[ \t]+(\S+)([ \t]*)$/gm;
+// A `BY <name>` line (a CONTRACT's), and the `BY <name>` a DELEGATE or FORK line ends with — before its AS, its colon.
+const BY_LINE_RE = /^([ \t]*BY[ \t]+)(\S+)([ \t]*)$/gm;
+const DELEGATION_BY_RE = new RegExp(`^([ \\t]*(?:${DELEGATION_VERBS.join('|')})${escapeRegex(ASYNC_MARK)}?[ \\t].*?[ \\t]BY[ \\t]+)([A-Za-z_][\\w-]*)((?:[ \\t]+AS!{0,2}[ \\t]+\\S+)?[ \\t]*:?[ \\t]*)$`, 'gm');
 
 /**
- * Rewrite `BY <role>` lines to `BY <agent>` using the RoleIndex. A name that
- * resolves to a bound agent (it is a role) is substituted with that agent. A
- * name that is already a known agent or a team is left verbatim. A name that is
- * neither is a dangling routing target — a compile error at its line.
+ * Rewrite `BY <role>` to `BY <agent>` using the RoleIndex — on a BY line and
+ * at the end of a delegation. A name that resolves to a bound agent (it is a
+ * role) is substituted with that agent. A name that is already a known agent
+ * or a team is left verbatim. A name that is neither is a dangling routing
+ * target — a compile error at its line.
  */
 function resolveByLines(
   raw: string,
@@ -350,13 +355,14 @@ function resolveByLines(
   knownNames: Set<string>,
   fail: (msg: string, line: number) => void,
 ): string {
-  return raw.replace(BY_LINE_RE, (whole, indent: string, name: string, trail: string, offset: number) => {
+  const resolveBy = (text: string, re: RegExp) => text.replace(re, (whole, head: string, name: string, trail: string, offset: number) => {
     const bound = resolveRole(index, name);
-    if (bound) return `${indent}BY ${bound.name}${trail}`;
+    if (bound) return `${head}${bound.name}${trail}`;
     if (knownNames.has(name)) return whole;
-    fail(`BY ${name}: no team member, no role bound to one and no team is called \`${name}\``, raw.slice(0, offset).split('\n').length);
+    fail(`BY ${name}: no team member, no role bound to one and no team is called \`${name}\``, text.slice(0, offset).split('\n').length);
     return whole;
   });
+  return resolveBy(resolveBy(raw, BY_LINE_RE), DELEGATION_BY_RE);
 }
 
 /** One agent in the orchestration: name, purpose, and the shape to talk to it in (its LENS-IN). */
@@ -423,7 +429,7 @@ export async function buildOrchestrationContent(opts: OrchestrationSectionOption
 
   // Phase 2: emit the shared chapters (Flows),
   // stamping each flow id so RUN references can resolve to `(id)`. Post-process
-  // the emitted chapters (as the agent pipeline does) so STEP/BY/DO/CONTEXT in
+  // the emitted chapters (as the agent pipeline does) so STEP/DO/DELEGATE in
   // flow bodies and force-levels in the chapter intros render to prose.
   const chapters = renderFlowReads(postProcessBody(emitCollectedSections(ctx), ctx).trim(), ctx, readsOf);
 

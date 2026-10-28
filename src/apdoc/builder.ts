@@ -30,7 +30,7 @@ import { resolve, basename } from 'path';
 import type { BundleContext } from '../dispatch/types.js';
 import type { Definition } from '../definition.js';
 import { lex, Token } from '../lexer.js';
-import { buildTree, isStructural, splitArgs, stripTrailingColon, rawOf, restOf, Node as WalkNode } from '../bundlers/renderTree.js';
+import { buildTree, isStructural, stripTrailingColon, rawOf, restOf, Node as WalkNode } from '../bundlers/renderTree.js';
 import { condCheckOf, checkedKeyword, checkedVars, questionOf, sugaredHead, splitMax, maxIssue, type ApCheckSpec, type CheckKind, type CheckLevel, type CheckSite } from '../check.js';
 import { sequencePrimitiveFor } from '../sequencePrimitives.js';
 import { parseTypeSpec, jsonExample, templateClosure } from '../shapeSchema.js';
@@ -59,7 +59,9 @@ import {
 import { parseBlocks, type Block } from '../parseBlocks.js';
 import { contractsFlowSource, contractWorkers } from '../services/contractsFlow.js';
 import type { ApNode, ApRef, ApShape, ApSlotType, ApStepNode, ApIfNode, ApDocumentMeta, ApStoreProjection } from './types.js';
-import { parseVarLine, parallelEachOf, readsOf, splitBy, splitInto, takesInto, constantOf, type VarScope } from '../vars.js';
+import { parseVarLine, parallelEachOf, readsOf, splitInto, takesInto, constantOf, type VarScope } from '../vars.js';
+import { isDelegationVerb, parseDelegation, bindBackgroundWork } from '../delegation.js';
+import { shortId } from './ids.js';
 import type { PlacedVariable } from '../exportedVars.js';
 import { introOf, fill, refSuffix, FORMULAS } from '../formulas.js';
 import { parseForceLevel, toCanonicalKeyword, getIntroByKeyword, forceLevelFamilies } from '../forceLevelConfig.js';
@@ -184,7 +186,10 @@ export class DocumentBuilder implements BlockCx {
   /** The decorators above the definition being built, until its first walk wraps its work in them. */
   private definitionDecorators: DecoratorLine[] | null = null;
   /** Every step walked, with the agent its BY names and the conditions it is under — what a step may do is held to its agent's (compiler). */
-  readonly stepScopes: { by: string | null; scope: DecoratorScope; path: string; line: number | null }[] = [];
+  /** Each `DELEGATE … BY x` / `FORK … BY x`, under the decorators enclosing it — a flow step's `@WITHIN` among them. */
+  readonly delegationScopes: { by: string; scope: DecoratorScope; path: string; line: number | null }[] = [];
+  /** The agent the DELEGATE block being walked goes to — null outside one. */
+  private delegatedTo: string | null = null;
 
   /** The reference index a kind's strategy names — lookup, never a branch. */
   private refIndex(ref: RefClass): Map<string, IndexedBlock> {
@@ -295,21 +300,14 @@ export class DocumentBuilder implements BlockCx {
 
       const kw = t.keyword as string;
 
-      // Sequence block (STEP): consecutive siblings, signature split from body.
+      // Sequence block (STEP): consecutive siblings, each a label over the lines whoever runs the flow carries out.
       if (sequencePrimitiveFor(kw)) {
         while (i < nodes.length) {
           const item = nodes[i];
           if (item.token.kind !== 'keyword' || (item.token.keyword as string) !== kw) break;
-          const { body, args } = splitArgs(kw, item.children);
-          const by = args.get('BY');
-          const step = this.at(new StepNode(
-            stripColon(restOf(item.token)),
-            by ? this.byRef(stripColon(by)) : null,
-            args.get('CONTEXT') ?? null,
-          ), item.token);
-          this.stepScopes.push({ by: by ? stripColon(by) : null, scope: this.scope, path: this.sourcePath, line: this.fileLine(item.token) });
+          const step = this.at(new StepNode(stripColon(restOf(item.token))), item.token);
           sink.push(step);
-          this.visit(body, step.body, host, [...steps, step]);
+          this.visit(item.children, step.body, host, [...steps, step]);
           i++;
         }
         continue;
@@ -404,6 +402,15 @@ export class DocumentBuilder implements BlockCx {
         this.visit(n.children, node.body, host, steps);
         this.sugared = prior;
         this.when = priorWhen;
+      } else if (isDelegationVerb(base)) {
+        // `DELEGATE … BY x:` — its DO lines are what the one it goes to is told; a checked condition among them is its.
+        const node = this.at(this.directive(base, force, t.rest, t.indent, t, host), t);
+        node.body = [];
+        sink.push(node);
+        const prior = this.delegatedTo;
+        this.delegatedTo = node.by ?? null;
+        this.visit(n.children, node.body, host, steps);
+        this.delegatedTo = prior;
       } else {
         const node = this.at(new DirectiveNode(base, force, rest, t.indent, []), t);
         sink.push(node);
@@ -432,7 +439,7 @@ export class DocumentBuilder implements BlockCx {
 
   /**
    * An `IF!`/`IF!!`/`UNTIL!`/`UNTIL!!` head: the agent whose apx answers for it —
-   * this agent, or the BY agent of the flow step it sits in — its id, its round
+   * this agent, or the agent of the flow's DELEGATE block it sits in — its id, its round
    * limit on an UNTIL, and, sealed, its condition taken out of the node (only
    * the apx's `meta.checks` keeps it). Where it stands is the builder's to say;
    * what follows from it — the id, a warning, an error — is `condCheckOf`'s.
@@ -445,9 +452,12 @@ export class DocumentBuilder implements BlockCx {
         message: `${kind}${'!'.repeat(t.level!)} is not allowed under PROCEDURE${executorMark(host.executor)} \`${host.name}\` — its executor decides its conditions: write ${kind} or ${kind}${executorMark(host.executor)}` });
       return judged;
     }
+    // In a flow, the one a DELEGATE block goes to checks the conditions among its lines; whoever runs the flow checks none yet.
     const step = steps[steps.length - 1];
-    const by = step?.by;
-    const site: CheckSite = step ? { at: 'step', agent: by && by.kind === 'agent' && by.resolved !== false ? refName(by) : null }
+    const by = this.delegatedTo;
+    // A role names the member bound to it, as AGENTS.md resolves it.
+    const agent = by ? (this.roles && resolveRole(this.roles, by)?.name) ?? by : null;
+    const site: CheckSite = agent && host?.kind === 'flow' ? { at: 'step', agent: this.agents.has(agent) ? agent : null }
       : host?.kind === 'flow' ? { at: 'flow' } : { at: 'agent', agent: this.ctx!.agentName };
     const head = t === this.sugared?.token ? this.sugared.head : checkedKeyword(kind, t.level ?? 0);
     const rounds = node.type === 'until' ? node.max : undefined;
@@ -456,7 +466,7 @@ export class DocumentBuilder implements BlockCx {
     if (issue) this.checkIssues.push({ ...at, ...issue });
     if (!check) return judged;
     node.check = check;
-    if (check.agent === this.ctx!.agentName) this.checkSites.push({ ...at, id: check.id, kind, level: check.level, head, condition: node.condition, inStep: !!step, ...(rounds ? { rounds } : {}) });
+    if (check.agent === this.ctx!.agentName) this.checkSites.push({ ...at, id: check.id, kind, level: check.level, head, condition: node.condition, inStep: !!step || !!by, ...(rounds ? { rounds } : {}) });
     if (check.level === 2) node.condition = '';
     return judged;
   }
@@ -486,7 +496,7 @@ export class DocumentBuilder implements BlockCx {
       const vars = checkedVars(site.condition, isConstant);
       const unseen = vars.filter(v => !visible.has(v));
       // A step's reads are checked here: a flow file's reads are no other check's.
-      if (site.inStep) for (const v of unseen) issue(`${head}: \`{{${v}}}\` is no variable the step's agent sees — export it as a SESSION VAR and IMPORT it in the step's agent`);
+      if (site.inStep) for (const v of unseen) issue(`${head}: \`{{${v}}}\` is no variable the agent it is delegated to sees — export it as a SESSION VAR and IMPORT it in that agent`);
       if (unseen.length === 0 && vars.length === 0) {
         issue(`${head}: a checked condition reads at least one variable — \`{{name}}\`: the judge decides on the state the variables hold, never on the agent's word`);
       }
@@ -537,13 +547,11 @@ export class DocumentBuilder implements BlockCx {
         // A procedure's input contract.
         host.lensIn = { force: 0, ref: this.templateRef(stripColon(actions[0] ?? '')) };
       } else if (enumPrimitiveFor(keyword)) {
-        // Stray enum line (e.g. CONTEXT outside a step signature): validate and
-        // apply to the innermost step lacking one — mirror of the legacy pass.
-        for (const raw of actions) this.applyEnum(keyword, raw.trim(), steps);
+        for (const raw of actions) this.applyEnum(keyword, raw.trim());
       } else if (getIntroByKeyword(keyword) !== null || BULLET_KEYWORDS.has(keyword)) {
         // Plain grouped lines: text travels VERBATIM (a trailing colon may be
         // legitimate prose); the source indent is presentation, recorded apart.
-        actions.forEach((a, k) => sink.push(this.at(this.directive(base, force, a, indent), tokens[i + k])));
+        actions.forEach((a, k) => sink.push(this.at(this.directive(base, force, a, indent, tokens[i + k], host), tokens[i + k])));
       } else {
         // Unclaimed keyword lines pass through verbatim (the legacy raw path).
         for (let k = i; k < j; k++) this.pushText(sink, tokens[k]);
@@ -554,14 +562,31 @@ export class DocumentBuilder implements BlockCx {
 
   /**
    * A plain line — an action ending in `INTO <name>` records the variable its
-   * result fills; an ASK ending in `BY <agent>` names who it is handed to.
+   * result fills; a delegation (src/delegation.ts) who it is handed to, the
+   * shape of what it is handed, whether it runs in the background — and, in
+   * a flow, the perimeter it is handed under.
    */
-  private directive(base: string, force: number | null, text: string, indent: number): DirectiveNode {
-    const by = base === 'ASK' ? splitBy(text) : null;
-    if (by) text = by.text;
+  private directive(base: string, force: number | null, text: string, indent: number, token?: Token, host?: ApBlock | null): DirectiveNode {
+    if (isDelegationVerb(base)) {
+      const d = parseDelegation(base, text);
+      const node = new DirectiveNode(base, force, d.task, indent);
+      // In a flow, BY names a member, a role bound to one, or a team — resolved as the flow's own reference, which it uses.
+      if (d.by && host?.kind === 'flow') {
+        const ref = this.byRef(d.by);
+        node.by = refName(ref);
+        node.uses = [ref];
+      } else if (d.by) node.by = d.by;
+      if (d.as) node.as = { force: d.as.force, ref: this.templateRef(d.as.name) };
+      if (token?.kind === 'keyword' && token.async) node.async = true;
+      if (d.into) {
+        node.into = VarBlock.ref(d.into);
+        this.varWrites.push({ name: d.into, node, path: this.sourcePath });
+      }
+      if (d.by) this.delegationScopes.push({ by: d.by, scope: this.scope, path: this.sourcePath, line: token ? this.fileLine(token) : null });
+      return node;
+    }
     const into = takesInto(base) ? splitInto(text) : null;
     const node = new DirectiveNode(base, force, into ? into.text : text, indent);
-    if (by) node.by = by.name;
     if (into) {
       node.into = VarBlock.ref(into.name);
       this.varWrites.push({ name: into.name, node, path: this.sourcePath });
@@ -625,9 +650,9 @@ export class DocumentBuilder implements BlockCx {
   }
 
   private applyShape(force: number, rawName: string, sink: ApNode[], host: ApBlock | null, steps: ApStepNode[]): void {
+    // In a step, the shape of what is handed over is its DELEGATE's `AS` — the lint names the rewrite.
+    if (steps.length > 0) return;
     const shape: ApShape = { force, ref: this.templateRef(stripColon(rawName)) };
-    const step = steps[steps.length - 1];
-    if (step) { step.shape = shape; return; }
     // Written in a WHEN's body: the shape of that trigger's answer, never the host's.
     if (this.when?.bodies.includes(sink)) { this.when.node.shape = shape; return; }
     if (host) {
@@ -637,11 +662,10 @@ export class DocumentBuilder implements BlockCx {
     }
   }
 
-  private applyEnum(keyword: string, value: string, steps: ApStepNode[]): void {
+  /** A stray enum line (`BUDGET` outside an agent's head): validated, nothing more. */
+  private applyEnum(keyword: string, value: string): void {
     const prim = enumPrimitiveFor(keyword);
-    if (!prim || !validateEnumValue(prim, value, this.ctx ?? undefined)) return;
-    const step = steps[steps.length - 1];
-    if (step && keyword === 'CONTEXT' && step.context === null) step.context = value;
+    if (prim) validateEnumValue(prim, value, this.ctx ?? undefined);
   }
 
   /** Keyword (or alias) → family base + numeric force — BlockCx service. */
@@ -712,8 +736,7 @@ export class DocumentBuilder implements BlockCx {
     return this.ref(this.templates.get(name), name, 'template', report);
   }
 
-  /** A step's BY: a role names the member bound to it (as AGENTS.md resolves it), else a member by name. */
-  /** A step's BY: an agent, a role bound to one — or a team, which carries the step out by its own routing. */
+  /** A flow delegation's BY: an agent, a role bound to one — or a team, which takes the work by its own routing. */
   private byRef(name: string): ApRef {
     const agent = (this.roles && resolveRole(this.roles, name)?.name) ?? name;
     const team = this.agents.has(agent) ? undefined : this.contractIndex?.teams.find(t => t.name === name);
@@ -1138,6 +1161,9 @@ export class DocumentBuilder implements BlockCx {
     this.checkSpecs(doc, opts.vars);
     const executors = executorSpecs(doc, opts.vars ?? {}, this.ctx!.agentName, name => templateClosure(name, this.ctx?.templates ?? []));
     if (Object.keys(executors).length > 0) doc.meta.executors = executors;
+    // What the flows start in the background: an id for each, and on each WAIT the ids it takes back.
+    const background = Object.assign({}, ...doc.byKind('flow').map(f => bindBackgroundWork(f as unknown as { address: string; name: string; body: unknown[] }, text => shortId('dlg', text))));
+    if (Object.keys(background).length > 0) doc.meta.background = background;
     const used = Object.fromEntries(plugins().filter(p => doc.byKind(p.name).length > 0).map(p => [p.name, p]));
     if (Object.keys(used).length > 0) doc.meta.plugins = used;
     doc.seal();

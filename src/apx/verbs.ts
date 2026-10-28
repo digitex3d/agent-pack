@@ -5,8 +5,8 @@
  * kinds it serves (`<kind> <operation> [<id>] …`, src/apx/service.ts). No
  * imports, so the compiler reads the lists without the engine.
  */
-export const APX_VERBS = ['start', 'scope', 'ls', 'get', 'set', 'refs', 'find', 'md', 'flow', 'run', 'check', 'contract', 'version', 'help'] as const;
+export const APX_VERBS = ['start', 'scope', 'ls', 'get', 'set', 'refs', 'find', 'md', 'flow', 'run', 'check', 'contract', 'wait', 'version', 'help'] as const;
 export type ApxVerb = typeof APX_VERBS[number];
 
 /** The kinds the apx serves, each by its name — the registry (src/apx/services) holds one service per kind. */
-export const APX_SERVICE_KINDS = ['store', 'dimension', 'ask'] as const;
+export const APX_SERVICE_KINDS = ['store', 'dimension', 'delegate'] as const;

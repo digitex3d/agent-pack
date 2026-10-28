@@ -176,7 +176,7 @@ export function condCheckOf(
   const warn = (message: string): { issue: CheckIssue } => ({ issue: { message, severity: 'warning' } });
   const fail = (message: string): { issue: CheckIssue } => ({ issue: { message } });
   if (site.at === 'none') {
-    const where = 'checks run in an agent\'s body, a procedure an agent runs, or a flow step whose BY is an agent';
+    const where = 'checks run in an agent\'s body, a procedure an agent runs, or a flow\'s `DELEGATE … BY <agent>:` block';
     return level === 1
       ? warn(`${head}: no executable here — the condition is the agent's: it reads as ${plain}; ${where}`)
       : fail(`${head}: no executable here — a sealed condition can never be checked here; ${where}`);
@@ -186,9 +186,9 @@ export function condCheckOf(
       ? warn(`${head}: no judge for checked conditions is configured — the condition is the agent's: it reads as ${plain}; to have a judge decide it, add checks: { adapter: 'jev' } to agent-pack.config.mjs`)
       : fail(`${head} needs checks: { adapter: 'jev' } in agent-pack.config.mjs — a sealed condition is decided by a judge, and none is configured`);
   }
-  // A checked condition between a flow's steps has no one agent to answer for it — not supported yet.
-  if (site.at === 'flow') return fail(`${head} at a flow's own level is not supported yet — put it inside a STEP, where the step's BY agent checks it`);
-  if (!site.agent) return fail(`${head}: a checked condition needs the step's agent: BY must name an agent`);
+  // A checked condition whoever runs the flow would decide has no one agent to answer for it — not supported yet.
+  if (site.at === 'flow') return fail(`${head} in a flow is not supported yet outside a DELEGATE block — put it inside \`DELEGATE … BY <agent>:\`, where that agent checks it`);
+  if (!site.agent) return fail(`${head}: a checked condition needs the agent of its DELEGATE block: BY must name an agent`);
   return {
     check: { id: checkId(site.agent, condition), level: level as CheckLevel, agent: site.agent, ...(kind === 'UNTIL' && rounds ? { rounds } : {}) },
   };

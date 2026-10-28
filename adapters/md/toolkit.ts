@@ -9,6 +9,7 @@
  * the document — the md twin of BlockCx.
  */
 import { DECORATOR_MARK } from '../../src/decorators.js';
+import { DELEGATE_VERB, delegationText } from '../../src/delegation.js';
 import { renderKeywordBlock } from '../../src/services/text.js';
 import { FORMULAS, fill } from '../../src/formulas.js';
 import { FORCE_LEVEL_PRIMITIVES } from '../../src/primitives.js';
@@ -33,7 +34,7 @@ export interface MdEnv {
   apxOf(agent: string | null): string;
   /** The document's own agent. */
   agent: string;
-  /** The agent an ASK without BY is handed to (`meta.delegate`). */
+  /** The agent a DELEGATE without BY is handed to (`meta.delegate`). */
   delegate?: string;
   /** A procedure carried out by a delegate or a program: its contract id and executor — else undefined. */
   exeOf?(target: string): { exe: string; executor: number } | undefined;
@@ -111,13 +112,16 @@ export function executorHow(env: MdEnv | undefined, exe: string | undefined, exe
 }
 
 /**
- * A directive's text as rendered — an `ASK … BY <agent>` line names the agent it
- * is handed to, and a line with a contract says how to have it carried out.
+ * A directive's text as rendered — a delegation line says who it goes to and
+ * with what context (src/delegation.ts), and a line with a contract says how
+ * to have it carried out.
  */
-export function directiveText(n: { text: string; by?: string; keyword?: string; exe?: string }, env?: MdEnv): string {
-  // An ASK without BY goes to the default delegate: the prompt names it.
-  const by = n.by ?? (n.keyword === 'ASK' && n.exe ? env?.delegate : undefined);
-  const text = by ? fill(FORMULAS.keywords.ASK.by, { text: n.text, agent: by }) : n.text;
+export function directiveText(n: { text: string; by?: string; keyword?: string; exe?: string; as?: ApShape; async?: true; work?: string; waits?: string[] }, env?: MdEnv): string {
+  // A DELEGATE without BY goes to the default delegate: the prompt names it.
+  const agent = n.by ?? (n.keyword === DELEGATE_VERB ? env?.delegate : undefined);
+  const shaped = n.as ? { name: refName(n.as.ref), ref: env ? env.refOf(n.as.ref.target) : '' } : undefined;
+  const apx = env && (n.work || n.waits?.length) ? env.apxOf(null) : undefined;
+  const text = delegationText({ keyword: n.keyword ?? '', text: n.text, agent, async: n.async, shaped, contract: !!n.exe, apx, work: n.work, waits: n.waits });
   return text + executorHow(env, n.exe, verbRank(n.keyword ?? '') ?? 1);
 }
 

@@ -9,11 +9,6 @@ import { FORMULAS, fill } from './formulas.js';
  * definition — its signature. This mirrors how an AGENT's MANDATE and bound ROLE
  * are the agent's identity (rendered apart from its body), not body lines.
  *
- * A STEP works the same way: `BY` (executor) and `CONTEXT` (how much upstream
- * context) describe the step, while `DO`/`RUN` are what it does. The renderer
- * folds the arguments into the step's head line and renders only the body
- * beneath it.
- *
  * This registry is the single source of truth: declaring that another block
  * kind has signature arguments is one entry here, with zero renderer changes —
  * the renderer asks `definitionArgsFor(<block>)`, it never names STEP.
@@ -23,32 +18,14 @@ export interface ArgumentSpec {
   keyword: string;
   /** Render the argument's value as an inline signature fragment. */
   inline(value: string): string;
-  /** The argument's value, and the body line it also stands for (null when none) — `CONTEXT summary AS! brief`. */
+  /** The argument's value, and the body line it also stands for (null when none). */
   split?(value: string): { value: string; line: string | null };
 }
 
-/**
- * `CONTEXT <mode> AS[!…] <template>` — a step's context mode and the shape of
- * what it is handed, on one line: the mode, and the `AS` line it stands for
- * (null when the line holds the mode alone).
- */
-export function contextShape(rest: string): { mode: string; as: string | null } {
-  // The template may come resolved already: `\`brief\` (tpl-…)`.
-  const m = /^(\S+)\s+(!*AS!*\s+\S.*)$/.exec(rest.trim());
-  return m ? { mode: m[1], as: m[2] } : { mode: rest.trim(), as: null };
-}
-
 export const DEFINITION_ARGS: Record<string, ArgumentSpec[]> = {
-  STEP: [
-    { keyword: 'BY', inline: v => fill(FORMULAS.keywords.STEP.args.find(a => a.keyword === 'BY')!.formula, { value: v }) },
-    {
-      keyword: 'CONTEXT', inline: v => fill(FORMULAS.keywords.STEP.args.find(a => a.keyword === 'CONTEXT')!.formula, { value: v }),
-      split: v => { const { mode, as } = contextShape(v); return { value: mode, line: as }; },
-    },
-  ],
   // AGENT carries its signature argument on the HEADER line, not as a child:
   // `AGENT <name> AS <role>:`. `AS` binds the agent to the NAME of a role
-  // — distinct from STEP's `AS`, which declares a response shape. `inline`
+  // — distinct from a DELEGATE's `AS`, which shapes what is handed over. `inline`
   // renders the binding for any signature-line consumer.
   AGENT: [
     { keyword: 'AS', inline: v => fill(FORMULAS.keywords.AS.agent, { value: v }) },
@@ -73,7 +50,7 @@ const AGENT_AS_RE = /^AS[ \t]+(\S+)\b/;
  * its signature arguments. Today the only argument is `AS <role>`; the parser
  * is deliberately narrow so the `.ap` source stays readable and unambiguous.
  *
- * `AS` is the agent's signature binding — parallel to how STEP's `BY`/`CONTEXT`
+ * `AS` is the agent's signature binding — parallel to how a DELEGATE's `BY`/`AS`
  * are signature arguments rather than body — so it is read here, not treated as
  * a body line.
  */

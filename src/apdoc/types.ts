@@ -17,6 +17,7 @@ import type { ApCondCheck, ApCheckSpec } from '../check.js';
 import type { RuleCriteria } from '../shapeCompiler.js';
 import type { ApExecutorSpec } from '../executor.js';
 import type { PluginSpec } from '../plugins.js';
+import type { ApBackgroundWork } from '../delegation.js';
 
 /**
  * A pointer to another block. `id` is the stable identity of the target
@@ -63,12 +64,20 @@ export interface ApDirectiveNode {
   shape?: ApShape;
   /** `DO … INTO <name>`: the session variable the step's result is stored in. */
   into?: ApRef;
-  /** A decorator's (`@WITH …`, `@WITHIN …`): the blocks the work nested below is under — a tag already expanded. */
+  /** A decorator's (`@WITH …`, `@WITHIN …`): the blocks the work nested below is under — a tag already expanded; a flow's DELEGATE / FORK: the agent or team its BY names. */
   uses?: ApRef[];
-  /** `ASK … BY <agent>`: the agent or team the line is handed to; absent = the default delegate. */
+  /** `DELEGATE … BY <agent>`, `FORK … BY <agent>`: who the line is handed to; absent = the default delegate, or a fork of whoever runs it. */
   by?: string;
-  /** An ASK / COMPUTE line's contract id (`exe-…`, `meta.executors`) — src/executor.ts. */
+  /** `DELEGATE … AS <template>`: the shape of what is handed over — only what it holds is passed (src/delegation.ts). */
+  as?: ApShape;
+  /** `DELEGATE~` / `FORK~`: started in the background — a WAIT takes it back. */
+  async?: true;
+  /** A DELEGATE / COMPUTE line's contract id (`exe-…`, `meta.executors`) — src/executor.ts. */
   exe?: string;
+  /** A flow's `DELEGATE~` / `FORK~`: its id in the apx's registry (`dlg-…`, `meta.background`) — src/delegation.ts. */
+  work?: string;
+  /** A flow's WAIT: the ids of the background work it takes back. */
+  waits?: string[];
 }
 
 /** `RUN <name>` — invocation of a runnable (procedure/flow), always a Ref. */
@@ -171,15 +180,12 @@ export interface ApWhenNode {
   body: ApNode[];
 }
 
-/** A flow STEP: signature lifted to fields (title/by/context/shape), DOs in body. */
+/** A flow STEP: a label grouping the lines whoever runs the flow carries out — DO, DELEGATE, FORK, WAIT. */
 export interface ApStepNode {
   type: 'step';
   /** Where the node was written — provenance, never serialized. */
   pos?: ApPos;
   title: string;
-  by: ApRef | null;
-  context: string | null;
-  shape: ApShape | null;
   chars: number;
   body: ApNode[];
 }
@@ -389,7 +395,7 @@ export interface ApDocumentMeta {
   root: string;
   /** Resolved force-level intros: family → level (as string) → phrase. */
   forceLevels: Record<string, Record<string, string>>;
-  /** Resolved enum primitives (e.g. CONTEXT modes), neutral prose. */
+  /** Resolved enum primitives (e.g. BUDGET tiers), neutral prose. */
   enums: Record<string, Record<string, string>>;
   /**
    * How the active adapter's harness runs a flow from its compiled script
@@ -414,9 +420,15 @@ export interface ApDocumentMeta {
    * its input and its output — src/executor.ts.
    */
   executors?: Record<string, ApExecutorSpec>;
+  /**
+   * What this agent's flows start in the background, by id (`dlg-…`): the flow,
+   * the step, the task, its INTO and its BY — the apx's registry starts from here
+   * (src/delegation.ts, src/apx/services/delegate.ts).
+   */
+  background?: Record<string, ApBackgroundWork>;
   /** The plugins whose blocks this agent holds, by name — the apx serves them from here (src/plugins.ts). */
   plugins?: Record<string, PluginSpec>;
-  /** The agent an ASK without BY is handed to — set when this agent has one (src/executor.ts). */
+  /** The agent a DELEGATE without BY is handed to — set when this agent has one (src/executor.ts). */
   delegate?: string;
   /** The model this agent runs on, from the `delegate.models` config key — absent: the harness decides. */
   model?: string;

@@ -25,7 +25,7 @@ A consumer holding only the JSON can render the agent's markdown without the `.a
 | `enums` | the prose of enum values, e.g. each `CONTEXT` mode |
 | `sessionEnv` | the environment variable the adapter's harness puts its session id in — where the apx finds the session its variables live in (absent: no variable can be read or written) |
 | `executors` | the contract of every piece a delegate or a program carries out, by id (`exe-<8 hex>`) — see below |
-| `delegate` | the agent an `ASK` without `BY` is handed to — present when the agent has such a line |
+| `delegate` | the agent a `DELEGATE` without `BY` is handed to — present when the agent has such a line |
 | `model` | the model the agent runs on, from the `delegate.models` config key — absent: the harness decides |
 | `md` | what the markdown projection needs and the blocks do not carry: the opening text (team membership, the agent-pack introduction), the introduction of every kind present, `{{vars}}`, tag breadcrumbs, and, for stores, what their backing makes of them (file, commands) |
 
@@ -50,7 +50,7 @@ A rule renders as `forceLevels[keyword][force] + " " + text`. Source sugar — `
 
 ### `executors`
 
-One entry per `ASK` or `COMPUTE` line, starred condition and starred procedure (a `COMPUTE` block included) — a line inside a starred procedure that does not raise its executor is part of the procedure's contract:
+One entry per `DELEGATE` (in an agent's body) or `COMPUTE` line, starred condition and starred procedure (a `COMPUTE` block included) — a line inside a starred procedure that does not raise its executor is part of the procedure's contract:
 
 ```json
 "exe-8c21d4e0": {
@@ -68,7 +68,7 @@ One entry per `ASK` or `COMPUTE` line, starred condition and starred procedure (
 | `executor` | `1` a delegate, `2` a program |
 | `site` | `line`, `condition` or `procedure` |
 | `text` | the line, the condition, or the procedure's name |
-| `by` | `ASK … BY <agent>`: who it is handed to — absent: the default delegate |
+| `by` | `DELEGATE … BY <agent>`: who it is handed to — absent: the default delegate |
 | `input` | `vars`, the variables it reads; `constants`, with their values; `in`, the `LENS-IN` template of a procedure |
 | `output` | `into` and `template` — the `INTO` variable and its type; `template` alone — a procedure's `AS`; `holds` — a condition |
 | `rounds` | an `UNTIL`'s condition: the rounds its loop runs at most |
@@ -128,7 +128,7 @@ Every reference between blocks is a `Ref`, never a bare string:
 
 | `type` | Carries |
 |---|---|
-| `directive` | `keyword`, `force`, `text`; a `DO`, `ASK` or `COMPUTE … INTO` line also `into` (a `Ref` to the variable) and `shape` (its type); an `ASK … BY` line `by` (the agent or team); an `ASK` or `COMPUTE` line `exe` (its contract id) |
+| `directive` | `keyword`, `force`, `text`; a `DO`, `DELEGATE`, `FORK` or `COMPUTE … INTO` line also `into` (a `Ref` to the variable) and `shape` (its type); a `DELEGATE … BY` / `FORK … BY` line `by` (the agent or team), in a flow also `uses` (its `Ref`); a `DELEGATE … AS` line `as` (the shape of what is handed over); a `~` line `async`; a `DELEGATE` or `COMPUTE` line `exe` (its contract id) |
 | `run` | a `Ref` to the procedure or flow; `RUN … INTO` also `into` and `shape` |
 | `when`, `until`, `if` | a condition and a body; `if` has `then` and `else`; `IF*`/`IF**`, `UNTIL*`/`UNTIL**` carry `executor` (`1` or `2`) and `exe` |
 | `in` | a `Ref` to a store and a body |

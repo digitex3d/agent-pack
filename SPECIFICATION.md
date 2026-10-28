@@ -220,7 +220,7 @@ language; a space-separated list is a compilation error.
   flow (D27), invoked by name with `RUN` from an agent, a role, another
   procedure or a flow step. Its contract is optional: the shape of its
   input (`LENS-IN`, D6) and of its result (`AS`, D35). Beside its
-  actions (`DO`, `ASK`, `COMPUTE`, `RUN`), its body holds directives at
+  actions (`DO`, `DELEGATE`, `COMPUTE`, `RUN`), its body holds directives at
   any force level (D11) — memory (D21) included — at its top and under
   its `IF`, `ELSE` and `UNTIL`. Its head may carry an executor mark
   (D40). (Amended in 1.2.)
@@ -275,28 +275,30 @@ language; a space-separated list is a compilation error.
   weighed against convenience. (Amended in 1.2.)
 
 - **D24 — flow** — the ordered steps a team follows for one kind of
-  work. Each `STEP` names who carries it out (`BY`, an agent or a team),
-  what to do (`DO`), how much upstream context to pass (D25) and the
-  template it hands over (D35); a step may put some of its actions under
-  a condition (D36); `PARALLEL` groups steps that run at the same time;
-  `RUN` carries out another flow; `IF` / `ELSE` and `UNTIL` put steps
-  under a condition or in a loop (D37). A team's routing (D7) points
-  each request at one flow. A step also holds directives at any force
-  level (D11), except memory (`MEM`, D21), since the agent a step names
-  with `BY` may have no memory in its harness — memory belongs to an
-  agent, a role or a procedure. A directive is a rule of the step, never
-  its action: a step needs at least one action (`DO`, `ASK`, `COMPUTE`,
-  D40) or `RUN`. `PARALLEL EACH <item> IN <list> MAX <n>` holds one
-  step and runs it once per element of a list, all at the same time;
-  in the step, `{{<item>}}` is the run's element. The list is a variable
-  (D32) typed with a template holding one `LIST` slot, its elements;
-  anything else fails the compilation. The bound is always written:
-  without `MAX`, or with one that is not a whole number of at least 1,
-  the compilation fails, and a list longer than it is an error that
-  stops the flow when it runs. A run that fails does not stop the
-  others; its report goes on with theirs. The language adds nothing to
-  clone an agent: a step `BY` the agent that split the work, with
-  `CONTEXT inherited`, is its clone. (Amended in 1.2.)
+  work. A `STEP` is a label over the lines whoever runs the flow carries
+  out, in order; it names no one. Work goes to someone else only by a
+  delegation (D46): `DELEGATE <task> [INTO <name>] BY <agent or team>
+  [AS <template>]`, or `FORK <task> [INTO <name>] [BY <agent>]`; a step
+  may put some of its lines under a condition (D36); `RUN` carries out
+  another flow; `IF` / `ELSE` and `UNTIL` put steps under a condition or
+  in a loop (D37). A team's routing (D7) points each request at one
+  flow. A step also holds directives at any force level (D11), except
+  memory (`MEM`, D21), since whoever runs the flow may have no memory in
+  its harness — memory belongs to an agent, a role or a procedure. A
+  directive is a rule of the step, never its action: a step needs at
+  least one action (`DO`, `DELEGATE`, `COMPUTE`, D40, `FORK`, `WAIT`) or
+  `RUN`. `PARALLEL EACH <item> IN <list> MAX <n>` holds one step and
+  runs it once per element of a list, all at the same time; in the step,
+  `{{<item>}}` is the run's element. The list is a variable (D32) typed
+  with a template holding one `LIST` slot, its elements; anything else
+  fails the compilation. The bound is always written: without `MAX`, or
+  with one that is not a whole number of at least 1, the compilation
+  fails, and a list longer than it is an error that stops the flow when
+  it runs. A run that fails does not stop the others; its report goes on
+  with theirs. The language adds nothing to clone an agent: a step that
+  forks it (`FORK … BY` the agent) is its clone. (Amended in 1.3: the
+  step's `BY`, `CONTEXT` and `AS` lines and the bare `PARALLEL` give way
+  to the delegation, D46.)
 
 - **D25 — context mode** — how much upstream context a step's executor
   receives: `isolated` (only its own intent), `summary` (a synthesized
@@ -397,18 +399,17 @@ language; a space-separated list is a compilation error.
   result, what a step hands its executor, the structure of a memory.
 
 - **D36 — step branch** — a flow step (D24) may hold `IF <condition>:`
-  and a bare `ELSE`; under them sit only action lines (`DO`, `ASK`,
-  `COMPUTE`, D40), `RUN` and the step's directives (D24) — no `AS`, which
-  belongs to the signature, and, as in the step itself, no `MEM`.
+  and a bare `ELSE`; under them sit only the step's lines (`DO`,
+  `DELEGATE`, `COMPUTE`, D40, `FORK`, `WAIT`), `RUN` and the step's
+  directives (D24) — as in the step itself, no `AS` and no `MEM`.
   The branch is transparent: its lines are the step's own, so a
-  step whose every action sits under an `IF` still has its action. The
-  step's signature — `BY`, `CONTEXT`, `AS` — stays unconditional, and a
+  step whose every action sits under an `IF` still has its action. A
   branch holds no further `IF`. Conditions and loops around whole steps
   belong to the flow (D37). (Added in 1.1.)
 
 - **D37 — flow control** — a flow (D24) may hold `IF <condition>:`, its
   `ELSE` and `UNTIL <condition>:` around its steps. Under them sit what
-  the flow itself holds — `STEP`, `PARALLEL`, `RUN` — and further `IF`,
+  the flow itself holds — `STEP`, `PARALLEL EACH`, `RUN` — and further `IF`,
   `ELSE` and `UNTIL`, nested at any depth. A step under them is the
   flow's own: a flow whose only step sits under an `UNTIL` still has its
   step, while a lone `RUN` is not a step. The condition is prose, judged
@@ -430,7 +431,7 @@ language; a space-separated list is a compilation error.
   variable or a constant fails the compilation. `GLOBAL` — every agent, every
   session, persisted — is reserved: this version refuses it at
   compilation. An agent never sees a private and a `SESSION` variable of
-  the same name. `INTO <name>` at the end of a `DO`, `ASK`, `COMPUTE` or
+  the same name. `INTO <name>` at the end of a `DO`, `DELEGATE`, `FORK`, `COMPUTE` or
   `RUN` line puts the line's result into a variable of either scope, and
   reassigns it — in a loop too — without redeclaring it; `RUN <p> INTO
   <name>` stores procedure p's result, typed by its `AS` (or `RETURN AS`,
@@ -492,19 +493,20 @@ language; a space-separated list is a compilation error.
   fails too. (Added in 1.2; `WHEN!` added in 1.2.)
 
 - **D40 — executor** — who carries out a line: the agent, a delegate or
-  a program. A line names it by its verb — `DO` the agent, `ASK` a
+  a program. A line names it by its verb — `DO` the agent, `DELEGATE` a
   delegate, `COMPUTE` a program; a `PROCEDURE`, `IF` or `UNTIL` head by
   its mark — none the agent, `*` a delegate, `**` a program. On a
   procedure the mark covers its body, whose lines inherit it; on an `IF`
   or `UNTIL` it covers the condition alone, and the branch or loop body
   inherits the enclosing block's executor. A line may raise its executor
-  (agent, then delegate, then program), never lower it: no `ASK` under a
+  (agent, then delegate, then program), never lower it: no `DELEGATE` under a
   program, no `RUN` of a procedure carried out below the enclosing mark.
   A starred condition reads at least one variable (D38); `!` or `!!`
   together with a star fails the compilation, since a condition has one
-  judge (D39). `ASK … [INTO <name>] [BY <agent>]` — `BY` ends the line —
+  judge (D39). `DELEGATE … [INTO <name>] [BY <agent>] [AS <template>]`
   hands the line to a standalone agent, a team, or a member of the
-  asker's own team; with no `BY` it goes to the default delegate, a
+  delegating agent's own team — in an agent's body, with the line's
+  inputs alone, shaped as its `AS` template when it has one (D46); with no `BY` it goes to the default delegate, a
   builtin agent that answers only from the input it is handed. The
   project's configuration, never the source, names the default delegate
   and the model each delegate runs on (P3). (Added in 1.2.)
@@ -519,10 +521,10 @@ language; a space-separated list is a compilation error.
   `ENSURE:`, the guarantees the result keeps, which become the program's
   tests. `REQUIRE` and `ENSURE` hold rules and `IF` only; `RETURN` holds
   what a program can carry out — `DO`, `COMPUTE`, `IF`, `UNTIL` and rules
-  — never `ASK`, `RUN`, `MEM` or `VAR`. (Added in 1.2.)
+  — never `DELEGATE`, `RUN`, `MEM` or `VAR`. (Added in 1.2.)
 
 - **D42 — executed contract** — every piece a delegate or a program
-  carries out — an `ASK` or `COMPUTE` line, a starred condition, a
+  carries out — a `DELEGATE` (in an agent's body) or `COMPUTE` line, a starred condition, a
   starred procedure — has a contract in the compiled definition (D9),
   under its own id: its input (the variables it reads, the constants with
   their values, its `LENS-IN`, D6), its output (the `INTO` variable and
@@ -624,9 +626,41 @@ language; a space-separated list is a compilation error.
   `@WITH <skill> AS <template>` shapes one skill's answer. `@WITHIN`
   (D29, D44) names the domains the work is within; it stands only right
   above an agent, a team, a flow or a step — the bounds the executable
-  knows at run time — and a step's names only domains of its `BY`
-  agent's. (New in 1.3: replaces the `WITH` block and its negation
+  knows at run time — and a step's names only domains of the agents its
+  delegations go to. (New in 1.3: replaces the `WITH` block and its negation
   `!WITH`, and the agent's `WRITES` and `READS` lines.)
+
+- **D46 — delegation** — the one way work is handed to someone else:
+  `DELEGATE <task> [INTO <name>] BY <agent or team> [AS <template>]`, on
+  one line or as a block whose lines are what the agent is told; `FORK
+  <task> [INTO <name>] [BY <agent>] [AS <template>]`. Its form says the context: a
+  `DELEGATE` hands over all of it, `AS <template>` only what the template
+  holds (what a reviewer must not see stays out of the template), a
+  `FORK` the conversation itself — a copy of whoever runs it, or the
+  agent `BY` names on it, what it is handed on top of it shaped as its
+  `AS` when it names one. The parts come in their order: task, `INTO`,
+  `BY`, `AS`. A `~` after the verb (`DELEGATE~`, `FORK~`) starts the work
+  and goes on; `WAIT <name>, …` or `WAIT ALL` takes it back, each piece
+  delivered or blocked, its variable then holding its result. What a `~`
+  starts is waited for before its block ends — its step, its branch, its
+  loop — and its variable is read only after its `WAIT`; anything else
+  fails the compilation. `~`, `WAIT` and `FORK` are a flow step's; in an
+  agent's body a `DELEGATE` waits where it stands, under its contract
+  (D40). (New in 1.3: replaces `ASK`, a step's `BY`, `CONTEXT` and `AS`,
+  and the bare `PARALLEL`; each of them fails the compilation with the
+  rewrite.)
+- **D47 — background work** — each piece a `~` starts has an id
+  (`dlg-…`) and a record in the session's registry, kept by the apx on
+  disk: running, delivered, blocked, or ended without delivery. The
+  compiled lines name the commands — the lead starts the piece before
+  handing it over, whoever carries it out delivers it (stored in its
+  `INTO` variable, checked against its type) or blocks it, the lead
+  takes it back at its `WAIT`. A `WAIT` returns when each piece it names
+  is settled, or at its limit: `WAIT … MAX <duration>` (`90s`, `10m`,
+  `2h`), else the project's `wait.max` (30 minutes by default). Nothing is
+  settled by itself: at the limit, and for a piece ended without
+  delivery, the lead decides — wait again, take it over, reassign it, or
+  block it. (New in 1.3.)
 
 ## 4. Citation
 
@@ -634,7 +668,7 @@ External works referencing this specification should use the stable
 identifiers defined above. Examples:
 
 - `Agent Pack §P7` — reasoning distills into code
-- `Agent Pack §D40` — the executors (`DO`, `ASK`, `COMPUTE`)
+- `Agent Pack §D40` — the executors (`DO`, `DELEGATE`, `COMPUTE`)
 - `Agent Pack §D20` — the executable agent (apx)
 - `Agent Pack §P4 + §D4` — explicit composition and its operator
 

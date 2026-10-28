@@ -197,7 +197,7 @@ assert.equal(renderMd(doc), compiled.body, 'the round-tripped document renders t
 
 // --- version and help ---
 has(run('version').out, `# pm  ${idOf('agent', 'pm')}`, 'built 2026-09-24T10:00:00Z by agent-pack 0.26.0  hash c0ffee');
-has(run('help').out, `${CMD} start`, `${CMD} get <id> [json]`, `${CMD} store a <sto-id> <field>=<value> …`, `${CMD} ask input <exe-id>`);
+has(run('help').out, `${CMD} start`, `${CMD} get <id> [json]`, `${CMD} store a <sto-id> <field>=<value> …`, `${CMD} delegate input <exe-id>`, `${CMD} wait <dlg-id | var>`);
 
 // --- errors: one line, the command that fixes it, exit 1 (missing) or 2 (usage) ---
 {
@@ -292,30 +292,31 @@ console.log('apx file tests passed.');
   }
 }
 
-// --- the claude-code Workflow script of a flow: steps as agents, the next step's input shape as schema ---
+// --- the claude-code Workflow script of a flow: delegations as agents, the next delegation's AS as schema ---
 {
   const plan = doc.byKind('template')[0];
-  const scout = doc.byKind('flow')[0].body[0].by;
-  const step = (title, context, shape) => ({ type: 'step', title, by: scout, context, shape, chars: 0,
-    body: [{ type: 'directive', keyword: 'DO', force: null, text: `do ${title}`, chars: 0, indent: 8 }] });
+  const scout = doc.byKind('flow')[0].body[0].body[0].by;
+  const delegate = (text, { async = false, as = null } = {}) => ({ type: 'directive', keyword: 'DELEGATE', force: null, text, chars: 0, indent: 8,
+    by: scout, ...(async ? { async: true } : {}), ...(as ? { as } : {}) });
+  const wait = { type: 'directive', keyword: 'WAIT', force: null, text: 'ALL', chars: 0, indent: 8 };
+  const step = (title, body) => ({ type: 'step', title, chars: 0, body });
   const planShape = { force: 2, ref: { id: plan.id, target: plan.address, kind: 'template' } };
   const flow = { name: 'plan-it', id: 'flw-00000000', about: null, body: [
-    step('draft', null, null),
-    { type: 'parallel', chars: 0, steps: [step('check a', 'isolated', null), step('check b', 'summary', null)] },
-    step('frame', 'full', null),
-    step('plan', 'full', planShape),
+    step('draft', [delegate('do draft')]),
+    step('check', [delegate('check a', { async: true }), delegate('check b', { async: true }), wait]),
+    step('frame', [delegate('do frame')]),
+    step('plan', [delegate('do plan', { as: planShape })]),
   ] };
   const script = compileWorkflow(flow, doc);
   has(script,
     'export const meta = {"name":"plan-it"',
     'agentType: "scout"',
-    'await parallel([',
-    'upstream("isolated")', 'upstream("summary")',
-    'Step \\"draft\\" of flow `plan-it`.\\nDo do draft',
-    `Shape your response to match exactly: \`plan\` (${plan.id})`,
+    'Step \\"draft\\" of flow `plan-it`: do draft',
+    'upstream("full")', 'upstream("shaped")',
     `schema: ${JSON.stringify({ type: 'object', properties: { request: { type: 'string', description: '≤25 words' } }, required: ['request'], additionalProperties: false })}`,
     'return results');
-  assert.equal(script.match(/schema:/g).length, 1, 'only the step that hands over a shaped input is bound');
+  assert.equal(script.match(/schema:/g).length, 1, 'only the delegation before a shaped one is bound');
+  assert.ok(script.indexOf('schema:') < script.indexOf('phase("plan")'), 'the schema binds the producing delegation');
   // Run it as the Workflow tool does — the body in an async function, the hooks stubbed.
   const AsyncFunction = (async () => {}).constructor;
   const calls = [];
@@ -323,15 +324,13 @@ console.log('apx file tests passed.');
   const results = await new AsyncFunction('args', 'agent', 'parallel', 'phase', script.replace(/^export /, ''))(
     { request: 'the ask' }, agent, thunks => Promise.all(thunks.map(t => t())), () => {});
   assert.deepEqual(results.map(r => [r.step, r.result]), [
-    ['draft', 'draft done'], ['check a', 'check a done'], ['check b', 'check b done'], ['frame', { request: 'a plan' }], ['plan', 'plan done']]);
-  assert.ok(calls.every(c => c.prompt.startsWith('Request: the ask')), 'every step carries the request');
-  assert.ok(!calls.find(c => c.opts.phase === 'check a').prompt.includes('Upstream context'), 'isolated: no upstream');
-  has(calls.find(c => c.opts.phase === 'check b').prompt, 'digest', '"draft done"');
-  has(calls.find(c => c.opts.phase === 'plan').prompt, 'this step passes the full upstream context', '"a plan"');
-  assert.ok(script.indexOf('schema:') < script.indexOf('phase("plan")'), 'the schema binds the producing step');
-  assert.equal(compileWorkflow({ ...flow, body: [{ ...step('x', null, null), by: { ...scout, kind: 'team' } }] }, doc), null,
-    'a step run by a team is carried out as written');
-  assert.equal(compileWorkflow({ ...flow, body: [step('x', 'inherited', null)] }, doc), null,
+    ['draft', 'draft done'], ['check', 'check done'], ['check', 'check done'], ['frame', { request: 'a plan' }], ['plan', 'plan done']]);
+  assert.ok(calls.every(c => c.prompt.startsWith('Request: the ask')), 'every delegation carries the request');
+  has(calls.find(c => c.opts.phase === 'frame').prompt, 'every result so far', '"draft done"');
+  has(calls.find(c => c.opts.phase === 'plan').prompt, 'only what you are handed', '"a plan"');
+  assert.equal(compileWorkflow({ ...flow, body: [step('x', [{ ...delegate('x'), by: doc.byKind('team')[0].name }])] }, doc), null,
+    'a delegation to a team is carried out as written');
+  assert.equal(compileWorkflow({ ...flow, body: [step('x', [{ type: 'directive', keyword: 'FORK', force: null, text: 'x', chars: 0, indent: 8 }])] }, doc), null,
     'a fork of the caller has no counterpart in a script');
   assert.equal(compileWorkflow({ ...flow, body: [{ type: 'text', raw: 'x', chars: 1 }] }, doc), null,
     'anything but steps is carried out as written');

@@ -95,7 +95,7 @@ try {
     const notAllowed = word => new RegExp(`${word} is not allowed inside DIMENSION \\(expected one of: ABOUT, FOR, EACH`);
     const strict = [
       [['    DO     read the file'], notAllowed('DO')],
-      [['    ASK    someone'], notAllowed('ASK')],
+      [['    DELEGATE    someone'], notAllowed('DELEGATE')],
       [['    IF the file is big:', '        MUST split it'], notAllowed('IF')],
       // WHEN is no line of a dimension — as a line or as a block: when it is read is the reader's WITH
       [['    WHEN a function is long'], notAllowed('WHEN')],

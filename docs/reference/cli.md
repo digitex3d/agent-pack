@@ -31,7 +31,7 @@ agent-pack bundle <name|path>    [--adapter <name>] [--out <dir>] [--apx-compres
 - each agent's apx, `.agent-pack/apx/<agent>.apx`, and its compiled document, `.agent-pack/compiled/<agent>.ap.json`;
 - `AGENTS.md` — the project context from `PROJECT.ap` (when present) and the orchestration of every standalone agent and team — plus each adapter's pointer to it (`CLAUDE.md` for Claude Code).
 
-AGENTS.md and CLAUDE.md are written as managed blocks: whatever you write outside them is kept. Program folders in `distilled/` that no piece owns any more — because it was edited or removed — are listed, never deleted (see [Programs](/reference/language#programs)). The default delegate, `quick`, is built with the agents when one of them hands it work (`ASK` without `BY`) and the project has no agent of that name.
+AGENTS.md and CLAUDE.md are written as managed blocks: whatever you write outside them is kept. Program folders in `distilled/` that no piece owns any more — because it was edited or removed — are listed, never deleted (see [Programs](/reference/language#programs)). The default delegate, `quick`, is built with the agents when one of them hands it work (`DELEGATE` without `BY`) and the project has no agent of that name.
 
 **`bundle <name|path>`** compiles one agent or skill, by name or by the path of its file.
 

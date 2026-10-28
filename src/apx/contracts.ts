@@ -17,8 +17,7 @@
  */
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { STATE_DIR } from './paths.js';
-import { openTable, queryTable, runTable, tabeliVersionError } from './tabeli.js';
+import { RecordTable } from './recordTable.js';
 import { projectFiles } from '../services/fs.js';
 import { matchesAnyGlob } from '../services/glob.js';
 
@@ -62,55 +61,11 @@ const FIELDS: (keyof ContractRecord)[] = ['ctr', 'contract', 'spec', 'assignee',
 export const CONTRACT_ID_RE = /^ctr-[0-9a-f]{8}$/;
 
 /** The table of a session's instances, and the session folder it lives in. */
-export class ContractTable {
-  private constructor(readonly path: string, readonly dir: string) {}
-
+export class ContractTable extends RecordTable<ContractRecord> {
   /** Open (create on first use) the table of `sessionId` under `projectRoot` — or the reason it cannot be. */
   static open(projectRoot: string, sessionId: string, engine: string | undefined): ContractTable | string {
-    const dir = join(projectRoot, STATE_DIR, sessionId);
-    const path = join(dir, 'contracts.tbl');
-    const error = openTable(path, engine) ?? tabeliVersionError(path, ['help'], `upgrade it: ${engine ?? 'tabeli'} upgrade ${path}`);
-    return error ? `contracts: ${error}` : new ContractTable(path, dir);
-  }
-
-  /** Every instance, in the order written. */
-  all(): ContractRecord[] {
-    return queryTable(this.path, []).map(asRecord);
-  }
-
-  get(ctr: string): ContractRecord | null {
-    const [r] = queryTable(this.path, [`ctr=${ctr}`]);
-    return r ? asRecord(r) : null;
-  }
-
-  /** Add an instance. Throws on a failure. */
-  add(record: ContractRecord): void {
-    this.ok(runTable(this.path, ['a', ...FIELDS.map(f => `${f}=${record[f]}`)]));
-  }
-
-  /** Set fields on an instance, unconditionally (the lead's own records before dispatch). */
-  set(ctr: string, fields: Partial<ContractRecord>): void {
-    const [r] = queryTable(this.path, [`ctr=${ctr}`]);
-    if (!r) throw new Error(`no instance ${ctr}`);
-    this.ok(runTable(this.path, ['s', String(r.id), ...Object.entries(fields).map(([k, v]) => `${k}=${v}`)]));
-  }
-
-  /**
-   * Move an instance from one state to another, setting `fields` with it — a
-   * compare-and-swap: false when its state had changed meanwhile (tabeli's
-   * exit 4), so the caller rereads instead of overwriting.
-   */
-  transition(ctr: string, from: ContractState, to: ContractState, fields: Partial<ContractRecord> = {}): boolean {
-    const [r] = queryTable(this.path, [`ctr=${ctr}`]);
-    if (!r) throw new Error(`no instance ${ctr}`);
-    const run = runTable(this.path, ['s', String(r.id), `state=${to}`, ...Object.entries(fields).map(([k, v]) => `${k}=${v}`), 'if', `state=${from}`]);
-    if (run.status === 4) return false;
-    this.ok(run);
-    return true;
-  }
-
-  private ok(run: ReturnType<typeof runTable>): void {
-    if (run.status !== 0) throw new Error(`${run.error?.message ?? `${run.stderr}${run.stdout}`}`.trim());
+    const at = RecordTable.place(projectRoot, sessionId, engine, 'contracts.tbl', 'contracts');
+    return typeof at === 'string' ? at : new ContractTable(at.path, at.dir, FIELDS, 'ctr');
   }
 }
 
@@ -118,12 +73,6 @@ export interface Skeleton {
   globs: string[];
   /** file (from the project root) → fingerprint at dispatch. */
   files: Record<string, string>;
-}
-
-function asRecord(r: Record<string, string>): ContractRecord {
-  const out = {} as Record<string, string>;
-  for (const f of FIELDS) out[f] = r[f] ?? '';
-  return out as unknown as ContractRecord;
 }
 
 /** The project's files the globs admit — where the lead's marks are looked for. */

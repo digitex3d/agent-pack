@@ -6,12 +6,12 @@
  */
 import { storeService } from './store.js';
 import { dimensionService } from './dimension.js';
-import { askService } from './ask.js';
+import { delegateService } from './delegate.js';
 import { pluginService } from './plugin.js';
 import type { ApxService } from '../service.js';
 import type { ApDocument } from '../../apdoc/document.js';
 
-export const APX_SERVICES: readonly ApxService[] = [storeService, dimensionService, askService];
+export const APX_SERVICES: readonly ApxService[] = [storeService, dimensionService, delegateService];
 
 /** The services an agent's apx answers with: the builtin ones, then one per plugin whose blocks it holds. */
 export function servicesOf(doc: ApDocument): ApxService[] {

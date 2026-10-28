@@ -16,7 +16,6 @@ import { dirname } from 'path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const { lintFlow, lintPolicy, checkVocabulary } = await import('../dist/src/lint.js');
-const { applyForceLevels } = await import('../dist/src/forceLevel.js');
 
 // ---------------------------------------------------------------------------
 // 1. Lint OK: well-formed TDD flow passes with zero errors
@@ -32,8 +31,7 @@ FLOW tdd
   STEP tester:
     RUN write-failing-test
   STEP developer:
-    CONTEXT full
-    RUN make-test-pass
+    DELEGATE make the test pass BY dev
   STEP tester:
     RUN verify-and-refactor
 `;
@@ -116,12 +114,12 @@ FLOW no-action
   STEP first:
     RUN step-one
   STEP second:
-    CONTEXT full
+    MUST be quick
 `;
 
   const errors = lintFlow('no-action.flow.ap', noAction);
   assert.ok(
-    errors.some(e => /STEP block requires at least one of: DO, ASK, COMPUTE, RUN/.test(e.message)),
+    errors.some(e => /STEP block requires at least one of: DO, DELEGATE, COMPUTE, FORK, WAIT, RUN/.test(e.message)),
     `step without DO/RUN produces contract error, got: ${JSON.stringify(errors)}`,
   );
 
@@ -129,73 +127,67 @@ FLOW no-action
 }
 
 // ---------------------------------------------------------------------------
-// 6. Block contract: STEP with 2 CONTEXT (unique violation)
+// 6. A step names no one: BY, CONTEXT and AS are its DELEGATE's
 // ---------------------------------------------------------------------------
 
 {
-  const dupCtx = `# dup-ctx
+  const old = `# old-step
 
-ABOUT  duplicate context test
+ABOUT  a step written the old way
 
-FLOW dup-ctx
-  STEP first:
-    RUN step-one
-  STEP second:
-    CONTEXT full
+FLOW old-step
+  STEP review:
+    BY bob
     CONTEXT summary
-    RUN step-two
+    AS brief
+    ASK check it INTO notes BY carol
+    DO check it
 `;
+  const contract = lintFlow('old-step.flow.ap', old).map(e => `${e.line}: ${e.message}`);
+  assert.ok(contract.some(m => m.startsWith('7: BY is not allowed inside STEP — a step names no one')), contract.join('\n'));
+  assert.ok(contract.some(m => m.startsWith('9: AS is not allowed inside STEP — a step hands nothing over itself')), contract.join('\n'));
+  const words = checkVocabulary('old-step.flow.ap', old).map(e => `${e.line}: ${e.message}`);
+  assert.ok(words.some(m => m.startsWith('8: CONTEXT was removed — the form of a DELEGATE says the context')), words.join('\n'));
+  assert.ok(words.some(m => m.startsWith('10: ASK became DELEGATE')), words.join('\n'));
+  // Each said once: a removed keyword is the vocabulary check's alone.
+  assert.ok(!contract.some(m => /CONTEXT|ASK/.test(m)), contract.join('\n'));
 
-  const errors = lintFlow('dup-ctx.flow.ap', dupCtx);
-  assert.ok(
-    errors.some(e => /STEP block has 2 occurrences of CONTEXT/.test(e.message)),
-    `duplicate CONTEXT produces unique violation, got: ${JSON.stringify(errors)}`,
-  );
-
-  console.log('Flow lint duplicate CONTEXT test passed.');
+  console.log('Flow lint old step signature test passed.');
 }
 
 // ---------------------------------------------------------------------------
-// 7. CONTEXT invalid mode (semantic check in lintFlow)
+// 7. DELEGATE, FORK, `~` and WAIT — the lines of a step, in their order
 // ---------------------------------------------------------------------------
 
 {
-  const badMode = `# bad-mode
-
-ABOUT  bad context mode test
-
-FLOW bad-mode
-  STEP first:
-    RUN step-one
-  STEP second:
-    CONTEXT verbose
-    RUN step-two
-`;
-
-  const errors = checkVocabulary('bad-mode.flow.ap', badMode);
-  assert.ok(
-    errors.some(e => /CONTEXT: unknown value `verbose`/.test(e.message) && e.line === 9),
-    `invalid CONTEXT mode produces lint error, got: ${JSON.stringify(errors)}`,
-  );
-
-  console.log('Flow lint invalid CONTEXT mode test passed.');
-}
-
-// ---------------------------------------------------------------------------
-// 7b. `CONTEXT <mode> AS! <template>` — the mode and the step's input shape on one line
-// ---------------------------------------------------------------------------
-
-{
-  const step = line => checkVocabulary('one-line.flow.ap', ['FLOW one-line', '  STEP review:', '    BY bob', `    ${line}`, '    DO check it', ''].join('\n'))
+  const errs = (...lines) => checkVocabulary('d.flow.ap', ['FLOW d', '  STEP s:', ...lines.map(l => `    ${l}`), ''].join('\n'))
     .map(e => `${e.line}: ${e.message}`);
-  assert.deepEqual(step('CONTEXT summary AS! review-brief'), [], 'the mode, then the shape');
-  assert.deepEqual(step('CONTEXT full AS review-brief'), [], 'at any level of AS');
-  assert.deepEqual(step('CONTEXT summery AS! review-brief'), ['4: CONTEXT: unknown value `summery` (allowed: isolated, summary, full, inherited)'],
-    'the mode is checked alone');
-  assert.deepEqual(step('CONTEXT summary AS!!!! review-brief'), ['4: `AS!!!!` is not a level of AS — use !AS, AS, AS!, AS!!'],
-    'the AS level is checked');
+  assert.deepEqual(errs('DELEGATE review it INTO notes BY bob AS! brief', 'DELEGATE~ trace it INTO paths BY carol', 'FORK~ wire it INTO wired', 'WAIT paths, wired'), []);
+  assert.deepEqual(errs('DELEGATE review it BY bob INTO notes'), ['3: DELEGATE: INTO comes right after the task — write `DELEGATE <task> INTO <name> BY <agent> AS <template>`']);
+  assert.deepEqual(errs('DELEGATE review it AS brief BY bob'), ['3: DELEGATE: BY comes after INTO, before AS — write `DELEGATE <task> INTO <name> BY <agent> AS <template>`']);
+  // A fork inherits the conversation; its AS shapes what it is handed on top of it (D58).
+  assert.deepEqual(errs('FORK wire it BY dave AS brief'), []);
+  assert.deepEqual(errs('DELEGATE review it'), ['3: DELEGATE in a flow names who it goes to — end it with `BY <agent | team>`']);
+  // Structured: every `~` is waited for in its own block, and read after its WAIT.
+  assert.deepEqual(errs('DELEGATE~ trace it INTO paths BY carol'), ['3: started with ~ and never waited for — WAIT paths before its STEP ends']);
+  assert.deepEqual(errs('DELEGATE~ trace it INTO paths BY carol', 'DO read {{paths}}', 'WAIT paths'),
+    ['4: `{{paths}}` is read before its WAIT — it was started with ~ at line 3: write `WAIT paths` above this line']);
+  assert.deepEqual(errs('WAIT nope'), ['3: WAIT nope: no DELEGATE~ or FORK~ of this block fills `nope` — a WAIT takes back what its own block started']);
+  assert.deepEqual(errs('WAIT ALL'), ['3: WAIT ALL: nothing was started with ~ in this block — drop the WAIT']);
+  assert.deepEqual(errs('DELEGATE~ a BY bob', 'DELEGATE~ b BY carol', 'WAIT ALL'), [], 'WAIT ALL takes back what has no name');
+  assert.deepEqual(errs('IF the plan is big:', '  DELEGATE~ trace it INTO paths BY carol', 'WAIT paths'),
+    ['4: started with ~ and never waited for — WAIT paths before its IF ends', '5: WAIT paths: no DELEGATE~ or FORK~ of this block fills `paths` — a WAIT takes back what its own block started']);
+  // Outside a flow step: a DELEGATE waits where it stands; FORK, `~` and WAIT are a step's.
+  const agent = checkVocabulary('a.ap', ['EXPORT AGENT a AS r:', '    ABOUT x', '    MANDATE y', '    WHEN asked:',
+    '        DELEGATE check it INTO notes BY bob', '        DELEGATE~ check it BY bob', '        FORK wire it', '        WAIT ALL', '', 'ROLE r:', '    ABOUT z', '    ALWAYS be'].join('\n'))
+    .map(e => `${e.line}: ${e.message}`);
+  assert.deepEqual(agent, [
+    "6: DELEGATE~: starting work without waiting for it is a flow STEP's — here, write DELEGATE and wait for it",
+    '7: FORK hands work to a fork of whoever runs a flow — it stands in a flow STEP; here, write DELEGATE',
+    '8: WAIT takes back what a STEP started with ~ — it stands in a flow STEP',
+  ]);
 
-  console.log('Flow lint CONTEXT with AS on one line test passed.');
+  console.log('Flow lint delegation lines test passed.');
 }
 
 // ---------------------------------------------------------------------------
@@ -221,7 +213,7 @@ FLOW no-step
 }
 
 // ---------------------------------------------------------------------------
-// 9. Block contract: PARALLEL nested inside PARALLEL
+// 9. A bare PARALLEL is gone: its rewrite
 // ---------------------------------------------------------------------------
 
 {
@@ -242,11 +234,11 @@ FLOW nested-parallel
 
   const errors = lintFlow('nested-parallel.flow.ap', nestedParallel);
   assert.ok(
-    errors.some(e => /PARALLEL is not allowed inside PARALLEL/.test(e.message)),
-    `nested PARALLEL produces contract error, got: ${JSON.stringify(errors)}`,
+    errors.some(e => e.line === 8 && /PARALLEL was removed — in one STEP, start each piece with `DELEGATE~/.test(e.message)),
+    `a bare PARALLEL is told its rewrite, got: ${JSON.stringify(errors)}`,
   );
 
-  console.log('Flow lint nested PARALLEL test passed.');
+  console.log('Flow lint bare PARALLEL test passed.');
 }
 
 // ---------------------------------------------------------------------------
@@ -334,11 +326,9 @@ FLOW bad-flow
     '  STEP tester:',
     '    DO write-failing-test',
     '  STEP developer:',
-    '    CONTEXT full',
-    '    DO make-test-pass',
+    '    DELEGATE make-test-pass BY test-agent',
     '  STEP reviewer:',
-    '    CONTEXT summary AS! brief',
-    '    DO review-the-change',
+    '    DELEGATE review-the-change BY test-agent AS! brief',
     '  STEP tester:',
     '    DO verify-and-refactor',
     '',
@@ -358,9 +348,9 @@ FLOW bad-flow
   assert.ok(bundle.includes('Test-Driven Development'), 'bundle contains flow ABOUT');
   assert.ok(bundle.includes('write-failing-test'), 'bundle contains first step action');
   assert.ok(bundle.includes('make-test-pass'), 'bundle contains second step action');
-  // `CONTEXT summary AS! brief` reads as `CONTEXT summary` with `AS! brief` beneath.
-  assert.match(bundle, /reviewer — summary context\n +Strictly shape your response as — no deviation: `brief` \(tpl-[0-9a-f]+\)\n +Do review-the-change/,
-    'one-line CONTEXT … AS!: the mode in the signature, the shape opening the step');
+  assert.match(bundle, /developer\n +Delegate: make-test-pass — to `test-agent`, with all your context/, 'a delegation without AS hands over all the context');
+  assert.match(bundle, /reviewer\n +Delegate: review-the-change — to `test-agent`, handing over only what `brief` \(tpl-[0-9a-f]+\) holds/,
+    'a delegation with AS hands over only what its template holds');
 
   process.chdir(prevCwd);
   rmSync(tmp, { recursive: true });
@@ -369,63 +359,28 @@ FLOW bad-flow
 }
 
 // ---------------------------------------------------------------------------
-// 13. BY primitive: renders inline with the executor name in backticks
+// 13. A DELEGATE block: the lines the one it goes to is told
 // ---------------------------------------------------------------------------
 
 {
-  const rendered = applyForceLevels('BY design');
-  assert.ok(
-    rendered.includes('By `design`'),
-    `BY renders the executor in backticks, got: ${JSON.stringify(rendered)}`,
-  );
+  const block = `# with-block
 
-  console.log('Flow BY rendering test passed.');
-}
+ABOUT  a delegation with its own lines
 
-// ---------------------------------------------------------------------------
-// 14. Block contract: STEP with BY + DO is valid
-// ---------------------------------------------------------------------------
-
-{
-  const withBy = `# with-by
-
-ABOUT  step bound to an executor via BY
-
-FLOW with-by
+FLOW with-block
   STEP implement idea:
-    BY design
-    DO implement the idea
+    DELEGATE implement the idea BY design:
+      DO write it test-first
+      NEVER touch the docs
 `;
+  const errors = lintFlow('with-block.flow.ap', block).filter(e => e.severity !== 'warning');
+  assert.deepEqual(errors, [], 'a DELEGATE block holds DO and rule lines');
 
-  const errors = lintFlow('with-by.flow.ap', withBy).filter(e => e.severity !== 'warning');
-  assert.equal(errors.length, 0, `STEP with BY + DO should have no errors, got: ${JSON.stringify(errors)}`);
+  const wrong = lintFlow('wrong-block.flow.ap', block.replace('      DO write it test-first', '      WAIT ALL').replace('wrong-block', 'with-block'))
+    .map(e => e.message);
+  assert.ok(wrong.some(m => /WAIT is not allowed inside DELEGATE/.test(m)), wrong.join('\n'));
 
-  console.log('Flow STEP with BY test passed.');
-}
-
-// ---------------------------------------------------------------------------
-// 15. Block contract: STEP with 2 BY (unique violation)
-// ---------------------------------------------------------------------------
-
-{
-  const dupBy = `# dup-by
-
-ABOUT  duplicate executor test
-
-FLOW dup-by
-  STEP implement idea:
-    BY design
-    BY dev
-    DO implement the idea
-`;
-
-  const errors = lintFlow('dup-by.flow.ap', dupBy);
-  assert.ok(
-    errors.some(e => /STEP block has 2 occurrences of BY/.test(e.message)),
-    `duplicate BY produces unique violation, got: ${JSON.stringify(errors)}`,
-  );
-
-  console.log('Flow duplicate BY test passed.');
+  console.log('Flow DELEGATE block test passed.');
 }
 
 console.log('All flow tests passed.');

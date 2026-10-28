@@ -157,7 +157,7 @@ node .agent-pack/apx/docs-auditor.apx flow flw-0b872a2f
 run this flow with the Workflow tool: Workflow({ scriptPath: "…/.agent-pack/flows/flw-0b872a2f.68279ca3.js", args: { request: "<the request, verbatim>" } }) — …
 ```
 
-The script runs each `STEP` as its agent (`BY`), a `PARALLEL` group at the same time, passes upstream results by the step's `CONTEXT` mode, and enforces a step's input shape (`AS`) as the JSON Schema of the answer of the step before it. The Workflow tool still runs only when the user asks for the flow, a workflow or ultracode; otherwise the steps are carried out as written.
+The script runs each `DELEGATE` as its agent (`BY`), starts a `DELEGATE~` without waiting and awaits it at its `WAIT`, passes every result so far — or, under an `AS`, only the one before, its shape enforced as the JSON Schema of that answer. A step with a line of its own for whoever runs the flow (a `DO`, an `IF`, a `FORK`), or a delegation to a team, keeps the flow out of the script. The Workflow tool still runs only when the user asks for the flow, a workflow or ultracode; otherwise the steps are carried out as written.
 
 Without a script — another adapter, a step run by a team, anything but steps at the flow's top level, or a script built for an earlier version of the flow (the `<hash>` is the flow's content hash) — `flow` prints the flow's steps, to carry out in order.
 
@@ -187,19 +187,19 @@ The first line is `open` or `closed`, for a machine; the second, why. The exit c
 
 ## Delegates and programs
 
-A line an agent hands to a delegate (`ASK`, `IF*`, `UNTIL*`, `PROCEDURE*`) or to a program (`COMPUTE`, `IF**`, `UNTIL**`, `PROCEDURE**` — see [Language](/reference/language#executors)) has a contract with an id like `exe-3f9a1c07`. The compiled line names the commands; `get <exe-id>` shows the contract, `scope` lists them all.
+A line an agent hands to a delegate (`DELEGATE`, `IF*`, `UNTIL*`, `PROCEDURE*`) or to a program (`COMPUTE`, `IF**`, `UNTIL**`, `PROCEDURE**` — see [Language](/reference/language#executors)) has a contract with an id like `exe-3f9a1c07`. The compiled line names the commands; `get <exe-id>` shows the contract, `scope` lists them all.
 
 **A delegate** — the agent hands it the input, and stores the answer it gets back:
 
 ```bash
-node .agent-pack/apx/clerk.apx ask input exe-3f9a1c07
+node .agent-pack/apx/clerk.apx delegate input exe-3f9a1c07
 {"pdf_text": "INVOICE 2026-114 …"}
-node .agent-pack/apx/clerk.apx ask answer exe-3f9a1c07 - < answer.json
+node .agent-pack/apx/clerk.apx delegate answer exe-3f9a1c07 - < answer.json
 # stored as `lines` for this session — read it: node .agent-pack/apx/clerk.apx get lines
 ```
 
-- `ask input <exe-id>` prints the JSON the piece receives — one key per variable it reads, with its value in this session (parsed when it is JSON), one per constant — and nothing else. An empty variable stops it (exit `1`).
-- `ask answer <exe-id> -` reads the delegate's answer on stdin (or the rest of the line) and checks it against the contract: a line with `INTO x` takes a value of `x`'s type and stores it in `x`; a procedure takes its `AS` template; a condition takes `{"holds": true}` or `{"holds": false}` and prints it. An answer that breaks the contract is refused (exit `6`): nothing is stored, and the agent hands the piece over again with the same input.
+- `delegate input <exe-id>` prints the JSON the piece receives — one key per variable it reads, with its value in this session (parsed when it is JSON), one per constant — and nothing else. An empty variable stops it (exit `1`).
+- `delegate answer <exe-id> -` reads the delegate's answer on stdin (or the rest of the line) and checks it against the contract: a line with `INTO x` takes a value of `x`'s type and stores it in `x`; a procedure takes its `AS` template; a condition takes `{"holds": true}` or `{"holds": false}` and prints it. An answer that breaks the contract is refused (exit `6`): nothing is stored, and the agent hands the piece over again with the same input.
 
 **A program** — the apx runs it itself:
 
@@ -220,11 +220,28 @@ node .agent-pack/apx/clerk.apx run exe-8c21d4e0
 | `7` | an `UNTIL*` / `UNTIL**` reached its round limit: stop the loop and report that the condition never held (also from `answer`) |
 | `1` / `2` | the piece cannot run yet (an empty variable, a delegate's contract) / wrong usage |
 
-**`--into <var>`** stores a procedure's result in a variable of the agent — what `RUN p INTO x` compiles to when a delegate or a program carries `p` out: `run <exe-id> --into x`, `ask answer <exe-id> - --into x`. It takes only a procedure's contract; a line stores in its own `INTO`.
+**`--into <var>`** stores a procedure's result in a variable of the agent — what `RUN p INTO x` compiles to when a delegate or a program carries `p` out: `run <exe-id> --into x`, `delegate answer <exe-id> - --into x`. It takes only a procedure's contract; a line stores in its own `INTO`.
 
 **Rounds.** For an `UNTIL*` or `UNTIL**`, each `holds: false` is a round: the apx adds `round 2 of 3 — do the next round, then ask again`, and at the limit (the head's `MAX <n>`) `round limit reached (3 of 3): stop and report that the condition never held`, with exit `7` — so a command chained after it with `&&` never starts another round. A `holds: true` starts the count again, and so does an answer given after the limit: the loop was left, a later entry is a new loop at round 1.
 
 Every delegate's answer and every program run is recorded in the session, in `.agent-pack/state/<session id>/executors.tbl`: the contract id, the executor, who carried it out (the delegate's name, or `program`), a sha256 fingerprint of the input (not the input), the outcome (`answered`, `ran`, `refused`, `timeout`, `broken`), the condition's answer, and the time.
+
+## Background work
+
+What a flow starts with `DELEGATE~` or `FORK~` has an id like `dlg-28f9d7d3` and a record in the session's registry, `.agent-pack/state/<session id>/delegations.tbl`: shared by every agent of the session, on disk — it outlives the conversation that started it. The compiled flow names the commands on each line (`get <flw-id>`):
+
+```bash
+node .agent-pack/apx/lead.apx delegate start dlg-28f9d7d3          # the lead, before handing it over
+node .agent-pack/apx/lead.apx delegate deliver dlg-28f9d7d3 - < style.txt   # whoever carries it out
+node .agent-pack/apx/lead.apx wait dlg-28f9d7d3 dlg-1d06e0a6 --max 10m      # the lead, at the WAIT
+dlg-28f9d7d3  style  delivered  → checker-a
+dlg-1d06e0a6  check  running  → checker-b  — still running after 10m
+```
+
+- `delegate start <dlg-id>` records the piece as `running`. A piece still running cannot start again; one that is settled starts afresh — a loop starts the same piece on every round.
+- `delegate deliver <dlg-id> -` takes its result on stdin and stores it in its `INTO` variable — checked against the variable's type: a value that breaks it is refused (exit `6`), nothing is stored. `delegate block <dlg-id> "<why>"` says it cannot be done as asked.
+- `wait <dlg-id | var> … [--max <duration>]`, `wait all` returns when every piece it names is delivered, blocked or ended without delivery — or when the limit is reached: `--max`, written by the WAIT's `MAX`, else the `wait.max` config key (`30m` by default). Then each one's state: exit `0` when all were delivered, `1` otherwise.
+- Nothing moves by itself: at the limit what still runs is left running, and the lead decides — wait again, `delegate take <dlg-id>` (it carries the piece out itself), `delegate reassign <dlg-id> <agent>`, or `delegate block <dlg-id> "<why>"`. When the harness says the agent of a piece stopped without delivering, the lead records it with `delegate ended <dlg-id>`, and decides the same way. `delegate list` shows every piece of the session.
 
 ## Compression
 

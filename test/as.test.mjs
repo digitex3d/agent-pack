@@ -27,16 +27,16 @@ const subst = (text, templates = []) =>
 }
 
 {
-  // indentation preserved (e.g. AS inside a flow STEP)
+  // indentation preserved (e.g. AS inside a procedure's WHEN)
   const templates = [{ name: 'spec', refId: 'tpl-2.3' }];
   const out = subst('    AS spec\n', templates);
   assert.equal(out, '    AS `spec` (tpl-2.3)\n', 'leading indent preserved');
 }
 
 {
-  // a step's `CONTEXT <mode> AS <slug>` resolves the slug, the mode kept
+  // a DELEGATE's trailing `AS <template>` is the delegation's to read (src/delegation.ts): the line stays as written
   const templates = [{ name: 'spec', refId: 'tpl-2.3' }];
-  assert.equal(subst('    CONTEXT summary AS! spec\n', templates), '    CONTEXT summary AS! `spec` (tpl-2.3)\n', 'CONTEXT … AS! resolved');
+  assert.equal(subst('    DELEGATE review it BY bob AS! spec\n', templates), '    DELEGATE review it BY bob AS! spec\n', 'DELEGATE … AS! left to the delegation');
 }
 
 {

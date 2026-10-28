@@ -25,6 +25,7 @@ import { CHECK_KINDS, MAX_CHECK_LEVEL, type CheckKind } from './check.js';
 import { splitExecutorMark } from './executor.js';
 import { ACTION_VERBS } from './actionVerbs.js';
 import { VAR_SCOPE_WORDS, isVarKeyword } from './vars.js';
+import { DELEGATION_VERBS, ASYNC_MARK } from './delegation.js';
 import { EXPORT_MODIFIER } from './blockTypes.js';
 
 /**
@@ -62,6 +63,9 @@ const STATIC_KEYWORDS = [
   'ELSE', 'WHEN', 'OWNS', 'WITH',
   'RUN', 'VAR', 'IF',
   ...ACTION_VERBS,
+  // FORK hands work to a copy of whoever runs it, WAIT takes back what a `~` started (src/delegation.ts).
+  // ASK became DELEGATE, and a step's CONTEXT its DELEGATE's form: still lexed, so the lint names the rewrite.
+  'FORK', 'WAIT', 'ASK',
   // A variable's scope, right before VAR (`SESSION VAR plan`) — vars.ts parses it.
   ...VAR_SCOPE_WORDS,
   'ROLE', 'EXPERTISE', 'MANDATE', 'BUDGET', 'LENS-OUT', 'LENS-IN',
@@ -200,7 +204,10 @@ export function splitDomainLine(keyword: string): { keyword: DomainLine; level: 
   return m ? { keyword: m[1] as DomainLine, level: m[2].length } : null;
 }
 
-const KW_GROUP = `(?:${CONTROL_ALT}|${DOMAIN_LINE_ALT}|PROCEDURE\\*{1,2}|!+(?:${FORCE_BASES_ALT})|(?:${FORCE_BASES_ALT})!*|${ALIAS_ALT}|${LIFECYCLE_ALT}|${STATIC_ALT})`;
+// A delegation verb with the mark that starts it without waiting: `DELEGATE~`, `FORK~` (src/delegation.ts).
+const ASYNC_ALT = `(?:${DELEGATION_VERBS.join('|')})${escapeRegex(ASYNC_MARK)}`;
+
+const KW_GROUP = `(?:${CONTROL_ALT}|${DOMAIN_LINE_ALT}|${ASYNC_ALT}|PROCEDURE\\*{1,2}|!+(?:${FORCE_BASES_ALT})|(?:${FORCE_BASES_ALT})!*|${ALIAS_ALT}|${LIFECYCLE_ALT}|${STATIC_ALT})`;
 
 const KEYWORD_WITH_REST_RE = new RegExp(`^([ \\t]*)(${KW_GROUP})[ \\t]+(.+?)[ \\t]*$`);
 // Keywords that stand alone on a line: IF, ELSE, PARALLEL and the DISTILL levels.
@@ -255,7 +262,8 @@ export type Token =
   | (Position & { kind: 'rawLine'; raw: string })
   // `level`: the level of an IF/UNTIL head (`IF!` 1, `IF!!` 2, `!IF` -1 — splitControl) or of a DOMAIN line (`WRITES!` 1 — splitDomainLine); absent = 0.
   // `executor`: the stars of an IF/UNTIL head (`IF*` 1 a delegate, `IF**` 2 a program); absent = the agent.
-  | (Position & { kind: 'keyword'; keyword: Keyword; rest: string; raw: string; level?: number; executor?: number })
+  // `async`: a delegation verb marked `~` (`DELEGATE~`) — it starts the work and goes on (src/delegation.ts).
+  | (Position & { kind: 'keyword'; keyword: Keyword; rest: string; raw: string; level?: number; executor?: number; async?: true })
   | (Position & { kind: 'blockOpener'; key: string; rest: string; raw: string })
   | (Position & { kind: 'procRef'; name: string; trailing: string; raw: string })
   // `@KEY items` above a block, `@KEY items:` opening one — a block decorator (src/decorators.ts).
@@ -341,9 +349,11 @@ export function lexRaw(source: string): Token[] {
       // A PROCEDURE head may carry its executor's stars (`PROCEDURE** name:`) — src/executor.ts.
       const mark = procedureMark(kw[2]);
       const control: { keyword: string; level: number; executor?: number } | null = mark ? null : splitControl(kw[2]) ?? splitDomainLine(kw[2]);
+      const async = kw[2].endsWith(ASYNC_MARK);
       out.push({
         kind: 'keyword', line, col, indent,
-        keyword: (mark?.word ?? control?.keyword ?? kw[2]) as Keyword,
+        keyword: (mark?.word ?? control?.keyword ?? (async ? kw[2].slice(0, -ASYNC_MARK.length) : kw[2])) as Keyword,
+        ...(async ? { async: true as const } : {}),
         ...(mark ? { executor: mark.executor } : {}),
         rest: kw[3],
         raw,

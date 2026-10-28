@@ -14,7 +14,8 @@ import { BLOCK_CONTRACTS, BlockContract, VAR_BLOCK } from './blockContracts.js';
 import { TEAM_KEY } from './services/teamMetadata.js';
 import { parseBlocks, agentNestedBlocks, exportedVar, readExportedVar, isExportedVar, type Block, type Node, type Line } from './parseBlocks.js';
 import { isExportFile } from './services/text.js';
-import { parseAgentSignature, contextShape } from './definitionArgs.js';
+import { parseAgentSignature } from './definitionArgs.js';
+import { isDelegationVerb, delegationLineErrors, waitLineErrors, concurrencyErrors, parseDelegation, WAIT_VERB } from './delegation.js';
 import { kindFromDir, unitNameFromPath } from './ingest.js';
 import { plugins, pluginOf, pluginOfKey, recordOfLines, lineIssues } from './plugins.js';
 import { BLOCK_TYPES, blockTypeOf, EXPORT_MODIFIER, AGENT_KEYS, PLUGIN_KEY, OPERATION_KEY } from './blockTypes.js';
@@ -756,6 +757,10 @@ function notAllowed(keyword: Keyword, parent: string, contract: BlockContract, w
   return `${what} is not allowed inside ${parent}${why ? ` — ${why}` : ''} (expected one of: ${expected})`;
 }
 
+const PARALLEL_EACH = 'PARALLEL EACH';
+/** What a bare `PARALLEL:` is told: the work of its steps starts in the background now. */
+const PARALLEL_REWRITE = 'PARALLEL was removed — in one STEP, start each piece with `DELEGATE~ <task> INTO <name> BY <agent>`, then `WAIT ALL` (PARALLEL EACH stays)';
+
 /** Whether `keyword` opens a branch (IF/ELSE, UNTIL) of a block under `contract`. */
 function isBranch(contract: BlockContract, keyword: Keyword): boolean {
   return contract.branches?.keywords.includes(keyword) ?? false;
@@ -787,6 +792,8 @@ export function validateBlockContracts(
     popClosedBlocks(t.indent);
 
     const parent = stack[stack.length - 1];
+    // A keyword the language no longer has is the vocabulary check's to name, once.
+    if (REMOVED_KEYWORDS[t.keyword as string]) continue;
     if (parent) {
       const c = parent.contract;
       const allowed = isAllowedChild(c, t.keyword);
@@ -810,13 +817,12 @@ export function validateBlockContracts(
         contract: { allows: branches.allows, excluded: parent.contract.excluded, branches: branches.nests ? branches : undefined },
         host: parent.host ?? parent,
       });
-    } else if (t.keyword === 'PARALLEL' && contracts.PARALLEL) {
-      // `PARALLEL EACH <item> IN <list> MAX <n>` holds its one step; a bare PARALLEL, its steps.
+    } else if (t.keyword === 'PARALLEL' && contracts[PARALLEL_EACH]) {
+      // `PARALLEL EACH <item> IN <list> MAX <n>` holds its one step; a bare PARALLEL is gone — its steps' work starts with `~`.
       const head = parseParallelHead(t.rest);
-      const malformed = head && 'error' in head;
-      if (malformed) errors.push({ file, line: t.line, message: head.error });
-      const key = head && !malformed ? 'PARALLEL EACH' : 'PARALLEL';
-      stack.push({ keyword: key, line: t.line, indent: t.indent, children: new Map(), contract: contracts[key] ?? contracts.PARALLEL });
+      if (!head) errors.push({ file, line: t.line, message: PARALLEL_REWRITE });
+      else if ('error' in head) errors.push({ file, line: t.line, message: head.error });
+      else stack.push({ keyword: PARALLEL_EACH, line: t.line, indent: t.indent, children: new Map(), contract: contracts[PARALLEL_EACH] });
     } else if (contracts[t.keyword]) {
       stack.push({ keyword: t.keyword, line: t.line, indent: t.indent, children: new Map(), contract: contracts[t.keyword] });
     }
@@ -1408,11 +1414,21 @@ function intoError(t: Extract<Token, { kind: 'keyword' }>): string | null {
   const into = splitInto(t.rest);
   if (!into || isVarKeyword(t.keyword as string)) return null;
   if (takesInto(t.keyword)) return null;
-  return `INTO ends only a DO, ASK, COMPUTE or RUN line — \`${t.raw.trim().split(/\s/)[0]}\` takes none`;
+  return `INTO ends only a DO, DELEGATE, FORK, COMPUTE or RUN line — \`${t.raw.trim().split(/\s/)[0]}\` takes none`;
 }
 
 /** What an old `WITH x:` line is told: it is a decorator now. */
 const WITH_REWRITE = 'WITH became a decorator — write `@WITH <names>` right above the block it is for, or `@WITH <names>:` around the lines';
+
+/**
+ * The keywords the language no longer has, each with the rewrite it is told —
+ * still lexed, so the vocabulary check names it once and no block contract
+ * repeats it.
+ */
+const REMOVED_KEYWORDS: Record<string, string> = {
+  ASK: 'ASK became DELEGATE — write `DELEGATE <task> INTO <name> BY <agent>`',
+  CONTEXT: 'CONTEXT was removed — the form of a DELEGATE says the context: `DELEGATE … BY <agent>` hands over all of it, `DELEGATE … BY <agent> AS <template>` only what the template holds, `FORK …` the conversation itself',
+};
 
 /** What is wrong with a decorator line as written: its key, its items. Resolution is the compiler's. */
 function decoratorLineErrors(key: string, rest: string): string[] {
@@ -1494,11 +1510,12 @@ export function checkVocabulary(file: string, body: string): LintError[] {
       if (t.executor && (t.level ?? 0) > 0) {
         err(t.line, `\`${t.raw.trim().split(/\s/)[0]}\` is not allowed — a condition has one judge: write ${key}! / ${key}!! (a judge decides) or ${key}* / ${key}** (a delegate or a program decides): "${quoteRaw(t)}"`);
       }
-      if (key === 'COMPUTE' && splitBy(t.rest)) err(t.line, 'BY ends only an ASK line — COMPUTE is carried out by a program');
-      // An ASK whose `BY <agent>` comes before its `INTO <name>` — BY must end the line.
-      const askInto = key === 'ASK' ? splitInto(t.rest) : null;
-      const early = askInto ? splitBy(askInto.text) : null;
-      if (early) err(t.line, `BY ${early.name} must end the ASK line — write \`ASK … INTO <name> BY ${early.name}\``);
+      if (key === 'COMPUTE' && splitBy(t.rest)) err(t.line, 'BY ends only a DELEGATE or a FORK line — COMPUTE is carried out by a program');
+      // A delegation's parts, in their order (src/delegation.ts).
+      if (isDelegationVerb(key)) for (const message of delegationLineErrors(key, t.rest)) err(t.line, message);
+      if (key === WAIT_VERB) for (const message of waitLineErrors(t.rest)) err(t.line, message);
+      const removed = REMOVED_KEYWORDS[key];
+      if (removed) err(t.line, `${removed}: "${quoteRaw(t)}"`);
       const base = forceLevelBaseOf(key);
       if (base && getIntroByKeyword(key) === null) err(t.line, unknownLevel(key, base));
       // Every list of the language is comma-separated (src/lists.ts).
@@ -1510,11 +1527,7 @@ export function checkVocabulary(file: string, body: string): LintError[] {
         if (!PERIMETER_KINDS.includes(owner.toLowerCase())) err(t.line, `APPLIES: a perimeter (${PERIMETER_FORMS}) goes on a POLICY or a SKILL — found on ${owner}`);
       }
       const prim = enumPrimitiveFor(key);
-      // `CONTEXT <mode> AS! <template>`: the mode, then the shape of what the step is handed.
-      const shaped = key === 'CONTEXT' ? contextShape(t.rest.replace(/:\s*$/, '')) : null;
-      const value = shaped ? shaped.mode : t.rest.trim().replace(/:$/, '');
-      const shapeWord = shaped?.as?.split(/\s+/)[0];
-      if (shapeWord && getIntroByKeyword(shapeWord) === null) err(t.line, unknownLevel(shapeWord, 'AS'));
+      const value = t.rest.trim().replace(/:$/, '');
       if (prim && value && !prim.values[value]) {
         err(t.line, `${key}: unknown value \`${value}\` (allowed: ${Object.keys(prim.values).join(', ')})`);
       }
@@ -1581,6 +1594,8 @@ export function checkVocabulary(file: string, body: string): LintError[] {
   errors.push(...computeBlockErrors(file, body));
   // A decorator decorating no block: the parser's to see (src/parseBlocks.ts), the lint's to report.
   errors.push(...parseBlocks(body).errors.filter(e => e.decorator).map(e => ({ file, line: e.line, message: e.message })));
+  // What a `~` starts is waited for in its own block, and read after its WAIT (src/delegation.ts).
+  errors.push(...concurrencyErrors(buildTree(tokens)).map(e => ({ file, ...e })));
   return errors;
 }
 
@@ -1588,7 +1603,7 @@ export function checkVocabulary(file: string, body: string): LintError[] {
  * A COMPUTE block's shape (src/executor.ts): ABOUT and rules on top, then
  * REQUIRE:, RETURN AS <template>: and ENSURE:, once each, in this order, none
  * empty. REQUIRE and ENSURE hold rules and IF only; RETURN holds what a program
- * can carry out — DO, COMPUTE, IF, UNTIL and rules — never ASK, RUN, MEM, WITH or VAR.
+ * can carry out — DO, COMPUTE, IF, UNTIL and rules — never DELEGATE, FORK, WAIT, RUN, MEM, WITH or VAR.
  */
 function computeBlockErrors(file: string, body: string): LintError[] {
   const errors: LintError[] = [];
@@ -1781,9 +1796,11 @@ export function checkedHeadIssues(
       }
       let inner = site;
       if (agentOf && key === 'FLOW') inner = { at: 'flow' };
-      if (agentOf && key === 'STEP') {
-        const by = n.children.find(c => keyOf(c) === 'BY');
-        inner = { at: 'step', agent: by && by.token.kind === 'keyword' ? agentOf(stripTrailingColon(by.token.rest).trim()) : null };
+      // In a flow, a DELEGATE block's agent checks the conditions among its lines; whoever runs the flow checks none yet.
+      if (agentOf && key === 'STEP') inner = { at: 'flow' };
+      if (agentOf && t.kind === 'keyword' && isDelegationVerb(key) && site.at !== 'none') {
+        const by = parseDelegation(key, t.rest).by;
+        inner = { at: 'step', agent: by ? agentOf(by) : null };
       }
       visit(n.children, inner, t.kind === 'keyword' && key === 'WHEN' ? { keyword: 'WHEN', condition: stripTrailingColon(t.rest) } : null);
     }

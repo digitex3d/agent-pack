@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
 /**
- * Executors (I2): who carries out a line. `DO` the agent, `ASK` a delegate,
+ * Executors (I2): who carries out a line. `DO` the agent, `DELEGATE` a delegate,
  * `COMPUTE` a program; on a condition head the stars say it — `IF*` a delegate,
- * `IF**` a program decides. ASK ends with `BY <agent>` to name who it is handed
- * to; ASK and COMPUTE take INTO like DO. A star with a `!` is an error (a
+ * `IF**` a program decides. DELEGATE ends with `BY <agent>` to name who it is handed
+ * to; DELEGATE and COMPUTE take INTO like DO. A star with a `!` is an error (a
  * condition has one judge), and a starred condition reads at least one variable.
  */
 import { strict as assert } from 'assert';
@@ -24,7 +24,7 @@ const { ApDocument } = await import('../dist/src/apdoc/document.js');
 const { renderTree } = await import('../dist/src/bundlers/renderTree.js');
 const refNameOf = shape => shape?.ref?.target?.split('/').pop();
 
-// --- the lexer: stars on IF/UNTIL heads, before or after the `!`s; ASK and COMPUTE are keywords ---
+// --- the lexer: stars on IF/UNTIL heads, before or after the `!`s; DELEGATE and COMPUTE are keywords ---
 {
   const head = line => { const t = lexRaw(line)[0]; return [t.kind, t.keyword, t.level ?? 0, t.executor ?? 0]; };
   assert.deepEqual(head('IF* {{a}} holds:'), ['keyword', 'IF', 0, 1]);
@@ -34,21 +34,21 @@ const refNameOf = shape => shape?.ref?.target?.split('/').pop();
   assert.deepEqual(head('IF*! {{a}} holds:'), ['keyword', 'IF', 1, 1], 'stars then bangs');
   assert.deepEqual(head('IF! {{a}} holds:'), ['keyword', 'IF', 1, 0], 'a checked head is unchanged');
   assert.equal(lexRaw('IF*** {{a}} holds:')[0].kind, 'unknown', 'three stars are no head');
-  assert.deepEqual(head('ASK read {{p}} INTO lines BY legal'), ['keyword', 'ASK', 0, 0]);
+  assert.deepEqual(head('DELEGATE read {{p}} INTO lines BY legal'), ['keyword', 'DELEGATE', 0, 0]);
   assert.deepEqual(head('COMPUTE sum {{l}} INTO t'), ['keyword', 'COMPUTE', 0, 0]);
   assert.deepEqual(splitBy('check {{c}} INTO risks BY legal-reviewer'), { text: 'check {{c}} INTO risks', name: 'legal-reviewer' });
   assert.equal(splitBy('sort by name'), null, 'a lowercase by is prose');
 }
 
 // --- the tree renderer (standalone files, team routing) says the same as the document ---
-assert.equal(renderTree('WHEN asked:\n    IF** {{a}} is odd:\n        DO  stop\n    UNTIL* {{b}} holds:\n        DO  retry\n    ASK  explain it BY legal\n    ASK  summarise it'), [
+assert.equal(renderTree('WHEN asked:\n    IF** {{a}} is odd:\n        DO  stop\n    UNTIL* {{b}} holds:\n        DO  retry\n    DELEGATE  explain it BY legal\n    DELEGATE  summarise it'), [
   'When asked:',
   '    If {{a}} is odd — a program decides:',
   '        Do stop',
   '    Until {{b}} holds — a delegate decides:',
   '        Do retry',
-  '    Ask a delegate to:',
-  '    - explain it — delegate: `legal`',
+  '    Delegate:',
+  '    - explain it — to `legal`, with all your context',
   '    - summarise it',
 ].join('\n'));
 
@@ -82,28 +82,29 @@ try {
   {
     const lint = lines => lintFile(join(dir, 'clerk.ap'), agent(...lines).join('\n') + '\n').map(e => e.message);
     assert.deepEqual(lint([
-      'ASK      read the invoice lines from {{pdf_text}} INTO lines',
-      'ASK      check the clauses of {{contract}} INTO risks BY legal-reviewer',
+      'DELEGATE read the invoice lines from {{pdf_text}} INTO lines',
+      'DELEGATE check the clauses of {{contract}} INTO risks BY legal-reviewer',
       'COMPUTE  group {{lines}} by VAT rate INTO totals',
       'IF** {{totals}} differ from {{document_total}}:',
       '    DO  write to the supplier',
       'UNTIL* {{risks}} are all reviewed MAX 3:',
       '    DO  review the next risk',
-    ]), [], 'ASK, COMPUTE, INTO, BY and starred heads lint clean');
+    ]), [], 'DELEGATE, COMPUTE, INTO, BY and starred heads lint clean');
     assert.deepEqual(lint(['IF!* {{totals}} is odd:', '    DO  x']), [
       '`IF!*` is not allowed — a condition has one judge: write IF! / IF!! (a judge decides) or IF* / IF** (a delegate or a program decides): "IF!* {{totals}} is odd:"',
     ]);
     assert.deepEqual(lint(['UNTIL**! {{totals}} is odd:', '    DO  x']).length, 1, 'stars then bangs too');
-    assert.deepEqual(lint(['COMPUTE  sum {{lines}} BY quick']), ['BY ends only an ASK line — COMPUTE is carried out by a program']);
-    assert.deepEqual(lint(['ASK  check {{contract}} BY legal INTO risks']), ['BY legal must end the ASK line — write `ASK … INTO <name> BY legal`']);
+    assert.deepEqual(lint(['COMPUTE  sum {{lines}} BY quick']), ['BY ends only a DELEGATE or a FORK line — COMPUTE is carried out by a program']);
+    assert.deepEqual(lint(['DELEGATE  check {{contract}} BY legal INTO risks']), ['DELEGATE: INTO comes right after the task — write `DELEGATE <task> INTO <name> BY <agent> AS <template>`']);
+    assert.deepEqual(lint(['ASK  check {{contract}} INTO risks BY legal']), ['ASK became DELEGATE — write `DELEGATE <task> INTO <name> BY <agent>`: "ASK  check {{contract}} INTO risks BY legal"']);
     assert.deepEqual(lint(['RUN  check INTO risks']), [], 'RUN takes an INTO: its procedure\'s result');
   }
 
   // --- the document and the md: who carries out each line ---
   {
     const file = write(join(dir, 'clerk.ap'), agent(
-      'ASK      read the invoice lines from {{pdf_text}} INTO lines',
-      'ASK      check the clauses of {{contract}} INTO risks BY legal-reviewer',
+      'DELEGATE read the invoice lines from {{pdf_text}} INTO lines',
+      'DELEGATE check the clauses of {{contract}} INTO risks BY legal-reviewer',
       'COMPUTE  group {{lines}} by VAT rate INTO totals',
       'COMPUTE  round the totals',
       'IF** {{totals}} differ from {{document_total}}:',
@@ -114,26 +115,26 @@ try {
     const opts = { agentName: 'clerk', agentFile: file, agentDir: dir, libraryRoot: lib, libraryRoots: [lib], libraries: { '@main': lib }, bundleConfig: { runtime: false } };
     const { body, structure } = await bundleAgentObject(opts);
     const text = l => [l.primitive, l.text];
-    assert.deepEqual(structure.lines('ASK').map(text), [['ASK', 'read the invoice lines from {{pdf_text}}'], ['ASK', 'check the clauses of {{contract}}']],
-      'an ASK line\'s text keeps neither its INTO nor its BY');
+    assert.deepEqual(structure.lines('DELEGATE').map(text), [['DELEGATE', 'read the invoice lines from {{pdf_text}}'], ['DELEGATE', 'check the clauses of {{contract}}']],
+      'a DELEGATE line\'s text keeps neither its INTO nor its BY');
     assert.deepEqual(structure.lines('COMPUTE').map(text), [['COMPUTE', 'group {{lines}} by VAT rate'], ['COMPUTE', 'round the totals']]);
-    const nodes = structure.lines().filter(l => ['ASK', 'COMPUTE', 'IF', 'UNTIL'].includes(l.primitive));
+    const nodes = structure.lines().filter(l => ['DELEGATE', 'COMPUTE', 'IF', 'UNTIL'].includes(l.primitive));
     const json = JSON.parse(structure.asJson());
     const flat = []; JSON.stringify(json, (k, v) => { if (v && typeof v === 'object' && (v.type === 'directive' || v.type === 'if' || v.type === 'until')) flat.push(v); return v; });
-    assert.equal(flat.find(n => n.keyword === 'ASK' && n.by)?.by, 'legal-reviewer', 'the BY agent is kept on the node');
+    assert.equal(flat.find(n => n.keyword === 'DELEGATE' && n.by)?.by, 'legal-reviewer', 'the BY agent is kept on the node');
     assert.equal(flat.find(n => n.type === 'if')?.executor, 2, 'IF** — a program decides');
     assert.equal(flat.find(n => n.type === 'until')?.executor, 1, 'UNTIL* — a delegate decides');
     assert.ok(!flat.find(n => n.type === 'if')?.check, 'a starred head is never also checked');
     assert.equal(nodes.length, 6);
     const plain = body.replace(/ \(read its value: `[^`]*`\)/g, '').replace(/node \S+\.apx/g, 'apx');
     for (const line of [
-      'Ask a delegate to read the invoice lines from `pdf_text`',
-      'Ask a delegate to check the clauses of `contract` — delegate: `legal-reviewer`',
+      'Delegate: read the invoice lines from `pdf_text`',
+      'Delegate: check the clauses of `contract` — to `legal-reviewer`',
       'Have a program group `lines` by VAT rate',
       'Have a program round the totals',
       'If `totals` differ from `document_total` — a program decides — `apx run exe-',
-      'Until `risks` are all reviewed — a delegate decides — hand it over its input and the shape of its answer, both from `apx ask input exe-',
-      'Ask a delegate to read the invoice lines from `pdf_text` — delegate: `quick` — hand it over its input and the shape of its answer, both from `apx ask input exe-',
+      'Until `risks` are all reviewed — a delegate decides — hand it over its input and the shape of its answer, both from `apx delegate input exe-',
+      'Delegate: read the invoice lines from `pdf_text` — to `quick` — hand it over its input and the shape of its answer, both from `apx delegate input exe-',
       'Have a program group `lines` by VAT rate — `apx run exe-',
     ]) assert.ok(plain.includes(line), `the md says: ${line}`);
     assert.ok(!/store the result as `(lines|risks|totals)`/.test(plain), 'answer / run store the result: no set to tell');
@@ -155,7 +156,7 @@ try {
       ['`POLICY*`: only a PROCEDURE head takes an executor mark — a delegate (*) or a program (**) carries its body out']);
     const procs = body => write(join(dir, 'clerk.ap'), [
       'IMPORT vat-totals FROM @main.procedures', '',
-      ...agent('RUN  vat-totals', 'ASK  explain {{lines}}', 'DO  file it'), '',
+      ...agent('RUN  vat-totals', 'DELEGATE  explain {{lines}}', 'DO  file it'), '',
       ...body,
       '', 'PROCEDURE chat:', '    DO  talk to the user',
     ]);
@@ -171,7 +172,7 @@ try {
     assert.equal(of('DO', 'group'), 2, 'a DO inherits PROCEDURE**');
     assert.equal(of('DO', 'tidy'), 1, 'a DO inherits PROCEDURE*');
     assert.equal(of('COMPUTE', 'count'), 2, 'a COMPUTE raises PROCEDURE* to a program');
-    assert.equal(of('ASK', 'explain'), 1, 'an ASK of the agent is a delegate');
+    assert.equal(of('DELEGATE', 'explain'), 1, 'a DELEGATE of the agent is a delegate');
     assert.equal(of('DO', 'file it'), 0, 'a DO of the agent is the agent');
     assert.equal(of('DO', 'talk'), 0, 'a plain procedure is the agent');
     const plain = body.replace(/ \(read its value: `[^`]*`\)/g, '').replace(/ — `node \S+\.apx run exe-[0-9a-f]+`| — hand it over its input and the shape of its answer, both from `node [^`]+`, then store its answer: `node [^`]+`/g, '');
@@ -179,11 +180,11 @@ try {
     assert.ok(plain.includes('A delegate carries out this procedure — never carry it out yourself.\nDo tidy `lines`'));
     assert.ok(plain.includes('If `lines` has an exempt line — a program decides:'), 'an unmarked condition inside PROCEDURE** is the program\'s too, and says so');
 
-    procs(['PROCEDURE** messy:', '    DO  sum {{lines}}', '    ASK  explain {{lines}}', '    IF* {{lines}} look odd:', '        DO  flag them',
+    procs(['PROCEDURE** messy:', '    DO  sum {{lines}}', '    DELEGATE  explain {{lines}}', '    IF* {{lines}} look odd:', '        DO  flag them',
       '    IF! {{lines}} are complete:', '        DO  go on', '    RUN  chat']);
     const messages = await bundleAgentObject(opts).then(() => [], e => e.message.split('\n').slice(1).map(l => l.replace(/^error\s+\S+\s+/, '')));
     assert.deepEqual(messages.sort(), [
-      'ASK is not allowed under PROCEDURE** `messy` — a line may raise its executor (agent → delegate → program), never lower it',
+      'DELEGATE is not allowed under PROCEDURE** `messy` — a line may raise its executor (agent → delegate → program), never lower it',
       'IF! is not allowed under PROCEDURE** `messy` — its executor decides its conditions: write IF or IF**',
       'IF* is not allowed under PROCEDURE** `messy` — a condition may raise its executor (agent → delegate → program), never lower it',
       'RUN chat: under PROCEDURE** `messy` only a PROCEDURE** may be run — a program cannot stop for the agent',
@@ -211,7 +212,7 @@ try {
     assert.deepEqual(lintDose(DOSE.map(l => l.replace('RETURN AS dose-result:', 'RETURN:'))), ['RETURN in COMPUTE `dose` needs its result shape — write `RETURN AS <template>:`']);
     assert.deepEqual(lintDose(DOSE.map(l => l.replace('RETURN AS dose-result:', 'RETURN AS! dose-result:'))), ['RETURN AS takes no force level — the program\'s result is always checked against its template']);
     assert.deepEqual(lintDose([...DOSE.slice(0, 7), '        DO  convert pounds to kg', ...DOSE.slice(7)]), ['DO is not allowed in REQUIRE of COMPUTE `dose` — it holds only rules (MUST, NEVER, …) and IF']);
-    assert.deepEqual(lintDose([...DOSE.slice(0, 12), '        ASK  explain it', ...DOSE.slice(12)]), ['ASK is not allowed in RETURN of COMPUTE `dose` — a program carries it out: DO, COMPUTE, IF, UNTIL and rules only']);
+    assert.deepEqual(lintDose([...DOSE.slice(0, 12), '        DELEGATE  explain it', ...DOSE.slice(12)]), ['DELEGATE is not allowed in RETURN of COMPUTE `dose` — a program carries it out: DO, COMPUTE, IF, UNTIL and rules only']);
     assert.deepEqual(lintDose(['EXPORT COMPUTE dose:', '    ABOUT  x', '    REQUIRE:', '    RETURN AS dose-result:', '        DO  y', '    ENSURE:', '        MUST  z']), ['REQUIRE in COMPUTE `dose` holds no line — write at least one']);
     const swapped = lintDose([...DOSE.slice(0, 5), ...DOSE.slice(9, 12), ...DOSE.slice(5, 9), ...DOSE.slice(12)]);
     assert.ok(swapped.length > 0 && swapped.every(m => /out of order or repeated/.test(m)), 'sections out of order');
@@ -257,7 +258,7 @@ try {
   {
     setVars(['VAR tolerance = 0.01', 'VAR pdf_text', 'VAR totals', 'VAR document_total', 'VAR weight_kg', 'VAR mg_per_kg', 'VAR mg_per_ml', 'VAR result AS dose-result', 'VAR flag']);
     write(join(dir, 'clerk.ap'), ['IMPORT dose FROM @main.procedures', '', ...agent(
-      'ASK      read the document total from {{pdf_text}} INTO document_total',
+      'DELEGATE read the document total from {{pdf_text}} INTO document_total',
       'COMPUTE  estimate a dose from {{weight_kg}} INTO result',
       'IF** {{totals}} differ from {{document_total}} by more than {{tolerance}}:',
       '    DO  write to the supplier',
@@ -293,12 +294,12 @@ try {
     setVars(['VAR pdf_text', 'VAR contract', 'VAR lines', 'VAR risks', 'VAR totals', 'VAR document_total']);
   }
 
-  // --- ASK … BY: a standalone agent or a team; a team member only from inside its own team ---
+  // --- DELEGATE … BY: a standalone agent or a team; a team member only from inside its own team ---
   {
     const proj = join(tmp, 'proj');
     const member = (dir, name) => write(join(proj, dir, `${name}.ap`), [
       `EXPORT AGENT ${name} AS ${name}-role:`, `    ABOUT    ${name}`, '    MANDATE  do the work',
-      '    WHEN asked:', `        ASK  check the contract BY {target}`, '', `ROLE ${name}-role:`, '    ABOUT   a worker', '    ALWAYS  do the work',
+      '    WHEN asked:', `        DELEGATE  check the contract BY {target}`, '', `ROLE ${name}-role:`, '    ABOUT   a worker', '    ALWAYS  do the work',
     ]);
     write(join(proj, 'agent-pack.config.mjs'), ['export default {', "  libraryRoot: 'library',", "  agentsDir: 'agents',", "  adapters: ['claude-code'],", '};']);
     mkdirSync(join(proj, 'library'), { recursive: true });
@@ -319,8 +320,8 @@ try {
       const by = async (who, dir, name) => { target(who, dir, name); return bundle(who); };
       await by('clerk', 'agents/standalone', 'auditor');
       await by('clerk', 'agents/standalone', 'legal');
-      await assert.rejects(by('clerk', 'agents/standalone', 'reader'), /BY reader: `reader` is a member of team `legal` — ASK names a standalone agent, a team, or a member of its own team/);
-      await assert.rejects(by('clerk', 'agents/standalone', 'ghost'), /unknown agent `ghost` — ASK … BY names a standalone agent or a team of the project/);
+      await assert.rejects(by('clerk', 'agents/standalone', 'reader'), /BY reader: `reader` is a member of team `legal` — DELEGATE names a standalone agent, a team, or a member of its own team/);
+      await assert.rejects(by('clerk', 'agents/standalone', 'ghost'), /unknown agent `ghost` — DELEGATE … BY names a standalone agent or a team of the project/);
       await by('scribe', 'agents/teams/legal', 'reader');
       await assert.rejects(by('bot', 'agents/teams/ops', 'reader'), /`reader` is a member of team `legal`/);
     } finally {
@@ -343,7 +344,7 @@ try {
     setVars(['VAR a', 'VAR b'], join(proj, 'library'));
     write(join(proj, 'agents', 'standalone', 'clerk.ap'), [
       'IMPORT r FROM @main.templates', '',
-      ...agent('DO  talk to the user', 'ASK  summarise {{a}}', 'IF** {{b}} is odd:', '    DO  say so', 'RUN  twice'), '',
+      ...agent('DO  talk to the user', 'DELEGATE  summarise {{a}}', 'IF** {{b}} is odd:', '    DO  say so', 'RUN  twice'), '',
       'PROCEDURE* soft:', '    DO  look at {{a}}', '',
       'COMPUTE twice:', '    REQUIRE:', '        MUST  {{b}} be a number', '    RETURN AS r:', '        DO  v = 2 × {{b}}', '    ENSURE:', '        MUST  v be even',
     ]);
@@ -360,7 +361,7 @@ try {
       await bundleAgentObjectFromConfig('clerk', config, { judge: run });
       await finishJudgeRun(run, { prune: false });
       assert.deepEqual(seen['t-executed'].sort(), ['b is odd', 'b be a number', 'look at a', 'summarise a', 'v = 2 × b', 'v be even'].sort(),
-        '#executed: the ASK, the IF**, the PROCEDURE* body and every COMPUTE section — never the agent\'s DO, never a RUN');
+        '#executed: the DELEGATE, the IF**, the PROCEDURE* body and every COMPUTE section — never the agent\'s DO, never a RUN');
       assert.deepEqual(seen['t-program'].sort(), ['b is odd', 'b be a number', 'v = 2 × b', 'v be even'].sort(), '#program: only what a program carries out');
       // #agent: the DO lines the agent carries out itself — never a delegate's or a program's, never a shipped
       // procedure's (write-program is judged in agent-pack's own build, not in a project's).

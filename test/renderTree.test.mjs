@@ -15,45 +15,45 @@ const { renderTree } = await import('../dist/src/bundlers/renderTree.js');
 {
   const out = renderTree([
     'STEP first:',
-    '  BY alice',
-    '  DO do the thing',
+    '  DELEGATE do the thing BY alice',
     'STEP second:',
     '  DO other',
   ].join('\n'));
 
   assert.ok(out.includes('Steps:'), `has Steps header, got:\n${out}`);
+  assert.ok(out.includes('1. first\n'), `a step is a label — nothing folded into its head, got:\n${out}`);
   assert.ok(out.includes('2. second'), `second item numbered, got:\n${out}`);
-  // BY is a signature argument folded into the head, not a body line.
-  assert.ok(out.includes('1. first — by `alice`'), `BY in signature, got:\n${out}`);
-  assert.ok(!/^\s*By `alice`/m.test(out), `BY must not appear as a body line, got:\n${out}`);
-  // The body (DO) renders under the item, reindented.
-  assert.ok(out.includes('Do do the thing'), `body action present, got:\n${out}`);
+  // The body renders under the item, reindented: whoever runs the flow delegates, with all its context.
+  assert.ok(out.includes('Delegate: do the thing — to `alice`, with all your context'), `delegation line, got:\n${out}`);
+  assert.ok(out.includes('Do other'), `body action present, got:\n${out}`);
 
   console.log('renderTree STEP grouping test passed.');
 }
 
 // ---------------------------------------------------------------------------
-// 1b. Multiple signature arguments render inline in declared order
+// 1b. A delegation's form says its context; `~` starts it, WAIT takes it back
 // ---------------------------------------------------------------------------
 
 {
   const out = renderTree([
     'STEP review:',
-    '  BY bob',
-    '  CONTEXT full',
-    '  DO check it',
+    '  DELEGATE~ report the gaps INTO gaps BY bob AS brief',
+    '  FORK~ trace the paths INTO paths',
+    '  FORK wire it BY carol',
+    '  WAIT gaps, paths',
   ].join('\n'));
 
-  assert.ok(out.includes('1. review — by `bob`, full context'), `BY + CONTEXT signature, got:\n${out}`);
-  assert.ok(!out.includes('passes the full upstream context'), `CONTEXT must render terse as an arg, got:\n${out}`);
+  assert.ok(out.includes('report the gaps INTO gaps — to `bob`, handing over only what `brief` holds — start it in the background'), out);
+  assert.ok(out.includes('trace the paths INTO paths — a fork of yourself, with this whole conversation — start it in the background'), out);
+  assert.ok(out.includes('wire it — to `carol`, forked with this whole conversation'), out);
+  assert.ok(out.includes('`gaps`, `paths` — every one delivered or blocked'), out);
 
-  // `CONTEXT <mode> AS! <template>` renders as the mode with the AS line beneath it.
-  const oneLine = renderTree(['STEP review:', '  BY bob', '  CONTEXT summary AS! brief', '  DO check it'].join('\n'));
-  const twoLines = renderTree(['STEP review:', '  BY bob', '  CONTEXT summary', '  AS! brief', '  DO check it'].join('\n'));
-  assert.equal(oneLine, twoLines, `one line and two lines render alike, got:\n${oneLine}`);
-  assert.ok(oneLine.includes('1. review — by `bob`, summary context'), oneLine);
+  // A DELEGATE block: its head, then the lines the one it goes to is told.
+  const block = renderTree(['STEP judge:', '  DELEGATE judge the findings BY dave:', '    DO verify every finding'].join('\n'));
+  assert.ok(block.includes('judge the findings — to `dave`, with all your context:'), block);
+  assert.ok(block.includes('Do verify every finding'), block);
 
-  console.log('renderTree definition arguments test passed.');
+  console.log('renderTree delegation lines test passed.');
 }
 
 // ---------------------------------------------------------------------------
@@ -89,12 +89,12 @@ const { renderTree } = await import('../dist/src/bundlers/renderTree.js');
 }
 
 // ---------------------------------------------------------------------------
-// 4. Enum primitive (CONTEXT) still resolves inside the tree pass
+// 4. Enum primitive (BUDGET) still resolves inside the tree pass
 // ---------------------------------------------------------------------------
 
 {
-  const out = renderTree('CONTEXT full');
-  assert.equal(out, 'passes the full upstream context, as-is', `CONTEXT enum, got: ${JSON.stringify(out)}`);
+  const out = renderTree('BUDGET cheap');
+  assert.equal(out, 'fast, shallow work — the cheapest model', `BUDGET enum, got: ${JSON.stringify(out)}`);
 
   console.log('renderTree enum primitive test passed.');
 }

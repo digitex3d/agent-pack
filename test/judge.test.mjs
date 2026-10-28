@@ -190,7 +190,7 @@ try {
         new RegExp(`body-rule.*BODY starts with \`${keyword.replace(/[!*]/g, '\\$&')}\`, but lines written .* are stored under \`${stored}\` — write \`${stored}\``),
         `BODY ${keyword} points to ${stored}`);
     }
-    for (const keyword of ['DO', 'ASK', 'COMPUTE', 'MUST', 'ALWAYS', 'SHOULD', 'MAY', 'MEM', 'RUN', 'VAR', 'IF', 'UNTIL', 'WHEN', 'STEP', 'PARALLEL', 'IN']) {
+    for (const keyword of ['DO', 'DELEGATE', 'FORK', 'WAIT', 'COMPUTE', 'MUST', 'ALWAYS', 'SHOULD', 'MAY', 'MEM', 'RUN', 'VAR', 'IF', 'UNTIL', 'WHEN', 'STEP', 'PARALLEL', 'IN']) {
       assert.deepEqual(bodyRule(join(root, `body-ok-${keyword}`), `${keyword} {x}`)().primitives, [keyword], `BODY ${keyword} names its lines`);
     }
     assert.deepEqual(bodyRule(join(root, 'body-ok-line'), '{x}', '#judge, #agent')().primitives, [], 'a scoped rule may lay out a slot alone');

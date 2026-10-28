@@ -3,7 +3,8 @@
 /**
  * The flow `STRATEGY contracts` runs (D44), as `.ap` source: one routing WHEN
  * and one FLOW — the lead prepares and hands the work out, the members carry
- * their contracts out in parallel, the lead merges. Written once here, read by
+ * their contracts out in the background (`DELEGATE~`, then `WAIT ALL`), the
+ * lead merges. Written once here, read by
  * the builder (the members' documents, their apx, the harness script) and by
  * the orchestration (AGENTS.md) exactly as a hand-written flow is.
  */
@@ -25,17 +26,19 @@ export function contractsFlowName(team: string): string {
 export function contractsFlowSource(team: string, lead: string, workers: string[]): string {
   const F = FORMULAS.blocks.contract.flow;
   const name = contractsFlowName(team);
-  // Each step names the apx of the agent that carries it out: its `contract` commands are that apx's.
-  const step = (indent: string, title: string, by: string, context: string, dos: string[]) =>
-    [`${indent}STEP ${title}:`, `${indent}    BY ${by}`, `${indent}    CONTEXT ${context}`, ...dos.map(d => `${indent}    DO ${fill(d, { apx: `node ${apxPath(by)}` })}`)];
+  // Each delegation names the apx of the agent that carries it out: its `contract` commands are that apx's.
+  const delegate = (async: boolean, title: string, by: string, dos: string[]) =>
+    [`        DELEGATE${async ? '~' : ''} ${title} BY ${by}:`, ...dos.map(d => `            DO ${fill(d, { apx: `node ${apxPath(by)}` })}`)];
   return [
     `WHEN ${F.when}:`,
     `    RUN ${name}`,
     '',
     `FLOW ${name}:`,
-    ...step('    ', F.prepare, lead, 'full', F.prepareDo),
-    ...(workers.length ? ['    PARALLEL', ...workers.flatMap(w => step('        ', fill(F.work, { member: w }), w, 'isolated', F.workDo))] : []),
-    ...step('    ', F.merge, lead, 'full', F.mergeDo),
+    `    STEP ${F.prepare}:`,
+    ...delegate(false, F.prepare, lead, F.prepareDo),
+    ...(workers.length ? [`    STEP ${F.work}:`, ...workers.flatMap(w => delegate(true, fill(F.workOf, { member: w }), w, F.workDo)), '        WAIT ALL'] : []),
+    `    STEP ${F.merge}:`,
+    ...delegate(false, F.merge, lead, F.mergeDo),
     '',
   ].join('\n');
 }

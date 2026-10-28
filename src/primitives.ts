@@ -280,8 +280,7 @@ export function stripHeaderKeyword(rawBody: string, keyword: Keyword, name: stri
  *   1. `{{name}}`        → `vars[name]`        (variable interpolation)
  *   2. `AS <slug>`       → `AS \`slug\` (id)`  (shape back-reference; keeps the
  *                                              AS keyword so applyForceLevels
- *                                              renders the force-level intro) —
- *                                              a step's `CONTEXT <mode> AS <slug>` too
+ *                                              renders the force-level intro)
  *
  * `AS` is a force-level family (see force-levels.json): `AS`, `AS!`, `AS!!`,
  * `!AS` modulate intensity. Here we resolve ONLY the slug argument against the
@@ -301,12 +300,12 @@ export interface SubstitutionContext {
 export function applyBodySubstitutions(text: string, ctx: SubstitutionContext): string {
   const shapes = ctx.templates;
   // AS first: a constant's value never becomes an AS line.
-  const shaped = text.replace(/^([ \t]*)((?:CONTEXT[ \t]+\S+[ \t]+)?)(!?AS!*)[ \t]+(\S+)[ \t]*$/gm, (_m, asIndent: string, context: string, asKeyword: string, asSlug: string) => {
+  const shaped = text.replace(/^([ \t]*)(!?AS!*)[ \t]+(\S+)[ \t]*$/gm, (_m, asIndent: string, asKeyword: string, asSlug: string) => {
     const shape = shapes.find(s => s.name === asSlug);
     if (!shape) {
       throw new Error(`AS: unknown shape "${asSlug}" (no TEMPLATE with this name is imported)`);
     }
-    return `${asIndent}${context}${asKeyword} \`${asSlug}\`${refSuffix(shape.refId)}`;
+    return `${asIndent}${asKeyword} \`${asSlug}\`${refSuffix(shape.refId)}`;
   });
   return applyVars(shaped, ctx.vars ?? {});
 }
@@ -417,10 +416,22 @@ export const DoPrimitive = createBulletGroupPrimitive({
   intro: FORMULAS.keywords.DO.intro,
 });
 
-/** `ASK <action>` — an action handed to a delegate (src/executor.ts); grouped like DO. */
-export const AskPrimitive = createBulletGroupPrimitive({
-  keyword: 'ASK',
-  intro: FORMULAS.keywords.ASK.intro,
+/** `DELEGATE <task>` — work handed to someone else (src/delegation.ts); grouped like DO. */
+export const DelegatePrimitive = createBulletGroupPrimitive({
+  keyword: 'DELEGATE',
+  intro: FORMULAS.keywords.DELEGATE.intro,
+});
+
+/** `FORK <task>` — work handed to a fork, on the conversation itself (src/delegation.ts); grouped like DO. */
+export const ForkPrimitive = createBulletGroupPrimitive({
+  keyword: 'FORK',
+  intro: FORMULAS.keywords.FORK.intro,
+});
+
+/** `WAIT <var>, …` / `WAIT ALL` — what a `~` started, taken back (src/delegation.ts). */
+export const WaitPrimitive = createBulletGroupPrimitive({
+  keyword: 'WAIT',
+  intro: FORMULAS.keywords.WAIT.intro,
 });
 
 /** `COMPUTE <action>` — an action left to a program (src/executor.ts); grouped like DO. */
@@ -459,7 +470,9 @@ export const FORCE_LEVEL_PRIMITIVES: BulletGroupPrimitive[] = [
   WhenPrimitive,
   RunPrimitive,
   DoPrimitive,
-  AskPrimitive,
+  DelegatePrimitive,
+  ForkPrimitive,
+  WaitPrimitive,
   ComputePrimitive,
   ByPrimitive,
 ];
@@ -499,7 +512,7 @@ export const AGENT_METADATA_KEYWORDS: Keyword[] = [
  * no negation, value lookup → string.
  *
  * Example:
- *   `CONTEXT full` → `values['full']()` → `'passes the full upstream context, as-is'`
+ *   `BUDGET cheap` → `values['cheap']()` → `'fast, shallow work — the cheapest model'`
  *
  * Unknown arg: lint warning, line left literal.
  */
@@ -511,18 +524,6 @@ export interface EnumPrimitive {
 }
 
 export const ENUM_PRIMITIVES: EnumPrimitive[] = [
-  {
-    keyword: 'CONTEXT',
-    values: {
-      isolated:  () => 'passes nothing — the step receives only its own intent',
-      summary:   () => 'passes a synthesized digest with provenance preserved',
-      full:      () => 'passes the full upstream context, as-is',
-      // `inherited` trades the executor's identity for native context: the step
-      // runs as a clone of the caller, not as the agent the `By` line names.
-      inherited: () => "runs as a fork of the caller — natively inherits the caller's full conversation context",
-    },
-    legendIntro: "Context modes — when a step's signature names one, pass upstream context exactly so:",
-  },
   // `BUDGET <tier>` in an AGENT: how much it may spend — the adapter maps the
   // tier to a model of its harness; the source never names a model.
   {

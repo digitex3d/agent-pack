@@ -9,7 +9,7 @@ import { FORMULAS } from './formulas.js';
  * container, whose child blocks) form an ordered or unordered list, and whose
  * body is rendered recursively by the same tree renderer. STEP is the first
  * member; adding another sequential-recursive construct is one entry here, with
- * zero renderer changes — the same contract as adding a BY or a CONTEXT today.
+ * zero renderer changes — the same contract as adding any line keyword.
  */
 export interface SequencePrimitive {
   /** The block-opener keyword (e.g. `STEP`). */

@@ -47,14 +47,6 @@ export function stepsHeader(): string {
   return `${K.STEP.list}:`;
 }
 
-/** A STEP's inline signature (` — by \`x\`, full context`), in the order the formulas declare. */
-export function stepSignature(args: ReadonlyMap<string, string>): string {
-  const frags = K.STEP.args
-    .filter(a => args.has(a.keyword))
-    .map(a => fill(a.formula, { value: args.get(a.keyword)! }));
-  return frags.length ? fill(K.STEP.signature, { args: frags.join(', ') }) : '';
-}
-
 /** The short name a Ref renders with. */
 export function refName(ref: ApRef): string {
   return addressName(ref.target);

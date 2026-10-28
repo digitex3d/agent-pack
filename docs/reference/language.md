@@ -12,7 +12,7 @@ EXPORT POLICY security:
 - A line starting with `#` at the top of a file is a title, for the reader.
 - Names are lowercase words joined by dashes (`verify-claim`) — variable names too (`{{best-pizza}}`). Every block gets a stable id from its kind, library and name.
 - Every list on a line is comma-separated, whatever the line: `IMPORT a, b FROM …`, `MEMBER a, b`, `WRITES IN src/api/**, src/db/**`, `EXPERTISE code-review, refactoring`, `APPLIES #board, universal`, `ENUM[low, high]`. A comma inside `{…}` belongs to a glob (`src/{api,db}/**` is one). A list separated by spaces fails the build, with the line to write.
-- Nothing compiles quietly: a word the language does not have, a level a keyword does not declare (`MEM!!!`), a value outside its set (`CONTEXT isolatd`), a name that points at no block, an undeclared `{{variable}}`, an `INTO` naming no variable — each fails the build, with its file and line, and a suggestion when a keyword is misspelled.
+- Nothing compiles quietly: a word the language does not have, a level a keyword does not declare (`MEM!!!`), a value outside its set (`BUDGET cheep`), a name that points at no block, an undeclared `{{variable}}`, an `INTO` naming no variable — each fails the build, with its file and line, and a suggestion when a keyword is misspelled.
 
 ## Blocks
 
@@ -40,7 +40,7 @@ One agent per file, anywhere under `agents/`.
 | `BUDGET cheap \| moderate \| costly` | how much it may spend — the adapter maps the tier to a model of its harness (Claude Code: haiku, sonnet, opus); it wins over the config's [`delegate.models`](/reference/config#delegate) |
 | `LENS-IN <template>` | the shape requests to it arrive in |
 | `LENS-OUT <template>` | the shape of its answers |
-| rules and `WHEN` workflows | its own behaviour — rules at every level, `SHOULD`, `MAY` and [`MEM`](#memory) included (see [Rules](#rules)), and [Control flow](#control-flow); `ASK` and `COMPUTE` lines hand a line to a delegate or a program (see [Executors](#executors)) |
+| rules and `WHEN` workflows | its own behaviour — rules at every level, `SHOULD`, `MAY` and [`MEM`](#memory) included (see [Rules](#rules)), and [Control flow](#control-flow); `DELEGATE` and `COMPUTE` lines hand a line to a delegate or a program (see [Executors](#executors)) |
 
 `@WITHIN <domain>, …` above the `AGENT` line puts all its work within the [domains](#domain) it names — see [@WITHIN](#decorators-within): the definition opens with a scope warning listing their files. Without it, the agent has no perimeter.
 
@@ -160,7 +160,7 @@ A procedure a program carries out — a `PROCEDURE**` written as a specification
 | Section | |
 |---|---|
 | `REQUIRE:` | when the program refuses its input — it stops with exit `1`, and the procedure stops with it. Only rules and `IF` |
-| `RETURN AS <template>:` | the computation, and the template its result is shaped as (no force level: the result is always checked). `DO`, `COMPUTE`, `IF`, `UNTIL` and rules — never `ASK` |
+| `RETURN AS <template>:` | the computation, and the template its result is shaped as (no force level: the result is always checked). `DO`, `COMPUTE`, `IF`, `UNTIL` and rules — never `DELEGATE` |
 | `ENSURE:` | the guarantees on the result — they become the program's tests. Only rules and `IF` |
 
 A section out of order, repeated, empty or missing fails the compilation; `REQUIRE`, `RETURN` and `ENSURE` stand only in a `COMPUTE` block. How the program is written and run: [Programs](#programs).
@@ -209,7 +209,7 @@ An answer implicit in a source file — its pseudocode, its design patterns, a d
 | `AS <template>` | a template with `SLOTS`: the value for a file is a list of its instances — one per thing `EACH` targets — or the literal `none` when there is nothing to report. No level: the value is always checked |
 | rule lines | `MUST`, `NEVER`, `SHOULD`, … — how the value is produced |
 
-`ABOUT`, `FOR`, `EACH` and `AS` are required, once each; beside them the body holds only rule lines. Any other line fails the build: a `WHEN` (as a line or a block), a nested block (`IF`, `ON-…:`, `UNTIL`, …), an action (`DO`, `ASK`, `COMPUTE`, `RUN`), and `MEM` and `@WITH`, which are an agent's. A dimension is declared and imported like a store — `EXPORT DIMENSION` in the library's `dimensions/`, `IMPORT pseudocode FROM @main.dimensions` — or written in the agent's own file. A dimension belongs to an agent and is reached only through that agent's apx: importing it into `PROJECT.ap` or a team's `flows.ap` fails the build. The apx reaches it by its id, like every block — `dimension read <dim-id> <file>` — so its name may be any name.
+`ABOUT`, `FOR`, `EACH` and `AS` are required, once each; beside them the body holds only rule lines. Any other line fails the build: a `WHEN` (as a line or a block), a nested block (`IF`, `ON-…:`, `UNTIL`, …), an action (`DO`, `DELEGATE`, `COMPUTE`, `RUN`), and `MEM` and `@WITH`, which are an agent's. A dimension is declared and imported like a store — `EXPORT DIMENSION` in the library's `dimensions/`, `IMPORT pseudocode FROM @main.dimensions` — or written in the agent's own file. A dimension belongs to an agent and is reached only through that agent's apx: importing it into `PROJECT.ap` or a team's `flows.ap` fails the build. The apx reaches it by its id, like every block — `dimension read <dim-id> <file>` — so its name may be any name.
 
 **When it is worth reading is the reader's to say — with [`@WITH`](#decorators-with), like a policy or a skill.** A dimension says what it holds, not when; the agent that has it names it above the lines it is for, and reads it there:
 
@@ -253,70 +253,72 @@ The compiled agent opens with a scope warning — the files of the domains it wo
 Written in a team's `flows.ap`. See [Teams and flows](/guide/teams-and-flows).
 
 ```
-FLOW complex-task:
-    STEP implement end-to-end:
-        BY senior
-        DO implement the change and run the tests
+FLOW deliver-task:
+    STEP implement:
+        DELEGATE implement the task test-first INTO report BY implementer
     STEP review:
-        BY reviewer
-        CONTEXT full
-        AS review-request
-        DO review the change for duplicated logic
+        DELEGATE~ report every gap between the task and the diff INTO gaps BY conformance-reviewer AS task-and-diff
+        DELEGATE~ trace every path the diff touches INTO paths BY edge-case-hunter AS diff-only
+        WAIT gaps, paths
+    STEP judge:
+        DELEGATE judge the findings INTO triage BY finding-judge:
+            DO verify every finding in {{gaps}} and {{paths}} against the code
+            NEVER close a finding without reading its line
 ```
+
+A step is a label: it groups the lines whoever runs the flow carries out, in order. It names no one — who does the work is said by the line that hands it over.
 
 | Line | |
 |---|---|
-| `STEP <title>:` | one step, in order |
-| `BY <agent or team>` | who carries it out — a member of the team, or a role bound to one; or another team, handed the step as one agent: it runs the flow its routing picks (a team of contracts, its contracts) and that flow's result is the step's answer. A flow with such a step is never compiled into a harness script: it is run from its text |
-| `CONTEXT isolated \| summary \| full \| inherited` | how much upstream context the step's agent receives |
-| `AS <template>` | the shape of what is handed to the step's agent — also written on the `CONTEXT` line: `CONTEXT summary AS! review-brief` reads as `CONTEXT summary` with `AS! review-brief` beneath |
-| `DO` | what to do |
+| `STEP <title>:` | one step, in order, carried out by whoever runs the flow |
+| `DO <action>` | done by whoever runs the flow |
+| `DELEGATE <task> [INTO <name>] BY <agent or team> [AS <template>]` | the task handed to an agent — a member of the team, or a role bound to one — or to another team, handed it as one agent: it runs the flow its routing picks (a team of contracts, its contracts) and that flow's result is the line's answer. Without `AS`, the agent gets all the context; with `AS <template>` (any level, `AS!`, `AS!!`), only what the template holds — for a reviewer, a template that holds the task and the diff alone. Written `…:`, the lines beneath are what the agent is told: `DO`, `RUN` and rules, under `IF`/`ELSE` too |
+| `FORK <task> [INTO <name>] [BY <agent>] [AS <template>]` | the task handed over on the conversation itself: a fork of whoever runs the flow, or the agent `BY` names, working with its own definition. With `AS` (`AS!`, `AS!!`), what it is handed on top of the conversation takes the template's shape |
+| `DELEGATE~ …`, `FORK~ …` | started in the background: the flow goes on |
+| `WAIT <name>, …` / `WAIT ALL` `[MAX <duration>]` | waits for what a `~` of this block started — the ones it names, or all — every one delivered, blocked or ended without delivery, or until its limit: `MAX` (`90s`, `10m`, `2h`), else the `wait.max` config key; then each one's variable holds its result, and for what is not delivered the lead decides |
 | `MUST`, `NEVER`, `SHOULD`, … | a [rule](#rules) of the step — `NEVER skip a finding`, not `DO never skip a finding`; never `MEM` |
-| `IF <condition>:` / `ELSE` | the `DO`, `RUN` and rule lines indented under it apply only when the condition holds (or, under `ELSE`, when it does not); `BY`, `CONTEXT` and `AS` stay unconditional |
-| `PARALLEL` | the steps indented under it run at the same time |
+| `IF <condition>:` / `ELSE` | the lines indented under it apply only when the condition holds (or, under `ELSE`, when it does not) |
 | `PARALLEL EACH <item> IN <list> MAX <n>:` | the one step indented under it runs once per element of the list, all at the same time — `{{<item>}}` is the run's element |
 
-**`PARALLEL EACH` — one run per element of a list.** A step fills a list variable (`DO … INTO subtasks`); `PARALLEL EACH subtask IN subtasks MAX 5:` then runs the one step beneath it once per element, all at the same time. The list is a variable typed with a template that holds one `LIST` slot — in a team's `flows.ap`, an imported `SESSION VAR`. `MAX` is required: a list longer than it stops the flow with an error. A run that fails does not stop the others: its report goes on with theirs, to the step that comes next. To clone an agent over the parts of a task, the step is `BY` that agent with `CONTEXT inherited`:
+**Each piece a `~` starts is tracked by the apx** — its id (`dlg-…`), its state, its result — and the compiled lines name the commands: `delegate start` before handing it over, `delegate deliver` or `delegate block` from whoever carries it out, `wait` at its `WAIT` (see [Background work](/guide/apx#background-work)). At the limit nothing is blocked by itself: the lead decides — wait again, take it over, reassign it or block it.
+
+**What a `~` starts is waited for in its own block.** Every `DELEGATE~` and `FORK~` is taken back by a `WAIT` before the block it is written in ends — its STEP, its `IF` or `ELSE` branch, its `UNTIL` — and its variable is read only after that `WAIT`. A `WAIT` names what its own block started. Each of these fails the build, with its line. `~`, `WAIT` and `FORK` are a flow step's: in an agent's body a `DELEGATE` waits where it stands.
+
+**`PARALLEL EACH` — one run per element of a list.** A step fills a list variable (`DELEGATE … INTO subtasks BY …`); `PARALLEL EACH subtask IN subtasks MAX 5:` then runs the one step beneath it once per element, all at the same time. The list is a variable typed with a template that holds one `LIST` slot — in a team's `flows.ap`, an imported `SESSION VAR`. `MAX` is required: a list longer than it stops the flow with an error. A run that fails does not stop the others: its report goes on with theirs, to the step that comes next. To clone an agent over the parts of a task, the step forks it:
 
 ```
 FLOW divide-and-conquer:
     STEP split the task:
-        BY developer
-        CONTEXT full
-        DO split the task into independent subtasks INTO subtasks
+        DELEGATE split the task into independent subtasks INTO subtasks BY developer
     PARALLEL EACH subtask IN subtasks MAX 5:
         STEP work the subtask:
-            BY developer
-            CONTEXT inherited
-            DO work only on {{subtask}}
+            FORK work only on {{subtask}} BY developer
     STEP merge the results:
-        BY developer
-        CONTEXT full
-        DO merge every subtask report into one result
+        DELEGATE merge every subtask report into one result BY developer
 ```
 
 A flow with a `PARALLEL EACH` runs as written, never as a Workflow script: the script does not hold the list.
 
-A flow itself may put its `STEP`, `PARALLEL` and `RUN` lines under `IF <condition>:` and its `ELSE`, or repeat them under `UNTIL <condition>:`, and nest further `IF`/`ELSE`/`UNTIL` inside them. The condition is prose, judged by whoever runs the flow; an `UNTIL` takes no mandatory bound — write it in the condition when there is one.
+A flow itself may put its `STEP`, `PARALLEL EACH` and `RUN` lines under `IF <condition>:` and its `ELSE`, or repeat them under `UNTIL <condition>:`, and nest further `IF`/`ELSE`/`UNTIL` inside them. The condition is prose, judged by whoever runs the flow; an `UNTIL` takes no mandatory bound — write it in the condition when there is one.
 
 ```
 FLOW build-change:
     STEP write the plan:
-        BY planner
-        DO write the implementation plan
+        DELEGATE write the implementation plan BY planner
     UNTIL the audit says pass or fail — three revisions at most:
         STEP revise the plan:
-            BY planner
-            DO amend the plan to close every gap the audit lists
+            DELEGATE amend the plan to close every gap the audit lists BY planner
     IF the audit says pass:
         RUN deliver-task
 ```
 
 A flow needs at least one `STEP`, directly or under its `IF`/`ELSE`/`UNTIL`. A flow in a team's `flows.ap` is checked like one in a flow file.
 
-A step needs at least one `DO` or `RUN`, directly or under its `IF`/`ELSE`: a rule line says how to act, never what to do.
+A step needs at least one `DO`, `DELEGATE`, `FORK`, `WAIT` or `RUN`, directly or under its `IF`/`ELSE`: a rule line says how to act, never what to do.
 
-A step takes no `MEM`, nor do its `IF`/`ELSE` branches: the agent its `BY` names may have no memory in its harness.
+A step takes no `MEM`, nor do its `IF`/`ELSE` branches or its `DELEGATE` blocks: whoever runs the flow may have no memory in its harness.
+
+The old forms fail the build with their rewrite: `BY` and `AS` lines in a step, `CONTEXT`, a bare `PARALLEL:` and `ASK`.
 
 ## Rules
 
@@ -335,7 +337,7 @@ A rule is a keyword and an action. The keyword says how binding it is:
 | `ALWAYS` | You must always |
 | `NEVER` | You must never |
 | `DO` | a step the agent carries out |
-| `ASK` | a step a delegate carries out — see [Executors](#executors) |
+| `DELEGATE` | a line a delegate carries out — see [Executors](#executors) |
 | `COMPUTE` | a step a program carries out — see [Executors](#executors) |
 
 A level is written with its keyword — `NEVER skip a finding`, `ALWAYS cite the line` — never as `DO never …` or `DO always …`.
@@ -371,7 +373,7 @@ Every line is carried out by one of three executors. The verb says which:
 | Write | Carried out by |
 |---|---|
 | `DO <action>` | the agent itself |
-| `ASK <action>` | a delegate — another agent, handed the line's inputs and nothing else |
+| `DELEGATE <action>` | a delegate — another agent, handed the line's inputs and nothing else |
 | `COMPUTE <action>` | a program — a script: same input, same output, every time |
 
 On a block head, stars say the same:
@@ -393,27 +395,27 @@ VAR totals
 VAR document_total
 
 WHEN an invoice arrives:
-    ASK      read the invoice lines from {{pdf_text}} INTO lines
-    ASK      check the clauses of {{contract}} INTO risks BY legal-reviewer
+    DELEGATE read the invoice lines from {{pdf_text}} INTO lines
+    DELEGATE check the clauses of {{contract}} INTO risks BY legal-reviewer
     COMPUTE  group {{lines}} by VAT rate INTO totals
     IF** {{totals}} differ from {{document_total}} by more than 0.01:
         DO   tell the user which rates do not add up
 ```
 
 - **On a procedure, the mark covers the body**: its lines inherit the executor. **On an `IF` or an `UNTIL`, it covers only the condition**: the lines beneath inherit the enclosing block's executor — and an unmarked `IF` inside a `PROCEDURE**` is decided by the program too.
-- **A line may raise its executor, never lower it** — agent, then delegate, then program. Under a `PROCEDURE**`, an `ASK`, an `IF*`, or a `RUN` of anything but a `PROCEDURE**` fails the compilation: a program cannot stop for the agent; under a `PROCEDURE*`, a `RUN` takes only a `PROCEDURE*` or a `PROCEDURE**`. A [checked condition](#checked-conditions) (`IF!`) inside a starred procedure is an error: its executor decides its conditions.
+- **A line may raise its executor, never lower it** — agent, then delegate, then program. Under a `PROCEDURE**`, a `DELEGATE`, an `IF*`, or a `RUN` of anything but a `PROCEDURE**` fails the compilation: a program cannot stop for the agent; under a `PROCEDURE*`, a `RUN` takes only a `PROCEDURE*` or a `PROCEDURE**`. A [checked condition](#checked-conditions) (`IF!`) inside a starred procedure is an error: its executor decides its conditions.
 - **A condition has one judge.** `IF!`/`IF!!` are decided by a judge, `IF*`/`IF**` by a delegate or a program: `IF!*` or `UNTIL**!` is an error. A starred condition reads at least one variable — its only input.
 
 **What a delegate or a program receives is its input, and nothing else.** One key per `{{variable}}` the piece reads, with its value in the session; one per constant, with its value; and `in`, the input of a procedure that declares a `LENS-IN`. An empty variable stops the piece before it starts. Its answer is checked against its contract: a line with `INTO x` answers a value of `x`'s type, a procedure its `AS` template, a condition `{"holds": true}` or `{"holds": false}`. Each piece gets a contract id, `exe-<8 hex>`, and the compiled line names the apx command that carries it out — `input` and `answer` for a delegate, `run` for a program (see [The apx](/guide/apx#delegates-and-programs)):
 
 ```
-Ask a delegate to read the invoice lines from `pdf_text` — delegate: `quick` — hand it over its input and the shape of its answer, both from `node .agent-pack/apx/clerk.apx ask input exe-…`, then store its answer: `node .agent-pack/apx/clerk.apx ask answer exe-… -`
+Delegate: read the invoice lines from `pdf_text` — to `quick` — hand it over its input and the shape of its answer, both from `node .agent-pack/apx/clerk.apx delegate input exe-…`, then store its answer: `node .agent-pack/apx/clerk.apx delegate answer exe-… -`
 If `totals` differ from `document_total` by more than 0.01 — a program decides — `node .agent-pack/apx/clerk.apx run exe-…`
 ```
 
-### ASK and BY
+### DELEGATE and BY
 
-`ASK … BY <agent>` names who the line is handed to: a standalone agent, a team (its routing picks the member), or a member of the asking agent's own team. A member of another team, or a name the project does not have, fails the compilation. `BY` ends the line, after the `INTO`: `ASK … INTO risks BY legal-reviewer` (`BY … INTO …` is an error). Only `ASK` takes a `BY` — a `COMPUTE` is a program's.
+`DELEGATE … BY <agent>` names who the line is handed to: a standalone agent, a team (its routing picks the member), or a member of the delegating agent's own team. A member of another team, or a name the project does not have, fails the compilation. The parts come in their order — the task, `INTO`, `BY`, `AS`: `DELEGATE … INTO risks BY legal-reviewer` (`BY … INTO …` is an error). In an agent's body a `DELEGATE` has its contract (`exe-…`): the delegate is handed the line's inputs and nothing else, and an `AS <template>` is the shape of that input. Only `DELEGATE` and `FORK` take a `BY` — a `COMPUTE` is a program's. `ASK` became `DELEGATE`: an `ASK` line fails the build with the rewrite.
 
 Without `BY`, the line goes to the **default delegate**, `quick`: a builtin agent that answers from the JSON input it is handed alone, as JSON in the shape the contract asks, saying what is missing when the input lacks it. `bundle all` builds it only when some agent hands it work and the project has no agent of that name. With Claude Code it runs on `haiku` and with no tool at all — it cannot read a file. The [`delegate`](/reference/config#delegate) key names another default and sets the model each agent runs on: the source never names a model.
 
@@ -454,7 +456,7 @@ An `UNTIL*` or `UNTIL**` asks its condition after each round, at most the rounds
 | `RUN <procedure> INTO <name>` | carry it out, and store its result in a variable |
 | `IN <store>:` | the indented lines work on that store |
 | `VAR <name>:` | the indented lines work out a [variable](#variables): its value is their final outcome |
-| `DO <action> INTO <name>` | do it, and store its result in a variable — `ASK` and `COMPUTE` take `INTO` too |
+| `DO <action> INTO <name>` | do it, and store its result in a variable — `DELEGATE`, `FORK` and `COMPUTE` take `INTO` too |
 
 Lifecycle shorthands expand to a `WHEN`:
 
@@ -557,7 +559,7 @@ A variable is a named value. A **constant** is fixed when the agent is compiled;
 | `VAR report AS task-report` | a variable with a type: a template |
 | `VAR draft:` + an indented block | declared and assigned: its value is the final outcome of the block |
 | `VAR report AS task-report:` + an indented block | the same, typed |
-| `DO <action> INTO draft` | assigns, or reassigns, a declared variable — so do `ASK`, `COMPUTE` and `RUN … INTO draft` |
+| `DO <action> INTO draft` | assigns, or reassigns, a declared variable — so do `DELEGATE`, `FORK`, `COMPUTE` and `RUN … INTO draft` |
 | `{{draft}}` | reads it |
 
 A variable is stored, and read back, only through the agent's [apx](/guide/apx#variables), which keeps the exact text stored — a later reader gets it verbatim, never a summary.
@@ -616,7 +618,7 @@ VAR claim:
 
 **`VAR x:` assigns an imported variable.** In a body, `VAR x:` normally declares a private `x` and assigns it. When the agent imports `x` — a `SESSION` variable, or an exported private one — `VAR x:` only assigns it: it declares nothing. This is how a procedure's result goes into a shared variable (`VAR plan:` with `RUN make-plan` beneath). It takes no `AS` there: the type is the declaration's — `VAR plan AS x:` would declare `plan` again, an error.
 
-A single step registers its result with a trailing `INTO <name>`, on a `DO`, `ASK`, `COMPUTE` or `RUN` line only — uppercase, at the very end of the line (before an `ASK`'s `BY`); anywhere else, `into` is plain text:
+A single step registers its result with a trailing `INTO <name>`, on a `DO`, `DELEGATE`, `FORK`, `COMPUTE` or `RUN` line only — uppercase, at the very end of the line (before a delegation's `BY` and `AS`); anywhere else, `into` is plain text:
 
 ```
 VAR summary
@@ -758,7 +760,7 @@ EXPORT TEAM delivery:
     FLOW deliver:
         @WITHIN api
         STEP build the endpoint:
-            BY backend-dev
+            DELEGATE build the endpoint BY backend-dev
 ```
 
-The compiler lets no ambiguous perimeter through: a perimeter is bound to a block whose bounds the apx knows at run time — the agent's is the scope warning, the apx's `scope` and, in a team of contracts, what each copy shows and delivers; a flow's and a step's are written into the flow. So `@WITHIN` stands only right above an `AGENT`, a `TEAM`, a `FLOW` or a `STEP` — anywhere else, or opening a block (`@WITHIN api:`), it fails the build. Nested, it narrows, and only by naming what the one around it names: a `@WITHIN` that names a domain the enclosing one does not fails the build — never a silent intersection. A step's `@WITHIN` names only domains its `BY` agent works within, when a `@WITHIN` decorates that agent. An agent no `@WITHIN` decorates has no perimeter. The old `WRITES <domain>` and `READS <domain>` agent lines, and `OWNS`, fail the build with the rewrite.
+The compiler lets no ambiguous perimeter through: a perimeter is bound to a block whose bounds the apx knows at run time — the agent's is the scope warning, the apx's `scope` and, in a team of contracts, what each copy shows and delivers; a flow's and a step's are written into the flow. So `@WITHIN` stands only right above an `AGENT`, a `TEAM`, a `FLOW` or a `STEP` — anywhere else, or opening a block (`@WITHIN api:`), it fails the build. Nested, it narrows, and only by naming what the one around it names: a `@WITHIN` that names a domain the enclosing one does not fails the build — never a silent intersection. A step's `@WITHIN` names only domains the agents its `DELEGATE` lines go to work within, when a `@WITHIN` decorates those agents. An agent no `@WITHIN` decorates has no perimeter. The old `WRITES <domain>` and `READS <domain>` agent lines, and `OWNS`, fail the build with the rewrite.

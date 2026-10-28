@@ -192,7 +192,7 @@ try {
     rmSync(join(lib, 'domains', 'http.ap'));
   }
 
-  // --- a team, a flow, a step: nested, @WITHIN narrows by naming what the one around it names; a step stays within its agent's ---
+  // --- a team, a flow, a step: nested, @WITHIN narrows by naming what the one around it names; a delegation stays within its agent's ---
   {
     const team = join(root, 'teams', 'crew');
     const member = (name, above = []) => write(join(team, `${name}.ap`), ['IMPORT api, db FROM @main.domains', '', ...above,
@@ -200,8 +200,8 @@ try {
     const crew = (aboveTeam, aboveFlow, aboveStep) => write(join(team, 'crew.ap'), ['IMPORT api, db FROM @main.domains', '', ...aboveTeam,
       'EXPORT TEAM crew:', '    MEMBER  builder, checker', '    ABOUT   a crew', '', '    WHEN asked to ship:', '        RUN ship', '',
       ...aboveFlow.map(l => `    ${l}`), '    FLOW ship:', ...aboveStep.map(l => `        ${l}`),
-      '        STEP build it:', '            BY builder', '            DO  compile the code',
-      '        STEP check it:', '            BY checker', '            DO  run the checks']);
+      '        STEP build it:', '            DELEGATE compile the code BY builder',
+      '        STEP check it:', '            DELEGATE run the checks BY checker']);
     const build = () => bundleAgentObject({ agentName: 'builder', agentFile: join(team, 'builder.ap'), agentDir: team, projectRoot: root, libraryRoot: lib, libraryRoots: [lib], libraries: { '@main': lib }, bundleConfig: { runtime: false } });
     member('builder', ['@WITHIN api']); member('checker');
     crew(['@WITHIN api, db'], [], ['@WITHIN api']);
@@ -211,7 +211,7 @@ try {
     crew(['@WITHIN api'], [], ['@WITHIN db']);
     await assert.rejects(build(), /crew\.ap:12  `@WITHIN db`: the @WITHIN around it names `api` — a nested @WITHIN names only what that one does/);
     crew([], ['@WITHIN db'], []);
-    await assert.rejects(build(), /crew\.ap:12  @WITHIN db: this step's agent `builder` works within `api` — a step's @WITHIN names only domains of its agent's/);
+    await assert.rejects(build(), /crew\.ap:13  @WITHIN db: `builder`, whom this line delegates to, works within `api` — a step's @WITHIN names only domains of the agents it delegates to/);
     member('builder');
     await build();
   }

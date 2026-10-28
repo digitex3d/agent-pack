@@ -129,9 +129,10 @@ try {
     const { compileWorkflow } = await import('../dist/adapters/claude-code/workflow.js');
     const flow = api.structure.byKind('flow').find(f => f.name === 'backend-contracts');
     assert.ok(flow, "the strategy's flow travels in the member's document");
-    assert.deepEqual(flow.body.map(n => n.type), ['step', 'parallel', 'step']);
-    assert.deepEqual([last(flow.body[0].by.target), flow.body[1].steps.map(s => last(s.by.target)), last(flow.body[2].by.target)],
-      ['architect', ['api-dev', 'db-dev'], 'architect'], 'the lead prepares, the workers in parallel, the lead merges');
+    assert.deepEqual(flow.body.map(n => n.type), ['step', 'step', 'step']);
+    const lines = step => step.body.map(n => `${n.keyword}${n.async ? '~' : ''} ${n.by ?? n.text}`);
+    assert.deepEqual(flow.body.map(lines), [['DELEGATE architect'], ['DELEGATE~ api-dev', 'DELEGATE~ db-dev', 'WAIT ALL'], ['DELEGATE architect']],
+      'the lead prepares, the workers in the background, the lead merges');
     assert.equal(flow.source, null, 'the flow is the strategy\'s: no line of the file');
     const tb2 = api.structure.byKind('team')[0];
     assert.deepEqual(tb2.routing.map(r => [r.when, last(r.run.target)]), [['handed a contract of this team', 'backend-contracts']]);
@@ -150,7 +151,7 @@ try {
   assert.ok(content.includes('- `endpoint` — one HTTP endpoint — domain `api` — carried out by `api-dev`'), content);
   assert.ok(content.includes('When handed a contract of this team:'), content);
   assert.ok(/Run the flow `backend-contracts` \(flw-[0-9a-f]{8}\) — start with `node \.agent-pack\/apx\/architect\.apx flow/.test(content), 'the flow starts from the lead');
-  assert.ok(content.includes('## `backend-contracts`') && content.includes('In parallel'), content);
+  assert.ok(content.includes('## `backend-contracts`') && content.includes('start it in the background and go on'), content);
 
   // --- the two shapes of a team ---
   TEAM(undefined, ['    LEAD      architect']);

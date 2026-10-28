@@ -56,8 +56,8 @@ function renderEnumValue(prim: EnumPrimitive, arg: string, ctx?: BundleContext):
 /**
  * Chapter legend for an enum's modes: `legendIntro` followed by one bullet per
  * value, each rendered through the same adapter-override lookup as the line
- * rewrite. Consumed by chapters whose strategy declares `legendEnum` (the flow
- * chapter explains CONTEXT this way). Returns '' for an unknown keyword.
+ * rewrite. Consumed by chapters whose strategy declares `legendEnum`. Returns ''
+ * for an unknown keyword.
  */
 export function renderEnumLegend(keyword: string, ctx?: BundleContext): string {
   const prim = enumPrimitiveFor(keyword);

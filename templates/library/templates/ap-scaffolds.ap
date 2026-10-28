@@ -5,8 +5,8 @@ EXPORT TEMPLATE ap-statement:
   APPLIES #agent-pack, #authoring, #scaffold, #rule
 
   SLOTS:
-    key:  ENUM[DO, ASK, COMPUTE, RUN, IF, ELSE, UNTIL, IF!, IF!!, UNTIL!, UNTIL!!, WHEN!, IF*, IF**, UNTIL*, UNTIL**, IN, VAR] "keyword"
-      MUST   act with DO (the agent), ASK (a delegate), COMPUTE (a program) or RUN; branch with IF / ELSE
+    key:  ENUM[DO, DELEGATE, COMPUTE, RUN, IF, ELSE, UNTIL, IF!, IF!!, UNTIL!, UNTIL!!, WHEN!, IF*, IF**, UNTIL*, UNTIL**, IN, VAR] "keyword"
+      MUST   act with DO (the agent), DELEGATE (a delegate), COMPUTE (a program) or RUN; branch with IF / ELSE
       MUST   loop with UNTIL; a line may raise its executor (agent, delegate, program), never lower it
       MUST   hand a condition to the judge with IF! / UNTIL! (agent sees it) or IF!! / UNTIL!! (sealed)
       MUST   make a checked condition read at least one variable — the judge sees only stored values
@@ -15,7 +15,7 @@ EXPORT TEMPLATE ap-statement:
       MUST   never put a `!` and a star on one condition — a condition has one judge
       MUST   never write a round limit on a checked or starred UNTIL — the apx counts the rounds
       MUST   open `IN <store>:` to work on a store, `VAR <name>:` to assign a block's final outcome
-      MUST   put INTO <name> at the end of a DO, ASK, COMPUTE or RUN line — on an ASK only `BY <agent>` follows
+      MUST   end a DO, COMPUTE or RUN line with INTO <name>; on a DELEGATE, INTO comes after the task, before BY and AS
       MUST   write `WHEN! <condition>:` as sugar for `WHEN <condition>:` + `IF! <condition>:` beneath; never WHEN!!
     text: TEXT  "the statement body (ELSE takes none); IN, VAR and WHEN! heads end with a colon"
   BODY:
@@ -69,93 +69,92 @@ EXPORT TEMPLATE ap-workflow:
         RUN draw-component-diagram
 
 EXPORT TEMPLATE ap-block-step:
-  ABOUT   scaffold for a STEP — a single executable node inside a FLOW or a PARALLEL group
+  ABOUT   scaffold for a STEP — a label grouping the lines whoever runs the flow carries out
   APPLIES #agent-pack, #authoring, #scaffold, #block
 
   SLOTS:
     label:    TEXT MAX_WORDS 8  "imperative step label; the header ends with a colon"
-    by?:      TEXT MAX_WORDS 1  "agent or team that executes it (BY); omit if unbound"
-    context?: ENUM[isolated, summary, full, inherited]  "how much upstream context to pass (CONTEXT); omit for default"
-    actions:  TEXT  "one DO, RUN or force-level line per action; IF/ELSE branches hold the same lines"
-      MUST   give at least one DO or RUN line — a step with neither is invalid
+    actions:  TEXT  "one DO, DELEGATE, FORK, WAIT, RUN or force-level line per action; IF/ELSE branches hold the same"
+      MUST   give at least one DO, DELEGATE, FORK, WAIT or RUN line — a step with none is invalid
+      MUST   hand work over with `DELEGATE <task> [INTO <var>] BY <agent or team> [AS <template>]`, a line or a block
+      MUST   write a DELEGATE without AS to pass all the context; with `AS <template>`, only what the template holds
+      MUST   write `FORK <task> [INTO <var>] [BY <agent>]` to hand over the conversation itself — a FORK takes no AS
+      MUST   start work without waiting for it with DELEGATE~ or FORK~
+      MUST   take every ~ back with `WAIT <var>, …` or `WAIT ALL` before the block it is written in ends
       MUST   write a rule with its force keyword (NEVER, MUST, SHOULD …) — never as DO never
-      MUST   not use MEM in a step — memory belongs to an agent, a role or a procedure
+      MUST   not use MEM in a step, nor in its DELEGATE blocks — memory belongs to an agent, a role or a procedure
       MUST   not declare a VAR in a step — declare it in the agent's body or import it
-      MAY    use IF! / IF!! / UNTIL! / UNTIL!! only when BY names an agent — its apx answers the check
-    shape?:   TEXT MAX_WORDS 1  "input-contract template for the step (AS); omit if none"
+      MUST   never write BY, CONTEXT or AS as a line of a step — the DELEGATE line carries them
+      MAY    use IF! / IF!! / UNTIL! / UNTIL!! only inside a `DELEGATE … BY <agent>:` block — its apx answers the check
   BODY:
     STEP {label}:
-        BY {by}
-        CONTEXT {context}
         {actions}
-        AS {shape}
   EXAMPLE:
     STEP audit for DRY:
-        BY dry-keeper
-        CONTEXT full
-        DO audit the implementation for DRY violations and duplicated logic
-        NEVER rewrite the code under review
-        IF a pattern repeats in three places or more:
-            DO recommend a single source of truth
-        ELSE
-            DO report the step as clean
+        DELEGATE audit the implementation for DRY violations BY dry-keeper:
+            DO report each duplicated logic with its file and line
+            NEVER rewrite the code under review
+            IF a pattern repeats in three places or more:
+                DO recommend a single source of truth
+            ELSE
+                DO report the step as clean
 
 EXPORT TEMPLATE ap-block-flow:
-  ABOUT   scaffold for a FLOW — ordered STEP, PARALLEL and RUN nodes, IF/ELSE/UNTIL around them; referenced by RUN
+  ABOUT   scaffold for a FLOW — ordered STEP, PARALLEL EACH and RUN nodes, IF/ELSE/UNTIL around them; referenced by RUN
   APPLIES #agent-pack, #authoring, #scaffold, #block
 
   SLOTS:
     flow-name: TEXT MAX_WORDS 1  "kebab-case flow name, referenced by RUN"
-    steps:     TEXT  "one node per line — STEP, PARALLEL, RUN, or IF/ELSE/UNTIL around them"
-      MUST   order nodes as they execute; wrap concurrent steps in a PARALLEL group
+    steps:     TEXT  "one node per line — STEP, PARALLEL EACH, RUN, or IF/ELSE/UNTIL around them"
+      MUST   order nodes as they execute
+      MUST   run concurrent work as DELEGATE~ or FORK~ lines in one STEP, then WAIT for them in that STEP
       MAY    fan one STEP out per list element with `PARALLEL EACH <item> IN <list> MAX <n>:`
       MUST   head a branch `IF <condition>:` and a loop `UNTIL <condition>:` — the condition is prose
-      MUST   not check a condition at the flow's own level — put IF! or UNTIL! inside a STEP BY an agent
-      MUST   indent STEP, PARALLEL, RUN or a nested IF/ELSE/UNTIL under an IF, ELSE or UNTIL head
+      MUST   not check a condition at the flow's own level — put IF! or UNTIL! in a `DELEGATE … BY <agent>:` block
+      MUST   indent STEP, PARALLEL EACH, RUN or a nested IF/ELSE/UNTIL under an IF, ELSE or UNTIL head
       MUST   place a bare ELSE right after an IF in the same body
       MAY    nest IF/ELSE/UNTIL at any depth — a step under them still counts as the flow's step
+      NEVER  write a bare `PARALLEL:` group or an ASK — both fail the build
   BODY:
     FLOW {flow-name}:
         {steps}
   EXAMPLE:
     FLOW simple-task:
         STEP implement the change:
-            BY senior-typescript
-            DO implement the requested change
-            DO run npm test before declaring done
+            DELEGATE implement the requested change BY senior-typescript:
+                DO run npm test before declaring done
+        STEP review the change:
+            DELEGATE~ report every gap between the task and the diff BY conformance-reviewer AS task-and-diff
+            DELEGATE~ trace every path the diff touches BY edge-case-hunter AS diff-and-claims
+            WAIT ALL
         UNTIL the review reports no open finding — three rounds at most:
             STEP fix the open findings:
-                BY senior-typescript
-                DO fix each open finding with the smallest change
+                DELEGATE fix each open finding with the smallest change BY senior-typescript
         IF the review reports no open finding:
             STEP audit for DRY:
-                BY dry-keeper
-                DO audit the implementation for DRY violations
+                DELEGATE audit the implementation for DRY violations BY dry-keeper
         ELSE
             RUN escalate-to-maintainer
 
 EXPORT TEMPLATE ap-block-parallel:
-  ABOUT   scaffold for a PARALLEL group — sibling STEPs that run concurrently inside a FLOW
+  ABOUT   scaffold for a PARALLEL EACH — one STEP run once per element of a list, all at the same time
   APPLIES #agent-pack, #authoring, #scaffold, #block
 
   SLOTS:
-    branches: LIST <ap-block-step> >=1  "one STEP per concurrent branch"
-      MUST   keep branches independent — they run concurrently, with no ordering dependence
-      MAY    head `PARALLEL EACH <item> IN <list> MAX <n>:` over exactly one STEP — it runs once per element
-      MUST   type <list> AS a template with exactly one LIST slot, filled earlier by `DO … INTO <list>`
-      MUST   give EACH a MAX of a whole number >= 1 — a longer list at run time stops the flow
-      MUST   read the run's element as {{<item>}}; clone the splitter with the same BY and CONTEXT inherited
+    item:  TEXT MAX_WORDS 1  "the name each run reads its element by, as {{<item>}}"
+    list:  TEXT MAX_WORDS 1  "the list variable — typed AS a template with exactly one LIST slot"
+      MUST   fill <list> in an earlier step with `DELEGATE … INTO <list> BY <agent>`
+    max:   NUMBER 1..1000  "the most runs — a longer list at run time stops the flow"
+    step:  <ap-block-step>  "the one STEP each run carries out"
+      MUST   keep the runs independent — they run concurrently, with no ordering dependence
+      MUST   read the run's element as {{<item>}}; clone the splitter with `FORK … BY <splitter>`
   BODY:
-    PARALLEL
-        {branches}
+    PARALLEL EACH {item} IN {list} MAX {max}:
+        {step}
   EXAMPLE:
-    PARALLEL
-        STEP audit documentation:
-            BY docs-auditor
-            DO audit README, guide and examples
-        STEP audit onboarding:
-            BY onboarding-auditor
-            DO execute the install-to-first-bundle path from scratch
+    PARALLEL EACH subtask IN subtasks MAX 5:
+        STEP work the subtask:
+            FORK work only on the subtask of this run BY developer
 
 EXPORT TEMPLATE ap-block-agent:
   ABOUT   scaffold for an agent-pack AGENT block — fill the slots to emit a valid `AGENT … AS …:` definition
@@ -284,7 +283,7 @@ EXPORT TEMPLATE ap-block-dimension:
       MUST   name a template with SLOTS, at no force level — the value is always checked
     rules?:         LIST <ap-rule>  "force-level lines on how the value is produced; omit if none"
       MUST   write ABOUT, FOR, EACH and AS once each — any other line fails the build
-      MUST   never add a WHEN (line or block), IF, ON-*, UNTIL, an action (DO, ASK, RUN …), MEM or WITH to a dimension — when to read it is the reader's WITH
+      MUST   never add a WHEN (line or block), IF, ON-*, UNTIL, an action (DO, DELEGATE, RUN …), MEM or WITH to a dimension — when to read it is the reader's WITH
   BODY:
     {importable} DIMENSION {dimension-name}:
         ABOUT   {about}
