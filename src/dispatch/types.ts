@@ -46,7 +46,7 @@ export interface BundleContext {
   stores: StoreEntry[];
   /** The dimensions — answers about the code the apx keeps (src/apx/dimensions.ts). */
   dimensions: DimensionEntry[];
-  /** The domains — regions of the code by path, named by WRITES/READS (src/apdoc/blocks.ts DomainBlock). */
+  /** The domains — regions of the code, named by `@WITHIN` (src/apdoc/blocks.ts DomainBlock). */
   domains: DomainEntry[];
   /** The skills the compilation IMPORTs — FROM a library (its own apx) or FROM `@harness.skills`. */
   skills: SkillEntry[];

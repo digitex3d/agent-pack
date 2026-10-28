@@ -319,12 +319,14 @@ language; a space-separated list is a compilation error.
 - **D28 — mandate** — `MANDATE`: the one statement of what an agent is
   responsible for, distinct from how it behaves.
 
-- **D29 — perimeter** — `WRITES <domain>, …`: the domains (D44) an
-  agent may write, and so read; `READS <domain>, …`: the ones it may
-  only read — without it, whatever it needs. Its definition opens with
-  a scope warning listing their files; outside the perimeter belongs to
-  other agents. A domain is never both written and read. (Amended: the
-  former `OWNS <globs>` is removed — a perimeter names domains.)
+- **D29 — perimeter** — `@WITHIN <domain>, …` (D45) above an agent: the
+  domains (D44) its work is within — it writes their `WRITES` files and
+  reads only their `READS` ones; with no `READS` among them, whatever it
+  needs. Its definition opens with a scope warning listing their files;
+  outside the perimeter belongs to other agents. An agent no `@WITHIN`
+  decorates has no perimeter. (Amended: the former `OWNS <globs>` is
+  removed; in 1.3 the agent's `WRITES <domain>` and `READS <domain>`
+  lines are too — the files are the domain's lines, `@WITHIN` names it.)
 
 - **D30 — export and namespace** — a block is local to its file unless
   marked `EXPORT`; exported blocks live in libraries and are reached by
@@ -582,29 +584,49 @@ language; a space-separated list is a compilation error.
   executable reaches a dimension by its id, as every block, after its
   verb `dimension`. (Added in 1.2.)
 
-- **D44 — domain** — a region of the code, by path: `ABOUT`, what its
-  files are; `FOR`, its files, as globs relative to the project root,
-  never absolute nor climbing out with `..` — the line a dimension (D43)
-  takes too. Both are required, once; a domain holds nothing else. It is
-  named by an agent's perimeter (D29) and by a contract's `DOMAIN` line.
-  Domains are by path only: two regions sharing a folder are a project
-  to restructure; two domains may cover the same files. Declared and
-  imported like a dimension (`domains/`, `@main.domains`), or at the
-  top of an agent's file.
+- **D44 — domain** — a region of the code: `ABOUT`, what its files are,
+  once; `WRITES [<formula>] [IN <glob>, …]`, the files work within it may
+  write, and `READS …`, those it may only read — at least one line, lines
+  adding up; `APPLIES`, its tags only. Globs are relative to the project
+  root, never absolute nor climbing out with `..`, and must match some
+  file of the project. A formula describes the files in words and a
+  judge decides it file by file, among the files of its `IN` or of the
+  whole project; its `!`s weigh the judgement as `IF!`'s (`!` the agent
+  decides the uncertain files, `!!` the judge alone), and a formula
+  without `!` fails the compilation. A formula needs a judge — the judge
+  of the lines (the config's `judge`), asked at compile time for each
+  file the probability that it belongs; without one the formula fails the
+  compilation — never a fallback on its `IN`. The config's thresholds
+  (`domains: { in, out }`, 0.8 and 0.2 by default) turn probabilities into
+  files: at or above `in` within, at or below `out` outside, between them
+  the agent's to decide under `!` and outside under `!!`. The
+  probabilities travel with the block; the verdicts are cached like the
+  judge's others, so only new or changed files — or all, when the
+  formula changes — are asked again. A domain holds nothing else and never names another
+  domain. It is named by `@WITHIN` (D29, D45) and by a contract's
+  `DOMAIN` line. Declared and imported like a dimension (`domains/`,
+  `@main.domains`), or at the top of an agent's file. (Amended in 1.3:
+  `FOR` gives way to `WRITES` and `READS`.)
 
 - **D45 — decorator** — a line that says under which conditions the work
   it decorates is done, never what to do: `@KEY <names>` right above a
-  control block (`WHEN`, `IF`, `UNTIL`) decorates that block, `@KEY
-  <names>:` in a body the lines nested beneath it. Every decorator reads
-  the same: names or tags, comma separated, resolved among the blocks
-  the compilation imports; stacked decorators apply in order; nested ones
-  of the same key combine as that key says (they add up, or narrow). A
-  decorator that decorates nothing, or a definition inside its block,
-  fails the compilation; a definition is decorated from inside its body.
-  A decorator has no negation. `@WITH` (D2, D23, D43) names the skills,
-  policies and dimensions the work is under; `@WITH <skill> AS
-  <template>` shapes one skill's answer. (New in 1.3: replaces the `WITH`
-  block and its negation `!WITH`.)
+  block decorates that block — above a definition, all its work, and
+  only what is written beneath it — and `@KEY <names>:` in a body the
+  lines nested beneath it. Every decorator reads the same: names or
+  tags, comma separated, resolved among the blocks the compilation
+  imports; stacked decorators apply in order; nested ones of the same
+  key combine as that key says — they add up, or narrow, naming only
+  what the enclosing one names. A decorator stands anywhere unless its
+  key says where; one that decorates nothing — or a definition with no
+  work — fails the compilation, and so does a definition inside a
+  decorator's block. A decorator has no negation. `@WITH` (D2,
+  D23, D43) names the skills, policies and dimensions the work is under;
+  `@WITH <skill> AS <template>` shapes one skill's answer. `@WITHIN`
+  (D29, D44) names the domains the work is within; it stands only right
+  above an agent, a team, a flow or a step — the bounds the executable
+  knows at run time — and a step's names only domains of its `BY`
+  agent's. (New in 1.3: replaces the `WITH` block and its negation
+  `!WITH`, and the agent's `WRITES` and `READS` lines.)
 
 ## 4. Citation
 

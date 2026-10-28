@@ -44,7 +44,7 @@ export interface Formulas {
     BY: { intro: Text; inline: Text };
     AS: { fallback: Text; line: Text; agent: Text; shaped: Text };
     APPLIES: { scope: Record<'universal' | 'team' | 'agent' | 'with' | 'ls', Text> };
-    WRITES: { fence: Text[]; none: Text };
+    WRITES: { fence: Text[]; none: Text; formula: Text; uncertain: Text };
     READS: { all: Text; only: Text };
     FOR: { glob: Text };
     'LENS-IN': { line: Text; input: Text };
@@ -73,7 +73,7 @@ export interface Formulas {
       team: { strategy: Text; contracts: Text; entry: Text; domain: Text };
     } & KindGuide;
     dimension: { chapter: Text; covers: Text; eachShape: Text; read: Text; write: Text } & KindGuide;
-    domain: { chapter: Text; covers: Text } & KindGuide;
+    domain: { chapter: Text; writes: Text; reads: Text; formula: Text } & KindGuide;
     plugin: { line: Text; commands: Text; command: Text };
     team: { heading: Text; member: Text; handles: Text; fellows: Text; fellow: Text; undescribed: Text; closing: Text } & KindGuide;
     runtime: { heading: Text };

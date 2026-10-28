@@ -20,7 +20,7 @@ export default {
 | `sharedLibraries` | `[]` | more libraries, each reached by its own alias — see below |
 | `bundle.runtime` | `true` | open every agent definition with the agent-pack introduction |
 | `bundle.apxCompress` | `false` | store the apx data gzipped instead of as compact JSON |
-| `lint.maxLineLength` | `120` | longest line accepted in a `.ap` file |
+| `lint.maxLineLength` | `180` | longest line accepted in a `.ap` file |
 | `judge` | absent | turns on the judge phase — see below; absent, everything compiles as before |
 | `judge.adapter` | `'jev'` | the judge — a built-in name (`'jev'`) or a judge object `{ type: 'judge', name, ask }` |
 | `judge.threshold` | `0.5` | a check answered below this probability is reported |
@@ -30,6 +30,8 @@ export default {
 | `checks` | absent | the judge of [checked conditions](/reference/language#checked-conditions) while the agent works — see below; absent, `IF!` reads as `IF` (a warning) and `IF!!` fails |
 | `checks.adapter` | `'jev'` | the judge — a built-in name (`'jev'`) or a judge object `{ type: 'judge', name, ask }` |
 | `checks.threshold` | `0.7` | a condition answered at or above this probability is open; below, closed. A loop's round limit is no config key: each `UNTIL` a judge, a delegate or a program ends writes its own `MAX <n>` ([Rounds](/reference/language#rounds)) |
+| `domains.in` | `0.8` | a file a judge answers at or above this probability belongs to the [domain formula](/reference/language#domain) |
+| `domains.out` | `0.2` | at or below this probability it does not; between the two, under `WRITES!`/`READS!`, the agent decides — `out` must be below `in` |
 | `delegate.default` | `'quick'` | the agent an `ASK` line without `BY` is handed to — see below |
 | `delegate.models` | `{}` | the model each agent runs on, by agent name — see below |
 

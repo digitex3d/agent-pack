@@ -148,6 +148,8 @@ export function nonExportedLines(source: string): number[] {
   const owned = new Set<number>();
   for (const block of exportedBlocksOf(parseBlocks(source).blocks)) {
     owned.add(block.startLine);
+    // The decorators above an exported block are its own: they travel with it (src/sources.ts span).
+    for (const d of block.decorators ?? []) owned.add(d.line);
     const dedentByLine = new Map<number, number>();
     indexBlockDedent(block, dedentByLine);
     for (const lineNo of dedentByLine.keys()) owned.add(lineNo);

@@ -257,12 +257,12 @@ console.log('identity cross-kind lint tests passed.');
     writeFileSync(agentFile, [
       'DOMAIN code:',
       '    ABOUT      the source',
-      '    FOR        src/**',
+      '    WRITES     IN src/**',
       '',
+      '@WITHIN code',
       'EXPORT AGENT my-agent AS backend-engineer:',
       '    ABOUT      a test agent for identity block integration',
       '    MANDATE    build scalable secure systems without breaking what works',
-      '    WRITES     code',
       '',
       'EXPORT ROLE backend-engineer:',
       '    ABOUT      a senior backend developer who ships secure systems',
@@ -290,7 +290,7 @@ console.log('identity cross-kind lint tests passed.');
     assert.ok(output.includes('**go**'), 'go expertise bold in bundle');
     assert.ok(output.includes('Your mandate: build scalable secure systems without breaking what works'), 'mandate in bundle');
 
-    // The scope warning (the WRITES perimeter) is a leading fence: before the Identity block
+    // The scope warning (the @WITHIN perimeter) is a leading fence: before the Identity block
     const scopeIdx = output.indexOf('SCOPE — WARNING');
     const identityIdx = output.indexOf('# Identity');
     assert.ok(scopeIdx !== -1 && scopeIdx < identityIdx, 'the scope warning appears before Identity block');

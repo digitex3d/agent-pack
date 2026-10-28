@@ -169,19 +169,20 @@ EXPORT TEMPLATE ap-block-agent:
       MUST   say what the agent does and how it is routed to — never paraphrase the bound role's ABOUT
     mandate:     TEXT MAX_WORDS 20  "the agent's operating directive"
       MUST   carry exactly one MANDATE line
-    writes?:     TEXT MAX_WORDS 10  "the DOMAINs the agent may write, comma-separated; omit the WRITES line if unscoped"
+    within?:     ENUM[@WITHIN]  "write @WITHIN above the agent to put its work within domains; omit if unscoped"
+    domains?:    TEXT MAX_WORDS 10  "the DOMAINs or #tags its work is within, comma-separated; omit with within"
     rules?:      LIST <ap-rule>  "project-level contracts for THIS agent; omit if none — behaviour lives in the role"
   BODY:
+    {within} {domains}
     {importable} AGENT {agent-name} AS {role-name}:
         ABOUT    {about}
         MANDATE  {mandate}
-        WRITES   {writes}
         {rules}
   EXAMPLE:
+    @WITHIN wiki
     EXPORT AGENT architect AS software-architect:
         ABOUT    Maintains the application architecture as PlantUML diagrams stored in the project wiki
         MANDATE  keep architecture diagrams current, consistent, and organized in the project wiki
-        WRITES   wiki
         MUST     store every diagram in the project wiki — never write diagram files directly
 
 EXPORT TEMPLATE ap-block-role:

@@ -38,3 +38,8 @@ export function globRegExp(glob: string): RegExp {
 export function matchesAnyGlob(path: string, globs: readonly string[]): boolean {
   return globs.some(glob => globRegExp(glob).test(path));
 }
+
+/** A path as a glob that matches it alone — each glob character in a class of its own (`a[*].ts`). */
+export function literalGlob(path: string): string {
+  return path.replace(/[*?{}[]/g, c => `[${c}]`);
+}

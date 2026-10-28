@@ -196,24 +196,51 @@ export function renderIdentityBlock(
   return lines.join('\n');
 }
 
-/** Globs as the md lists them — each quoted as code, comma-separated: a FOR line's, an agent's perimeter. */
+/** Globs as the md lists them — each quoted as code, comma-separated: a FOR line's, a domain's, an agent's perimeter. */
 export function renderGlobs(globs: readonly string[]): string {
   return globs.map(glob => fill(FORMULAS.keywords.FOR.glob, { glob })).join(', ');
 }
 
-/** An agent's perimeter as globs: what it writes, and what it reads — null, whatever it needs. */
+/** What judged formulas put in a perimeter's side: their text, and the files the agent decides (file → probability). */
+export interface JudgedSide {
+  formulas: string[];
+  uncertain: Record<string, number>;
+}
+
+/**
+ * An agent's perimeter as globs: what it writes, and what it reads — null,
+ * whatever it needs. A file a formula puts within is one more glob, matching
+ * that file alone; `judged`, when a formula is among its domains, names the
+ * formulas and the uncertain files — globs too: the agent decides them.
+ */
 export interface PerimeterGlobs {
   writes: string[];
   reads: string[] | null;
+  judged?: { writes: JudgedSide; reads: JudgedSide };
+  /** The plain globs, as the scope warning names them beside the formulas — absent with no formula. */
+  shown?: { writes: string[]; reads: string[] };
 }
 
-/** The scope warning at the top of an agent's definition — its WRITES and READS, as the globs of their domains. */
+/** The files the agent decides, as a line lists them: `src/a.ts` (p=0.55), … */
+export function renderUncertain(uncertain: Record<string, number>): string {
+  return Object.entries(uncertain).map(([file, p]) => `${fill(FORMULAS.keywords.FOR.glob, { glob: file })} (p=${p.toFixed(2)})`).join(', ');
+}
+
+/** The scope warning at the top of an agent's definition — the WRITES and READS globs of the domains it works within. */
 export function renderPerimeter(p: PerimeterGlobs): string {
   const W = FORMULAS.keywords.WRITES;
   const R = FORMULAS.keywords.READS;
-  const writes = p.writes.length ? W.fence.map(line => fill(line, { globs: renderGlobs(p.writes) })) : [W.fence[0], W.none];
-  const reads = p.reads ? fill(R.only, { globs: renderGlobs(p.reads) }) : R.all;
-  return [...writes, reads, '', ''].join('\n');
+  const named = (globs: string[], side?: JudgedSide) => [
+    ...(globs.length ? [renderGlobs(globs)] : []),
+    ...(side?.formulas ?? []).map(formula => fill(W.formula, { formula })),
+  ].join(', ');
+  const writeNames = named(p.shown?.writes ?? p.writes, p.judged?.writes);
+  const writes = writeNames ? W.fence.map(line => fill(line, { globs: writeNames })) : [W.fence[0], W.none];
+  const readNames = p.reads ? named(p.shown?.reads ?? p.reads, p.judged?.reads) : '';
+  const reads = p.reads ? fill(R.only, { globs: readNames }) : R.all;
+  const uncertain = { ...p.judged?.reads.uncertain, ...p.judged?.writes.uncertain };
+  const decide = Object.keys(uncertain).length ? [fill(W.uncertain, { files: renderUncertain(uncertain) })] : [];
+  return [...writes, reads, ...decide, '', ''].join('\n');
 }
 
 /**
@@ -451,8 +478,6 @@ export const FORCE_LEVEL_PRIMITIVES: BulletGroupPrimitive[] = [
  */
 export const AGENT_METADATA_KEYWORDS: Keyword[] = [
   AboutPrimitive.keyword as Keyword,      // ABOUT
-  'WRITES' as Keyword,                    // WRITES  (the perimeter: rendered as the scope warning, src/apdoc/document.ts)
-  'READS' as Keyword,                     // READS
   AppliesPrimitive.keyword as Keyword,    // APPLIES
   // ROLE is NOT stripped here: it is the inline `ROLE <name>:` block opener,
   // extracted by inlineBlocks. Stripping it would orphan the block body.

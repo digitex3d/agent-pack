@@ -9,7 +9,7 @@
  *     is the lead plus whoever a BY names
  *   - `WHEN handed <contract>:` is a member's entry: the trigger's input is the
  *     contract, resolved and rendered
- *   - the checks: the two shapes of a team, DOMAIN against the BY agent's WRITES, BY
+ *   - the checks: the two shapes of a team, DOMAIN against the BY agent's @WITHIN, BY
  *     against the folder and the teams of contracts, a member without its WHEN,
  *     LENS-IN in such a team, a team no contract hands work to, a project
  *     contract that names no team
@@ -17,7 +17,7 @@
 
 import { strict as assert } from 'assert';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
 import { tmpdir } from 'os';
 
 const { bundleAgentObject, bundleStandaloneToString } = await import('../dist/src/compiler/index.js');
@@ -40,22 +40,25 @@ const write = (file, lines) => { writeFileSync(file, lines.join('\n') + '\n'); r
 const tpl = (name, slots) => write(join(lib, 'templates', `${name}.ap`), [`EXPORT TEMPLATE ${name}:`, `    ABOUT  ${name}`, '    SLOTS:', ...slots.map(s => `        ${s}`), '    BODY:', '        {' + slots[0].split(':')[0] + '}']);
 tpl('endpoint-spec', ['goal: TEXT  "what the zone does"', 'interface: TEXT  "signatures, verbatim"']);
 tpl('change-request', ['request: TEXT  "the request"']);
-const domain = (name, globs) => write(join(lib, 'domains', `${name}.ap`), [`EXPORT DOMAIN ${name}:`, `    ABOUT  ${name}`, `    FOR    ${globs}`]);
+const domain = (name, globs) => write(join(lib, 'domains', `${name}.ap`), [`EXPORT DOMAIN ${name}:`, `    ABOUT  ${name}`, `    WRITES IN ${globs}`]);
 domain('api', 'src/api/**'); domain('persistence', 'src/db/**');
+// A domain names files that are there.
+for (const f of ['src/api/routes.ts', 'src/db/schema.ts']) { mkdirSync(join(tmp, dirname(f)), { recursive: true }); writeFileSync(join(tmp, f), '// x\n'); }
 
 const agent = (dir, name, lines, top = []) => write(join(dir, `${name}.ap`), [
   ...top, `EXPORT AGENT ${name} AS ${name}-role:`, `    ABOUT    ${name}`, '    MANDATE  do the work', ...lines, '',
   `ROLE ${name}-role:`, '    ABOUT   a worker', '    ALWAYS  do the work',
 ]);
 const lead = () => write(join(backend, 'architect.ap'), [
-  'DOMAIN code:', '    ABOUT  the source', '    FOR    src/**', '',
-  'EXPORT AGENT architect AS lead-role:', '    ABOUT    plans and hands out', '    MANDATE  deliver the change', '    WRITES   code',
+  'DOMAIN code:', '    ABOUT  the source', '    WRITES IN src/**', '',
+  '@WITHIN code',
+  'EXPORT AGENT architect AS lead-role:', '    ABOUT    plans and hands out', '    MANDATE  deliver the change',
   '    WHEN handed change:', '        DO  write the skeletons and hand the zones out', '',
   'ROLE lead-role:', '    ABOUT   a lead', '    ALWAYS  finish before anyone starts',
 ]);
-/** A member writes the domain of the contract it is handed. */
+/** A member works within the domain of the contract it is handed. */
 const DOMAIN_OF = { endpoint: 'api', repository: 'persistence' };
-const member = (name, contract, extra = [], writes = DOMAIN_OF[contract]) => agent(backend, name, [`    WRITES   ${writes}`, ...extra, `    WHEN handed ${contract}:`, '        DO  implement the zone, then deliver'], [`IMPORT ${writes} FROM @main.domains`, '']);
+const member = (name, contract, extra = [], within = DOMAIN_OF[contract]) => agent(backend, name, [...extra, `    WHEN handed ${contract}:`, '        DO  implement the zone, then deliver'], [`IMPORT ${within} FROM @main.domains`, '', `@WITHIN ${within}`]);
 const TEAM = (contracts = ['    CONTRACT endpoint:', '        ABOUT   one HTTP endpoint', '        DOMAIN  api', '        AS      endpoint-spec', '        BY      api-dev',
   '    CONTRACT repository:', '        ABOUT   one table and its repository', '        DOMAIN  persistence', '        AS      endpoint-spec', '        BY      db-dev'], head = ['    STRATEGY  contracts', '    LEAD      architect']) =>
   write(join(backend, 'backend.ap'), ['IMPORT endpoint-spec FROM @main.templates', '', 'EXPORT TEAM backend:', '    ABOUT     builds a backend change by contracts', ...head, ...contracts]);
@@ -158,7 +161,7 @@ try {
   TEAM(undefined, ['    STRATEGY  contracts']);
   await assert.rejects(compile('architect'), /backend\.ap:3  TEAM backend: STRATEGY contracts needs a LEAD/);
   TEAM(undefined, ['    STRATEGY  contracts', '    LEAD      architect', '    DOMAINS   domains']);
-  await assert.rejects(compile('architect'), /backend\.ap:7  DOMAINS was removed — the files of a domain are its `EXPORT DOMAIN <name>:` block's FOR/);
+  await assert.rejects(compile('architect'), /backend\.ap:7  DOMAINS was removed — the files of a domain are its `EXPORT DOMAIN <name>:` block's WRITES and READS/);
   TEAM([]);
   await assert.rejects(compile('architect'), /backend\.ap:3  TEAM backend: STRATEGY contracts needs at least one CONTRACT block/);
   TEAM(undefined, ['    STRATEGY  teamwork', '    LEAD      architect']);
@@ -174,10 +177,10 @@ try {
   await assert.rejects(compile('architect'), /backend\.ap:7  CONTRACT block requires at least one AS/);
   assert.ok(lintFile(join(tmp, 'x.ap'), 'EXPORT AGENT x AS r:\n    ABOUT  x\n    MANDATE  y\n    CONTRACT c:\n        ABOUT  z\n').some(e => /a CONTRACT is declared in a TEAM block, or at the top of the project file — found inside AGENT/.test(e.message)));
 
-  // --- DOMAIN: one its BY agent writes ---
+  // --- DOMAIN: one its BY agent works within ---
   TEAM(['    CONTRACT endpoint:', '        ABOUT   one endpoint', '        DOMAIN  persistence', '        AS      endpoint-spec', '        BY      api-dev']);
   rmSync(join(backend, 'db-dev.ap'));
-  await assert.rejects(compile('api-dev'), /backend\.ap:9  CONTRACT endpoint: DOMAIN `persistence` — `api-dev`, its BY, does not write it: give it `WRITES persistence`/);
+  await assert.rejects(compile('api-dev'), /backend\.ap:9  CONTRACT endpoint: DOMAIN `persistence` — `api-dev`, its BY, does not work within it: write `@WITHIN persistence` above its AGENT/);
   member('db-dev', 'repository');
 
   // --- BY: the folder's agents, or one team of contracts ---
@@ -186,7 +189,7 @@ try {
   await assert.rejects(compile('architect'), /backend\.ap:11  BY ghost: no agent file in `backend\/` declares `EXPORT AGENT ghost`, and no team runs by contracts under that name/);
   const front = join(teams, 'front');
   mkdirSync(front);
-  write(join(front, 'ui-lead.ap'), ['IMPORT api FROM @main.domains', '', 'EXPORT AGENT ui-lead AS ui-role:', '    ABOUT    leads the front', '    MANDATE  deliver', '    WRITES   api', '    WHEN handed screens:', '        DO  hand out', '    WHEN handed widget:', '        DO  build it', '', 'ROLE ui-role:', '    ABOUT   a lead', '    ALWAYS  lead']);
+  write(join(front, 'ui-lead.ap'), ['IMPORT api FROM @main.domains', '', '@WITHIN api', 'EXPORT AGENT ui-lead AS ui-role:', '    ABOUT    leads the front', '    MANDATE  deliver', '    WHEN handed screens:', '        DO  hand out', '    WHEN handed widget:', '        DO  build it', '', 'ROLE ui-role:', '    ABOUT   a lead', '    ALWAYS  lead']);
   write(join(front, 'front.ap'), ['IMPORT endpoint-spec FROM @main.templates', '', 'EXPORT TEAM front:', '    ABOUT     the front team', '    STRATEGY  contracts', '    LEAD      ui-lead',
     '    CONTRACT widget:', '        ABOUT   a widget', '        DOMAIN  api', '        AS      endpoint-spec', '        BY      ui-lead']);
   TEAM(['    CONTRACT endpoint:', '        ABOUT   one endpoint', '        DOMAIN  api', '        AS      endpoint-spec', '        BY      api-dev',

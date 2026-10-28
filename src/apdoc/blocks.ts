@@ -30,7 +30,7 @@ import { storeTypeOf, storeTypeNames } from '../storeTypes/registry.js';
 import { phraseOf, STORE_LIFETIMES, type StoreDecl, type StoreLifetime } from '../storeTypes/types.js';
 import { parseTemplate, templateLayout, composeExample, SLOT_NAME } from '../shapeCompiler.js';
 import type { VarScope } from '../vars.js';
-import { extractPrimitive, extractPrimitives, stripPrimitives } from '../services/text.js';
+import { extractPrimitive, stripPrimitives, unwrapExportFile } from '../services/text.js';
 import { renderIdentityBlock, renderGlobs, enumPrimitiveFor } from '../primitives.js';
 import { DirectiveNode, reviveNodes } from './nodes.js';
 import { deslugifyRole } from '../services/role.js';
@@ -39,6 +39,8 @@ import { resolve, basename, dirname } from 'path';
 import type { Block } from '../parseBlocks.js';
 import { isTeamFile, CONTRACTS_STRATEGY, type TeamFile, type ContractDecl, type ContractLimit } from '../services/teamMetadata.js';
 import { splitList } from '../lists.js';
+import { domainLines, formulaFiles, DEFAULT_DOMAIN_THRESHOLDS, type DomainFormula, type DomainThresholds } from '../domains.js';
+import type { DomainLine } from '../lexer.js';
 import { serviceCommand } from '../apx/service.js';
 import { pluginOf, recordOfLines, lineKeyOf, inputUsage, type PluginSpec } from '../plugins.js';
 
@@ -392,33 +394,78 @@ export class DimensionBlock extends ApBlock {
   }
 }
 
-/** A region of the code by path (D44) — an agent's WRITES and READS name domains, and so does a CONTRACT's DOMAIN line. */
+/** A region of the code (D44) — `@WITHIN <domain>` puts work within it, and a CONTRACT's DOMAIN line names one. */
 export class DomainBlock extends ApBlock {
   static readonly PREFIX = 'dom';
   readonly kind = 'domain';
   protected readonly idPrefix = DomainBlock.PREFIX;
-  /** The `FOR` globs — from the project root. */
-  globs: string[] = [];
+  /** The globs of its plain WRITES lines' IN — from the project root: what work within it may write. */
+  writes: string[] = [];
+  /** The globs of its plain READS lines' IN: what work within it may only read. */
+  reads: string[] = [];
+  /** Its formula lines — each with the probability of every file the judge was asked about, once judged. */
+  formulas: DomainFormula[] = [];
+  /** The thresholds the compilation judged its formulas with — absent while it has none. */
+  thresholds: DomainThresholds | null = null;
 
   static fromData(data: ApBlockData): DomainBlock {
     const block = restore(new DomainBlock(initOf(data)), data);
-    block.globs = (data.args['for'] as string[] | undefined) ?? [];
+    block.writes = (data.args['writes'] as string[] | undefined) ?? [];
+    block.reads = (data.args['reads'] as string[] | undefined) ?? [];
+    block.formulas = (data.args['formulas'] as DomainFormula[] | undefined) ?? [];
+    block.thresholds = (data.args['thresholds'] as DomainThresholds | undefined) ?? null;
     return block;
   }
 
   static fromDefinition(def: Definition, cx: BlockCx): DomainBlock {
     const block = new DomainBlock(cx.defInit(def));
-    block.globs = splitList(extractPrimitive(def.body, 'FOR') ?? '');
+    const lines = domainLines(unwrapExportFile(def.body));
+    block.writes = lines.writes;
+    block.reads = lines.reads;
+    block.formulas = lines.formulas;
     return block;
   }
 
+  /**
+   * The files of one side (WRITES or READS) as globs a path is matched with:
+   * its plain globs, then each file a formula puts within — and, under `!`,
+   * the uncertain ones the agent decides (`uncertain`: file → probability).
+   */
+  side(keyword: DomainLine): { globs: string[]; within: string[]; uncertain: Record<string, number> } {
+    const within: string[] = [];
+    const uncertain: Record<string, number> = {};
+    for (const f of this.formulas.filter(f => f.keyword === keyword)) {
+      const files = formulaFiles(f, this.thresholds ?? DEFAULT_DOMAIN_THRESHOLDS);
+      within.push(...files.within);
+      Object.assign(uncertain, files.uncertain);
+    }
+    return { globs: keyword === 'WRITES' ? this.writes : this.reads, within, uncertain };
+  }
+
+  /** Whether it says anything of a side — a plain glob or a formula. */
+  declares(keyword: DomainLine): boolean {
+    return (keyword === 'WRITES' ? this.writes : this.reads).length > 0 || this.formulas.some(f => f.keyword === keyword);
+  }
+
   protected override argsJson(): Record<string, unknown> {
-    return { for: this.globs };
+    return {
+      ...(this.writes.length ? { writes: this.writes } : {}),
+      ...(this.reads.length ? { reads: this.reads } : {}),
+      ...(this.formulas.length ? { formulas: this.formulas } : {}),
+      ...(this.thresholds ? { thresholds: this.thresholds } : {}),
+    };
   }
 
   /** The files it covers — a domain holds no rule, it only says where. */
   override asMdBody(): string {
-    return fill(FORMULAS.blocks.domain.covers, { globs: renderGlobs(this.globs) });
+    const D = FORMULAS.blocks.domain;
+    const side = (keyword: DomainLine, line: string) => {
+      const { globs } = this.side(keyword);
+      const judged = this.formulas.filter(f => f.keyword === keyword).map(f => fill(D.formula, { formula: f.formula, count: String(formulaFiles(f, this.thresholds ?? DEFAULT_DOMAIN_THRESHOLDS).within.length) }));
+      const what = [...(globs.length ? [renderGlobs(globs)] : []), ...judged].join(', ');
+      return what ? [fill(line, { globs: what })] : [];
+    };
+    return [...side('WRITES', D.writes), ...side('READS', D.reads)].join('\n');
   }
 }
 
@@ -843,10 +890,6 @@ export class AgentBlock extends ApBlock {
   mandate: string | null = null;
   /** `BUDGET <tier>`: the cost tier the adapter maps to a model. */
   budget: string | null = null;
-  /** `WRITES <domain>, …`: the domains it may write — and so read. */
-  writes: string[] = [];
-  /** `READS <domain>, …`: the domains it may only read — null, no READS line: whatever it needs. */
-  reads: string[] | null = null;
   lensOut: ApShape | null = null;
 
   static fromData(data: ApBlockData): AgentBlock {
@@ -854,8 +897,6 @@ export class AgentBlock extends ApBlock {
     block.role = (data.args['role'] as ApRef | undefined) ?? null;
     block.mandate = (data.args['mandate'] as string | undefined) ?? null;
     block.budget = (data.args['budget'] as string | undefined) ?? null;
-    block.writes = (data.args['writes'] as string[] | undefined) ?? [];
-    block.reads = (data.args['reads'] as string[] | undefined) ?? null;
     block.lensIn = (data.args['lensIn'] as ApShape | undefined) ?? null;
     block.lensOut = (data.args['lensOut'] as ApShape | undefined) ?? null;
     block.shape = (data.args['shape'] as ApShape | undefined) ?? null;
@@ -903,9 +944,6 @@ export class AgentBlock extends ApBlock {
     }
     block.mandate = md('MANDATE');
     block.budget = md('BUDGET');
-    block.writes = splitList(md('WRITES') ?? '');
-    const reads = md('READS');
-    block.reads = reads === null ? null : splitList(reads);
     const lensIn = md('LENS-IN');
     if (lensIn) block.lensIn = { force: 0, ref: cx.templateRef(lensIn) };
     const lensOut = md('LENS-OUT');
@@ -920,8 +958,6 @@ export class AgentBlock extends ApBlock {
       ...(this.role ? { role: this.role } : {}),
       ...(this.mandate ? { mandate: this.mandate } : {}),
       ...(this.budget ? { budget: this.budget } : {}),
-      ...(this.writes.length ? { writes: this.writes } : {}),
-      ...(this.reads ? { reads: this.reads } : {}),
       ...(this.lensIn ? { lensIn: this.lensIn } : {}),
       ...(this.lensOut ? { lensOut: this.lensOut } : {}),
       ...(this.shape ? { shape: this.shape } : {}),
@@ -977,7 +1013,7 @@ export const KIND_STRATEGIES: KindStrategy[] = [
   // Reached by its name through the apx, and named by a WITH like a policy: no reference index.
   { kind: 'dimension', revive: DimensionBlock.fromData, folder: 'dimensions', chapterTitle: FORMULAS.blocks.dimension.chapter, prefix: DimensionBlock.PREFIX, ref: null,
     entries: ctx => ctx.dimensions, from: DimensionBlock.fromDefinition },
-  // Named by an agent's WRITES/READS: the perimeter reads its FOR globs.
+  // Named by `@WITHIN`: the perimeter reads its WRITES and READS globs.
   { kind: 'domain', revive: DomainBlock.fromData, folder: 'domains', chapterTitle: FORMULAS.blocks.domain.chapter, prefix: DomainBlock.PREFIX, ref: null,
     entries: ctx => ctx.domains, from: DomainBlock.fromDefinition },
   // A team's contracts — built from the team file, not collected from a library: a chapter the lead and its members read.

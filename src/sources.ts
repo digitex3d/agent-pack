@@ -20,6 +20,7 @@ import { parseBlocks, agentNestedBlocks, ParseResult, Block } from './parseBlock
 import { TEAM_KEY } from './blockTypes.js';
 import type { ApPos } from './apdoc/types.js';
 import { splitOnReads } from './vars.js';
+import type { DecoratorLine } from './decorators.js';
 
 /** How a path becomes text — the file on disk by default, an editor's buffer tomorrow. */
 export type SourceReader = (path: string) => string;
@@ -42,6 +43,8 @@ export interface SourceSpan {
   line: number;
   /** The file lines the block's text was composed from, in order. */
   lines: SourceLine[];
+  /** The decorators written right above the block (src/decorators.ts) — a definition's, all its work's. */
+  decorators?: DecoratorLine[];
 }
 
 export class SourceRegistry {
@@ -96,7 +99,7 @@ export class SourceRegistry {
     const nested = named.find(n => n.agent.name === owner) ?? named[0];
     if (nested) {
       const span = this.blockSpan(path, nested.agent);
-      return { ...span, line: nested.block.startLine, lines: span.lines.filter(l => l.line >= nested.block.startLine) };
+      return { ...withDecorators({ ...span }, nested.block), line: nested.block.startLine, lines: span.lines.filter(l => l.line >= nested.block.startLine) };
     }
     // A block declared inside a team (a FLOW of its routing): its header to its next sibling.
     for (const team of blocks.filter(b => b.key === TEAM_KEY)) {
@@ -112,7 +115,7 @@ export class SourceRegistry {
     const span = this.blockSpan(path, parent);
     const next = parent.children[parent.children.indexOf(child) + 1];
     const end = next ? (next.type === 'line' ? next.line : next.startLine) : span.line + span.lines.length;
-    return { file: span.file, line: child.startLine, lines: span.lines.filter(l => l.line >= child.startLine && l.line < end) };
+    return withDecorators({ file: span.file, line: child.startLine, lines: span.lines.filter(l => l.line >= child.startLine && l.line < end) }, child);
   }
 
   /** One top-level block of a file: its header to the line before the next top-level block (any kind), or EOF. */
@@ -120,8 +123,15 @@ export class SourceRegistry {
     const lines = this.read(path).split(/\r?\n/);
     const next = this.tree(path).blocks.find(b => b.startLine > block.startLine);
     const end = next ? next.startLine - 1 : lines.length;
-    return { file: resolve(path), line: block.startLine, lines: numbered(lines.slice(block.startLine - 1, end), block.startLine) };
+    return withDecorators({ file: resolve(path), line: block.startLine, lines: numbered(lines.slice(block.startLine - 1, end), block.startLine) }, block);
   }
+}
+
+/** A block's span, with the decorators written above the block when it has some. */
+function withDecorators(span: SourceSpan, block: Block): SourceSpan {
+  if (block.decorators?.length) span.decorators = block.decorators;
+  else delete span.decorators;
+  return span;
 }
 
 /** Consecutive file lines, the first one numbered `from`. */

@@ -34,15 +34,15 @@ write(join(proj, 'agent-pack.config.mjs'), ['export default {', "  libraryRoot: 
 write(join(proj, 'library', 'templates', 'spec.ap'), ['EXPORT TEMPLATE spec:', '    ABOUT  a spec', '    SLOTS:', '        goal: TEXT  "what the zone does"', '    BODY:', '        {goal}']);
 write(join(proj, 'library', 'templates', 'request.ap'), ['EXPORT TEMPLATE request:', '    ABOUT  a request', '    SLOTS:', '        request: TEXT  "the request"', '    BODY:', '        {request}']);
 // The domains: the lead writes all the sources, each member its own region.
-const domain = (name, globs) => write(join(proj, 'library', 'domains', `${name}.ap`), [`EXPORT DOMAIN ${name}:`, `    ABOUT  ${name}`, `    FOR    ${globs}`]);
+const domain = (name, globs) => write(join(proj, 'library', 'domains', `${name}.ap`), [`EXPORT DOMAIN ${name}:`, `    ABOUT  ${name}`, `    WRITES IN ${globs}`]);
 domain('code', 'src/**'); domain('api', 'src/api/**'); domain('persistence', 'src/db/**');
 const team = join(proj, 'agents', 'teams', 'backend');
-const agent = (name, lines, imports = []) => write(join(team, `${name}.ap`), [...imports, ...(imports.length ? [''] : []),
+const agent = (name, lines, imports = [], within = []) => write(join(team, `${name}.ap`), [...imports, ...(imports.length ? [''] : []), ...within,
   `EXPORT AGENT ${name} AS ${name}-role:`, `    ABOUT    ${name}`, '    MANDATE  do the work', ...lines, '', `ROLE ${name}-role:`, '    ABOUT   a worker', '    ALWAYS  work']);
-agent('architect', ['    WRITES   code', '    WHEN handed change:', '        DO  write the skeletons, hand the zones out'], ['IMPORT code FROM @main.domains']);
-agent('api-dev', ['    WRITES   api', '    WHEN handed endpoint:', '        DO  implement the zone'], ['IMPORT api FROM @main.domains']);
-agent('api-dev-2', ['    WRITES   api', '    WHEN handed endpoint:', '        DO  implement the zone'], ['IMPORT api FROM @main.domains']);
-agent('db-dev', ['    WRITES   persistence', '    WHEN handed repository:', '        DO  implement the zone'], ['IMPORT persistence FROM @main.domains']);
+agent('architect', ['    WHEN handed change:', '        DO  write the skeletons, hand the zones out'], ['IMPORT code FROM @main.domains'], ['@WITHIN code']);
+agent('api-dev', ['    WHEN handed endpoint:', '        DO  implement the zone'], ['IMPORT api FROM @main.domains'], ['@WITHIN api']);
+agent('api-dev-2', ['    WHEN handed endpoint:', '        DO  implement the zone'], ['IMPORT api FROM @main.domains'], ['@WITHIN api']);
+agent('db-dev', ['    WHEN handed repository:', '        DO  implement the zone'], ['IMPORT persistence FROM @main.domains'], ['@WITHIN persistence']);
 write(join(team, 'backend.ap'), ['IMPORT spec FROM @main.templates', '', 'EXPORT TEAM backend:', '    ABOUT     builds a backend change by contracts',
   '    STRATEGY  contracts', '    LEAD      architect',
   '    CONTRACT endpoint:', '        ABOUT   one HTTP endpoint', '        DOMAIN  api', '        WITHIN  zone', '        AS      spec', '        BY      api-dev, api-dev-2',

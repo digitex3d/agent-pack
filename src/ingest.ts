@@ -330,7 +330,7 @@ function fileFacets(
 const UNIT_METADATA_KEYWORDS = AGENT_METADATA_KEYWORDS.filter(k => k !== 'AS' && k !== 'LENS-IN');
 
 /**
- * Lift a unit's ABOUT/APPLIES and strip its metadata keywords (ABOUT, WRITES,
+ * Lift a unit's ABOUT/APPLIES and strip its metadata keywords (ABOUT, MANDATE,
  * APPLIES, …), returning the rendered body. The single seam shared by
  * the whole-file path ({@link ingestRaw}) and the per-block path
  * ({@link ingestExportBlock}), so a single-export file and one block of a

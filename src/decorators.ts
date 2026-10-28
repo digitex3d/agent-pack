@@ -4,13 +4,13 @@
  * Block decorators — `@WITH pdf`, `@WITHIN web`: a line that says under which
  * conditions the work it decorates is done, never what to do.
  *
- *   @KEY items              above a block: decorates that block
+ *   @KEY items              above a block: decorates that block — a definition, all its work
  *   @KEY items:             in a body: decorates the lines nested beneath
  *
  * The family is one registry. A decorator's entry holds only what sets it
  * apart: the kinds of block its items name, how a decorator nested in another
- * of the same key combines with it, and the opening of the sentence the
- * compiled definition prints. Everything else is written once, here and in
+ * of the same key combines with it, the opening of the sentence the compiled
+ * definition prints, and the blocks it may stand above when not every one. Everything else is written once, here and in
  * the readers that consult the registry — the lexer's `decorator` token, the
  * parser's attachment, the lint's checks, the resolution of names and tags,
  * the document's node, the scope a walk carries down, the rendering. A reader
@@ -41,6 +41,13 @@ export interface DecoratorSpec {
   intro: string;
   /** The kind whose answer `AS <template>` may shape — one block of it, named alone; absent: no AS. */
   shape?: string;
+  /**
+   * The blocks it may stand above — and only above: written anywhere else, or
+   * opening a block, it is an error. Absent: anywhere. A decorator whose
+   * conditions the apx applies by itself is held to the blocks the apx knows
+   * the bounds of at run time.
+   */
+  on?: readonly string[];
 }
 
 /**
@@ -52,7 +59,18 @@ export const WITH_DECORATOR: DecoratorSpec = {
   key: 'WITH', names: ['skill', 'policy', 'dimension'], combine: 'union', intro: FORMULAS.decorators.intros.WITH, shape: 'skill',
 };
 
-const DECORATORS: DecoratorSpec[] = [WITH_DECORATOR];
+/**
+ * `@WITHIN web` — the domains the work it decorates is done within (D44): it
+ * writes only their WRITES files, reads only their READS ones. Nested, it
+ * narrows: it names only domains of the one around it. The compiler lets no
+ * ambiguous perimeter through — only above an agent, a team, a flow or a step,
+ * the bounds the apx knows by itself.
+ */
+export const WITHIN_DECORATOR: DecoratorSpec = {
+  key: 'WITHIN', names: ['domain'], combine: 'intersection', intro: FORMULAS.decorators.intros.WITHIN, on: ['AGENT', 'TEAM', 'FLOW', 'STEP'],
+};
+
+const DECORATORS: DecoratorSpec[] = [WITH_DECORATOR, WITHIN_DECORATOR];
 
 /** Make a decorator known — one entry per key. */
 export function registerDecorator(spec: DecoratorSpec): void {
@@ -90,14 +108,27 @@ export function danglingDecoratorMessage(key: string): string {
   return `\`${DECORATOR_MARK}${key}\` decorates no block — write it right above a block, at the block's indent, or open one: \`${DECORATOR_MARK}${key} …:\``;
 }
 
-/** A decorator above a definition (`EXPORT PROCEDURE p:`): not yet — a definition's work is decorated from inside its body. */
-export function definitionDecoratorMessage(key: string, block: string): string {
-  return `\`${DECORATOR_MARK}${key}\` stands above ${block}, a definition — decorate its work from inside: \`${DECORATOR_MARK}${key} …:\` as the first line of its body, around its lines`;
+/** A decorator held to some blocks (`on`), above another one — or opening a block: where it may stand. Null when it stands there. */
+export function placementMessage(spec: DecoratorSpec, block: string | null): string | null {
+  if (!spec.on || (block !== null && spec.on.includes(block))) return null;
+  const where = block === null ? `\`${DECORATOR_MARK}${spec.key} …:\` opens a block` : `\`${DECORATOR_MARK}${spec.key}\` stands above ${block}`;
+  return `${where} — ${DECORATOR_MARK}${spec.key} stands only right above ${orList(spec.on)}, whose bounds the apx knows at run time`;
 }
 
-/** A definition inside a decorator's block (`@WITH pdf:` around `PROCEDURE p:`): a decorator holds lines and control blocks. */
+/** A definition inside a decorator's block (`@WITH pdf:` around `PROCEDURE p:`): a definition is decorated from above. */
 export function definitionInDecoratorMessage(key: string, block: string): string {
-  return `\`${DECORATOR_MARK}${key} …:\` holds ${block}, a definition — a decorator holds lines and blocks like WHEN or IF: move the definition out, and decorate its work from inside its body`;
+  return `\`${DECORATOR_MARK}${key} …:\` holds ${block}, a definition — a decorator's block holds lines and blocks like WHEN or IF: write \`${DECORATOR_MARK}${key} …\` right above the definition instead`;
+}
+
+/** A definition the decorator above it finds no work in (a TEMPLATE, a DOMAIN): it decorates nothing. */
+export function workless(key: string, block: string): string {
+  return `\`${DECORATOR_MARK}${key}\` stands above ${block}, which holds no work to decorate`;
+}
+
+/** A nested decorator that narrows, naming blocks the one around it does not: an error, never a silent intersection. */
+export function escapeMessage(spec: DecoratorSpec, outside: readonly DecoratorUse[], outer: readonly DecoratorUse[]): string {
+  const names = (us: readonly DecoratorUse[]) => us.map(u => `\`${u.name}\``).join(', ');
+  return `\`${DECORATOR_MARK}${spec.key} ${outside.map(u => u.name).join(', ')}\`: the ${DECORATOR_MARK}${spec.key} around it names ${names(outer) || 'nothing'} — a nested ${DECORATOR_MARK}${spec.key} names only what that one does`;
 }
 
 /** `@WITH pdf:` with nothing nested below it: it opens a block that holds no line. */
@@ -193,10 +224,19 @@ export class DecoratorScope {
   /** The scope beneath a decorator: its blocks, combined with the enclosing ones of the same key. */
   enter(spec: DecoratorSpec, uses: readonly DecoratorUse[]): DecoratorScope {
     const outer = this.by.get(spec.key);
-    const same = (a: DecoratorUse, b: DecoratorUse) => a.kind === b.kind && a.name === b.name;
     const combined = !outer ? [...uses]
       : spec.combine === 'union' ? [...outer, ...uses.filter(u => !outer.some(o => same(o, u)))]
         : outer.filter(o => uses.some(u => same(o, u)));
     return new DecoratorScope(new Map([...this.by, [spec.key, combined]]));
   }
+
+  /** What a narrowing decorator names that the enclosing one of its key does not — empty when nothing encloses it, or it adds up. */
+  outside(spec: DecoratorSpec, uses: readonly DecoratorUse[]): DecoratorUse[] {
+    const outer = this.by.get(spec.key);
+    return spec.combine === 'intersection' && outer ? uses.filter(u => !outer.some(o => same(o, u))) : [];
+  }
+}
+
+function same(a: DecoratorUse, b: DecoratorUse): boolean {
+  return a.kind === b.kind && a.name === b.name;
 }

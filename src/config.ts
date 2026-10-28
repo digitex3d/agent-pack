@@ -10,6 +10,9 @@ import { AdapterPlugin } from '../adapters/types.js';
 import { resolveAdapter, resolveJudge } from './adapter-registry.js';
 import type { ChecksConfig, JudgeConfig, JudgePlugin } from './judge/types.js';
 import { defaultBundleConfig } from './bundleDefaults.js';
+import { DEFAULT_MAX_LINE_LENGTH } from './lint.js';
+import { DEFAULT_DOMAIN_THRESHOLDS, type DomainThresholds } from './domains.js';
+import { isProbability } from './judge/lock.js';
 
 function expandHome(p: string): string {
   if (p === '~') return homedir();
@@ -273,6 +276,8 @@ export interface Config {
   judge?: JudgeConfig | null;
   /** The judge of checked conditions while the agent works — null (no `checks` key): none. */
   checks?: ChecksConfig | null;
+  /** The thresholds that turn a domain formula's probabilities into files (src/domains.ts) — `{ in: 0.8, out: 0.2 }` by default. */
+  domains?: DomainThresholds;
   /** Who an ASK without BY is handed to, and the models delegates run on (src/executor.ts). */
   delegate?: DelegateConfig;
   /** The plugins the project activates (`plugins: ['./plugins/checklist']`), installed — src/plugins.ts. */
@@ -309,7 +314,7 @@ export function adapterNames(config: Config): string[] {
 const OUTPUT_DIR = '.agent-pack/compiled';
 
 const LINT_DEFAULTS: LintConfig = {
-  maxLineLength: 120,
+  maxLineLength: DEFAULT_MAX_LINE_LENGTH,
 };
 
 /** The judge lock's default path, from the project root. */
@@ -359,6 +364,22 @@ function resolveJudgeConfig(raw: unknown, projectRoot: string): JudgeConfig | nu
   if (typeof lock !== 'string' || lock.trim() === '') throw new Error('judge.lock must be a file path');
   if (!Number.isInteger(concurrency) || (concurrency as number) < 1) throw new Error('judge.concurrency must be a whole number ≥ 1');
   return { adapter, threshold: threshold as number, offline, lock: resolve(projectRoot, expandHome(lock)), concurrency: concurrency as number };
+}
+
+/**
+ * The `domains` key resolved: the probabilities that split a domain formula's
+ * files — at or above `in` within, at or below `out` outside (D44). Both
+ * between 0 and 1, `out` below `in`; absent, the defaults.
+ */
+function resolveDomainThresholds(raw: unknown): DomainThresholds {
+  if (raw === undefined || raw === null) return { ...DEFAULT_DOMAIN_THRESHOLDS };
+  if (!isPlainObject(raw)) throw new Error('domains must be an object, e.g. { in: 0.8, out: 0.2 }');
+  const unknown = Object.keys(raw).filter(k => k !== 'in' && k !== 'out');
+  if (unknown.length) throw new Error(`domains: unknown key ${unknown.map(k => `\`${k}\``).join(', ')} — it takes \`in\` and \`out\``);
+  const t = { ...DEFAULT_DOMAIN_THRESHOLDS, ...raw } as Record<string, unknown>;
+  for (const k of ['in', 'out']) if (!isProbability(t[k])) throw new Error(`domains.${k} must be a number between 0 and 1`);
+  if ((t.out as number) >= (t.in as number)) throw new Error('domains.out must be below domains.in — between them the agent decides');
+  return { in: t.in as number, out: t.out as number };
 }
 
 /**
@@ -469,6 +490,7 @@ export async function loadConfig(args: string[]): Promise<Config> {
     adapters: (userConfig.adapters || []).map(resolveAdapter),
     judge: resolveJudgeConfig(userConfig.judge, projectRoot),
     checks: resolveChecksConfig(userConfig.checks),
+    domains: resolveDomainThresholds(userConfig.domains),
     delegate: resolveDelegateConfig(userConfig.delegate),
     // Each plugin folder, from the project root — loaded and installed before any agent compiles.
     plugins: await loadPlugins(((userConfig.plugins ?? []) as string[]).map(dir => resolve(projectRoot, expandHome(dir)))),

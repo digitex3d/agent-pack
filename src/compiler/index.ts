@@ -23,7 +23,7 @@ import { renderTree } from '../bundlers/renderTree.js';
 import { renderEnumLegend } from '../enumPrimitives.js';
 import { partitionMetadata, mergeMetadata, protectVerbatim } from '../services/text.js';
 import { lex, opensBlock } from '../lexer.js';
-import { applyBodySubstitutions, stripHeaderKeyword, AGENT_METADATA_KEYWORDS } from '../primitives.js';
+import { applyBodySubstitutions, stripHeaderKeyword, AGENT_METADATA_KEYWORDS, renderGlobs } from '../primitives.js';
 import { resolveShapeRefs } from '../shapeCompiler.js';
 import { AdapterPlugin } from '../../adapters/types.js';
 import { renderMd } from '../../adapters/md/index.js';
@@ -32,9 +32,13 @@ import { STRATEGIES, strategyFor, type DefinitionStrategy, type Definition } fro
 import { parseNamespace } from '../namespace.js';
 import { DocumentBuilder } from '../apdoc/builder.js';
 import type { ApDocument } from '../apdoc/document.js';
-import type { AgentBlock, StoreBlock, DimensionBlock, TemplateBlock, TeamBlock } from '../apdoc/blocks.js';
+import type { AgentBlock, StoreBlock, DimensionBlock, DomainBlock, TemplateBlock, TeamBlock } from '../apdoc/blocks.js';
+import { hasProjectFile } from '../services/fs.js';
+import { matchesAnyGlob } from '../services/glob.js';
+import { DECORATOR_MARK, WITHIN_DECORATOR } from '../decorators.js';
 import { SourceRegistry } from '../sources.js';
 import { judgeDocument, type JudgeRun } from '../judge/phase.js';
+import { judgeDomainFormulas } from '../judge/domains.js';
 import type { ChecksConfig } from '../judge/types.js';
 import { importedVariables, visibleIn } from '../exportedVars.js';
 import { readsOf, constantOf, parseVarLine, splitInto, takesInto } from '../vars.js';
@@ -202,7 +206,9 @@ function standaloneDecoratorErrors(ctx: BundleContext, file: string, body: strin
   const blocks = [ctx.roles, ctx.procedures, ctx.flows, ctx.policies, ctx.skills].flat();
   const named = new Set<string>();
   const errors: LintError[] = [];
-  for (const { path, text } of [{ path: file, text: body }, ...blocks.map(d => ({ path: d.path, text: d.body }))]) {
+  // A definition's decorators stand above its body: read with it.
+  const above = (d: Definition) => (ctx.sources.span(d.path, d.kind, d.name)?.decorators ?? []).map(x => `${DECORATOR_MARK}${x.key} ${x.rest}`);
+  for (const { path, text } of [{ path: file, text: body }, ...blocks.map(d => ({ path: d.path, text: [...above(d), d.body].join('\n') }))]) {
     for (const t of lex(text)) {
       const read = readDecorator(t, ctx);
       if (!read) continue;
@@ -432,36 +438,45 @@ function pluginFileErrors(ctx: BundleContext): LintError[] {
   return files.flatMap(file => pluginBlockErrors(file, ctx.sources.tree(file).blocks));
 }
 
-/** A domain keeps its contract wherever it is written — a library file or the agent's own (domainBlockErrors, the lint's own check). */
-function domainFileErrors(ctx: BundleContext): LintError[] {
+/**
+ * A domain keeps its contract wherever it is written — a library file or the
+ * agent's own (domainBlockErrors, the lint's own check) — and puts work
+ * somewhere: its plain globs match a file of the project, or a judged formula
+ * places one within, or leaves one to the agent. A domain a formula of which
+ * is not judged (no judge, a file not answered) is said elsewhere.
+ */
+function domainFileErrors(ctx: BundleContext, doc: ApDocument, projectRoot: string, unjudged: ReadonlySet<string>): LintError[] {
   const files = [...new Set(ctx.domains.map(d => d.path))].filter(file => existsSync(file));
-  return files.flatMap(file => domainBlockErrors(file, ctx.sources.tree(file).blocks));
+  const empty = (doc.byKind('domain') as DomainBlock[]).flatMap(d => {
+    const file = ctx.domains.find(e => e.name === d.name)?.path;
+    if (!file || unjudged.has(d.name)) return [];
+    const globs = [...d.writes, ...d.reads];
+    const sides = [d.side('WRITES'), d.side('READS')];
+    if (sides.some(s => s.within.length > 0 || Object.keys(s.uncertain).length > 0)) return [];
+    if (globs.length > 0 && hasProjectFile(projectRoot, rel => matchesAnyGlob(rel, globs))) return [];
+    if (globs.length === 0 && d.formulas.length === 0) return [];
+    const what = [...(globs.length ? [`no file of the project matches ${renderGlobs(globs)}`] : []), ...d.formulas.map(f => `a judge placed no file in \u201c${f.formula}\u201d`)].join(', and ');
+    return [{ file, line: lineOfName(file, d.name), message: `DOMAIN ${d.name}: ${what} — a domain says where work is done: name files that are there` }];
+  });
+  return [...files.flatMap(file => domainBlockErrors(file, ctx.sources.tree(file).blocks)), ...empty];
 }
 
 /**
- * An agent's perimeter names domains (D44): every name of its WRITES and READS
- * is a DOMAIN it declares or imports, listed once; a domain it writes is not
- * also one it reads — writing a domain reads it.
+ * A step's perimeter stays within its agent's (D44): a step BY this agent,
+ * under `@WITHIN`, names only domains the agent works within — when a
+ * `@WITHIN` decorates the agent. A step is checked by its own agent's
+ * compilation, so once.
  */
-function perimeterErrors(doc: ApDocument, file: string): LintError[] {
-  const root = doc.root() as AgentBlock | null;
-  if (!root) return [];
-  const domains = new Set(doc.byKind('domain').map(d => d.name));
-  const lines = existsSync(file) ? readFileSync(file, 'utf-8').split(/\r?\n/) : [];
-  const at = (keyword: string) => Math.max(1, lines.findIndex(l => new RegExp(`^\\s*${keyword}\\b`).test(l)) + 1);
-  const errors: LintError[] = [];
-  for (const [keyword, names] of [['WRITES', root.writes], ['READS', root.reads ?? []]] as const) {
-    const seen = new Set<string>();
-    for (const name of names) {
-      if (seen.has(name)) errors.push({ file, line: at(keyword), message: `${keyword}: \`${name}\` is listed twice` });
-      seen.add(name);
-      if (!domains.has(name)) errors.push({ file, line: at(keyword), message: `${keyword} ${name}: no DOMAIN is called \`${name}\` — declare it (\`EXPORT DOMAIN ${name}:\` with \`FOR <glob>, …\`) or IMPORT it FROM @main.domains` });
-    }
-  }
-  for (const name of root.reads ?? []) {
-    if (root.writes.includes(name)) errors.push({ file, line: at('READS'), message: `READS ${name}: \`${name}\` is in WRITES already — writing a domain reads it` });
-  }
-  return errors;
+function stepPerimeterErrors(doc: ApDocument, steps: DocumentBuilder['stepScopes'], agentName: string): LintError[] {
+  const mine = doc.domains();
+  if (!mine) return [];
+  const names = new Set(mine.map(d => d.name));
+  return steps.flatMap(s => {
+    const within = s.by === agentName ? s.scope.get(WITHIN_DECORATOR.key) ?? [] : [];
+    const outside = within.filter(u => !names.has(u.name));
+    if (outside.length === 0) return [];
+    return [{ file: s.path, line: s.line ?? 1, message: `${DECORATOR_MARK}${WITHIN_DECORATOR.key} ${outside.map(u => u.name).join(', ')}: this step's agent \`${agentName}\` works within ${[...names].map(n => `\`${n}\``).join(', ')} — a step's ${DECORATOR_MARK}${WITHIN_DECORATOR.key} names only domains of its agent's` }];
+  });
 }
 
 /**
@@ -492,7 +507,7 @@ function dimensionErrors(doc: ApDocument, ctx: BundleContext): LintError[] {
 
 /**
  * Under `STRATEGY contracts`: a CONTRACT's DOMAIN is one the agent its BY names
- * writes (`WRITES <domain>` — a DOMAIN block, D44); a member some BY names
+ * works within (`@WITHIN <domain>` — a DOMAIN block, D44); a member some BY names
  * declares `WHEN handed <contract>:` for each such contract, and no LENS-IN —
  * its input is the contract it is handed.
  */
@@ -500,9 +515,9 @@ function contractErrors(doc: ApDocument, team: TeamFile, agentName: string, lens
   if (team.strategy?.name !== CONTRACTS_STRATEGY) return [];
   const errors: LintError[] = [];
   const at = (line: number | null, message: string) => errors.push({ file: team.path, line: line ?? team.block.startLine, message });
-  const writes = (doc.root() as AgentBlock | null)?.writes ?? [];
+  const within = (doc.domains() ?? []).map(d => d.name);
   for (const c of team.contracts.filter(c => c.domain !== null && c.by.includes(agentName))) {
-    if (!writes.includes(c.domain!)) at(c.domainLine, `CONTRACT ${c.name}: DOMAIN \`${c.domain}\` — \`${agentName}\`, its BY, does not write it: give it \`WRITES ${c.domain}\`, or hand the contract to an agent that writes it`);
+    if (!within.includes(c.domain!)) at(c.domainLine, `CONTRACT ${c.name}: DOMAIN \`${c.domain}\` — \`${agentName}\`, its BY, does not work within it: write \`@WITHIN ${c.domain}\` above its AGENT, or hand the contract to an agent within it`);
   }
   const handed = team.contracts.filter(c => c.by.includes(agentName));
   if (handed.length > 0) {
@@ -850,14 +865,17 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
   const everywhere = { constants: opts.vars ?? {}, variables: [...declared].filter(name => !imported.has(name)) };
   const located = (e: { path: string; name: string; line: number | null; message: string; severity?: 'warning' }): LintError =>
     ({ file: e.path, line: e.line ?? lineOfName(e.path, e.name), message: e.message, ...(e.severity ? { severity: e.severity } : {}) });
+  const projectRoot = opts.projectRoot ?? process.cwd();
+  const judgedDomains = await judgeDomainFormulas(structure, ctx, opts.judge, projectRoot);
   reportIssues([
     ...unresolvedErrors(builder.unresolved),
     ...builder.decoratorProblems.map(p => ({ file: p.path, line: p.line ?? 1, message: p.message })),
     ...unappliedErrors(ctx, builder.decoratorNamed, true),
     ...storeErrors(structure, ctx, agentFilePath),
     ...dimensionErrors(structure, ctx),
-    ...perimeterErrors(structure, agentFilePath),
-    ...domainFileErrors(ctx),
+    ...stepPerimeterErrors(structure, builder.stepScopes, agentName),
+    ...judgedDomains.errors,
+    ...domainFileErrors(ctx, structure, projectRoot, judgedDomains.unjudged),
     ...pluginFileErrors(ctx),
     ...(teamFile ? contractErrors(structure, teamFile, agentName, agentFile.info.lensIn ? agentFilePath : null) : []),
     ...builder.varErrors.map(located),

@@ -11,7 +11,7 @@ EXPORT POLICY security:
 - `EXPORT` makes a block importable by other files. Without it, the block belongs to the file it is written in.
 - A line starting with `#` at the top of a file is a title, for the reader.
 - Names are lowercase words joined by dashes (`verify-claim`) — variable names too (`{{best-pizza}}`). Every block gets a stable id from its kind, library and name.
-- Every list on a line is comma-separated, whatever the line: `IMPORT a, b FROM …`, `MEMBER a, b`, `FOR src/api/**, src/db/**`, `EXPERTISE code-review, refactoring`, `APPLIES #board, universal`, `ENUM[low, high]`. A comma inside `{…}` belongs to a glob (`src/{api,db}/**` is one). A list separated by spaces fails the build, with the line to write.
+- Every list on a line is comma-separated, whatever the line: `IMPORT a, b FROM …`, `MEMBER a, b`, `WRITES IN src/api/**, src/db/**`, `EXPERTISE code-review, refactoring`, `APPLIES #board, universal`, `ENUM[low, high]`. A comma inside `{…}` belongs to a glob (`src/{api,db}/**` is one). A list separated by spaces fails the build, with the line to write.
 - Nothing compiles quietly: a word the language does not have, a level a keyword does not declare (`MEM!!!`), a value outside its set (`CONTEXT isolatd`), a name that points at no block, an undeclared `{{variable}}`, an `INTO` naming no variable — each fails the build, with its file and line, and a suggestion when a keyword is misspelled.
 
 ## Blocks
@@ -19,10 +19,10 @@ EXPORT POLICY security:
 ### AGENT
 
 ```
+@WITHIN reviewing
 EXPORT AGENT reviewer AS code-reviewer:
     ABOUT     Reviews a change for bugs and duplicated logic, never edits the code
     MANDATE   review the change the user points at and report what to fix
-    READS     code
     LENS-IN   review-request
     LENS-OUT  review-report
     NEVER     edit the files under review
@@ -38,11 +38,11 @@ One agent per file, anywhere under `agents/`.
 | `ABOUT` | one line: what the agent is for — also its description in the harness and in the orchestration |
 | `MANDATE` | what it is responsible for |
 | `BUDGET cheap \| moderate \| costly` | how much it may spend — the adapter maps the tier to a model of its harness (Claude Code: haiku, sonnet, opus); it wins over the config's [`delegate.models`](/reference/config#delegate) |
-| `WRITES <domain>, …` | the [domains](#domain) it may write — and so read; the definition opens with a scope warning listing their files |
-| `READS <domain>, …` | the domains it may only read; without a `READS` line it reads whatever it needs. A domain is never in both lines |
 | `LENS-IN <template>` | the shape requests to it arrive in |
 | `LENS-OUT <template>` | the shape of its answers |
 | rules and `WHEN` workflows | its own behaviour — rules at every level, `SHOULD`, `MAY` and [`MEM`](#memory) included (see [Rules](#rules)), and [Control flow](#control-flow); `ASK` and `COMPUTE` lines hand a line to a delegate or a program (see [Executors](#executors)) |
+
+`@WITHIN <domain>, …` above the `AGENT` line puts all its work within the [domains](#domain) it names — see [@WITHIN](#decorators-within): the definition opens with a scope warning listing their files. Without it, the agent has no perimeter.
 
 ### SKILL
 
@@ -227,20 +227,26 @@ The agent finds its dimensions in its definition, each opening with where it app
 
 ```
 EXPORT DOMAIN api:
-    ABOUT  the HTTP layer
-    FOR    src/api/**, src/shared/http.ts
+    ABOUT    the HTTP layer
+    APPLIES  #backend
+    WRITES   IN src/api/**, src/shared/http.ts
+    READS    IN src/db/**
 ```
 
-A region of the code, by path. An agent names the domains it writes and reads — `WRITES api`, `READS db` — and a `CONTRACT`'s `DOMAIN` line names the domain its work is in.
+A region of the code: the files work within it may write, and those it may only read. [`@WITHIN api`](#decorators-within) puts work within it, and a `CONTRACT`'s `DOMAIN` line names the domain its work is in.
 
 | Line | |
 |---|---|
 | `ABOUT <text>` | what the files of the region are |
-| `FOR <glob>, …` | its files: globs from the project root, as a [dimension's](#dimension); an absolute glob or one with `..` fails the build |
+| `APPLIES #<tag>, …` | its tags — `@WITHIN #backend` selects every imported domain that carries one; a perimeter (`universal`, `team:`, `agent:`) fails the build |
+| `WRITES[!] [<formula>] [IN <glob>, …]` | the files work within it may write: globs from the project root, as a [dimension's](#dimension); an absolute glob or one with `..` fails the build |
+| `READS[!] [<formula>] [IN <glob>, …]` | the files it may only read; with no `READS` among its domains, work reads whatever it needs |
 
-`ABOUT` and `FOR` are required, once each, and a domain holds nothing else: it says where, never how. It is declared like a dimension — `EXPORT DOMAIN` in the library's `domains/`, `IMPORT api FROM @main.domains` — or at the top of the agent's own file. Domains are by path only: two regions in one folder are a project to restructure, not a domain to split. Two domains may cover the same files.
+`ABOUT` is required, once, with at least one `WRITES` or `READS` line; lines add up, and a domain holds nothing else: it says where, never how. A domain never names another one — two domains that read the same files repeat the glob. It is declared like a dimension — `EXPORT DOMAIN` in the library's `domains/`, `IMPORT api FROM @main.domains` — or at the top of the agent's own file. A domain whose globs match no file of the project fails the build.
 
-The compiled agent opens with a scope warning — the files of the domains it writes, and of those it reads — and lists its domains in their chapter. An agent working alone reads it as a rule; in a team of contracts each instance works in a copy that shows only what its agent reads, and its delivery keeps only what it may write.
+**A formula is decided by a judge.** `WRITES! <formula> [IN <glob>, …]` describes the files in words, and the judge of the lines — the config's [`judge`](/reference/config#judge), the one that checks the code — decides it at compile time, file by file: among the files of its `IN`, or of the whole project (never the judge lock), it answers for each file, from its path and its text, the probability that the file belongs. The thresholds of the config's [`domains`](/reference/config) key turn it into files: at or above `in` (0.8) within, at or below `out` (0.2) outside. Its `!`s weigh the judgement as `IF!`'s do: with `!`, a file between the thresholds is the agent's to decide, in context — the scope warning and `apx scope` list each with its probability, and in a copy of a team of contracts it stays within, with a word on each write; with `!!`, the judge alone — within only at or above `in`. A formula without `!` fails the build; so does a formula with no `judge` in the config — never a fallback on its `IN` alone — and one that places no file. The verdicts are saved like the judge's others, in the domain file's unit: the next build asks only about files that are new or changed, and about every file when the formula changes; a decision in the judge lock wins. A file the judge could not answer for, offline, stays outside — a warning, or an error with `judge.offline: 'error'`. `FOR` is no domain line: it fails the build with the rewrite to `WRITES IN`.
+
+The compiled agent opens with a scope warning — the files of the domains it works within: what it writes, and what it only reads — and lists its domains in their chapter. An agent working alone reads it as a rule; in a team of contracts each instance works in a copy that shows only what its agent reads, and its delivery keeps only what it may write.
 
 ### FLOW
 
@@ -426,7 +432,7 @@ distilled/dst-1a2b3c4d/
 - **`tests.json`** holds the program's cases: an input and the output it must answer, or `"exit": 1` when it must refuse. Every `REQUIRE` line gives a refusal case, every `ENSURE` line cases that prove the guarantee, and each decision the block left open a case whose `why` starts with `CHOICE:` — so the choice is written down, for a reader to confirm.
 - **A new or changed program runs its tests first**; the apx records the hash of the script and the tests (`tested` in the manifest) and runs them again only when either changes.
 - **The folder** (`dst-` and eight hex digits) is a hash of what the piece carries out and of its contract's templates: editing either gives a new folder. The new version starts from the previous one — the manifests share a `lineage` (the procedure's address); the new one sets `version` + 1 and `previous`. `bundle all` lists the folders no piece owns any more, for you to review and delete; it never deletes them.
-- Writing its programs is always inside an agent's perimeter (its `WRITES` gains `distilled/**`).
+- Writing its programs is always inside an agent's perimeter (it writes `distilled/**` too).
 
 A refusal (exit `1`) stops the procedure: the agent never carries the piece out itself. A program that does not answer in `timeout_ms` hands that one run to the agent, which says so.
 
@@ -706,10 +712,10 @@ IMPORT pdf, frontend-design:frontend-design FROM @harness.skills
 
 | Form | Decorates |
 |---|---|
-| `@KEY <names>` right above a `WHEN`, an `IF`, an `UNTIL` | that block, all of it |
+| `@KEY <names>` right above a block — a `WHEN`, an `IF`, a `STEP`, or a definition (`AGENT`, `PROCEDURE`, `TEAM`, `FLOW`) | that block, all of it — a definition, all its work |
 | `@KEY <names>:` in a body | the lines nested beneath it |
 
-Every decorator follows the same rules: its items are names or tags, comma separated; several decorators may be stacked, one per line; a decorator that decorates nothing — above a line, at the end of a body, or opening a block with nothing nested — fails the build, and so does a definition inside its block (`@WITH pdf:` around `PROCEDURE p:`). A definition — an agent, a procedure, a role, a flow, any `EXPORT` block — is decorated from inside its body, not from above: `@WITH x:` as the first line of its body covers all of it, and whoever imports it gets it with it. A decorator has no negation.
+Every decorator follows the same rules: its items are names or tags, comma separated; several decorators may be stacked, one per line; a decorator that decorates nothing — above a line, at the end of a body, opening a block with nothing nested, or above a definition that holds no work (a `TEMPLATE`, a `DOMAIN`) — fails the build, and so does a definition inside a decorator's block (`@WITH pdf:` around `PROCEDURE p:`): write the decorator right above it. Above a definition, a decorator decorates all its work, and whoever imports it gets it with it; it decorates only what is written beneath it — an agent a decorated team calls keeps its own. A decorator stands anywhere, unless its own entry says where (`@WITHIN`). A decorator has no negation.
 
 **`@WITH` says which work skills, policies and dimensions are for.** The work it decorates is under the skills and policies it names, and reads the dimensions it names — by name, or (a skill, a policy) by a tag with its kind (`#policy:<tag>`, `#skill:<tag>`). Nested `@WITH`s add up.
 
@@ -730,6 +736,29 @@ EXPORT PROCEDURE reasoning:
 | `@WITH <name>, #policy:<tag>, #skill:<tag>` | the work is under these skills and policies, and reads these dimensions |
 | `@WITH <skill> AS <template>` | and the skill's answer is shaped as the template |
 
-`#policy:<tag>` selects every imported policy whose `APPLIES` line carries `#<tag>`, `#skill:<tag>` every such skill; the compiler writes their names, each with its id, in place of the tag. A [dimension](#dimension) has no `APPLIES` line: `@WITH` names it by name, and the compiled line carries its id — `get <id>` returns it with the commands that read and write it. A tag without its kind, and a name or a tag that selects nothing, fail the build. `AS` shapes the answer of one skill — named, never a policy, a dimension or a tag. A flow step takes no `@WITH` — its `BY` agent uses what it imports. It reads the same in `PROJECT.ap`, whose `AGENTS.md` lists the skills it imports in its own *Skills* chapter.
+`#policy:<tag>` selects every imported policy whose `APPLIES` line carries `#<tag>`, `#skill:<tag>` every such skill; the compiler writes their names, each with its id, in place of the tag. A [dimension](#dimension) has no `APPLIES` line: `@WITH` names it by name, and the compiled line carries its id — `get <id>` returns it with the commands that read and write it. A tag without its kind, and a name or a tag that selects nothing, fail the build. `AS` shapes the answer of one skill — named, never a policy, a dimension or a tag. It reads the same in `PROJECT.ap`, whose `AGENTS.md` lists the skills it imports in its own *Skills* chapter.
 
 There is no way to keep lines out of a policy: a policy says where it holds with its `APPLIES` line, and that is where it is narrowed. The old `WITH x:` and `!WITH` lines fail the build with the rewrite.
+
+### Decorators: @WITHIN
+
+**`@WITHIN` says within which domains the work is done.** The work it decorates writes only the `WRITES` files of the [domains](#domain) it names, and reads only their `READS` files — by name, or by a tag (`@WITHIN #backend`). Several domains in one `@WITHIN` add up.
+
+```
+@WITHIN api, db
+EXPORT AGENT backend-dev AS developer:
+    ABOUT    builds the backend
+    MANDATE  deliver the change
+```
+
+```
+@WITHIN code
+EXPORT TEAM delivery:
+    …
+    FLOW deliver:
+        @WITHIN api
+        STEP build the endpoint:
+            BY backend-dev
+```
+
+The compiler lets no ambiguous perimeter through: a perimeter is bound to a block whose bounds the apx knows at run time — the agent's is the scope warning, the apx's `scope` and, in a team of contracts, what each copy shows and delivers; a flow's and a step's are written into the flow. So `@WITHIN` stands only right above an `AGENT`, a `TEAM`, a `FLOW` or a `STEP` — anywhere else, or opening a block (`@WITHIN api:`), it fails the build. Nested, it narrows, and only by naming what the one around it names: a `@WITHIN` that names a domain the enclosing one does not fails the build — never a silent intersection. A step's `@WITHIN` names only domains its `BY` agent works within, when a `@WITHIN` decorates that agent. An agent no `@WITHIN` decorates has no perimeter. The old `WRITES <domain>` and `READS <domain>` agent lines, and `OWNS`, fail the build with the rewrite.

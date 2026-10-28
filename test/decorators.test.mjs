@@ -1,8 +1,8 @@
 /**
  * Block decorators (src/decorators.ts) — the structure every decorator goes
- * through, proven with two test decorators registered here: one that adds up
- * (union), one that narrows (intersection). No real decorator is registered
- * yet: WITH and WITHIN move onto this structure in the next pieces.
+ * through, proven with test decorators registered here: one that adds up
+ * (union), one that narrows (intersection), one held to some blocks (`on`).
+ * The real ones, @WITH and @WITHIN, have their own tests (skills, perimeter).
  */
 import { strict as assert } from 'assert';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
@@ -12,14 +12,16 @@ import { tmpdir } from 'os';
 const { lex } = await import('../dist/src/lexer.js');
 const { parseBlocks } = await import('../dist/src/parseBlocks.js');
 const { checkVocabulary } = await import('../dist/src/lint.js');
-const { registerDecorator, decoratorOf, resolveDecorator, DecoratorScope } = await import('../dist/src/decorators.js');
+const { registerDecorator, decoratorOf, resolveDecorator, DecoratorScope, WITHIN_DECORATOR } = await import('../dist/src/decorators.js');
 const { renderTree } = await import('../dist/src/bundlers/renderTree.js');
 const { bundleAgentObject } = await import('../dist/src/compiler/index.js');
 
 const SHAPE = { key: 'SHAPE', names: ['template'], combine: 'union', intro: 'For the work below, shape it with' };
 const ONLY = { key: 'ONLY', names: ['template', 'policy'], combine: 'intersection', intro: 'For the work below, only' };
+const ABOVE = { key: 'ABOVE', names: ['template'], combine: 'union', intro: 'For the work below, above', on: ['FLOW', 'STEP'] };
 registerDecorator(SHAPE);
 registerDecorator(ONLY);
+registerDecorator(ABOVE);
 
 const has = (out, ...needles) => { for (const n of needles) assert.ok(out.includes(n), `missing ${JSON.stringify(n)} in:\n${out}`); };
 const messages = (file, body) => checkVocabulary(file, body).map(e => `${e.line}: ${e.message}`);
@@ -53,8 +55,16 @@ const messages = (file, body) => checkVocabulary(file, body).map(e => `${e.line}
   assert.match(dangling[0].message, /`@SHAPE` decorates no block/);
   assert.match(parseBlocks(['PROCEDURE p:', '    DO one', '    @SHAPE a'].join('\n')).errors[0].message, /decorates no block/, 'at the end of a body');
   assert.match(parseBlocks(['PROCEDURE p:', '    @SHAPE a:', '    DO one'].join('\n')).errors[0].message, /opens a block, and nothing is nested below it/);
-  // A definition is decorated from inside its body, not yet from above.
-  assert.match(parseBlocks(['@SHAPE a', 'EXPORT PROCEDURE p:', '    DO one'].join('\n')).errors[0].message, /`@SHAPE` stands above PROCEDURE, a definition — decorate its work from inside/);
+  // Above a definition, it is the definition's — all its work.
+  const def = parseBlocks(['@SHAPE a', 'EXPORT PROCEDURE p:', '    DO one'].join('\n'));
+  assert.deepEqual(def.errors, []);
+  assert.deepEqual(def.blocks[0].decorators.map(d => d.key), ['SHAPE']);
+  // A decorator held to some blocks stands only right above one of them, and never opens a block.
+  const flow = ['FLOW f:', '    @ABOVE a', '    STEP s:', '        DO one'].join('\n');
+  assert.deepEqual(parseBlocks(flow).errors, []);
+  assert.match(parseBlocks(['PROCEDURE p:', '    @ABOVE a', '    WHEN asked:', '        DO one'].join('\n')).errors[0].message, /`@ABOVE` stands above WHEN — @ABOVE stands only right above FLOW or STEP/);
+  assert.match(parseBlocks(['FLOW f:', '    @ABOVE a:', '        DO one'].join('\n')).errors[0].message, /`@ABOVE …:` opens a block — @ABOVE stands only right above FLOW or STEP/);
+  assert.deepEqual(WITHIN_DECORATOR.on, ['AGENT', 'TEAM', 'FLOW', 'STEP'], '@WITHIN: the bounds the apx knows');
   console.log('decorators: parser passed.');
 }
 
@@ -74,8 +84,12 @@ const messages = (file, body) => checkVocabulary(file, body).map(e => `${e.line}
   const t = name => ({ kind: 'template', name });
   const added = DecoratorScope.EMPTY.enter(SHAPE, [t('a')]).enter(SHAPE, [t('b'), t('a')]);
   assert.deepEqual(added.get('SHAPE').map(u => u.name), ['a', 'b'], 'union: nested decorators add up');
-  const narrowed = DecoratorScope.EMPTY.enter(ONLY, [t('a'), t('b')]).enter(ONLY, [t('b'), t('c')]);
+  const narrowed = DecoratorScope.EMPTY.enter(ONLY, [t('a'), t('b')]).enter(ONLY, [t('b')]);
   assert.deepEqual(narrowed.get('ONLY').map(u => u.name), ['b'], 'intersection: nested decorators narrow');
+  const around = DecoratorScope.EMPTY.enter(ONLY, [t('a'), t('b')]);
+  assert.deepEqual(around.outside(ONLY, [t('b'), t('c')]).map(u => u.name), ['c'], 'what a narrowing decorator names beyond the one around it');
+  assert.deepEqual(DecoratorScope.EMPTY.outside(ONLY, [t('c')]), [], 'nothing around it: nothing beyond');
+  assert.deepEqual(added.outside(SHAPE, [t('z')]), [], 'a decorator that adds up never goes beyond');
   const outer = DecoratorScope.EMPTY.enter(SHAPE, [t('a')]);
   outer.enter(SHAPE, [t('b')]);
   assert.deepEqual(outer.get('SHAPE').map(u => u.name), ['a'], 'entering never changes the enclosing scope');
@@ -109,14 +123,15 @@ const messages = (file, body) => checkVocabulary(file, body).map(e => `${e.line}
     const lib = join(root, 'library');
     const write = (file, lines) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, lines.join('\n') + '\n'); return file; };
     for (const name of ['shape-a', 'shape-b']) write(join(lib, 'templates', `${name}.ap`), [`EXPORT TEMPLATE ${name}:`, '    ABOUT  a shape of text', '    SLOTS:', '        text: TEXT  "the text"']);
-    const compile = body => {
+    const compileAbove = (above, body, imports = 'shape-a, shape-b') => {
       const file = write(join(root, 'a.ap'), [
-        'IMPORT shape-a, shape-b FROM @main.templates', '',
+        `IMPORT ${imports} FROM @main.templates`, '', ...above,
         'EXPORT AGENT a AS r:', '    ABOUT    writes', '    MANDATE  write well', ...body, '',
         'ROLE r:', '    ABOUT   a writer', '    ALWAYS  write clearly',
       ]);
       return bundleAgentObject({ agentName: 'a', agentFile: file, agentDir: root, libraryRoot: lib, libraryRoots: [lib], libraries: { '@main': lib }, bundleConfig: { runtime: false } });
     };
+    const compile = body => compileAbove([], body);
     const ok = await compile([
       '    @SHAPE shape-a', '    WHEN asked to write:', '        DO  write it',
       '        @SHAPE shape-b:', '            DO  shape it',
@@ -131,7 +146,26 @@ const messages = (file, body) => checkVocabulary(file, body).map(e => `${e.line}
     assert.ok(when.body.some(n => n.keyword === '@SHAPE' && n.body.some(m => m.text === 'shape it')), 'the opened block nests where it is written');
 
     await assert.rejects(compile(['    @SHAPE shape-z', '    WHEN asked to write:', '        DO  write it']), /`@SHAPE shape-z`: no imported template is called `shape-z`/);
+    // Nested, a narrowing decorator names only what the one around it does — never a silent intersection.
+    await assert.rejects(compile(['    @ONLY shape-a:', '        DO  write it', '        @ONLY shape-b:', '            DO  shape it']),
+      /`@ONLY shape-b`: the @ONLY around it names `shape-a` — a nested @ONLY names only what that one does/);
     console.log('decorators: compilation passed.');
+
+    // Above a definition: all its work, inside the decorator — the agent's here; a definition with no work has nothing to decorate.
+    const above = await compileAbove(['@SHAPE shape-a'], ['    WHEN asked to write:', '        DO  write it']);
+    const agentNode = Object.values(JSON.parse(above.structure.asJson()).blocks).find(b => b.kind === 'agent');
+    assert.equal(agentNode.body.length, 1);
+    assert.equal(agentNode.body[0].keyword, '@SHAPE');
+    assert.ok(agentNode.body[0].body.some(n => n.type === 'when'), "the agent's work is the decorator's body");
+    assert.deepEqual(above.structure.definitionUses(above.structure.root(), 'SHAPE').map(b => b.name), ['shape-a']);
+    // A definition declared in the agent's file, decorated from above: its decorator leaves the agent's body with it.
+    const inline = await compileAbove([], ['    WHEN asked to write:', '        RUN p', '', '    @SHAPE shape-a', '    PROCEDURE p:', '        DO  write it']);
+    const agentBody = Object.values(JSON.parse(inline.structure.asJson()).blocks).find(b => b.kind === 'agent').body;
+    assert.ok(!agentBody.some(n => n.keyword === '@SHAPE'), "the procedure's decorator is not the agent's");
+    assert.equal(inline.structure.byKind('procedure').find(b => b.name === 'p').body[0].keyword, '@SHAPE', "it is the procedure's");
+    write(join(lib, 'templates', 'shape-c.ap'), ['@SHAPE shape-a', 'EXPORT TEMPLATE shape-c:', '    ABOUT  a shape of text', '    SLOTS:', '        text: TEXT  "the text"']);
+    await assert.rejects(compileAbove([], [], 'shape-a, shape-c'), /shape-c\.ap:1  `@SHAPE` stands above TEMPLATE, which holds no work to decorate/);
+    console.log('decorators: definitions passed.');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

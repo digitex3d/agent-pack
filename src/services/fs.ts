@@ -30,15 +30,16 @@ const SKIPPED_DIRS = new Set(['.git', 'node_modules', '.agent-pack']);
 
 /**
  * Every file under `root` whose `/`-separated relative path `keep` admits, in
- * path order — the project's own files: `.git`, `node_modules` and `.agent-pack`
+ * path order, `max` at most — the project's own files: `.git`, `node_modules` and `.agent-pack`
  * are never entered, nor is a symbolic link to a folder followed.
  */
-export function projectFiles(root: string, keep: (rel: string) => boolean): string[] {
+export function projectFiles(root: string, keep: (rel: string) => boolean, max = Infinity): string[] {
   const out: string[] = [];
   const walk = (dir: string): void => {
     let entries: Dirent[];
     try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
     for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      if (out.length >= max) return;
       const abs = resolve(dir, entry.name);
       if (entry.isDirectory()) { if (!SKIPPED_DIRS.has(entry.name)) walk(abs); continue; }
       if (!entry.isFile()) continue;
@@ -48,6 +49,11 @@ export function projectFiles(root: string, keep: (rel: string) => boolean): stri
   };
   walk(root);
   return out;
+}
+
+/** Whether some file of the project `keep` admits — the walk of projectFiles, stopped at the first. */
+export function hasProjectFile(root: string, keep: (rel: string) => boolean): boolean {
+  return projectFiles(root, keep, 1).length > 0;
 }
 
 /** Every `.ap` file under `dir`, recursively; [] when `dir` is no directory. */

@@ -125,7 +125,7 @@ A complete team you can bundle as it is — two members, routing, a two-step flo
 | Construct | Purpose |
 |---|---|
 | `AGENT`, `ROLE` | who the agent is: mandate, rules, identity and expertise |
-| `DOMAIN`, `WRITES`, `READS` | regions of the code by path, and the ones an agent may write and read; its definition opens with a scope warning |
+| `DOMAIN`, `@WITHIN` | regions of the code — the files work within one writes, and those it only reads — and the decorator that puts an agent, a team, a flow or a step within them; an agent's definition opens with a scope warning |
 | `POLICY` | rules every agent that imports them must respect |
 | `TEMPLATE` | a typed answer format — `SLOTS`, `BODY` layout, `EXAMPLE` |
 | `PROCEDURE` | reusable steps, invoked with `RUN` |

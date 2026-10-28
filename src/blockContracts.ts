@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { DIMENSION_LINES, GLOBS_LINE, PERIMETER_LINES, type Keyword } from './lexer.js';
+import { DIMENSION_LINES, DOMAIN_LINES, type Keyword } from './lexer.js';
 import { ACTION_VERBS } from './actionVerbs.js';
 import { getFamilyBases } from './forceLevelConfig.js';
 import { VERBATIM_REGIONS } from './shapeCompiler.js';
@@ -102,10 +102,10 @@ export interface BlockContract {
  */
 /** The agent surface — see its comment in BLOCK_CONTRACTS.AGENT. */
 const AGENT_CONTRACT: BlockContract = {
-  allows: ['ABOUT', 'MANDATE', 'BUDGET', ...PERIMETER_LINES, 'LENS-OUT', 'LENS-IN', 'IMPORT', 'ON-INVOKE', 'WHEN', 'VAR', ...AGENT_FAMILIES],
+  allows: ['ABOUT', 'MANDATE', 'BUDGET', 'LENS-OUT', 'LENS-IN', 'IMPORT', 'ON-INVOKE', 'WHEN', 'VAR', ...AGENT_FAMILIES],
   excluded: AGENT_EXCLUDED,
   requiresAll: ['AS', 'MANDATE'] as const,
-  unique: ['AS', 'ABOUT', 'MANDATE', 'BUDGET', ...PERIMETER_LINES, 'LENS-OUT', 'LENS-IN'] as const,
+  unique: ['AS', 'ABOUT', 'MANDATE', 'BUDGET', 'LENS-OUT', 'LENS-IN'] as const,
   identityKeywords: ['ROLE', 'EXPERTISE', 'APPLIES'] as const,
 };
 
@@ -173,13 +173,17 @@ export const BLOCK_CONTRACTS: Record<string, BlockContract> = {
     requiresAll: ['ABOUT', ...DIMENSION_LINES, 'AS'] as const,
     unique: ['ABOUT', ...DIMENSION_LINES, 'AS'] as const,
   },
-  // A domain is a region of the code by path: ABOUT what it is, FOR its files.
-  // An agent's WRITES and READS name domains, and so does a CONTRACT's DOMAIN line.
-  // Nothing else: a domain holds no rule, it only says where.
+  // A domain is a region of the code: ABOUT what it is, WRITES the files work
+  // within it may write, READS the ones it may only read — lines that add up
+  // (src/domains.ts), APPLIES its tags — tags only, a domain holds nowhere by
+  // itself. `@WITHIN <domain>` (or `@WITHIN #tag`) puts work within it, and a
+  // CONTRACT's DOMAIN line names one. Nothing else: a domain holds no rule, it only says where.
   DOMAIN: {
-    allows: ['ABOUT', GLOBS_LINE] as const,
-    requiresAll: ['ABOUT', GLOBS_LINE] as const,
-    unique: ['ABOUT', GLOBS_LINE] as const,
+    allows: ['ABOUT', 'APPLIES', ...DOMAIN_LINES] as const,
+    requiresAll: ['ABOUT'] as const,
+    requiresAnyOf: DOMAIN_LINES,
+    unique: ['ABOUT', 'APPLIES'] as const,
+    excluded: { FOR: 'a domain says its files with `WRITES IN <glob>, …` (and `READS IN <glob>, …` for the ones it only reads)' },
   },
   // A plugin's manifest: ABOUT what its block is, AS the template its lines
   // are, and an OPERATION block per apx command — ABOUT what it does, AS the

@@ -63,7 +63,7 @@ export interface ApDirectiveNode {
   shape?: ApShape;
   /** `DO … INTO <name>`: the session variable the step's result is stored in. */
   into?: ApRef;
-  /** `WITH …:` / `!WITH …:`: the skills and policies the lines nested below are under — a tag already expanded. */
+  /** A decorator's (`@WITH …`, `@WITHIN …`): the blocks the work nested below is under — a tag already expanded. */
   uses?: ApRef[];
   /** `ASK … BY <agent>`: the agent or team the line is handed to; absent = the default delegate. */
   by?: string;

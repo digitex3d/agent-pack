@@ -42,13 +42,21 @@ EXPORT ROLE ap-author:
       DO   let the agent use an imported skill freely; add @WITH <skill> to say which block it is for
       DO   put @WITH <skill> on its own line right above a control block, at its indent — a WHEN, an IF, an UNTIL
       DO   put @WITH <skill>: first in a block's body, around its lines, for the skill to travel with that block
-      NEVER put a @WITH above a definition block — an AGENT, a PROCEDURE, a ROLE, a FLOW or any EXPORT block
       DO   write @WITH <skill>: to open a block in a body — it decorates only the lines nested beneath it
       DO   stack several decorators one per line; separate the names with commas
       DO   write @WITH <skill> AS <template> to shape one skill's answer
       DO   narrow a policy's APPLIES line to keep lines out of it — there is no negated @WITH
       DO   import the skill in the file that writes the @WITH
-      NEVER write a @WITH on a flow STEP or a COMPUTE block, nor a @WITH with nothing below it to decorate
+      NEVER write a @WITH with nothing below it to decorate
+
+    WHEN putting work within a perimeter of files:
+      DO   declare a DOMAIN with ABOUT and its files on WRITES IN <glob>, … and READS IN <glob>, … lines
+      DO   give a domain its tags on an APPLIES line — tags only, never universal, team: or agent:
+      DO   write @WITHIN <domain>, … on its own line right above an AGENT, a TEAM, a FLOW or a STEP, at its indent
+      DO   name in a nested @WITHIN only domains the enclosing @WITHIN already names — it narrows, never widens
+      NEVER write WRITES or READS anywhere but in a DOMAIN — an agent takes its perimeter from @WITHIN
+      NEVER write a formula on a domain's WRITES or READS line yet — globs only, until a judge decides them
+      NEVER let a domain name another domain, nor match no file of the project
 
     WHEN binding shapes:
       DO   bind an agent's answers with LENS-OUT <template> and the requests it receives with LENS-IN <template>

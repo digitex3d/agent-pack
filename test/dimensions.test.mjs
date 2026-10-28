@@ -155,10 +155,10 @@ try {
     }
 
     // --- B1: FOR and EACH are a DIMENSION's lines; a DIMENSION stands at the file top or directly in an agent's body ---
-    await assert.rejects(compile([], [], ['    FOR    src/*.py']), /FOR is a line of a DIMENSION or a DOMAIN block — found inside AGENT/);
+    await assert.rejects(compile([], [], ['    FOR    src/*.py']), /FOR is a line of a DIMENSION block — found inside AGENT/);
     await assert.rejects(compile([], [], ['    EACH   function']), /EACH is a line of a DIMENSION block — found inside AGENT/);
     await assert.rejects(compile(['PROCEDURE p:', '    ABOUT  a procedure', '    DO     work', '    EACH   function']), /EACH is a line of a DIMENSION block — found inside PROCEDURE/);
-    await assert.rejects(compile(['FOR    src/*.py']), /FOR is a line of a DIMENSION or a DOMAIN block — found inside the file top/);
+    await assert.rejects(compile(['FOR    src/*.py']), /FOR is a line of a DIMENSION block — found inside the file top/);
     await assert.rejects(compile(['PROCEDURE p:', '    ABOUT  a procedure', '    DO     work', ...dimension().map(l => `    ${l}`)]),
       /a DIMENSION is declared at the file top or directly in an agent's body — found inside PROCEDURE/);
     await assert.rejects(compile(['ROLE other:', '    ABOUT  another', ...dimension().map(l => `    ${l}`)]), /found inside ROLE/);

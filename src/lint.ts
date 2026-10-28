@@ -3,7 +3,8 @@
 import { DECORATOR_MARK, decoratorOf, decoratorItemError, splitDecoratorRest, unknownDecoratorMessage } from './decorators.js';
 import { existsSync, readFileSync } from 'fs';
 import { basename } from 'path';
-import { lex, Token, Keyword, KEYWORDS, GLOBS_LINE, isTriggerKind, opensBlock, type DimensionLine } from './lexer.js';
+import { lex, Token, Keyword, KEYWORDS, GLOBS_LINE, DOMAIN_LINES, isTriggerKind, opensBlock, type DimensionLine, type DomainLine } from './lexer.js';
+import { parseDomainLine, domainLineIssue } from './domains.js';
 import { ACTION_VERBS } from './actionVerbs.js';
 import { desugar } from './desugar.js';
 import { parseApplies, PERIMETER_FORMS, PERIMETER_KINDS } from './services/tags.js';
@@ -46,7 +47,7 @@ export interface LintOptions {
   maxLineLength?: number;
 }
 
-const DEFAULT_MAX_LINE_LENGTH = 120;
+export const DEFAULT_MAX_LINE_LENGTH = 180;
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -762,6 +763,8 @@ function isBranch(contract: BlockContract, keyword: Keyword): boolean {
 
 /** The contracts checked line by line — a DIMENSION, a DOMAIN and a TEAM are checked on their parsed block (coveringBlockErrors, teamBlockErrors). */
 const { DIMENSION: _parsed, DOMAIN: _domain, TEAM: _team, CONTRACT: _contract, [PLUGIN_KEY]: _plugin, [OPERATION_KEY]: _operation, ...TOKEN_CONTRACTS } = BLOCK_CONTRACTS;
+/** The blocks checked on their parsed block: their contract names every line they do not hold, so no other check repeats it. */
+const PARSED_CONTRACTS = new Set(Object.keys(BLOCK_CONTRACTS).filter(key => !(key in TOKEN_CONTRACTS)));
 
 export function validateBlockContracts(
   tokens: ReturnType<typeof lex>,
@@ -972,20 +975,38 @@ export function dimensionBlockErrors(file: string, blocks: readonly Block[]): Li
   return coveringBlockErrors(file, blocks, 'DIMENSION');
 }
 
-/** Every DOMAIN a file declares — at its top, or in an AGENT's body: its contract, and its FOR globs, read from the project root. */
+/**
+ * Every DOMAIN a file declares — at its top, or in an AGENT's body: its
+ * contract, and its WRITES and READS lines (src/domains.ts) — files by IN
+ * globs read from the project root; a formula, an error until a judge decides one.
+ */
 export function domainBlockErrors(file: string, blocks: readonly Block[]): LintError[] {
-  return coveringBlockErrors(file, blocks, 'DOMAIN');
+  return coveringBlockErrors(file, blocks, 'DOMAIN', DOMAIN_LINES, c => {
+    const t = lex(c.raw)[0];
+    const parts = parseDomainLine(c.rest);
+    const issue = domainLineIssue(c.keyword as DomainLine, t?.kind === 'keyword' ? t.level ?? 0 : 0, parts);
+    const spaced = spacedListError(`${c.keyword} IN`, c.rest.replace(/^.*?\bIN\s+/, ''));
+    return { globs: parts.globs, issues: [issue, parts.globs.length ? spaced : null].filter((m): m is string => m !== null) };
+  });
 }
 
-/** The blocks that cover files with a FOR line (DIMENSION, DOMAIN): their contract, and globs that stay in the project. */
-function coveringBlockErrors(file: string, blocks: readonly Block[], key: string): LintError[] {
+/**
+ * The blocks that cover files (DIMENSION by FOR, DOMAIN by WRITES and READS):
+ * their contract, what is wrong with each of those lines, and globs that stay
+ * in the project.
+ */
+function coveringBlockErrors(file: string, blocks: readonly Block[], key: string, lines: readonly string[] = [GLOBS_LINE],
+  read: (c: Line) => { globs: string[]; issues: string[] } = c => ({ globs: splitList(c.rest), issues: [] })): LintError[] {
   const found = blocks.flatMap(b => (b.key === key ? [b] : agentNestedBlocks([b], key).map(n => n.block)));
   return found.flatMap(b => [
     ...checkBlockContract(file, b, key),
     ...b.children.flatMap((c): LintError[] => {
-      if (c.type !== 'line' || c.keyword !== GLOBS_LINE) return [];
-      return splitList(c.rest).filter(leavesRoot)
-        .map(glob => ({ file, line: c.line, message: `FOR \`${glob}\`: a glob is read from the project root — no absolute path, no \`..\`` }));
+      if (c.type !== 'line' || !lines.includes(c.keyword)) return [];
+      const { globs, issues } = read(c);
+      return [
+        ...issues.map(message => ({ file, line: c.line, message })),
+        ...globs.filter(leavesRoot).map(glob => ({ file, line: c.line, message: `${c.keyword} \`${glob}\`: a glob is read from the project root — no absolute path, no \`..\`` })),
+      ];
     }),
   ]);
 }
@@ -1190,10 +1211,21 @@ function isAgentOrOrchestration(file: string, body: string): boolean {
 // Vocabulary — every line of every file speaks the language
 // ---------------------------------------------------------------------------
 
-/** The lines only some blocks hold, and what each is of them: a COMPUTE's sections, a DIMENSION's FOR and EACH, a DOMAIN's FOR. */
-const LINE_OWNERS = new Map<string, { owners: readonly string[]; what: string }>([
-  ...COMPUTE_SECTIONS.map((s): [string, { owners: readonly string[]; what: string }] => [s, { owners: ['COMPUTE'], what: 'a section' }]),
-  [GLOBS_LINE, { owners: ['DIMENSION', 'DOMAIN'], what: 'a line' }],
+/** A line only some blocks hold: those blocks, what it is of them, and — found in one of `hints`' blocks — what to write instead. */
+interface LineOwner {
+  owners: readonly string[];
+  what: string;
+  hints?: Readonly<Record<string, string>>;
+}
+
+/** An agent once named its domains with WRITES and READS: work is put within a domain by a decorator now. */
+const WITHIN_HINT = 'an agent works within a domain by its decorator — write `@WITHIN <domain>` above its AGENT';
+
+/** The lines only some blocks hold, and what each is of them: a COMPUTE's sections, a DIMENSION's FOR and EACH, a DOMAIN's WRITES and READS. */
+const LINE_OWNERS = new Map<string, LineOwner>([
+  ...COMPUTE_SECTIONS.map((s): [string, LineOwner] => [s, { owners: ['COMPUTE'], what: 'a section' }]),
+  [GLOBS_LINE, { owners: ['DIMENSION'], what: 'a line' }],
+  ...DOMAIN_LINES.map((l): [string, LineOwner] => [l, { owners: ['DOMAIN'], what: 'a line', hints: { AGENT: WITHIN_HINT } }]),
   ['EACH', { owners: ['DIMENSION'], what: 'a line' }],
   ['MEMBER', { owners: [TEAM_KEY], what: 'a line' }],
   ['STRATEGY', { owners: [TEAM_KEY], what: 'a line' }],
@@ -1229,7 +1261,10 @@ const BARE_NEEDS: Record<string, string> = {
 function placementError(key: string, parent: string | undefined, opens: boolean): string | null {
   // A block of its own (`DOMAIN api:`) is no line of another: a COMPUTE section (`ENSURE:`) still is.
   const owned = opens && blockTypeOf(key) ? undefined : LINE_OWNERS.get(key);
-  if (owned && !owned.owners.includes(parent ?? '')) return `${key} is ${owned.what} of a ${owned.owners.join(' or a ')} block — found inside ${parent || 'the file top'}`;
+  if (owned && !owned.owners.includes(parent ?? '') && !PARSED_CONTRACTS.has(parent ?? '')) {
+    const hint = owned.hints?.[parent ?? ''];
+    return `${key} is ${owned.what} of a ${owned.owners.join(' or a ')} block — found inside ${parent || 'the file top'}${hint ? `: ${hint}` : ''}`;
+  }
   if (opens && (key === 'DIMENSION' || key === 'DOMAIN' || pluginOfKey(key)) && parent && !AGENT_KEYS.has(parent)) return `a ${key} is declared at the file top or directly in an agent's body — found inside ${parent}`;
   if (opens && key === 'CONTRACT' && parent && parent !== TEAM_KEY) return `a CONTRACT is declared in a TEAM block, or at the top of the project file — found inside ${parent}`;
   return null;
@@ -1490,15 +1525,15 @@ export function checkVocabulary(file: string, body: string): LintError[] {
       if (DISTILL_RE.test(key) || DISTILL_SUFFIX_RE.test(t.rest.trim())) {
         err(t.line, `DISTILL was removed — mark the procedure PROCEDURE** or write a COMPUTE block: "${quoteRaw(t)}"`);
       }
-      // DOMAINS was removed: a contract's DOMAIN names a DOMAIN block its BY agent writes (D44).
+      // DOMAINS was removed: a contract's DOMAIN names a DOMAIN block its BY agent works within (D44).
       if (key === 'DOMAINS') {
-        err(t.line, `DOMAINS was removed — the files of a domain are its \`EXPORT DOMAIN <name>:\` block's FOR, and a CONTRACT's \`DOMAIN <name>\` goes to an agent that writes it (\`WRITES <name>\`): "${quoteRaw(t)}"`);
+        err(t.line, `DOMAINS was removed — the files of a domain are its \`EXPORT DOMAIN <name>:\` block's WRITES and READS, and a CONTRACT's \`DOMAIN <name>\` goes to an agent within it (\`@WITHIN <name>\`): "${quoteRaw(t)}"`);
       }
       // WITH became a decorator (src/decorators.ts).
       if (key === 'WITH') err(t.line, `${WITH_REWRITE}: "${quoteRaw(t)}"`);
-      // OWNS was removed: a perimeter names domains (D44).
+      // OWNS was removed: work is put within a domain by `@WITHIN` (D44).
       if (key === 'OWNS') {
-        err(t.line, `OWNS was removed — declare the files as \`EXPORT DOMAIN <name>:\` with \`FOR ${splitList(t.rest).join(', ')}\`, and write \`WRITES <name>\` (or \`READS <name>\`) in the agent: "${quoteRaw(t)}"`);
+        err(t.line, `OWNS was removed — declare the files as \`EXPORT DOMAIN <name>:\` with \`WRITES IN ${splitList(t.rest).join(', ')}\`, and write \`@WITHIN <name>\` above the agent: "${quoteRaw(t)}"`);
       }
       if (!isVarKeyword(key) && stack.some(a => a.key === 'VAR') && !isAllowedChild(VAR_BLOCK, key as Keyword)) {
         err(t.line, notAllowed(key as Keyword, 'VAR', VAR_BLOCK));

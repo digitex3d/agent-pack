@@ -163,7 +163,7 @@ export const STRATEGIES: DefinitionStrategy[] = [
   // the store's GAP above does not reach it: a compilation that is no agent's
   // (standalone, orchestration) fails on a dimension (strayDimensionErrors).
   { ...defaults('dimension'), afterEmit: propagateRefId },
-  // A domain is a region of the code by path — named by an agent's WRITES/READS, never RUN.
+  // A domain is a region of the code — named by `@WITHIN`, never RUN.
   { ...defaults('domain'),    afterEmit: propagateRefId },
 ];
 

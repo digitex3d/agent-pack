@@ -28,8 +28,8 @@ import { VAR_SCOPE_WORDS, isVarKeyword } from './vars.js';
 import { EXPORT_MODIFIER } from './blockTypes.js';
 
 /**
- * `FOR <glob>, …` — the files a block covers, from the project root: a
- * DIMENSION's and a DOMAIN's, the one word of the language for a set of files.
+ * `FOR <glob>, …` — the files a DIMENSION covers, from the project root. A
+ * DOMAIN says its files with WRITES and READS (DOMAIN_LINES).
  */
 export const GLOBS_LINE = 'FOR';
 
@@ -40,8 +40,13 @@ export const GLOBS_LINE = 'FOR';
  */
 export const DIMENSION_LINES = [GLOBS_LINE, 'EACH'] as const;
 
-/** An agent's perimeter: the DOMAINs it writes (and so reads), the DOMAINs it only reads. */
-export const PERIMETER_LINES = ['WRITES', 'READS'] as const;
+/**
+ * A DOMAIN's lines: `WRITES [<formula>] [IN <glob>, …]` the files work within
+ * it may write, `READS …` the ones it may only read (src/domains.ts). A
+ * formula's judgement takes `!`s, as IF's: `WRITES! <formula>`, `READS!!`.
+ */
+export const DOMAIN_LINES = ['WRITES', 'READS'] as const;
+export type DomainLine = typeof DOMAIN_LINES[number];
 export type DimensionLine = typeof DIMENSION_LINES[number];
 
 /**
@@ -76,7 +81,7 @@ const STATIC_KEYWORDS = [
   // DIMENSION body: FOR the files it covers (globs from the project root), EACH
   // what to translate inside a file; its value's shape is its AS template.
   'DIMENSION', ...DIMENSION_LINES,
-  ...PERIMETER_LINES,
+  ...DOMAIN_LINES,
   // `IN <store>:` — a block grouping the steps that work in one store. A
   // control-flow head, not a named declaration: it lives inside a runnable.
   'IN',
@@ -186,7 +191,16 @@ const LIFECYCLE_ALT = LIFECYCLE_ALIASES.map(escapeRegex).join('|');
 //   - alias name
 //   - lifecycle alias (ON-AGENT-PROMPTED, ON-INVOKE, …)
 //   - static keyword
-const KW_GROUP = `(?:${CONTROL_ALT}|PROCEDURE\\*{1,2}|!+(?:${FORCE_BASES_ALT})|(?:${FORCE_BASES_ALT})!*|${ALIAS_ALT}|${LIFECYCLE_ALT}|${STATIC_ALT})`;
+// A DOMAIN line with the `!`s of its formula's judgement: `WRITES!`, `READS!!` (splitDomainLine).
+const DOMAIN_LINE_ALT = `(?:${DOMAIN_LINES.join('|')})!{1,2}`;
+
+/** `WRITES!!` → `{ keyword: 'WRITES', level: 2 }`; any other word → null. */
+export function splitDomainLine(keyword: string): { keyword: DomainLine; level: number } | null {
+  const m = /^(WRITES|READS)(!{0,2})$/.exec(keyword);
+  return m ? { keyword: m[1] as DomainLine, level: m[2].length } : null;
+}
+
+const KW_GROUP = `(?:${CONTROL_ALT}|${DOMAIN_LINE_ALT}|PROCEDURE\\*{1,2}|!+(?:${FORCE_BASES_ALT})|(?:${FORCE_BASES_ALT})!*|${ALIAS_ALT}|${LIFECYCLE_ALT}|${STATIC_ALT})`;
 
 const KEYWORD_WITH_REST_RE = new RegExp(`^([ \\t]*)(${KW_GROUP})[ \\t]+(.+?)[ \\t]*$`);
 // Keywords that stand alone on a line: IF, ELSE, PARALLEL and the DISTILL levels.
@@ -239,7 +253,7 @@ export type Token =
   | (Position & { kind: 'blank' })
   | (Position & { kind: 'comment'; raw: string })
   | (Position & { kind: 'rawLine'; raw: string })
-  // `level`: the level of an IF/UNTIL head (`IF!` 1, `IF!!` 2, `!IF` -1 — splitControl); absent = 0.
+  // `level`: the level of an IF/UNTIL head (`IF!` 1, `IF!!` 2, `!IF` -1 — splitControl) or of a DOMAIN line (`WRITES!` 1 — splitDomainLine); absent = 0.
   // `executor`: the stars of an IF/UNTIL head (`IF*` 1 a delegate, `IF**` 2 a program); absent = the agent.
   | (Position & { kind: 'keyword'; keyword: Keyword; rest: string; raw: string; level?: number; executor?: number })
   | (Position & { kind: 'blockOpener'; key: string; rest: string; raw: string })
@@ -326,7 +340,7 @@ export function lexRaw(source: string): Token[] {
     if (kw) {
       // A PROCEDURE head may carry its executor's stars (`PROCEDURE** name:`) — src/executor.ts.
       const mark = procedureMark(kw[2]);
-      const control = mark ? null : splitControl(kw[2]);
+      const control: { keyword: string; level: number; executor?: number } | null = mark ? null : splitControl(kw[2]) ?? splitDomainLine(kw[2]);
       out.push({
         kind: 'keyword', line, col, indent,
         keyword: (mark?.word ?? control?.keyword ?? kw[2]) as Keyword,

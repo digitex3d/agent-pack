@@ -22,7 +22,9 @@ import { walk, type LineHead } from './nodes.js';
 import { DISTILLED_DIR } from '../apx/paths.js';
 import { ApBlock } from './block.js';
 import type { AgentBlock, DomainBlock, TemplateBlock } from './blocks.js';
+import { DECORATOR_MARK, WITHIN_DECORATOR } from '../decorators.js';
 import type { PerimeterGlobs } from '../primitives.js';
+import { literalGlob } from '../services/glob.js';
 import { slotSpecsOf, type SlotSpec, type SlotResolver } from '../shapeSchema.js';
 import { KIND_STRATEGIES, strategyOf, installPluginKind } from './blocks.js';
 import { registerPlugin } from '../plugins.js';
@@ -178,18 +180,57 @@ export class ApDocument {
   }
 
   /**
-   * The agent's perimeter as globs: the FOR globs of the domains it WRITES —
-   * plus the programs' folder when a program carries out some of its work,
-   * writing its programs being always allowed — and of the domains it READS
-   * (null: whatever it needs). Null when the agent declares neither.
+   * What the decorators of one key above a definition name (`@WITHIN web` over
+   * its AGENT): the blocks, in order — null when none of that key decorates it.
+   * They wrap its whole body (src/apdoc/builder.ts walk), outermost first.
+   */
+  definitionUses(block: ApBlock, key: string): ApBlock[] | null {
+    let body = block.body;
+    let found: ApBlock[] | null = null;
+    while (body.length === 1 && body[0].type === 'directive' && body[0].keyword.startsWith(DECORATOR_MARK)) {
+      const node = body[0];
+      if (node.keyword === `${DECORATOR_MARK}${key}`) found = [...(found ?? []), ...(node.uses ?? []).map(r => this.resolve(r)).filter((b): b is ApBlock => b !== null)];
+      body = node.body ?? [];
+    }
+    return found;
+  }
+
+  /** The domains the agent works within — `@WITHIN` above its AGENT; null when it names none. */
+  domains(): DomainBlock[] | null {
+    const root = this.root();
+    return root ? this.definitionUses(root, WITHIN_DECORATOR.key) as DomainBlock[] | null : null;
+  }
+
+  /**
+   * The agent's perimeter as globs: the WRITES globs of the domains it works
+   * within — plus the programs' folder when a program carries out some of its
+   * work, writing its programs being always allowed — and their READS globs
+   * (null when none of them says READS: whatever it needs). A file a formula
+   * puts within, or leaves to the agent (`!`), is a glob of its own. Null when
+   * no `@WITHIN` decorates the agent.
    */
   perimeter(): PerimeterGlobs | null {
-    const root = this.root() as AgentBlock | null;
-    if (!root || (root.writes.length === 0 && root.reads === null)) return null;
-    const domains = this.byKind('domain') as DomainBlock[];
-    const globsOf = (names: string[]) => names.flatMap(name => domains.find(d => d.name === name)?.globs ?? []);
+    const domains = this.domains();
+    if (!domains) return null;
     const programs = Object.values(this.meta.executors ?? {}).some(e => e.program) ? [`${DISTILLED_DIR}/**`] : [];
-    return { writes: [...globsOf(root.writes), ...programs], reads: root.reads === null ? null : globsOf(root.reads) };
+    const side = (keyword: 'WRITES' | 'READS') => {
+      const parts = domains.map(d => d.side(keyword));
+      const uncertain: Record<string, number> = Object.assign({}, ...parts.map(p => p.uncertain));
+      const globs = parts.flatMap(p => p.globs);
+      return {
+        globs,
+        all: [...globs, ...[...parts.flatMap(p => p.within), ...Object.keys(uncertain)].map(literalGlob)],
+        judged: { formulas: domains.flatMap(d => d.formulas.filter(f => f.keyword === keyword).map(f => f.formula)), uncertain },
+      };
+    };
+    const writes = side('WRITES');
+    const reads = side('READS');
+    const perimeter: PerimeterGlobs = { writes: [...writes.all, ...programs], reads: domains.some(d => d.declares('READS')) ? reads.all : null };
+    if (domains.some(d => d.formulas.length > 0)) {
+      perimeter.judged = { writes: writes.judged, reads: reads.judged };
+      perimeter.shown = { writes: [...writes.globs, ...programs], reads: reads.globs };
+    }
+    return perimeter;
   }
 
   /** Every block, in insertion (production) order. */

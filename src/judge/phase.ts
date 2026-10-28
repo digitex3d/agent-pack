@@ -27,9 +27,10 @@ import { type LintError } from '../lint.js';
 import { reporter } from '../report.js';
 import { judgeState, loadJudgeRules, severityOf } from './rules.js';
 import { AGENT, DELEGATE, PROGRAM, executorOf, scriptRuleLines } from '../executor.js';
-import { JudgeLock, verdictKey } from './lock.js';
+import { JudgeLock, verdictKey, questionKey } from './lock.js';
+import { DEFAULT_DOMAIN_THRESHOLDS, type DomainThresholds } from '../domains.js';
 import { sha256, UnitStore, type Unit, type UnitDiagnostic } from './units.js';
-import { JudgeError, isDirect, type JudgeCheck, type JudgeConfig, type JudgeRule } from './types.js';
+import { JudgeError, isDirect, type JudgeCheck, type JudgeConfig, type JudgeQuestion, type JudgeRule } from './types.js';
 
 /** One check's verdict on one line text: the one that counts, and the judge's own when known. */
 interface CheckVerdict {
@@ -41,7 +42,7 @@ interface CheckVerdict {
 }
 
 /** A line text a rule could not judge, and why. */
-interface NotJudged {
+export interface NotJudged {
   reason: string;
 }
 
@@ -66,6 +67,8 @@ export function unitsDir(config: Pick<Config, 'outputDir'>): string {
 export class JudgeRun {
   /** rule + text → its verdicts, or why it was not judged — each asked once. */
   private readonly pending = new Map<string, Promise<CheckVerdict[] | NotJudged>>();
+  /** A question's key on one file → its verdict, or why it was not judged — each asked once. */
+  private readonly questions = new Map<string, Promise<{ p: number; key: string; machine?: number } | NotJudged>>();
   /** The distinct line texts judged, per keyword. */
   private readonly texts = new Set<string>();
   /** The warnings of the run, once each (an agent compiled for two adapters reports them twice). */
@@ -89,6 +92,8 @@ export class JudgeRun {
     readonly rules: JudgeRule[],
     readonly lock: JudgeLock,
     readonly units: UnitStore,
+    /** The thresholds that turn a domain formula's probabilities into files. */
+    readonly domains: DomainThresholds = DEFAULT_DOMAIN_THRESHOLDS,
   ) {}
 
   /** The warnings collected so far. */
@@ -153,6 +158,20 @@ export class JudgeRun {
       this.stats.cached++;
       return rule.checks.map((check, i) => ({ check, p: known[i].decision ?? known[i].machine!, key: keys[i], machine: known[i].machine }));
     }
+    const answers = await this.ask(state, rule.checks);
+    if (!(answers instanceof Map)) return answers;
+    return rule.checks.map((check, i) => {
+      const machine = answers.get(check.id)!;
+      return { check, p: known[i].decision ?? machine, key: keys[i], machine };
+    });
+  }
+
+  /**
+   * The judge's probability for each check of one state — or why it gave none:
+   * it cannot be reached (no request follows in the run), or this request
+   * failed. The model is pinned from the first answer.
+   */
+  private async ask(state: string, checks: (JudgeCheck | JudgeQuestion)[]): Promise<Map<string, number> | NotJudged> {
     const judge = this.options.adapter;
     const offline = (): NotJudged => {
       this.stats.notJudged++;
@@ -160,8 +179,8 @@ export class JudgeRun {
     };
     let answer: Awaited<ReturnType<typeof judge.ask>> | null;
     try {
-      answer = await this.limit(() => this.offlineReason ? Promise.resolve(null) : judge.ask(state, rule.checks, this.lock.model ?? undefined));
-      for (const check of rule.checks) {
+      answer = await this.limit(() => this.offlineReason ? Promise.resolve(null) : judge.ask(state, checks, this.lock.model ?? undefined));
+      for (const check of checks) {
         const p = answer?.answers[check.id];
         if (answer && (typeof p !== 'number' || !(p >= 0 && p <= 1))) throw new JudgeError('line', `${judge.name} gave no probability for ${check.id}`);
       }
@@ -177,11 +196,38 @@ export class JudgeRun {
     if (!answer) return offline();
     this.stats.asked++;
     this.lock.pin(answer.model);
-    return rule.checks.map((check, i) => {
-      // A rule's check is a yes/no question: its answer is a probability (checked above).
-      const machine = answer!.answers[check.id] as number;
-      return { check, p: known[i].decision ?? machine, key: keys[i], machine };
-    });
+    // Each answer is a probability (checked above).
+    return new Map(checks.map(c => [c.id, answer!.answers[c.id] as number]));
+  }
+
+  /**
+   * The probability that one file belongs to a domain formula (D44): the
+   * question asked on the file's path and text, once per run — from the lock's
+   * human decision, a saved verdict, or the judge. The key is the question's
+   * and the state's: editing the formula or the file asks again.
+   */
+  fileVerdict(question: JudgeQuestion, file: string, text: string): Promise<{ p: number; key: string; machine?: number } | NotJudged> {
+    const max = this.options.adapter.maxStateChars;
+    const whole = `${file}\n\n${text}`;
+    const state = max !== undefined && whole.length > max ? whole.slice(0, max) : whole;
+    const key = questionKey(question, state);
+    let verdict = this.questions.get(key);
+    if (!verdict) {
+      this.stats.pairs++;
+      verdict = (async () => {
+        const decision = this.lock.decision(key)?.p;
+        const machine = this.units.verdict(key);
+        if (decision !== undefined || machine !== undefined) {
+          this.stats.cached++;
+          return { p: decision ?? machine!, key, machine };
+        }
+        const answers = await this.ask(state, [question]);
+        if (!(answers instanceof Map)) return answers;
+        return { p: answers.get(question.id)!, key, machine: answers.get(question.id)! };
+      })();
+      this.questions.set(key, verdict);
+    }
+    return verdict;
   }
 
   /** Run `ask` with at most `judge.concurrency` requests in flight. */
@@ -202,7 +248,7 @@ export function openJudgeRun(config: Config, projectRoot: string): JudgeRun | nu
   if (!config.judge) return null;
   const lock = JudgeLock.load(config.judge.lock, config.judge.adapter.name);
   return new JudgeRun(config.judge, loadJudgeRules(config), lock,
-    new UnitStore(unitsDir(config), projectRoot, lock.model, librariesAliasMap(config)));
+    new UnitStore(unitsDir(config), projectRoot, lock.model, librariesAliasMap(config)), config.domains);
 }
 
 /** A diagnostic at the line — a unit's, without its file. */

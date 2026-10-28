@@ -246,9 +246,9 @@ try {
       // a decorator decorates a block: above one, or opening one with lines nested below it
       assert.ok(lint(['EXPORT PROCEDURE p:', '    ABOUT  p', '    @WITH pdf', '    DO  work']).some(e => /`@WITH` decorates no block/.test(e.message)));
       assert.ok(lint(['EXPORT PROCEDURE p:', '    ABOUT  p', '    @WITH pdf:', '    DO  work']).some(e => /nothing is nested below it/.test(e.message)));
-      // a definition is decorated from inside its body — never from above, never inside a decorator's block
-      assert.ok(lint(['@WITH pdf', 'EXPORT PROCEDURE p:', '    ABOUT  p', '    DO  work']).some(e => /stands above PROCEDURE, a definition/.test(e.message)));
-      assert.ok(lint(['EXPORT AGENT a AS r:', '    ABOUT  a', '    MANDATE  m', '    @WITH pdf:', '        PROCEDURE p:', '            DO  work']).some(e => /holds PROCEDURE, a definition/.test(e.message)));
+      // @WITH stands anywhere: above a definition it decorates all its work — a definition is decorated from above, never inside a decorator's block
+      assert.deepEqual(lint(['@WITH pdf', 'EXPORT PROCEDURE p:', '    ABOUT  p', '    DO  work']), []);
+      assert.ok(lint(['EXPORT AGENT a AS r:', '    ABOUT  a', '    MANDATE  m', '    @WITH pdf:', '        PROCEDURE p:', '            DO  work']).some(e => /holds PROCEDURE, a definition — .* write `@WITH …` right above the definition instead/.test(e.message)));
       // AS shapes one skill's answer
       assert.ok(lint(['EXPORT PROCEDURE p:', '    ABOUT  p', '    @WITH pdf, pdf-report AS report:', '        DO  work']).some(e => /AS shapes the answer of one skill/.test(e.message)));
       assert.deepEqual(lint(['EXPORT PROCEDURE p:', '    ABOUT  p', '    @WITH pdf, #policy:decisions:', '        DO  work']), []);

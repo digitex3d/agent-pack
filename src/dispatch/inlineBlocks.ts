@@ -200,6 +200,12 @@ function collectInlineDefinition(
  *
  * No-op when the body contains no inline block-opener for a STRATEGIES kind.
  */
+/** A decorator line written above a block at the top of the body — `@WITH pdf`, never one that opens a block. */
+function decoratesBelow(line: string): boolean {
+  const t = lex(line)[0];
+  return t?.kind === 'decorator' && !t.opens && t.indent === 0;
+}
+
 export function extractInlineDefinitions(
   rawBody: string,
   ctx: BundleContext,
@@ -220,6 +226,10 @@ export function extractInlineDefinitions(
     const body = dedent(bodyLines);
     collectInlineDefinition(h.strat, h.name, body, sourcePath, h.startLine, ctx, h.executor);
     for (let l = h.startLine; l < endLine; l++) linesToRemove.add(l);
+    // The decorators right above it are its own (src/decorators.ts): they leave with it.
+    for (let l = h.startLine - 1; l >= 1 && (lines[l - 1].trim() === '' || decoratesBelow(lines[l - 1])); l--) {
+      if (lines[l - 1].trim() !== '') linesToRemove.add(l);
+    }
   }
 
   const remaining: string[] = [];

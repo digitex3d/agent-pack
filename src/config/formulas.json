@@ -67,13 +67,15 @@
     "APPLIES":   { "$comment": "Where a policy, a skill or a dimension holds (src/withUse.ts): its perimeter, or only under a WITH that names it — a dimension has no perimeter; `ls` is the apx listing's short form.",
                    "scope": { "universal": "Applies everywhere.", "team": "Applies to the members of team `{name}`.", "agent": "Applies to the agent `{name}`.",
                               "with": "Applies only to the work nested under a line that names it.", "ls": "only where @WITH names it" } },
-    "WRITES":    { "$comment": "An agent's perimeter: WRITES names the domains it writes (and reads), READS the ones it only reads — {globs} are their FOR globs. Without READS it reads whatever it needs.",
+    "WRITES":    { "$comment": "An agent's perimeter: the domains `@WITHIN` puts it within — {globs} are their WRITES globs; READS the globs it only reads. With no READS among them it reads whatever it needs.",
                    "fence": [
                      "> **SCOPE — WARNING**",
                      "> This agent may write only: {globs}.",
                      "> Do NOT modify or create files outside these patterns without explicit user authorisation — they belong to others."
                    ],
-                   "none": "> This agent writes no file — do NOT modify or create any without explicit user authorisation." },
+                   "none": "> This agent writes no file — do NOT modify or create any without explicit user authorisation.",
+                   "formula": "the files a judge placed in \u201c{formula}\u201d (`apx scope` lists them)",
+                   "uncertain": "> A judge could not tell whether these files belong — decide each in context, from what the work needs: {files}." },
     "READS":     { "all": "> Read whatever you need.",
                    "only": "> Read only: {globs} — and what you may write." },
     "FOR":       { "glob": "`{glob}`" },
@@ -180,10 +182,12 @@
                     "line": "- {key}: {value}",
                     "commands": "Its commands:",
                     "command": "- `{command}` — {about}" },
-    "domain":     { "$comment": "A domain (D44): a region of the code by path. An agent's WRITES/READS name domains; the perimeter fence lists their globs.",
+    "domain":     { "$comment": "A domain (D44): a region of the code — the files work within it writes, those it only reads. `@WITHIN <domain>` puts work within one; the perimeter fence lists their globs.",
                     "chapter": "Domains",
-                    "covers": "Files: {globs}.",
-                    "intro": ["The regions of the code, by path. The scope warning at the top of this definition names the domains you write and the ones you read.", "!MUST     write a file outside the domains you write — say what you would change, and why, instead"],
+                    "writes": "Writes: {globs}.",
+                    "reads": "Reads only: {globs}.",
+                    "formula": "the {count} files a judge placed in \u201c{formula}\u201d",
+                    "intro": ["The regions of the code. The scope warning at the top of this definition says the files of the domains you work within — what you write, and what you only read.", "!MUST     write a file outside the domains you write — say what you would change, and why, instead"],
                     "quiz": [{"ask": "To finish your work you need to change a file of a domain you only read. What do you do?", "options": ["change it, the work needs it", "leave it, and say what you would change and why", "copy it into a domain you write"], "right": "b"}] },
     "team":       { "heading": "# Your team",
                     "member": "You are `{agent}`, a member of the team `{team}` (purpose: {purpose}).",
@@ -219,7 +223,7 @@
 
   "decorators": { "$comment": "A block decorator (src/decorators.ts): the opening of its sentence is its own; each block it names reads so, joined.",
                   "use": "the {kind} `{name}`{ref}", "and": " and ",
-                  "intros": { "WITH": "For the work below, use" } },
+                  "intros": { "WITH": "For the work below, use", "WITHIN": "For the work below, act only within" } },
 
   "document": {
     "ref": " ({id})",

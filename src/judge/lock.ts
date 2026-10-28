@@ -15,7 +15,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname } from 'path';
-import type { JudgeCheck } from './types.js';
+import type { JudgeCheck, JudgeQuestion } from './types.js';
 import { sha256Hex } from '../apdoc/ids.js';
 
 /** A human decision: a probability on one check of one line text. */
@@ -38,6 +38,11 @@ interface LockData {
 export function verdictKey(check: JudgeCheck, state: string): string {
   const criteria = check.criteria ? `${JSON.stringify(check.criteria)}\n` : '';
   return sha256Hex(`${check.id}\n${check.statement}\n${criteria}${state}`).slice(0, 16);
+}
+
+/** The key of a question asked as is on a state — a domain formula's on one file (src/domains.ts). */
+export function questionKey(question: JudgeQuestion, state: string): string {
+  return sha256Hex(`${question.id}\n${question.question}\n${state}`).slice(0, 16);
 }
 
 /** Whether `p` is a probability. */

@@ -23,7 +23,7 @@
  *             kind lives in its class, never here.
  */
 import { readDecorator, decoratorPhrase } from '../decoratorUse.js';
-import { DecoratorScope, DECORATOR_MARK } from '../decorators.js';
+import { DecoratorScope, DECORATOR_MARK, escapeMessage, workless, type DecoratorLine } from '../decorators.js';
 import { plugins, pluginOf } from '../plugins.js';
 import { existsSync } from 'fs';
 import { resolve, basename } from 'path';
@@ -181,6 +181,10 @@ export class DocumentBuilder implements BlockCx {
   readonly decoratorTrail: { path: string; line: number | null; key: string; names: string[] }[] = [];
   /** The conditions the walk is under at this point: every enclosing decorator, combined. */
   private scope: DecoratorScope = DecoratorScope.EMPTY;
+  /** The decorators above the definition being built, until its first walk wraps its work in them. */
+  private definitionDecorators: DecoratorLine[] | null = null;
+  /** Every step walked, with the agent its BY names and the conditions it is under — what a step may do is held to its agent's (compiler). */
+  readonly stepScopes: { by: string | null; scope: DecoratorScope; path: string; line: number | null }[] = [];
 
   /** The reference index a kind's strategy names — lookup, never a branch. */
   private refIndex(ref: RefClass): Map<string, IndexedBlock> {
@@ -196,8 +200,13 @@ export class DocumentBuilder implements BlockCx {
    * builder owns its traversal; a block-level AS lands on `host.shape`.
    */
   walk(body: string, sink: ApNode[], host?: ApBlock): void {
-    this.bodyLines = this.span ? align(body.split(/\r?\n/), this.span) : null;
-    this.visit(buildTree(lex(body)), sink, host ?? null, []);
+    // A definition's decorators decorate all its work: its first walk is their block's.
+    const decorators = this.definitionDecorators ?? [];
+    this.definitionDecorators = null;
+    const text = decorators.length ? wrapped(decorators, body) : body;
+    this.bodyLines = this.span ? align(text.split(/\r?\n/), this.span) : null;
+    decorators.forEach((d, k) => { if (this.bodyLines) this.bodyLines[k] = d.line; });
+    this.visit(buildTree(lex(text)), sink, host ?? null, []);
     this.bodyLines = null;
   }
 
@@ -218,9 +227,13 @@ export class DocumentBuilder implements BlockCx {
    * it walks, the block its header. No span (a file or block not found) → no
    * positions, never an error.
    */
-  private fromSource<T extends ApBlock>(span: SourceSpan | null, build: () => T): T {
+  private fromSource<T extends ApBlock>(span: SourceSpan | null, build: () => T, decorators: readonly DecoratorLine[] = span?.decorators ?? []): T {
     this.span = span;
+    this.definitionDecorators = decorators.length ? [...decorators] : null;
     const block = build();
+    // A definition whose build walked no body has no work for the decorators above it.
+    for (const d of this.definitionDecorators ?? []) this.decoratorProblems.push({ path: this.sourcePath, line: d.line, message: workless(d.key, block.kind.toUpperCase()) });
+    this.definitionDecorators = null;
     if (this.span) block.source = { file: this.span.file, line: this.span.line, col: positionOf(this.span, this.span.line).col };
     this.span = null;
     return block;
@@ -294,6 +307,7 @@ export class DocumentBuilder implements BlockCx {
             by ? this.byRef(stripColon(by)) : null,
             args.get('CONTEXT') ?? null,
           ), item.token);
+          this.stepScopes.push({ by: by ? stripColon(by) : null, scope: this.scope, path: this.sourcePath, line: this.fileLine(item.token) });
           sink.push(step);
           this.visit(body, step.body, host, [...steps, step]);
           i++;
@@ -565,7 +579,9 @@ export class DocumentBuilder implements BlockCx {
   private decorate(t: Token & { kind: 'decorator' }, decorated: WalkNode[], sink: ApNode[], host: ApBlock | null, steps: ApStepNode[]): void {
     const read = this.ctx ? readDecorator(t, this.ctx) : null;
     if (!read) { this.visit(decorated, sink, host, steps); return; }
-    for (const message of read.problems) this.decoratorProblems.push({ path: this.sourcePath, line: this.fileLine(t), message });
+    const outside = this.scope.outside(read.spec, read.uses);
+    const problems = outside.length ? [...read.problems, escapeMessage(read.spec, outside, this.scope.get(read.spec.key) ?? [])] : read.problems;
+    for (const message of problems) this.decoratorProblems.push({ path: this.sourcePath, line: this.fileLine(t), message });
     const refs = read.uses.map(d => this.ref({ kind: d.kind, name: d.name, namespace: this.nsOf(d) }, d.name, d.kind));
     const shape = read.template ? { force: 0, ref: this.templateRef(read.template.name, false) } : null;
     const phrase = decoratorPhrase(read.spec, read.uses.map((d, k) => ({ kind: d.kind, name: d.name, ref: refSuffix(refs[k].id) })),
@@ -890,10 +906,15 @@ export class DocumentBuilder implements BlockCx {
     const path = team.file.path;
     this.sourcePath = path;
     const flowsNs = TeamBlock.flowsNamespace(team.name);
+    // The decorators above the team decorate its work — its flows, each inside them, then in its own.
+    const around = team.file.block.decorators ?? [];
     return [
-      ...team.flows.map(f => this.fromSource(f.block ? sources.nestedSpan(path, team.file.block, f.block) : null, () => RuleBlock.fromBody('flow', { name: f.name, namespace: flowsNs }, f.body, this))),
+      ...team.flows.map(f => {
+        const span = f.block ? sources.nestedSpan(path, team.file.block, f.block) : null;
+        return this.fromSource(span, () => RuleBlock.fromBody('flow', { name: f.name, namespace: flowsNs }, f.body, this), [...around, ...(span?.decorators ?? [])]);
+      }),
       // The team is its EXPORT TEAM block.
-      this.fromSource(sources.blockSpan(path, team.file.block), () => TeamBlock.fromScan(team, this)),
+      this.fromSource(sources.blockSpan(path, team.file.block), () => TeamBlock.fromScan(team, this), []),
     ];
   }
 
@@ -1132,4 +1153,11 @@ export class DocumentBuilder implements BlockCx {
 /** The routing and flow a team of contracts runs, as source — its workers the agents its BY lines hand work to. */
 function strategySource(file: TeamFile, leadOf: (name: string) => string | null): string {
   return contractsFlowSource(file.name, file.lead!.name, contractWorkers(file, leadOf));
+}
+
+/** A definition's body nested in the decorators above it, outermost first — each opening the block the next one, then the body, stands in. */
+function wrapped(decorators: readonly DecoratorLine[], body: string): string {
+  const pad = (n: number) => '    '.repeat(n);
+  const heads = decorators.map((d, k) => `${pad(k)}${DECORATOR_MARK}${d.key}${d.rest ? ` ${d.rest}` : ''}:`);
+  return [...heads, ...body.split(/\r?\n/).map(l => (l.trim() ? `${pad(decorators.length)}${l}` : l))].join('\n');
 }

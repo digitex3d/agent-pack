@@ -18,7 +18,7 @@
  * Semantics (rendering, frontmatter, validation) live in BLOCK_TYPES.
  */
 
-import { DECORATOR_MARK, danglingDecoratorMessage, emptyDecoratorMessage, definitionDecoratorMessage, definitionInDecoratorMessage, type DecoratorLine } from './decorators.js';
+import { DECORATOR_MARK, decoratorOf, placementMessage, danglingDecoratorMessage, emptyDecoratorMessage, definitionInDecoratorMessage, type DecoratorLine } from './decorators.js';
 import { lex, Token } from './lexer.js';
 import { blockTypeOf, EXPORT_MODIFIER, AGENT_KEYS } from './blockTypes.js';
 import { computeHead, splitExecutorMark } from './executor.js';
@@ -275,18 +275,20 @@ export function parseBlocks(source: string): ParseResult {
     for (const d of pending) errors.push({ line: d.line, message: danglingDecoratorMessage(d.key), decorator: true });
     pending = [];
   };
-  /** The decorators a block opened at `indent` takes: those right above it, at its indent — never a definition's (yet). */
-  const takePending = (indent: number, key?: string): DecoratorLine[] | undefined => {
+  /** The decorators the block `key` opened at `indent` takes: those right above it, at its indent — each where it may stand. */
+  const takePending = (indent: number, key: string): DecoratorLine[] | undefined => {
     if (pending.length === 0) return undefined;
     if (pending.some(d => d.indent !== indent)) { dangling(); return undefined; }
-    if (key && blockTypeOf(key)) {
-      for (const d of pending) errors.push({ line: d.line, message: definitionDecoratorMessage(d.key, key), decorator: true });
-      pending = [];
-      return undefined;
-    }
+    for (const d of pending) placed(d, key);
     const taken = pending.map(({ key, rest, line }) => ({ key, rest, line }));
     pending = [];
     return taken;
+  };
+  /** A decorator held to some blocks, above another one (`block`) or opening one (null): the error, once. */
+  const placed = (d: { key: string; line: number }, block: string | null): void => {
+    const spec = decoratorOf(d.key);
+    const message = spec ? placementMessage(spec, block) : null;
+    if (message) errors.push({ line: d.line, message, decorator: true });
   };
 
   while (i < tokens.length) {
@@ -300,7 +302,8 @@ export function parseBlocks(source: string): ParseResult {
         continue;
       }
       popUntilParentOf(t.indent);
-      const above = takePending(t.indent);
+      const above = takePending(t.indent, `${DECORATOR_MARK}${t.key}`);
+      placed(t, null);
       const block: Block = {
         type: 'block', key: `${DECORATOR_MARK}${t.key}`, name: null, rest: t.rest, children: [],
         startLine: t.line, indent: t.indent, exported: false, decorator: { key: t.key, rest: t.rest, line: t.line },
@@ -423,7 +426,7 @@ export function parseBlocks(source: string): ParseResult {
   }
 
   dangling();
-  // A decorator's block holds the lines it decorates: one that holds none says nothing.
+  // A decorator's block holds the lines it decorates: one that holds none says nothing, and a definition is decorated from above.
   const emptyDecorators = (bs: readonly Node[]): void => {
     for (const b of bs) {
       if (b.type !== 'block') continue;

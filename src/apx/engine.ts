@@ -47,7 +47,7 @@ import { constantOf, readsOf } from '../vars.js';
 import { dimensionDefHash, dimensionTemplates } from './dimensions.js';
 import { servicesOf, serviceOf } from './services/registry.js';
 import { countOf } from './service.js';
-import { enumPrimitiveFor } from '../primitives.js';
+import { enumPrimitiveFor, type PerimeterGlobs } from '../primitives.js';
 import { globRegExp, matchesAnyGlob } from '../services/glob.js';
 
 /** The exit of an UNTIL*'s answer at its round limit: the loop ends (src/check.ts roundLine). */
@@ -310,7 +310,11 @@ export class ApxEngine {
     this.out(`you:  ${this.label(root)}  — your definition, complete`);
     if (root.mandate) this.out(`mandate: ${root.mandate}`);
     const perimeter = this.doc.perimeter();
-    if (perimeter) this.out(`perimeter: you write only ${perimeter.writes.join(', ') || 'nothing'} — ${perimeter.reads ? `you read only ${perimeter.reads.join(', ')}` : 'read whatever you need'}`);
+    if (perimeter) {
+      this.out(`perimeter: you write only ${perimeter.writes.join(', ') || 'nothing'} — ${perimeter.reads ? `you read only ${perimeter.reads.join(', ')}` : 'read whatever you need'}`);
+      const uncertain = { ...perimeter.judged?.reads.uncertain, ...perimeter.judged?.writes.uncertain };
+      if (Object.keys(uncertain).length) this.out(`uncertain: a judge could not tell whether these belong — decide each in context: ${Object.entries(uncertain).map(([f, p]) => `${f} (p=${p.toFixed(2)})`).join(', ')}`);
+    }
     const role = root.role ? this.doc.resolve(root.role) : null;
     if (role) this.out(`role: ${this.label(role)}`);
     const team = this.doc.byKind('team')[0] as TeamBlock | undefined;
@@ -1140,7 +1144,7 @@ export class ApxEngine {
   }
 
   /** An agent's perimeter, from its own apx beside this one — null when it has none, or no apx. */
-  private perimeterOf(agent: string): Perimeter | null {
+  private perimeterOf(agent: string): PerimeterGlobs | null {
     if (agent === this.root.name) return this.doc.perimeter();
     const file = join(dirname(this.exe), `${agent}.apx`);
     if (!existsSync(file)) return null;
@@ -1276,7 +1280,7 @@ export class ApxEngine {
     const pending = cx.table.all().filter(r => r.state === 'assigned' && !r.dispatched_at && r.assignee !== this.root.name);
     if (pending.length === 0) return this.fail(1, `no instance to hand out — write them first: ${this.cmd} contract new <con-id> -`);
     const globs = this.doc.perimeter()?.writes ?? [];
-    if (globs.length === 0) return this.fail(2, `${this.root.name} writes no domain — the zones are marked in the files the lead writes: give it \`WRITES <domain>\``);
+    if (globs.length === 0) return this.fail(2, `${this.root.name} works within no domain it writes — the zones are marked in the files the lead writes: write \`@WITHIN <domain>\` above its AGENT, a domain with WRITES`);
     const { zones, problems } = scanZones(cx.root, perimeterFiles(cx.root, globs), pending.map(r => r.ctr));
     const refusals: string[] = [...problems].map(([ctr, why]) => `${ctr}: ${why}`);
     const perimeters = new Map<string, Perimeter>();
@@ -1285,7 +1289,7 @@ export class ApxEngine {
       const zs = zones.get(r.ctr) ?? [];
       if (limit !== 'domain' && zs.length === 0 && !problems.has(r.ctr)) refusals.push(`${r.ctr}: WITHIN ${limit} needs a zone — mark it: \`${zoneMarks(r.ctr).open}\` … \`${zoneMarks(r.ctr).close}\`, inside comments`);
       const p = this.perimeterOf(r.assignee);
-      if (!p || p.writes.length === 0) { refusals.push(`${r.ctr}: ${r.assignee} writes no domain — it has nothing to deliver; compile it with \`WRITES <domain>\``); continue; }
+      if (!p || p.writes.length === 0) { refusals.push(`${r.ctr}: ${r.assignee} works within no domain it writes — it has nothing to deliver; compile it with \`@WITHIN <domain>\` above its AGENT`); continue; }
       perimeters.set(r.ctr, p);
       for (const z of zs) if (!matchesAnyGlob(z.file, p.writes)) refusals.push(`${r.ctr}: ${z.file} holds a zone of it, and ${r.assignee} does not write that file`);
     }
@@ -1323,7 +1327,13 @@ export class ApxEngine {
     const lost = d.lostZones.filter(hit);
     if (lost.length) { this.out(`${lost.join(', ')}: the marks of ${r.ctr}'s zones are lost — put them back around your work, as the lead wrote them`); return 3; }
     const out = d.leftOut.filter(hit);
-    if (out.length === 0) return 0;
+    if (out.length === 0) {
+      // A file a judge could not place: within the copy, and the assignee's to decide.
+      const judged = this.perimeterOf(r.assignee)?.judged;
+      const p = judged?.writes.uncertain[path];
+      if (p !== undefined) this.out(`${path}: a judge could not tell whether it belongs to your domain (p=${p.toFixed(2)}) — keep it only if the work needs it`);
+      return 0;
+    }
     this.out(`${out.join(', ')} is outside ${r.ctr} (WITHIN ${this.limitOf(r)}): it will be left out of the delivery — keep it only with a good reason, you will be asked for it at deliver`);
     return 3;
   }

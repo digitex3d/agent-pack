@@ -26,7 +26,7 @@ node .agent-pack/apx/reviewer.apx start
 node .agent-pack/apx/reviewer.apx start 1=c 2=a 3=b 4=?
 ```
 
-For every kind it missed (`?` counts as a miss, and costs nothing), the apx prints that kind's introduction — how to use it. Then it prints the **scope**: who the agent is and its mandate, its perimeter (`WRITES` and `READS`), its role, its team and the team's routing, the policies it respects, what it does when (every `WHEN` and hook), what it remembers (`MEM`), the stores it writes to, the template requests arrive in and the one its answers take, and how many blocks of each kind it holds. The quiz runs once, at the start of the work.
+For every kind it missed (`?` counts as a miss, and costs nothing), the apx prints that kind's introduction — how to use it. Then it prints the **scope**: who the agent is and its mandate, its perimeter (the domains `@WITHIN` names), its role, its team and the team's routing, the policies it respects, what it does when (every `WHEN` and hook), what it remembers (`MEM`), the stores it writes to, the template requests arrive in and the one its answers take, and how many blocks of each kind it holds. The quiz runs once, at the start of the work.
 
 Running the apx with no verb is the same as `start`.
 
