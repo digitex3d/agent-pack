@@ -2,17 +2,19 @@
 // Copyright (c) 2026 Giuseppe Federico
 import { strict as assert } from 'assert';
 import { parseBlocks } from '../dist/src/parseBlocks.js';
-import { buildRoleIndex, resolveRole, ANCHOR_PRIORITY } from '../dist/src/roleIndex.js';
+import { buildRoleIndex, resolveRole, roleHolders, ambiguousRoleMessage, ANCHOR_PRIORITY } from '../dist/src/roleIndex.js';
 import { parseAgentSignature } from '../dist/src/definitionArgs.js';
 
 const blocksOf = src => parseBlocks(src).blocks;
 
 // --- parseAgentSignature ---
 {
-  assert.equal(parseAgentSignature('AS simplifier').role, 'simplifier');
-  assert.equal(parseAgentSignature('AS simplifier  MANDATE x').role, 'simplifier');
-  assert.equal(parseAgentSignature('').role, null);
-  assert.equal(parseAgentSignature('MANDATE only').role, null);
+  assert.deepEqual(parseAgentSignature('AS simplifier').roles, ['simplifier'], 'one role is a list of one');
+  assert.deepEqual(parseAgentSignature('AS simplifier:').roles, ['simplifier']);
+  assert.deepEqual(parseAgentSignature('AS simplifier  MANDATE x').roles, ['simplifier']);
+  assert.deepEqual(parseAgentSignature('AS reviewer, explorer:').roles, ['reviewer', 'explorer'], 'several, in the order written');
+  assert.deepEqual(parseAgentSignature('').roles, []);
+  assert.deepEqual(parseAgentSignature('MANDATE only').roles, []);
   console.log('parseAgentSignature ok');
 }
 
@@ -64,36 +66,29 @@ const blocksOf = src => parseBlocks(src).blocks;
   console.log('local shadows imported silently ok');
 }
 
-// --- ambiguity: two LOCAL agents on the same role throws ---
+// --- a role many agents share: no error building the index; only BY <role> cannot pick ---
 {
   const src = [
-    'AGENT alice AS simplifier:',
+    'AGENT alice AS reviewer:',
     '  MANDATE one',
     '',
-    'AGENT bob AS simplifier:',
+    'AGENT bob AS reviewer, explorer:',
     '  MANDATE two',
   ].join('\n');
-  assert.throws(
-    () => buildRoleIndex({ blocks: blocksOf(src), anchor: 'directory' }),
-    /ambiguous role binding/,
-    'two local agents on same role is an explicit ambiguity error',
-  );
-  console.log('ambiguity (two local on one role) ok');
-}
-
-// --- ambiguity across groups at equal precedence (two imported) throws ---
-{
+  const index = buildRoleIndex({ blocks: blocksOf(src), anchor: 'directory' });
+  assert.equal(resolveRole(index, 'reviewer'), null, 'two holders: no single agent to resolve to');
+  assert.deepEqual(roleHolders(index, 'reviewer'), ['alice', 'bob']);
+  assert.equal(resolveRole(index, 'explorer').name, 'bob', 'a role one agent holds still resolves');
+  assert.equal(ambiguousRoleMessage('reviewer', ['alice', 'bob']), '`reviewer` is the role of alice, bob — name the agent');
+  // Two imported holders at equal precedence share it too; a local holder still shadows them.
   const a = 'AGENT a AS p:\n  MANDATE x\n';
   const b = 'AGENT b AS p:\n  MANDATE y\n';
-  assert.throws(
-    () => buildRoleIndex(
-      { blocks: blocksOf(a), anchor: 'imported' },
-      { blocks: blocksOf(b), anchor: 'imported' },
-    ),
-    /ambiguous role binding/,
-    'two imported agents on same role at equal precedence throws',
-  );
-  console.log('ambiguity (two imported on one role) ok');
+  const shared = buildRoleIndex({ blocks: blocksOf(a), anchor: 'imported' }, { blocks: blocksOf(b), anchor: 'imported' });
+  assert.deepEqual(roleHolders(shared, 'p'), ['a', 'b']);
+  const shadowed = buildRoleIndex({ blocks: blocksOf(a), anchor: 'imported' }, { blocks: blocksOf(b), anchor: 'imported' },
+    { blocks: blocksOf('AGENT c AS p:\n  MANDATE z\n'), anchor: 'directory' });
+  assert.equal(resolveRole(shadowed, 'p').name, 'c');
+  console.log('shared roles ok');
 }
 
 // --- AGENT blocks without AS contribute nothing ---

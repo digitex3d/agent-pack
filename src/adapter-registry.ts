@@ -4,8 +4,8 @@ import { AdapterPlugin } from '../adapters/types.js';
 import { Config } from './config.js';
 import claudeCodeAdapter from '../adapters/claude-code/index.js';
 import claudeCodeApxAdapter from '../adapters/claude-code-apx/index.js';
+import codexAdapter from '../adapters/codex/index.js';
 import cursorAdapter from '../adapters/cursor/index.js';
-import junieAdapter from '../adapters/junie/index.js';
 import { fromBuiltins } from './judge/builtins.js';
 
 /**
@@ -16,12 +16,17 @@ import { fromBuiltins } from './judge/builtins.js';
 const BUILTIN_ADAPTERS: Record<string, () => AdapterPlugin> = {
   'claude-code': () => claudeCodeAdapter(),
   'claude-code-apx': () => claudeCodeApxAdapter(),
+  codex: () => codexAdapter(),
   cursor: () => cursorAdapter(),
-  junie: () => junieAdapter(),
 };
 
 /** A config entry as an adapter: a built-in by name, or an adapter object as is. */
 export const resolveAdapter = fromBuiltins('adapter', BUILTIN_ADAPTERS);
+
+/** Every adapter shipped with agent-pack, by name — the harnesses installed before any config names one (D66). */
+export function builtinAdapters(): AdapterPlugin[] {
+  return Object.values(BUILTIN_ADAPTERS).map(make => make());
+}
 
 /** A config entry as a judge — the judges' own table (judge/builtins.ts), shared with the apx. */
 export { resolveJudge } from './judge/builtins.js';

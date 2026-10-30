@@ -55,6 +55,7 @@ import { parseBlocks, type Block } from '../parseBlocks.js';
 import type { ApNode, ApRef, ApShape, ApSlotType, ApStepNode, ApIfNode, ApDocumentMeta, ApStoreProjection } from './types.js';
 import { parseVarLine, eachHeadOf, readsOf, splitInto, takesInto, constantOf, type VarScope } from '../vars.js';
 import { isDelegationVerb, parseDelegation, bindBackgroundWork, parseMark, contractListOf, delegationPhrases, MARK_VERB, type ApMark } from '../delegation.js';
+import { splitHarness } from '../delegation.js';
 import { shortId } from './ids.js';
 import type { PlacedVariable } from '../exportedVars.js';
 import { introOf, fill, refSuffix, FORMULAS } from '../formulas.js';
@@ -94,7 +95,8 @@ interface IndexedBlock {
 /** Everything `finish()` needs from the bundle pipeline's collected state. */
 export interface RecorderFinishOpts {
   metadata: Map<string, string[]>;
-  boundRole: Definition | null;
+  /** The roles the agent binds with `AS <role>, …`, in order — empty when none. */
+  boundRoles: Definition[];
   agentBody: string;
   agentFilePath: string;
   /** Where the agent body was written — the span its reader composed it from. */
@@ -572,7 +574,12 @@ export class DocumentBuilder implements BlockCx {
       const d = parseDelegation(base, text);
       const node = new DirectiveNode(base, force, d.task, indent);
       // In a flow, BY names a member, a role bound to one, or a team — resolved as the flow's own reference, which it uses.
-      if (d.by && host?.kind === 'flow') {
+      // `BY <harness>:<agent>`: an agent of the project as another harness runs it — no member, role or team of this one (D66).
+      const other = d.by ? splitHarness(d.by) : null;
+      if (other) {
+        node.harness = other.harness;
+        node.by = other.agent;
+      } else if (d.by && host?.kind === 'flow') {
         const ref = this.byRef(d.by);
         node.by = refName(ref);
         node.uses = [ref];
@@ -588,7 +595,7 @@ export class DocumentBuilder implements BlockCx {
         this.varWrites.push({ name: d.into, node, path: this.sourcePath });
         if (this.eachDepth > 0) this.eachInto.push({ name: d.into, node, path: this.sourcePath });
       }
-      if (d.by) this.delegationScopes.push({ by: d.by, scope: this.scope, path: this.sourcePath, line: token ? this.fileLine(token) : null });
+      if (d.by && !other) this.delegationScopes.push({ by: d.by, scope: this.scope, path: this.sourcePath, line: token ? this.fileLine(token) : null });
       return node;
     }
     const into = takesInto(base) ? splitInto(text) : null;
@@ -883,7 +890,7 @@ export class DocumentBuilder implements BlockCx {
       }
       // The same role index the orchestration resolves `BY <role>` with: the team's inline blocks and its members' bindings.
       this.roles = buildRoleIndex({ blocks: this.team.blocks, anchor: 'directory' },
-        { bindings: members.filter(m => m.role).map(m => ({ name: m.name, role: m.role! })), anchor: 'directory' });
+        { bindings: members.filter(m => m.roles.length > 0).map(m => ({ name: m.name, roles: m.roles })), anchor: 'directory' });
       this.indexImportLines(this.team.file.source);
       for (const f of this.team.flows) {
         this.runnables.set(f.name, { kind: 'flow', name: f.name, namespace: TeamBlock.flowsNamespace(this.team.name) });
@@ -1155,7 +1162,10 @@ export class DocumentBuilder implements BlockCx {
       const m = parseMark(node.text ?? '');
       return m.into && node.as ? { flow, step, list: m.into, spec: refName(node.as.ref), max: node.max ?? 0, within: node.within ?? null } : null;
     };
-    const background = Object.assign({}, ...doc.byKind('flow').map(f => bindBackgroundWork(f as unknown as { address: string; name: string; body: unknown[] },
+    // The agent's own body too: a delegation to another harness there is a piece of the registry (D66).
+    const root = doc.root();
+    const bodies = [...doc.byKind('flow'), ...(root ? [root] : [])];
+    const background = Object.assign({}, ...bodies.map(f => bindBackgroundWork(f as unknown as { address: string; name: string; body: unknown[] },
       (text, prefix) => shortId(prefix, text), marks, (node, step) => markOf(node, step, f.name))));
     if (Object.keys(background).length > 0) doc.meta.background = background;
     if (Object.keys(marks).length > 0) doc.meta.marks = marks;

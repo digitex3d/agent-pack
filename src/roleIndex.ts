@@ -15,9 +15,12 @@
  *   1. a directory-anchored local agent (`anchor: 'directory'`) beats
  *   2. an `EXPORT AGENT` imported from a library (`anchor: 'imported'`).
  *
- * Tie-break: two LOCAL agents claiming the same role in the same bundle is an
- * unrecoverable ambiguity — `buildRoleIndex` throws. A local agent shadowing an
- * imported one is NOT an error: the local one wins silently, by design.
+ * A role is a craft many agents share (reviewer, implementer, explorer): any
+ * number of agents may bind it, and an agent may bind several (`AS r1, r2`).
+ * Only a `BY <role>` has to pick one, so the ambiguity is told there, never
+ * here: `resolveRole` answers only when one agent holds the role at the
+ * winning precedence, `roleHolders` says who holds it otherwise. A local agent
+ * shadowing an imported one is NOT an ambiguity: the local one wins silently.
  */
 
 import type { Block } from './parseBlocks.js';
@@ -47,13 +50,13 @@ export interface AgentEntry {
   priority: number;
 }
 
-/** role name → the winning agent that implements it. */
-export type RoleIndex = Map<string, AgentEntry>;
+/** role name → the agents that hold it at the winning precedence, in the order they came. */
+export type RoleIndex = Map<string, AgentEntry[]>;
 
-/** A role binding read directly from a directory-anchored agent.ap. */
+/** The roles an agent binds, read directly from a directory-anchored agent.ap. */
 export interface AgentBinding {
   name: string;
-  role: string;
+  roles: string[];
 }
 
 export interface BuildRoleIndexInput {
@@ -77,9 +80,8 @@ export interface BuildRoleIndexInput {
  * right precedence. Pass groups in any order — precedence is resolved by
  * `priority`, not call order.
  *
- * Throws on a genuine ambiguity: two agents at the SAME (winning) priority
- * claiming the same role. A lower-priority agent losing to a higher-priority
- * one is resolved silently.
+ * Several agents at the same (winning) priority holding one role are kept
+ * together; a lower-priority agent losing to a higher-priority one is dropped.
  */
 export function buildRoleIndex(...groups: BuildRoleIndexInput[]): RoleIndex {
   const index: RoleIndex = new Map();
@@ -90,11 +92,10 @@ export function buildRoleIndex(...groups: BuildRoleIndexInput[]): RoleIndex {
 
     for (const block of group.blocks ?? []) {
       if (block.key !== 'AGENT' || block.name === null) continue;
-      const sig = parseAgentSignature(block.rest);
-      if (sig.role) insertEntry(index, { name: block.name, role: sig.role, anchor, priority });
+      for (const role of parseAgentSignature(block.rest).roles) insertEntry(index, { name: block.name, role, anchor, priority });
     }
     for (const b of group.bindings ?? []) {
-      insertEntry(index, { name: b.name, role: b.role, anchor, priority });
+      for (const role of b.roles) insertEntry(index, { name: b.name, role, anchor, priority });
     }
   }
 
@@ -102,29 +103,34 @@ export function buildRoleIndex(...groups: BuildRoleIndexInput[]): RoleIndex {
 }
 
 /**
- * Insert one agent entry, resolving precedence against any sitting entry for the
- * same role. Higher priority wins silently; equal priority is an irreducible
- * ambiguity and throws.
+ * Insert one agent entry against the agents already holding the same role:
+ * a higher priority replaces them, an equal one joins them, a lower one is
+ * dropped. The same agent met twice counts once.
  */
 function insertEntry(index: RoleIndex, entry: AgentEntry): void {
-  const existing = index.get(entry.role);
-  if (existing === undefined || entry.priority > existing.priority) {
-    index.set(entry.role, entry);
+  const holders = index.get(entry.role);
+  if (!holders || entry.priority > holders[0].priority) {
+    index.set(entry.role, [entry]);
     return;
   }
-  if (entry.priority < existing.priority) return;
-
-  throw new Error(
-    `ambiguous role binding: agents "${existing.name}" and "${entry.name}" ` +
-      `both bind role "${entry.role}" at the same precedence (${entry.anchor})`,
-  );
+  if (entry.priority === holders[0].priority && !holders.some(h => h.name === entry.name)) holders.push(entry);
 }
 
 /**
- * Resolve the agent bound to `roleName`, or null when no agent claims it.
- * Resolution is exact — the role index is pre-resolved for precedence, so this
- * is a direct lookup.
+ * Resolve the agent bound to `roleName`: the one agent holding it, or null
+ * when none does — or when several do, which `roleHolders` tells.
  */
 export function resolveRole(index: RoleIndex, roleName: string): AgentEntry | null {
-  return index.get(roleName) ?? null;
+  const holders = index.get(roleName);
+  return holders?.length === 1 ? holders[0] : null;
+}
+
+/** The agents holding `roleName` at the winning precedence — more than one, and a `BY <role>` cannot pick. */
+export function roleHolders(index: RoleIndex, roleName: string): string[] {
+  return (index.get(roleName) ?? []).map(h => h.name);
+}
+
+/** What a `BY <role>` says when several agents hold the role. */
+export function ambiguousRoleMessage(roleName: string, holders: readonly string[]): string {
+  return `\`${roleName}\` is the role of ${holders.join(', ')} — name the agent`;
 }

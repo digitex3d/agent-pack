@@ -13,7 +13,7 @@ export default {
 
 | Key | Default | |
 |---|---|---|
-| `adapters` | `[]` | the harnesses to write for — built-in names (`'claude-code'`, `'claude-code-apx'`, `'cursor'`, `'junie'`) or adapter objects. See [Adapters](/guide/adapters) |
+| `adapters` | `[]` | the harnesses to write for — built-in names (`'claude-code'`, `'claude-code-apx'`, `'codex'`, `'cursor'`) or adapter objects. See [Adapters](/guide/adapters) |
 | `agentsDir` | `agents` | where agents are discovered — every `.ap` file holding an `EXPORT AGENT` block |
 | `teamsDir` | `agents/teams` | where teams live — one folder per team |
 | `libraryRoot` | `library` | the project library, reached as `@main` |

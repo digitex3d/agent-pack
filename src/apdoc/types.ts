@@ -17,7 +17,7 @@ import type { ApCondCheck, ApCheckSpec } from '../check.js';
 import type { RuleCriteria } from '../shapeCompiler.js';
 import type { ApExecutorSpec } from '../executor.js';
 import type { PluginSpec } from '../plugins.js';
-import type { ApBackgroundWork, ApMark } from '../delegation.js';
+import type { ApBackgroundWork, ApMark, HarnessInvocation } from '../delegation.js';
 
 /**
  * A pointer to another block. `id` is the stable identity of the target
@@ -68,6 +68,8 @@ export interface ApDirectiveNode {
   uses?: ApRef[];
   /** `DELEGATE … BY <agent>`, `FORK … BY <agent>`: who the line is handed to; absent = the default delegate, or a fork of whoever runs it. */
   by?: string;
+  /** `DELEGATE … BY <harness>:<agent>`: the other harness the agent `by` runs on, launched from outside (src/harnesses.ts, D66). */
+  harness?: string;
   /** `DELEGATE … AS <template>`: the shape of what is handed over — only what it holds is passed (src/delegation.ts). */
   as?: ApShape;
   /** `DELEGATE~` / `FORK~`: started in the background — a WAIT takes it back. */
@@ -450,6 +452,12 @@ export interface ApDocumentMeta {
    * its domain — the contracts it binds start from here (src/delegation.ts).
    */
   marks?: Record<string, ApMark>;
+  /**
+   * The launch recipe of each other harness this agent's delegations go to, by
+   * harness (`BY <harness>:<agent>`, D66) — what the apx fills when the piece
+   * starts: the command, the rules to run it by, the files the copy is given.
+   */
+  harnesses?: Record<string, HarnessInvocation>;
   /** The plugins whose blocks this agent holds, by name — the apx serves them from here (src/plugins.ts). */
   plugins?: Record<string, PluginSpec>;
   /** The agent a DELEGATE without BY is handed to — set when this agent has one (src/executor.ts). */

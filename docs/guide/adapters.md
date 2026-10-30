@@ -37,7 +37,7 @@ export default {
 | `claude-code` | `.claude/agents/<name>.md` — the whole definition | `.claude/skills/<name>/SKILL.md` | `CLAUDE.md` → `@AGENTS.md` |
 | `claude-code-apx` | `.claude/agents/<name>.md` — the agent's own definition (team, identity, mandate, shapes, its own rules) in the same words as `claude-code`, then a pointer to the agent's apx for the rest | `.claude/skills/<name>/SKILL.md` — the same, under the skill's frontmatter | as `claude-code` |
 | `cursor` | `.cursor/rules/<name>.mdc` | `.cursor/rules/<name>.mdc` | — |
-| `junie` | `.junie/AGENTS.md` | `.junie/skills/<name>/SKILL.md` | — |
+| `codex` | `.codex/agents/<name>.toml` — `name`, `description`, `developer_instructions` | `.agents/skills/<name>/SKILL.md` | — (Codex reads `AGENTS.md` itself) |
 
 Options:
 
@@ -45,7 +45,7 @@ Options:
 claudeCodeAdapter({ agentsDir: '.claude/agents', skillsDir: '.claude/skills', tools: '*' });
 claudeCodeApxAdapter({ agentsDir: '.claude/agents', skillsDir: '.claude/skills', tools: '*' });
 cursorAdapter({ rulesDir: '.cursor/rules', agentsAlwaysActive: false });
-junieAdapter({ agentsFile: '.junie/AGENTS.md', skillsDir: '.junie/skills' });
+codexAdapter({ agentsDir: '.codex/agents', skillsDir: '.agents/skills' });
 ```
 
 A skill is an agent: `bundle all` builds every `EXPORT SKILL` of the project library, with its apx, and the adapter writes it as a skill instead of a subagent. The frontmatter carries its name and its `ABOUT` as `description`.
@@ -61,6 +61,23 @@ An adapter may word how its harness hands work out and waits, over the neutral w
 Every other adapter keeps the neutral words: `apx wait` blocks until each piece is settled or the limit is reached.
 
 An adapter may keep the project's settings too (`projectSettings`, called once per build, after every agent): `claude-code` keeps the perimeter there. When some agent works under one — an `@WITHIN`, a `DELEGATE~`, a `MARK` — `bundle all` adds two hooks to `.claude/settings.json`, on `Write|Edit|MultiEdit|NotebookEdit`: before a write, `.agent-pack/hooks/claude-code-guard.mjs before` asks the apx (`guard`) and denies a write outside the perimeter of the work in progress; after one in a contract's copy, `… after` warns when the file is outside the contract. The settings' hooks run inside subagents too, with `agent_id` and `agent_type` in their input: that is how the apx knows who writes. Only agent-pack's own entries are written or removed — the rest of the file stays as it is — and they go when no agent works under a perimeter. A write the hook cannot check is denied: the check failing never lets a write through.
+
+## Delegating to another harness
+
+An adapter is two-sided. Out, it writes the agents in its harness's form. In, it says how an agent on another harness launches one of its agents, from outside: `invocation`, a recipe in an `.ap` TEMPLATE — `invoke.ap` beside the adapter — whose BODY is the command line and whose slots' rules say how to run it.
+
+```
+BODY:
+    codex exec -C {project} -s workspace-write --skip-git-repo-check --ephemeral --color never -o {answer} {shape} - < {prompt}
+```
+
+The apx fills it when the piece starts (`delegate start`): `{project}` the piece's copy, `{agent}`, `{prompt}` the file it writes, `{answer}` the file the command writes, `{shape}` the adapter's `shape` flag with its JSON Schema when the line has an `AS`. `carry` lists the files the copy is given from the working folder — the agent's definition, generated and often untracked — and `intro` the prompt's first line, for a CLI that picks the agent by its prompt.
+
+```javascript
+invocation: { recipe: '<dir>/invoke.ap', cli: 'codex', shape: '--output-schema {schema}', carry: ['.codex/agents/{agent}.toml', 'AGENTS.md'], intro: 'Have the custom agent `{agent}` carry out the task below, and answer with its result.' }
+```
+
+`agent-pack harness list` shows every harness: installed (shipped, or an adapter object of the config), enabled (in `adapters:`), delegable (enabled, with a recipe), and whether its CLI is on the PATH — looked up, never run. `claude-code` and `codex` ship a recipe; `cursor` has none, and cannot be delegated to.
 
 ## Writing an adapter
 

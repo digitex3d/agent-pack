@@ -26,7 +26,7 @@ Set up agent-pack in this project:
 2. Run `agent-pack init` — it writes agent-pack.config.mjs and the .agent-pack/ directory.
 3. Ask me which harness I use and set `adapters` in agent-pack.config.mjs to its name:
    'claude-code-apx' (Claude Code, each agent reads its definition on demand from its .apx),
-   'claude-code' (Claude Code, the whole definition in the agent file), 'cursor' or 'junie'.
+   'claude-code' (Claude Code, the whole definition in the agent file), 'codex' or 'cursor'.
 4. Ask me whether I want the two example agents — agent-pack-developer (writes and edits .ap
    files for me) and web-researcher. For each yes, copy it into agents/standalone/:
    mkdir -p agents/standalone
@@ -46,7 +46,7 @@ agent-pack init
 ```javascript
 // agent-pack.config.mjs
 export default {
-  // built-in adapters, by name: claude-code, claude-code-apx, cursor, junie
+  // built-in adapters, by name: claude-code, claude-code-apx, codex, cursor
   adapters: ['claude-code'],
 };
 ```

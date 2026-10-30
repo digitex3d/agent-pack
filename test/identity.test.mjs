@@ -213,10 +213,13 @@ console.log('identity cross-kind lint tests passed.');
     assert.ok(errs.some(e => /APPLIES is not allowed inside an AGENT block/.test(e.message)), 'APPLIES rejected in AGENT block');
   }
 
-  // Missing AS header → error.
+  // No AS header: an agent may bind no role. Several roles are a comma list.
   {
     const errs = lintAgentBlocks('team.ap', 'AGENT impl:\n  MANDATE x\n');
-    assert.ok(errs.some(e => /requires an `AS <role>` binding/.test(e.message)), 'missing AS rejected');
+    assert.ok(!errs.some(e => /AS/.test(e.message)), 'an agent without a role is valid');
+    assert.deepEqual(lintAgentBlocks('team.ap', 'AGENT impl AS reviewer, explorer:\n  MANDATE x\n').filter(e => /AS/.test(e.message)), [], 'AS r1, r2 is valid');
+    const spaced = lintAgentBlocks('team.ap', 'AGENT impl AS reviewer explorer:\n  MANDATE x\n');
+    assert.ok(spaced.some(e => /`AS reviewer explorer`: separate the items with commas — `AS reviewer, explorer`/.test(e.message)), 'a space-separated AS is the old list form');
   }
 
   // Missing MANDATE → error.

@@ -13,7 +13,7 @@
  * one `# error:` line carrying the command that fixes it. `check` answers on its
  * first line, `open` (exit 0) or `closed` (exit 1, or 2 on a usage or config error).
  */
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { spawnSync, type SpawnSyncOptionsWithStringEncoding } from 'child_process';
 import { ApDocument as ApDocumentClass, type ApDocument } from '../apdoc/document.js';
@@ -34,10 +34,10 @@ import { refName } from '../../adapters/md/phrases.js';
 import { scopeLabel } from '../withUse.js';
 import { SCOPED_KINDS } from '../services/tags.js';
 import { CREDIT } from '../credits.js';
-import { validateRecord, formatIssues, jsonExample } from '../shapeSchema.js';
+import { validateRecord, formatIssues, jsonExample, jsonSchemaOf } from '../shapeSchema.js';
 import { BLOCK_ID_RE, addressName, sha256Hex, shortId } from '../apdoc/ids.js';
 import { perimeterFiles, scanZones, zoneMarks, zonesText, parseZones } from './contracts.js';
-import { DelegationTable, CONTRACT_ID_RE, MARK_ID_RE, pieceRecord, type DelegationRecord } from './delegations.js';
+import { DelegationTable, CONTRACT_ID_RE, MARK_ID_RE, pieceRecord, pieceOf, type DelegationRecord } from './delegations.js';
 import type { ApMark } from '../delegation.js';
 import { parsePayload } from './payload.js';
 import { resolveWorkspace } from '../workspace/registry.js';
@@ -224,6 +224,8 @@ export class ApxEngine {
     deliver: (table: DelegationTable, r: DelegationRecord, args: string[]) => this.deliverContract(table, r, args),
     copy: (ctr: string) => this.contractCopy(ctr),
     fold: (table: DelegationTable, pieces: DelegationRecord[]) => this.foldContracts(table, pieces),
+    launch: (r: DelegationRecord) => this.launchElsewhere(r),
+    deliverElsewhere: (table: DelegationTable, r: DelegationRecord) => this.deliverElsewhere(table, r),
   };
 
   constructor(
@@ -316,7 +318,7 @@ export class ApxEngine {
       always.add(b);
       if (b.kind === 'template') for (const r of uniqueRefs(b.toJSON())) add(this.doc.resolve(r));
     };
-    if (this.root.role) add(this.doc.resolve(this.root.role));
+    for (const role of this.root.roles) add(this.doc.resolve(role));
     this.doc.byKind('policy').forEach(add);
     if (this.root.lensIn) add(this.doc.resolve(this.root.lensIn.ref));
     if (this.root.lensOut) add(this.doc.resolve(this.root.lensOut.ref));
@@ -335,8 +337,8 @@ export class ApxEngine {
       const uncertain = { ...perimeter.judged?.reads.uncertain, ...perimeter.judged?.writes.uncertain };
       if (Object.keys(uncertain).length) this.out(`uncertain: a judge could not tell whether these belong — decide each in context: ${Object.entries(uncertain).map(([f, p]) => `${f} (p=${p.toFixed(2)})`).join(', ')}`);
     }
-    const role = root.role ? this.doc.resolve(root.role) : null;
-    if (role) this.out(`role: ${this.label(role)}`);
+    const roles = root.roles.map(ref => this.doc.resolve(ref)).filter((b): b is ApBlock => b !== null);
+    for (const role of roles) this.out(`role: ${this.label(role)}`);
     const team = this.doc.byKind('team')[0] as TeamBlock | undefined;
     if (team) {
       this.out(`team: ${this.label(team)}${team.about ? `  — ${team.about}` : ''}`);
@@ -347,8 +349,8 @@ export class ApxEngine {
       this.out('respect:');
       for (const p of policies) this.out(`  ${this.label(p)}${p.about ? `  — ${p.about}` : ''}`);
     }
-    // Every WHEN and hook of the agent and of its role: what it does, and when.
-    const own = [root, ...(role ? [role] : [])].flatMap(b => b.toJSON().body as ApNode[]);
+    // Every WHEN and hook of the agent and of its roles: what it does, and when.
+    const own = [root, ...roles].flatMap(b => b.toJSON().body as ApNode[]);
     const whens = own.filter((n): n is ApWhenNode => n.type === 'when');
     if (whens.length > 0) {
       this.out(`when:  — the steps: ${this.cmd} get ${root.id}`);
@@ -1189,8 +1191,9 @@ export class ApxEngine {
     }
     const blocked = (why: string) => { this.out(`${path}: ${why} — do not write it; if the work needs it, say so in your delivery`); return 3; };
     if (agent) {
+      // A contract's copy mirrors the project root: its files are judged by their path inside it.
       const own = this.agentPerimeter(agent);
-      if (own && !matchesAnyGlob(path, own.writes)) return blocked(`outside ${agent}'s own perimeter (${own.writes.join(', ') || 'it writes nothing'})`);
+      if (own && !matchesAnyGlob(copy ? copy[2] : path, own.writes)) return blocked(`outside ${agent}'s own perimeter (${own.writes.join(', ') || 'it writes nothing'})`);
     }
     if (!subagent) return 0;
     const session = this.sessionIdOrReason('guard needs');
@@ -1419,6 +1422,109 @@ export class ApxEngine {
     return 0;
   }
 
+  /** The files a delegation to another harness keeps beside its copy: the prompt it is handed, the answer it writes, the schema of an AS. */
+  private elsewhereFiles(cx: ContractCx, dlg: string): { copy: string; prompt: string; answer: string; schema: string } {
+    const copy = resolve(cx.root, cx.ws().path(dlg));
+    return { copy, prompt: `${copy}.prompt.md`, answer: `${copy}.answer.txt`, schema: `${copy}.schema.json` };
+  }
+
+  /**
+   * A delegation to another harness, started (D66): its copy is opened, the
+   * files its harness needs and the copy may not hold are carried in, its
+   * prompt is written — the task, what it reads, the form of its AS — and the
+   * harness's recipe is printed, filled, with the rules to run it by. The
+   * command is the caller's to run: nothing is launched here.
+   */
+  private launchElsewhere(r: DelegationRecord): number {
+    const work = this.doc.meta.background?.[pieceOf(r.dlg).work];
+    const inv = work?.harness ? this.doc.meta.harnesses?.[work.harness] : undefined;
+    if (!work?.harness || !inv) return this.fail(2, `${r.dlg} goes to another harness, but its recipe was not compiled into ${this.root.name} — bundle again`);
+    const agent = work.by ?? '';
+    const cx = this.contractCx();
+    if (!cx) return this.lastCode;
+    const landing = cx.ws().land();
+    if ('conflicts' in landing) return this.fail(3, `what was merged conflicts with the working folder: ${landing.conflicts.join(', ')} — make them agree there, then start again`);
+    cx.ws().open(r.dlg, { reads: null, writes: ['**'] });
+    const files = this.elsewhereFiles(cx, r.dlg);
+    for (const path of inv.carry.map(c => c.replace(/\{agent\}/g, agent))) {
+      const from = join(cx.root, path);
+      if (!existsSync(from)) continue;
+      mkdirSync(dirname(join(files.copy, path)), { recursive: true });
+      copyFileSync(from, join(files.copy, path));
+    }
+    // What it is handed: the task, the variables and constants it reads — never the conversation (D66).
+    const names = [...new Set(readsOf(work.task).map(v => v.name))];
+    const vars = this.sessionVars();
+    const read = vars ? this.readVariables(vars, names.filter(n => constantOf(this.doc.mdSource?.vars, n) === undefined)) : { values: [] };
+    if ('empty' in read) return this.fail(1, `${emptyVariable(read.empty)}: fill it before ${r.dlg} is handed over`);
+    const handed = [...names.flatMap(n => { const c = constantOf(this.doc.mdSource?.vars, n); return c === undefined ? [] : [{ name: n, value: c }]; }), ...read.values];
+    const shape = this.elsewhereShape(r.dlg);
+    const prompt = [
+      ...(inv.intro ? [inv.intro.replace(/\{agent\}/g, agent), ''] : []),
+      work.task,
+      ...(handed.length ? ['', 'What you are handed:', '```json', JSON.stringify(Object.fromEntries(handed.map(h => [h.name, h.value])), null, 2), '```'] : []),
+      ...(shape ? ['', `Answer with JSON shaped as \`${refName(shape)}\`, like: ${JSON.stringify(jsonExample(this.doc.slotsOf(shape)!, this.doc.slotResolver()))}`] : []),
+      '', 'Work only in this folder: it is your own copy of the project. Your last message is your answer.',
+    ].join('\n');
+    writeFileSync(files.prompt, `${prompt}\n`);
+    const slots = this.doc.slotsOf(shape ?? { id: '', target: '', kind: 'template' });
+    if (shape && inv.shape && slots) writeFileSync(files.schema, JSON.stringify(jsonSchemaOf(slots, this.doc.slotResolver()), null, 2));
+    const flag = shape && inv.shape && slots ? inv.shape.replace(/\{schema\}/g, files.schema) : '';
+    const command = inv.command.replace(/\{project\}/g, files.copy).replace(/\{agent\}/g, agent).replace(/\{prompt\}/g, files.prompt)
+      .replace(/\{answer\}/g, files.answer).replace(/\{shape\}/g, flag).replace(/\s{2,}/g, ' ').trim();
+    if (!cx.table.transition(r.dlg, 'running', 'running', { harness: work.harness })) return this.fail(4, `${r.dlg} changed meanwhile — ${this.cmd} delegate list`);
+    this.out(`${r.dlg}  → ${agent} on ${work.harness}  copy: ${cx.ws().path(r.dlg)}`);
+    this.out('# run, with your shell:');
+    this.out(command);
+    for (const rule of inv.rules) this.out(`# ${rule}`);
+    return this.print(`# when it ends: ${this.cmd} delegate deliver ${r.dlg} --answer — or: ${this.cmd} delegate block ${r.dlg} "<why>"`);
+  }
+
+  /** The AS of a delegation to another harness, as a reference — null when it has none, or its template was not compiled in. */
+  private elsewhereShape(dlg: string): ApRef | null {
+    const work = this.doc.meta.background?.[pieceOf(dlg).work];
+    if (!work) return null;
+    for (const { node } of this.doc.nodes()) {
+      if (node.type === 'directive' && node.work === pieceOf(dlg).work && node.as) return this.doc.slotsOf(node.as.ref) ? node.as.ref : null;
+    }
+    return null;
+  }
+
+  /**
+   * A delegation to another harness, delivered (`delegate deliver <dlg-id>
+   * --answer`): its answer, from the file its command wrote, is its result —
+   * stored in its INTO; what its copy changed is kept only within its
+   * perimeter (every glob list the registry recorded), the files carried in
+   * never — anything else is left out, and said. A WAIT merges it.
+   */
+  private deliverElsewhere(table: DelegationTable, r: DelegationRecord): number {
+    const cx = this.contractCx();
+    if (!cx) return this.lastCode;
+    if (r.state !== 'running') return this.fail(1, `${r.dlg} is ${r.state} — only a running piece is delivered`);
+    const files = this.elsewhereFiles(cx, r.dlg);
+    if (!existsSync(files.answer)) return this.fail(1, `${r.dlg} wrote no answer (${files.answer}) — run its command again, or ${this.cmd} delegate block ${r.dlg} "<why>"`);
+    const text = readFileSync(files.answer, 'utf-8').trim();
+    if (r.into && pieceOf(r.dlg).run === null) {
+      const block = this.variable(r.into);
+      const failed = block ? this.storeVariable(block, text) : null;
+      if (failed) return this.fail(6, `${r.dlg} delivers into \`${r.into}\`: ${failed.reason} — run it again; nothing was stored`);
+    }
+    // What it changed: every file, then only those within its perimeter — a glob of each list it was handed under.
+    const inv = r.harness ? this.doc.meta.harnesses?.[r.harness] : undefined;
+    const carried = new Set((inv?.carry ?? []).map(c => c.replace(/\{agent\}/g, r.assignee)));
+    const lists: string[][] = r.perimeter ? JSON.parse(r.perimeter) : [];
+    const changed = cx.ws().deliver(r.dlg, { globs: ['**'], created: true }, { dryRun: true }).committed;
+    const keep = changed.filter(f => !carried.has(f) && lists.every(globs => matchesAnyGlob(f, globs)));
+    const left = changed.filter(f => !keep.includes(f) && !carried.has(f));
+    cx.ws().deliver(r.dlg, { globs: keep.map(literalGlob) });
+    if (!table.transition(r.dlg, 'running', 'delivered', { result: JSON.stringify(text), left_out: left.join('; '), why: left.length ? 'outside its perimeter' : '' })) {
+      return this.fail(1, `${r.dlg} moved meanwhile — ${this.cmd} delegate list`);
+    }
+    this.out(`${r.dlg}  delivered — ${keep.length ? keep.join(', ') : 'nothing changed'}`);
+    if (left.length) this.out(`left out, outside its perimeter: ${left.join(', ')}`);
+    return 0;
+  }
+
   /** A contract's copy, from the project root — where whoever carries it out works. */
   private contractCopy(ctr: string): string | null {
     return this.contractCx()?.ws().path(ctr) ?? null;
@@ -1435,7 +1541,8 @@ export class ApxEngine {
     const out: DelegationRecord[] = [];
     let merged = 0;
     for (const r of pieces) {
-      if (r.state !== 'delivered' || !CONTRACT_ID_RE.test(r.dlg)) { out.push(r); continue; }
+      // A contract, or a delegation to another harness: both delivered from a copy of their own.
+      if (r.state !== 'delivered' || !(CONTRACT_ID_RE.test(r.dlg) || r.harness)) { out.push(r); continue; }
       const m = cx.ws().merge(r.dlg);
       if (!m.merged) { this.out(`${r.dlg}  conflicts with what is merged in ${m.conflicts.join(', ')} — ${this.cmd} contract merge ${r.dlg} --prefer ours|theirs`); out.push(r); continue; }
       table.transition(r.dlg, 'delivered', 'merged');

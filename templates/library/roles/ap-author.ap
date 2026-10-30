@@ -13,7 +13,7 @@ EXPORT ROLE ap-author:
     ALWAYS  choose keywords from the closed sets only — never invent a keyword the lexer does not recognise
     ALWAYS  reference any cross-file block only after IMPORT <names> FROM @main.<kind>, placed before any block
     ALWAYS  run `agent-pack bundle all` before declaring done — it must report no warnings and no errors
-    NEVER   let a line exceed the 120-char max
+    NEVER   let a line exceed the 180-char max
 
     WHEN placing files:
       DO   write an agent as one flat file holding one EXPORT AGENT block — agents/standalone/<name>.ap
@@ -35,6 +35,13 @@ EXPORT ROLE ap-author:
       DO   write each statement with ap-statement — DO, DELEGATE, COMPUTE, RUN, IF, ELSE, UNTIL, marked forms, IN, VAR
       DO   write a POLICY with ALWAYS / NEVER lines only
 
+    WHEN writing a ROLE or binding roles to an agent or a team:
+      ALWAYS reuse a generic role of the library — reviewer, implementer, explorer — before writing a new one
+      ALWAYS write a new ROLE only for a craft more than one agent can share — never one agent's identity
+      ALWAYS put what is specific to one agent in its ABOUT, MANDATE, own rules and imported policies
+      MAY    give an agent or a team several roles with `AS r1, r2`, one with `AS r`, or none — each adds its rules and imports
+      NEVER  write a ROLE for a single agent
+
     WHEN writing a TEMPLATE block — it cannot host a scaffold of itself, so author it by hand:
       DO   open `TEMPLATE <name>:`, then an ABOUT line and optional APPLIES
       DO   under SLOTS: write one `field[?]: TYPE "desc"` per slot — a trailing ? marks it optional
@@ -42,7 +49,7 @@ EXPORT ROLE ap-author:
       DO   under BODY: write the literal layout with {slot} placeholders; under EXAMPLE: one filled instance
 
     WHEN writing or using a skill — an agent the harness loads as a skill:
-      DO   write it as one EXPORT SKILL <name> AS <role> under agents/library/skills/ — the lines of an AGENT
+      DO   write it as one EXPORT SKILL <name>: under agents/library/skills/ — the lines of an AGENT, with no AS <role>
       DO   import a library skill FROM @main.skills, a harness one FROM @harness.skills — named as the harness knows it
       DO   let the agent use an imported skill freely; add @WITH <skill> to say which block it is for
       DO   put @WITH <skill> on its own line right above a control block, at its indent — a WHEN, an IF, an UNTIL
@@ -53,6 +60,7 @@ EXPORT ROLE ap-author:
       DO   narrow a policy's APPLIES line to keep lines out of it — there is no negated @WITH
       DO   import the skill in the file that writes the @WITH
       NEVER write a @WITH with nothing below it to decorate
+      NEVER bind a role to a skill — its identity and rules go in its own ABOUT, MANDATE, ALWAYS / NEVER, MUST, WHEN lines
 
     WHEN putting work within a perimeter of files:
       DO   declare a DOMAIN with ABOUT and its files on WRITES IN <glob>, … and READS IN <glob>, … lines

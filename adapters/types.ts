@@ -125,6 +125,20 @@ export interface AdapterPlugin {
    * Example: claude-code compiles a Workflow tool script.
    */
   flowScript?: { ext: string; compile(flow: ApBlock, doc: ApDocument): string | null };
+  /**
+   * Optional: how an agent on another harness launches an agent of this one
+   * from outside (D66) — `recipe` the path of its `invoke.ap`, a TEMPLATE whose
+   * BODY is the command line and whose slots' rules say how to run it; `cli`
+   * the executable that command runs; `shape` the flag that binds the answer
+   * to a JSON Schema (`{schema}` its file), when the CLI has one. An adapter
+   * without it cannot be delegated to.
+   * `carry` the files the agent needs that a copy of the project may not hold —
+   * its definition, generated and often untracked (`{agent}` its name) — taken
+   * from the working folder into the copy, never delivered back; `intro` the
+   * line the prompt opens with when the CLI picks the agent by its prompt.
+   * Example: codex declares `{ recipe: '<dir>/invoke.ap', cli: 'codex', shape: '--output-schema {schema}' }`.
+   */
+  invocation?: { recipe: string; cli: string; shape?: string; carry?: string[]; intro?: string };
 }
 
 /**

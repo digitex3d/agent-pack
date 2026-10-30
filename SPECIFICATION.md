@@ -164,7 +164,7 @@ language; a space-separated list is a compilation error.
   definition.)
 
 - **D8 — adapter** — a translation layer from `.ap` source to a
-  specific runtime's native format (Claude Code, Cursor, Junie, the
+  specific runtime's native format (Claude Code, Codex, Cursor, the
   `AGENTS.md` every harness reads). Adapters are pure
   transformations: they map, they never invent. New runtimes are
   supported by writing a new adapter, never by altering the source.
@@ -226,8 +226,11 @@ language; a space-separated list is a compilation error.
   (D40). (Amended in 1.2.)
 
 - **D17 — role** — a way of thinking and acting: an identity, its
-  expertise and its rules, reusable across agents. An agent binds one
-  role as its identity (`AS <role>`); a role may extend another.
+  expertise and its rules, reusable across agents. An agent binds the
+  roles it embodies with `AS <role>, …` — none, one or several, each
+  adding its identity line, its rules and its imports; any number of
+  agents may bind the same role, and `BY <role>` resolves only when one
+  agent holds it. A role may extend another. (Amended: several roles.)
 
 - **D18 — store** — the data an agent keeps between sessions, declared
   like a schema: slots, a key that identifies a record, and how long it

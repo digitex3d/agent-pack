@@ -98,6 +98,13 @@ try {
   assert.equal(r.code, 3, r.out);
   has(r.out, 'src/api/x.ts: outside builder\'s own perimeter (src/web/**)', 'say so in your delivery');
   assert.equal(guard('src/web/new.ts', '--agent', 'builder', '--subagent').code, 0);
+  // In a contract's copy, which mirrors the project root, the path inside the copy is what its own @WITHIN judges.
+  const inCopy = p => `.agent-pack/work/ctr-0123abcd/${p}`;
+  r = guard(inCopy('src/web/new.ts'), '--agent', 'builder', '--subagent');
+  assert.equal(r.code, 0, `within its own perimeter, in a copy:\n${r.out}`);
+  r = guard(inCopy('src/api/x.ts'), '--agent', 'builder', '--subagent');
+  assert.equal(r.code, 3, r.out);
+  has(r.out, `${inCopy('src/api/x.ts')}: outside builder's own perimeter (src/web/**)`);
   r = guard('docs/guide.md', '--agent', 'reader', '--subagent');
   assert.equal(r.code, 3, 'a domain that only READS writes nothing');
   has(r.out, 'it writes nothing');

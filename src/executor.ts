@@ -86,13 +86,23 @@ export interface AgentIndexEntry {
  * agent is none the line may name: unknown, or a member of another team than
  * the delegating agent's.
  */
-export function delegateTargetErrors(doc: ApDocument, index: readonly AgentIndexEntry[], ownTeam: string | null): LintError[] {
+export function delegateTargetErrors(doc: ApDocument, index: readonly AgentIndexEntry[], ownTeam: string | null, harnessProblem: (harness: string) => string | null = h => `no harness is called \`${h}\``): LintError[] {
   const teams = new Set(index.map(a => a.team).filter((t): t is string => t !== null));
   const errors: LintError[] = [];
   for (const { node, block } of doc.nodes()) {
     if (node.type !== 'directive' || !isDelegationVerb(node.keyword) || !node.by) continue;
     const name = node.by;
     const verb = node.keyword;
+    // `BY <harness>:<agent>`: the harness is a dependency of the build, and the agent one of the project (D66).
+    if (node.harness) {
+      const at = { file: block.source?.file ?? '', line: node.pos?.line ?? 0 };
+      const message = verb === FORK_VERB
+        ? `FORK … BY ${node.harness}:${name}: a fork takes this conversation, and a conversation does not cross harnesses — DELEGATE it to ${node.harness}:${name}`
+        : harnessProblem(node.harness) ?? (index.some(a => a.name === name) ? null
+          : `BY ${node.harness}:${name}: unknown agent \`${name}\` — another harness runs an agent of this project, compiled for it`);
+      if (message) errors.push({ ...at, message });
+      continue;
+    }
     // A fork is an agent on the conversation itself: a team has no conversation to take.
     if (teams.has(name) && verb !== FORK_VERB) continue;
     const agent = index.find(a => a.name === name);
@@ -252,7 +262,8 @@ export function executorSpecs(
     if (!own || (block.executor ?? AGENT) >= own) continue;   // the procedure's own work
     if (node.type === 'directive') {
       // A flow's delegation is the flow runner's, with the context its form says; a fork takes the conversation, never an input.
-      if (block.kind === 'flow' || node.keyword === FORK_VERB) continue;
+      // So is a delegation to another harness: it is launched from outside, in a copy, and kept by the registry (D66).
+      if (block.kind === 'flow' || node.keyword === FORK_VERB || node.harness) continue;
       const into = node.into ? addressName(node.into.target) : undefined;
       const template = into ? varTemplate(into) : undefined;
       add(block, {

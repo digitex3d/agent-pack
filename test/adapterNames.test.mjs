@@ -18,9 +18,9 @@ try {
   process.chdir(tmp);
   const configFile = join(tmp, 'agent-pack.config.mjs');
 
-  writeFileSync(configFile, "export default { adapters: ['claude-code-apx', 'junie'] };\n");
+  writeFileSync(configFile, "export default { adapters: ['claude-code-apx', 'codex'] };\n");
   const config = await loadConfig(['--config', configFile]);
-  assert.deepEqual(config.adapters.map(a => a.name), ['claude-code-apx', 'junie'], 'names resolve to the built-in adapters');
+  assert.deepEqual(config.adapters.map(a => a.name), ['claude-code-apx', 'codex'], 'names resolve to the built-in adapters');
 
   const registry = AdapterRegistry.fromConfig(config);
   assert.equal(registry.get('cursor').name, 'cursor', '--adapter reaches a built-in even when not configured');
@@ -28,7 +28,7 @@ try {
 
   const badFile = join(tmp, 'bad.config.mjs'); // a new path: ESM caches the first import
   writeFileSync(badFile, "export default { adapters: ['nope'] };\n");
-  await assert.rejects(loadConfig(['--config', badFile]), /Unknown adapter "nope" — built-in adapters: claude-code, claude-code-apx, cursor, junie/);
+  await assert.rejects(loadConfig(['--config', badFile]), /Unknown adapter "nope" — built-in adapters: claude-code, claude-code-apx, codex, cursor/);
 
   console.log('adapter names in config: passed.');
 } finally {

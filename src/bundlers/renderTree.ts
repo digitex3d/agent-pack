@@ -34,7 +34,7 @@ import { checkHead, condCheckOf, type CheckKind } from '../check.js';
 import { apxCommand } from '../apx/paths.js';
 import { executorHead, eachHead } from '../../adapters/md/phrases.js';
 import { eachHeadOf } from '../vars.js';
-import { WAIT_VERB, MARK_VERB, isDelegationVerb, parseDelegation, delegationText } from '../delegation.js';
+import { WAIT_VERB, MARK_VERB, isDelegationVerb, parseDelegation, delegationText, splitHarness } from '../delegation.js';
 
 const CONTROL_HEADS: Record<string, string> = { IF: 'If', ELSE: 'Else', UNTIL: 'Until' };
 
@@ -182,7 +182,8 @@ function delegationLine(t: Token, ctx?: BundleContext): string | null {
   const template = d.as ? ctx?.templates.find(tp => tp.name === d.as!.name.replace(/`/g, '')) : undefined;
   const shaped = d.as ? { name: d.as.name.replace(/`/g, '').replace(/\s+\(.*\)$/, ''), ref: template ? refSuffix(template.refId) : '' } : undefined;
   // Its INTO stays as written: no store line follows it here.
-  const text = delegationText({ keyword, text: d.into ? `${d.task} INTO ${d.into}` : d.task, agent: d.by ?? undefined, async: t.async, shaped,
+  const other = d.by ? splitHarness(d.by) : null;
+  const text = delegationText({ keyword, text: d.into ? `${d.task} INTO ${d.into}` : d.task, agent: other?.agent ?? d.by ?? undefined, harness: other?.harness, async: t.async, shaped,
     phrases: ctx?.renderings, ...(keyword === 'FORK' && d.by ? { definition: `\`${apxCommand(d.by, 'scope')}\`` } : {}) });
   return `${indent}${keyword} ${text}${d.opens ? ':' : ''}`;
 }

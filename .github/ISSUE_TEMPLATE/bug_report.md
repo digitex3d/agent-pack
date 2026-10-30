@@ -21,4 +21,4 @@ labels: bug
 - agent-pack version (`agent-pack --version`):
 - Node version (`node -v`):
 - OS:
-- Adapter(s) (`claude-code`, `claude-code-apx`, `cursor`, `junie`):
+- Adapter(s) (`claude-code`, `claude-code-apx`, `codex`, `cursor`):

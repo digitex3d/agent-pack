@@ -34,7 +34,7 @@ One agent per file, anywhere under `agents/`.
 
 | Line | |
 |---|---|
-| `AS <role>` | the role the agent embodies — its identity |
+| `AS <role>, …` | the roles the agent embodies — its identity; optional, one or several, comma-separated (see [ROLE](#role)) |
 | `ABOUT` | one line: what the agent is for — also its description in the harness and in the orchestration |
 | `MANDATE` | what it is responsible for |
 | `BUDGET cheap \| moderate \| costly` | how much it may spend — the adapter maps the tier to a model of its harness (Claude Code: haiku, sonnet, opus); it wins over the config's [`delegate.models`](/reference/config#delegate) |
@@ -54,7 +54,7 @@ EXPORT SKILL pdf-report AS reporter:
     MUST     quote every table as CSV
 ```
 
-A skill is an agent in every respect — the same lines, the same compilation, its own apx — that the adapter writes as a skill of the harness instead of a subagent (`.claude/skills/<name>/SKILL.md`, `.junie/skills/<name>/SKILL.md`). It lives in the project library, under `skills/`; `bundle all` builds every one. Its `ABOUT` is the description the harness picks it by. Its `APPLIES` line — its own, never its role's — gives its tags and, like a [policy](#policy)'s, where it holds. An agent uses it by importing it — see [Skills](#skills).
+A skill is an agent in every respect — the same lines, the same compilation, its own apx — that the adapter writes as a skill of the harness instead of a subagent (`.claude/skills/<name>/SKILL.md`, `.agents/skills/<name>/SKILL.md` for Codex). It lives in the project library, under `skills/`; `bundle all` builds every one. Its `ABOUT` is the description the harness picks it by. Its `APPLIES` line — its own, never its role's — gives its tags and, like a [policy](#policy)'s, where it holds. An agent uses it by importing it — see [Skills](#skills).
 
 ### ROLE
 
@@ -66,7 +66,11 @@ ROLE code-reviewer:
     NEVER      report a style preference as a bug
 ```
 
-A way of thinking and acting. The role an agent is bound to with `AS` becomes the opening of its identity — *You are: **code reviewer** — a careful reviewer who reads before judging — with expertise in **code-review**, **refactoring***. Other imported roles apply together with it.
+A way of thinking and acting — a craft, generic enough for many agents to share: a reviewer, an implementer, an explorer. What sets one agent apart is its `ABOUT`, its `MANDATE`, its own rules and the policies it imports, not a role of its own.
+
+An agent binds the roles it embodies with `AS`, none, one or several: `EXPORT AGENT edge-case-hunter AS reviewer, explorer:`. Each bound role opens a line of its identity — *You are: **code reviewer** — a careful reviewer who reads before judging — with expertise in **code-review**, **refactoring*** — in the order written, and adds its rules and its imports; a rule two roles share is kept once. Two bound roles that disagree on a rule — `ALWAYS x` in one, `NEVER x` in the other — fail the compilation. Other imported roles apply together with them.
+
+Any number of agents may bind the same role. In a flow, `BY <role>` names the one agent that holds it; when several members hold it, the compilation fails and asks for the agent's name.
 
 A role can extend another with `EXTENDS <parent>`: the parent's rules — looked up in the role's own folder, then in `roles/` of every library — come first, then the role's own. A parent that cannot be found, or a chain that loops back, fails the compilation.
 
@@ -421,6 +425,8 @@ If `totals` differ from `document_total` by more than 0.01 — a program decides
 ### DELEGATE and BY
 
 `DELEGATE … BY <agent>` names who the line is handed to: a standalone agent, a team (its routing picks the member), or a member of the delegating agent's own team. A member of another team, or a name the project does not have, fails the compilation. The parts come in their order — the task, `INTO`, `BY`, `AS`: `DELEGATE … INTO risks BY legal-reviewer` (`BY … INTO …` is an error). In an agent's body a `DELEGATE` has its contract (`exe-…`): the delegate is handed the line's inputs and nothing else, and an `AS <template>` is the shape of that input. Only `DELEGATE` and `FORK` take a `BY` — a `COMPUTE` is a program's. `ASK` became `DELEGATE`: an `ASK` line fails the build with the rewrite.
+
+**Another harness: `BY <harness>:<agent>`.** `DELEGATE … BY codex:hunter` hands the task to `hunter`, an agent of the project, as another harness runs it — launched from outside, as that harness's adapter describes in its recipe (`invoke.ap`). The harness is a dependency of the build: a name no adapter has, a harness not in the config's `adapters:`, one without a recipe, or one whose CLI is not on the PATH fails the compilation, saying which (`agent-pack harness list` shows them all). It works in a copy of its own, in the background (`DELEGATE~`) or not: `apx delegate start <dlg-id>` opens the copy, writes the prompt and prints the command to run; `apx delegate deliver <dlg-id> --answer` takes its answer, and of what it changed in its copy only what stays within its perimeter; the WAIT — or, for a line not in the background, the `apx wait <dlg-id>` the line names — merges it. It is handed the task and the variables it reads — the conversation does not cross harnesses — or, with `AS <template>`, what the template holds; `FORK … BY <harness>:<agent>` is an error.
 
 Without `BY`, the line goes to the **default delegate**, `quick`: a builtin agent that answers from the JSON input it is handed alone, as JSON in the shape the contract asks, saying what is missing when the input lacks it. `bundle all` builds it only when some agent hands it work and the project has no agent of that name. With Claude Code it runs on `haiku` and with no tool at all — it cannot read a file. The [`delegate`](/reference/config#delegate) key names another default and sets the model each agent runs on: the source never names a model.
 

@@ -16,5 +16,5 @@ features:
   - title: One apx per agent
     details: The agent's definition and the engine that serves it in a single file run by Node. The agent reads what the task needs, block by block, following ids — never the whole prompt at once.
   - title: Every harness
-    details: The same sources compile to Claude Code, Cursor, Junie and AGENTS.md. No runtime, no server — the agents orchestrate themselves, following the flows you wrote.
+    details: The same sources compile to Claude Code, Codex, Cursor and AGENTS.md. No runtime, no server — the agents orchestrate themselves, following the flows you wrote.
 ---

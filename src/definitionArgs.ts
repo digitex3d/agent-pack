@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
 import { FORMULAS, fill } from './formulas.js';
+import { splitList } from './lists.js';
 /**
  * Definition arguments — the declarative split between a block's *signature*
  * and its *body*.
@@ -36,25 +37,30 @@ export function definitionArgsFor(blockKeyword: string): ArgumentSpec[] {
   return DEFINITION_ARGS[blockKeyword] ?? [];
 }
 
-/** Parsed signature of an `AGENT <name> AS <role>:` header. */
+/** Parsed signature of an `AGENT <name> AS <role>, …:` header. */
 export interface AgentSignature {
-  /** The role name bound via `AS <role>`, or null when absent. */
-  role: string | null;
+  /** The roles bound via `AS <role>, …`, in the order written — empty when the agent binds none. */
+  roles: string[];
 }
 
-/** Matches a leading `AS <role>` clause in an AGENT header's `rest`. */
-const AGENT_AS_RE = /^AS[ \t]+(\S+)\b/;
+/** Matches a leading `AS <role>, …` clause in an AGENT header's `rest`, up to its colon. */
+const AGENT_AS_RE = /^AS[ \t]+(.+?)[ \t]*:?[ \t]*$/;
 
 /**
  * Parse an AGENT block's header `rest` (everything after `AGENT <name>`) into
- * its signature arguments. Today the only argument is `AS <role>`; the parser
- * is deliberately narrow so the `.ap` source stays readable and unambiguous.
+ * its signature arguments. Today the only argument is `AS <role>, …`: the
+ * roles the agent binds, a list like every list of the language (src/lists.ts)
+ * — one role is a list of one.
  *
  * `AS` is the agent's signature binding — parallel to how a DELEGATE's `BY`/`AS`
  * are signature arguments rather than body — so it is read here, not treated as
  * a body line.
  */
 export function parseAgentSignature(rest: string): AgentSignature {
-  const m = rest.trim().match(AGENT_AS_RE);
-  return { role: m ? m[1] : null };
+  return { roles: splitList(agentAsText(rest)).map(item => item.split(/\s+/)[0]) };
+}
+
+/** The text of the `AS` clause of an AGENT header, as written — empty when there is none; the lint checks its list form. */
+export function agentAsText(rest: string): string {
+  return rest.trim().match(AGENT_AS_RE)?.[1] ?? '';
 }

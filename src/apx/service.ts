@@ -76,6 +76,10 @@ export interface ApxHost {
     deliver(table: DelegationTable, r: DelegationRecord, args: string[]): number;
     copy(ctr: string): string | null;
     fold(table: DelegationTable, pieces: DelegationRecord[]): DelegationRecord[];
+    /** A delegation to another harness, just started: its copy opened, its prompt written, the command printed (D66). */
+    launch(r: DelegationRecord): number;
+    /** A delegation to another harness, delivered: its answer stored, what its copy changed kept within its perimeter. */
+    deliverElsewhere(table: DelegationTable, r: DelegationRecord): number;
   };
 }
 

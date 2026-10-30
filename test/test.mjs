@@ -260,6 +260,9 @@ await import('./tagRegistry.test.mjs');
 // --- Library index lint: untagged + similar-tag errors ---
 await import('./libraryIndexLint.test.mjs');
 
+// --- lint of ROLE and PROCEDURE: characterisation of the lines each accepts or rejects, and the errors ---
+await import('./lint-role-procedure-specs.test.mjs');
+
 // --- Tag hierarchy (FCA-derived) ---
 await import('./tagHierarchy.test.mjs');
 
@@ -273,6 +276,8 @@ await import('./parseBlocks.test.mjs');
 
 // --- roleIndex: role→agent binding, precedence, ambiguity ---
 await import('./roleIndex.test.mjs');
+// --- several roles on one agent, BY <role> with a shared role ---
+await import('./roles.test.mjs');
 
 // --- Template compiler: SLOTS/BODY/EXAMPLE contract ---
 await import('./shapeCompiler.test.mjs');
@@ -300,6 +305,7 @@ await import('./team.test.mjs');
 await import('./delegations.test.mjs');
 await import('./marks.test.mjs');
 await import('./guard.test.mjs');
+await import('./harness.test.mjs');
 
 // --- User-level config cascade (default → user → project), reserved @user alias ---
 await import('./userConfigCascade.test.mjs');

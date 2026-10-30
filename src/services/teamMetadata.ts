@@ -181,8 +181,8 @@ export interface AgentInfo {
    * override in the TEAM block is layered on top by the orchestration reader and wins.
    */
   lensIn?: string;
-  /** Role this agent binds via the `AS <role>` header signature. */
-  role?: string;
+  /** The roles this agent binds via the `AS <role>, …` header signature, in order — empty when none. */
+  roles: string[];
   /** True when the block is a `SKILL` — an agent the adapter writes as a skill. */
   skill: boolean;
   /** A skill's APPLIES line: its tags and its perimeter, read by whoever imports it (src/withUse.ts). */
@@ -250,10 +250,10 @@ function asInlineDeclaration(block: ExportedBlockBody): string {
   return `${head}:\n${body}`;
 }
 
-/** The AGENT block body prefixed with its header `AS <role>` binding as a top-level line. */
+/** The AGENT block body prefixed with its header `AS <role>, …` binding as a top-level line. */
 function asAgentBody(agent: ExportedBlockBody): string {
-  const role = parseAgentSignature(agent.rest).role;
-  return role ? `AS ${role}\n${agent.body}` : agent.body;
+  const roles = parseAgentSignature(agent.rest).roles;
+  return roles.length ? `AS ${roles.join(', ')}\n${agent.body}` : agent.body;
 }
 
 /**
@@ -283,7 +283,7 @@ export function readAgentFile(path: string, sources: SourceRegistry = new Source
   const info: AgentInfo = {
     name: agent.name,
     about: extractPrimitive(agent.body, 'ABOUT') ?? '',
-    role: parseAgentSignature(agent.rest).role ?? undefined,
+    roles: parseAgentSignature(agent.rest).roles,
     lensIn: extractPrimitive(agent.body, 'LENS-IN') ?? undefined,
     skill: agent.key === 'SKILL',
     applies: parseApplies(extractPrimitives(agent.body, 'APPLIES')),

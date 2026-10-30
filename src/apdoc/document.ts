@@ -278,13 +278,13 @@ export class ApDocument {
 
     // The bound role is IN the document (it is the agent's identity) but the
     // Roles chapter excludes it — identity fused into the Identity block.
-    const boundRoleAddress = (this.root() as AgentBlock | null)?.role?.target;
+    const boundRoles = new Set(((this.root() as AgentBlock | null)?.roles ?? []).map(r => r.target));
 
     const partBlocks = this.byProvenance(provenance);
     for (const strategy of KIND_STRATEGIES) {
       if (!strategy.entries) continue; // chapter kinds only
       const entries = partBlocks.filter(
-        b => b.kind === strategy.kind && b.address !== boundRoleAddress,
+        b => b.kind === strategy.kind && !boundRoles.has(b.address),
       );
       if (entries.length === 0) continue;
       visitor.chapter?.(strategy.chapterTitle ?? strategy.kind, strategy.kind);

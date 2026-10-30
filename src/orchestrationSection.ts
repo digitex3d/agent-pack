@@ -23,7 +23,7 @@ import { importedVariables, type ImportedVariable } from './exportedVars.js';
 import { varCommand } from '../adapters/md/phrases.js';
 import { BundleContext } from './dispatch/index.js';
 import { parseBlocks } from './parseBlocks.js';
-import { buildRoleIndex, resolveRole, RoleIndex } from './roleIndex.js';
+import { buildRoleIndex, resolveRole, roleHolders, ambiguousRoleMessage, RoleIndex } from './roleIndex.js';
 import { DELEGATION_VERBS, ASYNC_MARK } from './delegation.js';
 import { escapeRegex } from './lexer.js';
 import {
@@ -226,8 +226,8 @@ async function collectTeams(teamsRoot: string, ctx: BundleContext): Promise<Team
     files.map(f => [f.teamName, readTeamMembers(f.teamDir)]),
   );
   const bindings = [...membersByTeam.values()].flat()
-    .filter((a): a is AgentInfo & { role: string } => Boolean(a.role))
-    .map(a => ({ name: a.name, role: a.role }));
+    .filter(a => a.roles.length > 0)
+    .map(a => ({ name: a.name, roles: a.roles }));
 
   const roleIndex = buildRoleIndex(
     ...files.map(f => ({ blocks: f.blocks, anchor: 'directory' as const })),
@@ -348,6 +348,11 @@ function resolveByLines(
   const resolveBy = (text: string, re: RegExp) => text.replace(re, (whole, head: string, name: string, trail: string, offset: number) => {
     const bound = resolveRole(index, name);
     if (bound) return `${head}${bound.name}${trail}`;
+    const holders = roleHolders(index, name);
+    if (holders.length > 1 && !knownNames.has(name)) {
+      fail(`BY ${name}: ${ambiguousRoleMessage(name, holders)}`, text.slice(0, offset).split('\n').length);
+      return whole;
+    }
     if (knownNames.has(name)) return whole;
     fail(`BY ${name}: no team member, no role bound to one and no team is called \`${name}\``, text.slice(0, offset).split('\n').length);
     return whole;

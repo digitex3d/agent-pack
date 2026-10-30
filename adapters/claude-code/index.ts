@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
+import { dirname, resolve } from 'path';
+import { fileURLToPath } from 'url';
 import { AdapterPlugin } from '../types.js';
 import { makeAgentMdEmitter } from './emitters/agent-md.js';
 import { makeClaudeSkillEmitter } from './emitters/claude-skill.js';
@@ -35,6 +37,13 @@ export default function claudeCodeAdapter(opts: ClaudeCodeOptions = {}): Adapter
     sessionEnv: 'CLAUDE_CODE_SESSION_ID',
     // Every flow compiles to a Workflow tool script: Claude Code runs the steps.
     flowScript: { ext: 'js', compile: compileWorkflow },
+    // How an agent on another harness hands one of these agents a task (D66): `claude -p --agent` in the delegation's copy.
+    invocation: {
+      recipe: resolve(dirname(fileURLToPath(import.meta.url)), 'invoke.ap'),
+      cli: 'claude',
+      // A copy of the project holds what git tracks; the generated definitions often are not.
+      carry: [`${opts.agentsDir ?? '.claude/agents'}/{agent}.md`],
+    },
     renderings: {
       // Claude Code's own memory: with `memory:` in the frontmatter (set for
       // every agent that uses MEM) the agent has a memory directory whose

@@ -14,7 +14,7 @@ import { BLOCK_CONTRACTS, BlockContract, VAR_BLOCK } from './blockContracts.js';
 import { TEAM_KEY } from './services/teamMetadata.js';
 import { parseBlocks, agentNestedBlocks, exportedVar, readExportedVar, isExportedVar, type Block, type Node, type Line } from './parseBlocks.js';
 import { isExportFile } from './services/text.js';
-import { parseAgentSignature } from './definitionArgs.js';
+import { agentAsText } from './definitionArgs.js';
 import { isDelegationVerb, delegationLineErrors, waitLineErrors, markLineErrors, concurrencyErrors, parseDelegation, WAIT_VERB, MARK_VERB } from './delegation.js';
 import { kindFromDir, unitNameFromPath } from './ingest.js';
 import { plugins, pluginOf, pluginOfKey, recordOfLines, lineIssues } from './plugins.js';
@@ -665,13 +665,11 @@ export function lintAgentBlocks(file: string, body: string): LintError[] {
     // the contract so `allows` and this set can never silently diverge.
     const forbidden = new Set<string>(contract.identityKeywords ?? []);
 
-    // Header signature: `AS <role>` is required.
-    if (!parseAgentSignature(block.rest).role) {
-      errors.push({
-        file, line: block.startLine,
-        message: `${block.key} block requires an \`AS <role>\` binding on its header line`,
-      });
-    }
+    // Header signature: `AS <role>, …` is optional — an agent may bind no role, one, or several,
+    // written like every list of the language.
+    const asText = agentAsText(block.rest);
+    const spaced = asText ? spacedListError('AS', asText) : null;
+    if (spaced) errors.push({ file, line: block.startLine, message: spaced });
 
     const childCounts = new Map<string, number>();
     for (const child of block.children) {

@@ -1,0 +1,17 @@
+# invoke-codex
+
+EXPORT TEMPLATE invoke-codex:
+    ABOUT  the command an orchestrator on another harness runs to hand one task to an agent of the codex harness
+
+    SLOTS:
+        project:  TEXT  "the folder the agent works in — the delegation's copy of the project"
+          MUST  run it outside any sandbox of your own: nested in one that forbids user namespaces, the codex sandbox cannot write ("needs access to create user namespaces") — never fall back to --dangerously-bypass-approvals-and-sandbox
+        prompt:   TEXT  "the file holding the task and what it is handed — the apx writes it, naming the agent first: codex picks a custom agent of `.codex/agents/` by the name a prompt gives"
+          MUST  never place a secret or a credential in the task or anywhere on the command line — the codex CLI reads its own credentials
+        answer:   TEXT  "the file codex writes its last message to (`-o`) — the apx reads it back at deliver"
+          MUST  give the process a generous timeout of your own: a run of several minutes is no error
+        shape?:   TEXT  "`--output-schema <file>` when the delegation has an AS: the answer then keeps the template's form"
+    BODY:
+        codex exec -C {project} -s workspace-write --skip-git-repo-check --ephemeral --color never -o {answer} {shape} - < {prompt}
+    EXAMPLE:
+        codex exec -C .agent-pack/work/s-1/dlg-1d06e0a6 -s workspace-write --skip-git-repo-check --ephemeral --color never -o .agent-pack/work/s-1/dlg-1d06e0a6.answer.txt --output-schema .agent-pack/work/s-1/dlg-1d06e0a6.schema.json - < .agent-pack/work/s-1/dlg-1d06e0a6.prompt.md

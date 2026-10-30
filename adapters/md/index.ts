@@ -97,8 +97,8 @@ export function renderPreamble(doc: ApDocument, env: MdEnv): string {
 
   if (root) {
     // Identity + lens — the agent block owns its own md preamble.
-    const roleBlock = root.role ? doc.resolve(root.role) : null;
-    out += root.asMdIdentity(env, roleBlock);
+    const roleBlocks = root.roles.map(r => doc.resolve(r)).filter((b): b is NonNullable<typeof b> => b !== null);
+    out += root.asMdIdentity(env, roleBlocks);
 
     // The agent's own body (rules, WHEN workflows). The legacy strip leaves
     // leading blank lines before the first rule — reproduce their count.

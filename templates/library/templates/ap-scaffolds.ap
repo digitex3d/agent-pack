@@ -157,23 +157,23 @@ EXPORT TEMPLATE ap-block-each:
         {lines}
 
 EXPORT TEMPLATE ap-block-agent:
-  ABOUT   scaffold for an agent-pack AGENT block — fill the slots to emit a valid `AGENT … AS …:` definition
+  ABOUT   scaffold for an agent-pack AGENT block — fill the slots to emit a valid `AGENT …:` definition, with or without AS
   APPLIES #agent-pack, #authoring, #scaffold, #block
 
   SLOTS:
     importable?: ENUM[EXPORT]  "prefix EXPORT to make the agent importable cross-file; omit for a local agent"
     agent-name:  TEXT MAX_WORDS 1  "kebab-case agent name, matching the filename"
-    role-name:   TEXT MAX_WORDS 1  "the role bound via AS — defined inline as ROLE or imported"
+    roles?:      TEXT MAX_WORDS 6  "AS and the generic roles it binds, comma-separated — AS r1, r2; omit for none"
     about:       TEXT MAX_WORDS 20  "external catalog blurb — what the agent does here and how it is routed to"
       MUST   say what the agent does and how it is routed to — never paraphrase the bound role's ABOUT
     mandate:     TEXT MAX_WORDS 20  "the agent's operating directive"
       MUST   carry exactly one MANDATE line
     within?:     ENUM[@WITHIN]  "write @WITHIN above the agent to put its work within domains; omit if unscoped"
     domains?:    TEXT MAX_WORDS 10  "the DOMAINs or #tags its work is within, comma-separated; omit with within"
-    rules?:      LIST <ap-rule>  "project-level contracts for THIS agent; omit if none — behaviour lives in the role"
+    rules?:      LIST <ap-rule>  "what is specific to THIS agent — its own rules; omit if none"
   BODY:
     {within} {domains}
-    {importable} AGENT {agent-name} AS {role-name}:
+    {importable} AGENT {agent-name} {roles}:
         ABOUT    {about}
         MANDATE  {mandate}
         {rules}
@@ -185,18 +185,18 @@ EXPORT TEMPLATE ap-block-agent:
         MUST     store every diagram in the project wiki — never write diagram files directly
 
 EXPORT TEMPLATE ap-block-role:
-  ABOUT   scaffold for a ROLE — the craft an agent binds via AS; identity lives here, never in the agent
+  ABOUT   scaffold for a ROLE — a generic craft several agents share via AS; an agent's own identity stays in the agent
   APPLIES #agent-pack, #authoring, #scaffold, #block
 
   SLOTS:
     importable?: ENUM[EXPORT]  "prefix EXPORT to import the role cross-file; omit for an inline role"
-    role-name:   TEXT MAX_WORDS 1  "kebab-case role name — the craft, vendor- and project-agnostic"
+    role-name:   TEXT MAX_WORDS 1  "kebab-case role name — the generic craft, e.g. reviewer, vendor- and project-agnostic"
     about:       TEXT MAX_WORDS 25  "self-description of the craft — the practitioner"
       MUST   describe the craft itself — never restate the binding agent's wiring or mandate
     expertise?:  TEXT MAX_WORDS 8  "space-separated capability domains (EXPERTISE); omit if none"
     tags?:       TEXT MAX_WORDS 6  "space-separated #tags (APPLIES); omit if none"
     rules:       LIST <ap-rule> >=1  "the role's ALWAYS / NEVER / MUST directives, one per line"
-      MUST   keep all identity here — rules and EXPERTISE live in the role, never in the agent
+      MUST   keep only the craft's rules here — what one agent alone needs lives in that agent
     workflows?:  LIST <ap-workflow>  "optional WHEN-triggered behaviour blocks the role runs"
   BODY:
     {importable} ROLE {role-name}:

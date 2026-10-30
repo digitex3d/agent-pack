@@ -15,7 +15,7 @@ const EXAMPLES = [
 ];
 
 const DEFAULT_CONFIG = `export default {
-  // built-in adapters, by name: claude-code, claude-code-apx, cursor, junie
+  // built-in adapters, by name: claude-code, claude-code-apx, codex, cursor
   adapters: ['claude-code'],
 };
 `;

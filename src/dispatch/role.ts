@@ -6,7 +6,8 @@ import { BundleContext, RoleEntry } from './types.js';
 import { lintFile } from '../lint.js';
 import { checkAndRegister, findInRoots, allLibraryRoots, processImportsOf, LoadRequest } from './shared.js';
 import { parseApplies } from '../services/tags.js';
-import { extractPrimitives, stripPrimitives, unwrapExportFile, liftRoleIdentity } from '../services/text.js';
+import { extractPrimitives, stripPrimitives, unwrapExportFile, liftRoleIdentity, exportedBlocksOf } from '../services/text.js';
+import { parseBlocks } from '../parseBlocks.js';
 import { deslugifyRole } from '../services/role.js';
 import { ingestRaw, unitNameFromPath } from '../ingest.js';
 
@@ -14,8 +15,16 @@ const EXTENDS_RE = /^EXTENDS\s+(.+)$/m;
 const ABOUT_RE = /^ABOUT\s+(.+)$/m;
 const H1_RE = /^#\s+(.+)$/m;
 
-function extractRoleName(body: string, filePath: string): string {
-  const m = body.match(H1_RE);
+/**
+ * A role file's name: its `EXPORT ROLE <name>:` block's, when it has one — a
+ * comment on the first line (`# reviewer — what it does`) describes the file,
+ * it never renames the block; a legacy file without the block is named by its
+ * `# <name>` heading, then by its path.
+ */
+function extractRoleName(raw: string, unwrapped: string, filePath: string): string {
+  const exported = exportedBlocksOf(parseBlocks(raw).blocks)[0]?.name;
+  if (exported) return exported;
+  const m = unwrapped.match(H1_RE);
   if (m) return m[1].trim();
   return unitNameFromPath(filePath);
 }
@@ -74,7 +83,7 @@ function resolveRoleFile(
   const ownTags = parseApplies(extractPrimitives(unwrapped, 'APPLIES')).tags;
   const merged = mergeParent(extractExtends(unwrapped), stripMetadata(unwrapped), absPath, ctx, seen);
   return {
-    name: extractRoleName(unwrapped, absPath),
+    name: extractRoleName(raw, unwrapped, absPath),
     about: extractAbout(unwrapped),
     rules: merged.rules,
     tags: [...new Set([...merged.tags, ...ownTags])],

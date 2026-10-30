@@ -5,13 +5,14 @@
 import { init } from './src/commands/init.js';
 import { bundle } from './src/commands/bundle.js';
 import { agents } from './src/commands/agents.js';
+import { harness } from './src/commands/harness.js';
 import { CREDIT } from './src/credits.js';
 import { banner, isPreRelease } from './reporters/pretty/logo.js';
 import { packageInfo, packageVersion } from './src/config.js';
 
 const [command, ...rest] = process.argv.slice(2);
 
-const commands: Record<string, (args: string[]) => Promise<void>> = { init, bundle, agents };
+const commands: Record<string, (args: string[]) => Promise<void>> = { init, bundle, agents, harness };
 
 if (command === '--version') {
   const version = packageVersion();
@@ -33,6 +34,8 @@ Commands:
   bundle all                     Compile every discovered agent for the configured adapters
   agents list                    List discoverable agents grouped by domain (project, global,
                                  library); filter with --domain, machine output with --json
+  harness list                   The harnesses a delegation can go to (BY <harness>:<agent>): installed,
+                                 enabled in the config, delegable, CLI on the PATH; --json
 
 Options:
   --config <path>   Path to config file (default: ./agent-pack.config.mjs)

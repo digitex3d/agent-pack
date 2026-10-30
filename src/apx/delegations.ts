@@ -65,9 +65,11 @@ export interface DelegationRecord {
    * `@WITHIN`, its assignee's own); `[]` in it writes nothing. '' when none.
    */
   perimeter: string;
+  /** The other harness a delegation goes to (`BY <harness>:<agent>`, D66): it works in a copy, delivered from there and merged; '' otherwise. */
+  harness: string;
 }
 
-const FIELDS: (keyof DelegationRecord)[] = ['dlg', 'flow', 'step', 'into', 'assignee', 'state', 'result', 'reason', 'started_at', 'author', 'mark', 'spec', 'zone', 'writes', 'left_out', 'why', 'perimeter'];
+const FIELDS: (keyof DelegationRecord)[] = ['dlg', 'flow', 'step', 'into', 'assignee', 'state', 'result', 'reason', 'started_at', 'author', 'mark', 'spec', 'zone', 'writes', 'left_out', 'why', 'perimeter', 'harness'];
 
 /** The id of a background piece — or of one run of one inside an EACH (`dlg-<8 hex>-<k>`, D56). */
 export const DELEGATION_ID_RE = /^dlg-[0-9a-f]{8}(?:-[1-9]\d*)?$/;

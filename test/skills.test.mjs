@@ -16,7 +16,7 @@ const { bundleAndEmit } = await import('../dist/src/bundlers/run.js');
 const { discoverAgentsByWalk } = await import('../dist/src/agentDiscovery.js');
 const { default: claudeCodeAdapter } = await import('../dist/adapters/claude-code/index.js');
 const { default: claudeCodeApxAdapter } = await import('../dist/adapters/claude-code-apx/index.js');
-const { default: junieAdapter } = await import('../dist/adapters/junie/index.js');
+const { default: codexAdapter } = await import('../dist/adapters/codex/index.js');
 
 const tmp = mkdtempSync(join(tmpdir(), 'ap-skills-'));
 const prevCwd = process.cwd();
@@ -75,10 +75,10 @@ try {
     assert.ok(skill.content.includes('node .agent-pack/apx/pdf-report.apx start'), skill.content);
   }
 
-  // --- junie: .junie/skills/<name>/SKILL.md ---
+  // --- codex: .agents/skills/<name>/SKILL.md ---
   {
-    const { files } = await bundleAndEmit('pdf-report', config, junieAdapter(), ctx);
-    const skill = files.find(f => f.path.endsWith('.junie/skills/pdf-report/SKILL.md'));
+    const { files } = await bundleAndEmit('pdf-report', config, codexAdapter(), ctx);
+    const skill = files.find(f => f.path.endsWith('.agents/skills/pdf-report/SKILL.md'));
     assert.ok(skill && skill.content.includes('description: turn a PDF into a short report'), files.map(f => f.path).join('\n'));
   }
 
@@ -120,7 +120,7 @@ try {
     assert.ok(!md.includes('quote every table as CSV'), 'the skill\'s own body stays in its apx');
 
     // without the adapter's words, the neutral ones
-    const neutral = await bundleAndEmit('user', config, junieAdapter(), ctx);
+    const neutral = await bundleAndEmit('user', config, codexAdapter(), ctx);
     assert.ok(neutral.bundle.body.includes('it is a skill of your harness — `pdf`'), neutral.bundle.body);
 
     // like a policy: a skill no @WITH names and no perimeter brings applies nowhere

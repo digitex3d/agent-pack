@@ -114,6 +114,30 @@ export function delegationLineErrors(verb: string, rest: string): string[] {
   return errors;
 }
 
+/** The mark between a harness and its agent in a BY: `codex:reviewer`. */
+export const HARNESS_SEP = ':';
+
+/** A BY naming an agent of another harness, split — null when it names no harness. */
+export function splitHarness(by: string): { harness: string; agent: string } | null {
+  const at = by.indexOf(HARNESS_SEP);
+  return at > 0 && at < by.length - 1 ? { harness: by.slice(0, at), agent: by.slice(at + 1) } : null;
+}
+
+/** A recipe as the compiler keeps it in the document (`meta.harnesses`): what the apx fills at `delegate start`. */
+export interface HarnessInvocation {
+  /** The command line, its slots `{project}`, `{agent}`, `{prompt}`, `{answer}`, `{shape}`. */
+  command: string;
+  /** How to run it: the rules of its slots, in order. */
+  rules: string[];
+  cli: string;
+  /** The flag that binds the answer to a JSON Schema, `{schema}` its file — absent when the CLI has none. */
+  shape?: string;
+  /** Files the copy is given from the working folder (`{agent}` its name) — never delivered back. */
+  carry: string[];
+  /** The prompt's first line, `{agent}` its name — absent when the CLI picks the agent itself. */
+  intro?: string;
+}
+
 /** The keywords whose words an adapter may give its own (`renderings.<KEYWORD>.<key>`): how its harness hands work out and waits. */
 const PHRASED = [DELEGATE_VERB, FORK_VERB, WAIT_VERB] as const;
 type Phrased = typeof PHRASED[number];
@@ -152,6 +176,8 @@ export function delegationText(n: {
   mark?: string; list?: string; spec?: { name: string; ref: string }; max?: number; within?: string;
   /** The adapter's own words (`meta.phrases`); a FORK BY's command that reads its agent's definition. */
   phrases?: DelegationPhrases; definition?: string;
+  /** `BY <harness>:<agent>`: the other harness `agent` runs on (D66). */
+  harness?: string;
 }): string {
   const K = phrasesOf(n.phrases);
   if (n.keyword === MARK_VERB) {
@@ -169,6 +195,13 @@ export function delegationText(n: {
     return fill(K.DELEGATE.contracts, { list: n.list, agent: n.agent, background: n.async ? K.DELEGATE.background : '' }) + run + wait;
   }
   const id = n.work && n.element ? fill(K.DELEGATE.element, { work: n.work }) : n.work;
+  // Another harness, launched from outside in a copy of its own (D66): the task and the variables it reads, or the AS's form.
+  if (n.keyword === DELEGATE_VERB && n.harness && n.agent) {
+    const context = n.shaped ? fill(K.DELEGATE.shaped, { name: n.shaped.name, ref: n.shaped.ref }) : K.DELEGATE.harnessContext;
+    const run = n.apx && id ? fill(K.DELEGATE.harnessRun, { apx: n.apx, id, agent: n.agent, harness: n.harness }) + (n.element ? K.DELEGATE.elements : '') : '';
+    const wait = !n.async && n.apx && id ? fill(K.DELEGATE.harnessWait, { apx: n.apx, id }) : '';
+    return fill(K.DELEGATE.harness, { text: n.text, agent: n.agent, harness: n.harness, context, background: n.async ? K.DELEGATE.harnessBackground : '' }) + run + wait;
+  }
   const started = n.apx && id ? fill(K.DELEGATE.started, { apx: n.apx, id }) + (n.element ? K.DELEGATE.elements : '') : '';
   const background = n.async ? K.DELEGATE.background + started : '';
   if (n.keyword === DELEGATE_VERB && n.agent) {
@@ -288,6 +321,8 @@ export interface ApBackgroundWork {
   each?: { max: number };
   /** The domains of the `@WITHIN` closest around it (the flow's, its step's) — the perimeter its work is handed under (D65). */
   within?: string[];
+  /** `BY <harness>:<agent>`: the other harness it is launched on, from outside, in a copy of its own (D66) — a piece even when not in the background. */
+  harness?: string;
 }
 
 /** A MARK of a flow, as the apx keeps it (`meta.marks`): where it is written, the list it fills, the spec of each zone, its limit, its domain. */
@@ -310,6 +345,8 @@ interface FlowNode {
   title?: string;
   async?: true;
   by?: string;
+  /** `BY <harness>:<agent>`: launched on another harness — a piece of the registry, in the background or not. */
+  harness?: string;
   into?: { target: string };
   /** Set here: a background delegation's id (`dlg-…`). */
   work?: string;
@@ -367,12 +404,16 @@ export function bindBackgroundWork(
           node.mark = id;
           if (node.async) running.push({ id, name: node.list });
         }
-      } else if (node.type === 'directive' && isDelegationVerb(node.keyword ?? '') && node.async) {
+      } else if (node.type === 'directive' && isDelegationVerb(node.keyword ?? '') && (node.async || node.harness)) {
+        // In the background — or on another harness, which works in a copy the registry keeps even when waited for at once (D66).
         const id = idOf(JSON.stringify([flow.address, n++]), 'dlg');
         node.work = id;
         if (each) node.element = true;
-        running.push({ id, name: nameOf(node.into) });
-        found[id] = { flow: flow.name, step, verb: node.keyword!, task: node.text ?? '', into: nameOf(node.into), by: node.by ?? null, ...(each ? { each } : {}), ...(within ? { within } : {}) };
+        if (node.async) running.push({ id, name: nameOf(node.into) });
+        found[id] = {
+          flow: flow.name, step, verb: node.keyword!, task: node.text ?? '', into: nameOf(node.into), by: node.by ?? null,
+          ...(each ? { each } : {}), ...(within ? { within } : {}), ...(node.harness ? { harness: node.harness } : {}),
+        };
       } else if (node.type === 'directive' && node.keyword === WAIT_VERB) {
         const wait = parseWait(node.text ?? '');
         const taken = 'all' in wait ? [...running] : running.filter(r => r.name !== null && wait.names.includes(r.name));
@@ -383,6 +424,8 @@ export function bindBackgroundWork(
       if (node.type === 'step') walk(node.body ?? [], node.title ?? '', [], null, within);
       else if (node.type === 'if') { walk(node.then ?? [], step, [], null, within); walk(node.else ?? [], step, [], null, within); }
       else if (node.type === 'until') walk(node.body ?? [], step, [], null, within);
+      // An agent's WHEN: its lines, where a delegation to another harness is a piece too.
+      else if (node.type === 'when') walk(node.body ?? [], step, [], null, within);
       // An EACH is no scope: what its runs start is waited for in its step.
       else if (node.type === 'each') walk(node.body ?? [], step, running, node.each ?? null, within);
       // A `@WITHIN`'s body works within its domains — the closest one holds, the compiler keeps it inside the outer (D32).

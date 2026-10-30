@@ -1,0 +1,10741 @@
+[
+ {
+  "name": "role flat: PROCEDURE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "PROCEDURE something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"PROCEDURE something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: PROCEDURE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  PROCEDURE something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"PROCEDURE something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: PROCEDURE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "PROCEDURE something"
+  ],
+  "expected": [
+   [
+    1,
+    "procedure has 2 PROCEDURE headers (expected 1)",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: PROCEDURE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  PROCEDURE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: PROCEDURE",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  PROCEDURE something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"PROCEDURE something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: PROCEDURE",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  PROCEDURE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: TEMPLATE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "TEMPLATE something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"TEMPLATE something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: TEMPLATE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  TEMPLATE something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"TEMPLATE something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: TEMPLATE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "TEMPLATE something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"TEMPLATE something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: TEMPLATE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  TEMPLATE something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"TEMPLATE something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: TEMPLATE",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  TEMPLATE something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"TEMPLATE something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: TEMPLATE",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  TEMPLATE something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a procedure: \"TEMPLATE something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: EXTENDS",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "EXTENDS something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: EXTENDS",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  EXTENDS something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: EXTENDS",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "EXTENDS something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"EXTENDS something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: EXTENDS",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  EXTENDS something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"EXTENDS something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: EXTENDS",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  EXTENDS something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: EXTENDS",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  EXTENDS something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a procedure: \"EXTENDS something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: APPLIES",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "APPLIES something"
+  ],
+  "expected": [
+   [
+    4,
+    "APPLIES token \"something\" is invalid — expected a classic flat hashtag like #kebab-slug (no slashes, no missing #), or universal, team:<team> or agent:<agent>",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: APPLIES",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  APPLIES something"
+  ],
+  "expected": [
+   [
+    5,
+    "APPLIES token \"something\" is invalid — expected a classic flat hashtag like #kebab-slug (no slashes, no missing #), or universal, team:<team> or agent:<agent>",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: APPLIES",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "APPLIES something"
+  ],
+  "expected": [
+   [
+    5,
+    "APPLIES token \"something\" is invalid — expected a classic flat hashtag like #kebab-slug (no slashes, no missing #), or universal, team:<team> or agent:<agent>",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: APPLIES",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  APPLIES something"
+  ],
+  "expected": [
+   [
+    5,
+    "APPLIES token \"something\" is invalid — expected a classic flat hashtag like #kebab-slug (no slashes, no missing #), or universal, team:<team> or agent:<agent>",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: APPLIES",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  APPLIES something"
+  ],
+  "expected": [
+   [
+    6,
+    "APPLIES token \"something\" is invalid — expected a classic flat hashtag like #kebab-slug (no slashes, no missing #), or universal, team:<team> or agent:<agent>",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: APPLIES",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  APPLIES something"
+  ],
+  "expected": [
+   [
+    6,
+    "APPLIES token \"something\" is invalid — expected a classic flat hashtag like #kebab-slug (no slashes, no missing #), or universal, team:<team> or agent:<agent>",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: IMPORT",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "IMPORT something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: IMPORT",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  IMPORT something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: IMPORT",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "IMPORT something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: IMPORT",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  IMPORT something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: IMPORT",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  IMPORT something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: IMPORT",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  IMPORT something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: UNTIL",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "UNTIL something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: UNTIL",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  UNTIL something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: UNTIL",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "UNTIL something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: UNTIL",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  UNTIL something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: UNTIL",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  UNTIL something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: UNTIL",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  UNTIL something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: ABOUT",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "ABOUT something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: ABOUT",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  ABOUT something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: ABOUT",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "ABOUT something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: ABOUT",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  ABOUT something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: ABOUT",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  ABOUT something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: ABOUT",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  ABOUT something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: SCOPE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "SCOPE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: SCOPE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  SCOPE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: SCOPE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "SCOPE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: SCOPE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  SCOPE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: SCOPE",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  SCOPE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: SCOPE",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  SCOPE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: ELSE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "ELSE something"
+  ],
+  "expected": [
+   [
+    4,
+    "ELSE must follow an IF in the same body",
+    null,
+    "r.role.ap"
+   ],
+   [
+    4,
+    "IF/ELSE block body must be indented (Python-style): \"ELSE something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: ELSE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  ELSE something"
+  ],
+  "expected": [
+   [
+    5,
+    "ELSE must follow an IF in the same body",
+    null,
+    "r.role.ap"
+   ],
+   [
+    5,
+    "IF/ELSE block body must be indented (Python-style): \"ELSE something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: ELSE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "ELSE something"
+  ],
+  "expected": [
+   [
+    5,
+    "ELSE must follow an IF in the same body",
+    null,
+    "p.procedure.ap"
+   ],
+   [
+    5,
+    "IF/ELSE block body must be indented (Python-style): \"ELSE something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: ELSE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  ELSE something"
+  ],
+  "expected": [
+   [
+    5,
+    "ELSE must follow an IF in the same body",
+    null,
+    "p.procedure.ap"
+   ],
+   [
+    5,
+    "IF/ELSE block body must be indented (Python-style): \"ELSE something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: ELSE",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  ELSE something"
+  ],
+  "expected": [
+   [
+    6,
+    "ELSE must follow an IF in the same body",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "IF/ELSE block body must be indented (Python-style): \"ELSE something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: ELSE",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  ELSE something"
+  ],
+  "expected": [
+   [
+    6,
+    "ELSE must follow an IF in the same body",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "IF/ELSE block body must be indented (Python-style): \"ELSE something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: WHEN",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "WHEN something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: WHEN",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  WHEN something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: WHEN",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "WHEN something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"WHEN something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: WHEN",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  WHEN something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"WHEN something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: WHEN",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  WHEN something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: WHEN",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  WHEN something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a procedure: \"WHEN something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: OWNS",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "OWNS something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"OWNS something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: OWNS",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  OWNS something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"OWNS something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: OWNS",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "OWNS something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"OWNS something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: OWNS",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  OWNS something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"OWNS something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: OWNS",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  OWNS something"
+  ],
+  "expected": [
+   [
+    6,
+    "OWNS was removed — declare the files as `EXPORT DOMAIN <name>:` with `WRITES IN something`, and write `@WITHIN <name>` above the agent: \"OWNS something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"OWNS something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: OWNS",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  OWNS something"
+  ],
+  "expected": [
+   [
+    6,
+    "OWNS was removed — declare the files as `EXPORT DOMAIN <name>:` with `WRITES IN something`, and write `@WITHIN <name>` above the agent: \"OWNS something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"OWNS something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: WITH",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "WITH something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"WITH something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: WITH",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  WITH something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"WITH something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: WITH",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "WITH something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"WITH something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: WITH",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  WITH something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"WITH something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: WITH",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  WITH something"
+  ],
+  "expected": [
+   [
+    6,
+    "WITH became a decorator — write `@WITH <names>` right above the block it is for, or `@WITH <names>:` around the lines: \"WITH something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"WITH something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: WITH",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  WITH something"
+  ],
+  "expected": [
+   [
+    6,
+    "WITH became a decorator — write `@WITH <names>` right above the block it is for, or `@WITH <names>:` around the lines: \"WITH something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"WITH something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: RUN",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "RUN something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: RUN",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  RUN something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: RUN",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "RUN something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: RUN",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  RUN something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: RUN",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  RUN something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: RUN",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  RUN something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: VAR",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "VAR something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: VAR",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  VAR something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: VAR",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "VAR something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: VAR",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  VAR something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: VAR",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  VAR something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: VAR",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  VAR something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: IF",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "IF something"
+  ],
+  "expected": [
+   [
+    4,
+    "IF/ELSE block body must be indented (Python-style): \"IF something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: IF",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  IF something"
+  ],
+  "expected": [
+   [
+    5,
+    "IF/ELSE block body must be indented (Python-style): \"IF something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: IF",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "IF something"
+  ],
+  "expected": [
+   [
+    5,
+    "IF/ELSE block body must be indented (Python-style): \"IF something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: IF",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  IF something"
+  ],
+  "expected": [
+   [
+    5,
+    "IF/ELSE block body must be indented (Python-style): \"IF something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: IF",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  IF something"
+  ],
+  "expected": [
+   [
+    6,
+    "IF/ELSE block body must be indented (Python-style): \"IF something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: IF",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  IF something"
+  ],
+  "expected": [
+   [
+    6,
+    "IF/ELSE block body must be indented (Python-style): \"IF something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: DO",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "DO something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: DO",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  DO something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: DO",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "DO something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: DO",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  DO something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: DO",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  DO something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: DO",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  DO something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: DELEGATE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "DELEGATE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: DELEGATE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  DELEGATE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: DELEGATE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "DELEGATE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: DELEGATE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  DELEGATE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: DELEGATE",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  DELEGATE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: DELEGATE",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  DELEGATE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: COMPUTE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "COMPUTE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: COMPUTE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  COMPUTE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: COMPUTE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "COMPUTE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: COMPUTE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  COMPUTE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: COMPUTE",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  COMPUTE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: COMPUTE",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  COMPUTE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: FORK",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "FORK something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"FORK something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: FORK",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  FORK something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"FORK something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: FORK",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "FORK something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"FORK something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: FORK",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  FORK something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"FORK something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: FORK",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  FORK something"
+  ],
+  "expected": [
+   [
+    6,
+    "FORK hands work to a fork of whoever runs a flow — it stands in a flow STEP; here, write DELEGATE",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"FORK something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: FORK",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  FORK something"
+  ],
+  "expected": [
+   [
+    6,
+    "FORK hands work to a fork of whoever runs a flow — it stands in a flow STEP; here, write DELEGATE",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"FORK something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: WAIT",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "WAIT something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"WAIT something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: WAIT",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  WAIT something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"WAIT something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: WAIT",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "WAIT something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"WAIT something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: WAIT",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  WAIT something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"WAIT something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: WAIT",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  WAIT something"
+  ],
+  "expected": [
+   [
+    6,
+    "WAIT takes back what a STEP started with ~ — it stands in a flow STEP",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"WAIT something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: WAIT",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  WAIT something"
+  ],
+  "expected": [
+   [
+    6,
+    "WAIT takes back what a STEP started with ~ — it stands in a flow STEP",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"WAIT something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: MARK",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "MARK something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"MARK something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: MARK",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  MARK something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"MARK something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: MARK",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "MARK something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"MARK something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: MARK",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  MARK something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"MARK something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: MARK",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  MARK something"
+  ],
+  "expected": [
+   [
+    6,
+    "MARK needs the list its contracts make up — `MARK <criterion> INTO <name> AS <spec> [MAX <n>] [WITHIN <domain>]`",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "MARK needs the spec of each zone — every contract is one `AS <template>`: `MARK <criterion> INTO <name> AS <spec> [MAX <n>] [WITHIN <domain>]`",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "MARK binds zones of the code to contracts for a flow to hand out — it stands in a flow STEP",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"MARK something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: MARK",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  MARK something"
+  ],
+  "expected": [
+   [
+    6,
+    "MARK needs the list its contracts make up — `MARK <criterion> INTO <name> AS <spec> [MAX <n>] [WITHIN <domain>]`",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "MARK needs the spec of each zone — every contract is one `AS <template>`: `MARK <criterion> INTO <name> AS <spec> [MAX <n>] [WITHIN <domain>]`",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "MARK binds zones of the code to contracts for a flow to hand out — it stands in a flow STEP",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"MARK something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: ASK",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "ASK something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"ASK something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: ASK",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  ASK something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"ASK something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: ASK",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "ASK something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"ASK something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: ASK",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  ASK something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"ASK something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: ASK",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  ASK something"
+  ],
+  "expected": [
+   [
+    6,
+    "ASK became DELEGATE — write `DELEGATE <task> INTO <name> BY <agent>`: \"ASK something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"ASK something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: ASK",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  ASK something"
+  ],
+  "expected": [
+   [
+    6,
+    "ASK became DELEGATE — write `DELEGATE <task> INTO <name> BY <agent>`: \"ASK something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"ASK something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: CONTRACT",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "CONTRACT something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"CONTRACT something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: CONTRACT",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  CONTRACT something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"CONTRACT something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: CONTRACT",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "CONTRACT something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"CONTRACT something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: CONTRACT",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  CONTRACT something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"CONTRACT something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: CONTRACT",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  CONTRACT something"
+  ],
+  "expected": [
+   [
+    6,
+    "CONTRACT blocks were removed — a contract is what a MARK makes: a flow marks the zones and hands them out itself — in a STEP, `MARK <criterion> INTO <list> AS <spec>`, then `DELEGATE <list> BY <agent>`: \"CONTRACT something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"CONTRACT something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: CONTRACT",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  CONTRACT something"
+  ],
+  "expected": [
+   [
+    6,
+    "CONTRACT blocks were removed — a contract is what a MARK makes: a flow marks the zones and hands them out itself — in a STEP, `MARK <criterion> INTO <list> AS <spec>`, then `DELEGATE <list> BY <agent>`: \"CONTRACT something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"CONTRACT something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: SESSION",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "SESSION something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"SESSION something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: SESSION",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  SESSION something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"SESSION something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: SESSION",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "SESSION something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"SESSION something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: SESSION",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  SESSION something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"SESSION something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: SESSION",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  SESSION something"
+  ],
+  "expected": [
+   [
+    6,
+    "SESSION is a variable's scope — it stands only right before VAR: `SESSION VAR <name>`",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"SESSION something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: SESSION",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  SESSION something"
+  ],
+  "expected": [
+   [
+    6,
+    "SESSION is a variable's scope — it stands only right before VAR: `SESSION VAR <name>`",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"SESSION something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: GLOBAL",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "GLOBAL something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"GLOBAL something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: GLOBAL",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  GLOBAL something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"GLOBAL something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: GLOBAL",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "GLOBAL something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"GLOBAL something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: GLOBAL",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  GLOBAL something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"GLOBAL something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: GLOBAL",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  GLOBAL something"
+  ],
+  "expected": [
+   [
+    6,
+    "GLOBAL is a variable's scope — it stands only right before VAR: `GLOBAL VAR <name>`",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"GLOBAL something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: GLOBAL",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  GLOBAL something"
+  ],
+  "expected": [
+   [
+    6,
+    "GLOBAL is a variable's scope — it stands only right before VAR: `GLOBAL VAR <name>`",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"GLOBAL something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: ROLE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "ROLE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: ROLE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  ROLE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: ROLE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "ROLE something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"ROLE something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: ROLE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  ROLE something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"ROLE something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: ROLE",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  ROLE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: ROLE",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  ROLE something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a procedure: \"ROLE something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: EXPERTISE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "EXPERTISE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: EXPERTISE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  EXPERTISE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: EXPERTISE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "EXPERTISE something"
+  ],
+  "expected": [
+   [
+    5,
+    "EXPERTISE is only allowed in a role — it is the bound role's identity; declare it in the role the agent binds via AS",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: EXPERTISE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  EXPERTISE something"
+  ],
+  "expected": [
+   [
+    5,
+    "EXPERTISE is only allowed in a role — it is the bound role's identity; declare it in the role the agent binds via AS",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: EXPERTISE",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  EXPERTISE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: EXPERTISE",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  EXPERTISE something"
+  ],
+  "expected": [
+   [
+    6,
+    "EXPERTISE is only allowed in a role — it is the bound role's identity; declare it in the role the agent binds via AS",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: MANDATE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "MANDATE something"
+  ],
+  "expected": [
+   [
+    4,
+    "MANDATE is only allowed inside an EXPORT AGENT block",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: MANDATE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  MANDATE something"
+  ],
+  "expected": [
+   [
+    5,
+    "MANDATE is only allowed inside an EXPORT AGENT block",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: MANDATE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "MANDATE something"
+  ],
+  "expected": [
+   [
+    5,
+    "MANDATE is only allowed inside an EXPORT AGENT block",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: MANDATE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  MANDATE something"
+  ],
+  "expected": [
+   [
+    5,
+    "MANDATE is only allowed inside an EXPORT AGENT block",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: MANDATE",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  MANDATE something"
+  ],
+  "expected": [
+   [
+    6,
+    "MANDATE is only allowed inside an EXPORT AGENT block",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: MANDATE",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  MANDATE something"
+  ],
+  "expected": [
+   [
+    6,
+    "MANDATE is only allowed inside an EXPORT AGENT block",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: BUDGET",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "BUDGET something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"BUDGET something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: BUDGET",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  BUDGET something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"BUDGET something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: BUDGET",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "BUDGET something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"BUDGET something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: BUDGET",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  BUDGET something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"BUDGET something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: BUDGET",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  BUDGET something"
+  ],
+  "expected": [
+   [
+    6,
+    "BUDGET: unknown value `something` (allowed: cheap, moderate, costly)",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"BUDGET something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: BUDGET",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  BUDGET something"
+  ],
+  "expected": [
+   [
+    6,
+    "BUDGET: unknown value `something` (allowed: cheap, moderate, costly)",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"BUDGET something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: LENS-OUT",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "LENS-OUT something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"LENS-OUT something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: LENS-OUT",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  LENS-OUT something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"LENS-OUT something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: LENS-OUT",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "LENS-OUT something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"LENS-OUT something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: LENS-OUT",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  LENS-OUT something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"LENS-OUT something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: LENS-OUT",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  LENS-OUT something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"LENS-OUT something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: LENS-OUT",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  LENS-OUT something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a procedure: \"LENS-OUT something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: LENS-IN",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "LENS-IN something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"LENS-IN something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: LENS-IN",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  LENS-IN something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"LENS-IN something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: LENS-IN",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "LENS-IN something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: LENS-IN",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  LENS-IN something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: LENS-IN",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  LENS-IN something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"LENS-IN something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: LENS-IN",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  LENS-IN something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: FLOW",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "FLOW something"
+  ],
+  "expected": [
+   [
+    4,
+    "FLOW is only allowed in a flow",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: FLOW",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  FLOW something"
+  ],
+  "expected": [
+   [
+    5,
+    "FLOW is only allowed in a flow",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: FLOW",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "FLOW something"
+  ],
+  "expected": [
+   [
+    5,
+    "FLOW is only allowed in a flow",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: FLOW",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  FLOW something"
+  ],
+  "expected": [
+   [
+    5,
+    "FLOW is only allowed in a flow",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: FLOW",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  FLOW something"
+  ],
+  "expected": [
+   [
+    6,
+    "FLOW is only allowed in a flow",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: FLOW",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  FLOW something"
+  ],
+  "expected": [
+   [
+    6,
+    "FLOW is only allowed in a flow",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: STEP",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "STEP something"
+  ],
+  "expected": [
+   [
+    4,
+    "STEP is only allowed in a flow",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: STEP",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  STEP something"
+  ],
+  "expected": [
+   [
+    5,
+    "STEP is only allowed in a flow",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: STEP",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "STEP something"
+  ],
+  "expected": [
+   [
+    5,
+    "STEP is only allowed in a flow",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: STEP",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  STEP something"
+  ],
+  "expected": [
+   [
+    5,
+    "STEP is only allowed in a flow",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: STEP",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  STEP something"
+  ],
+  "expected": [
+   [
+    6,
+    "STEP is only allowed in a flow",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: STEP",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  STEP something"
+  ],
+  "expected": [
+   [
+    6,
+    "STEP is only allowed in a flow",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: PARALLEL",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "PARALLEL something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"PARALLEL something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: PARALLEL",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  PARALLEL something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"PARALLEL something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: PARALLEL",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "PARALLEL something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"PARALLEL something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: PARALLEL",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  PARALLEL something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"PARALLEL something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: PARALLEL",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  PARALLEL something"
+  ],
+  "expected": [
+   [
+    6,
+    "PARALLEL was removed — in one STEP, start each piece with `DELEGATE~ <task> INTO <name> BY <agent>`, then `WAIT ALL`; one run per element of a list: `EACH <item> IN {{<list>}} MAX <n>:` with its DELEGATE or FORK lines beneath: \"PARALLEL something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"PARALLEL something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: PARALLEL",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  PARALLEL something"
+  ],
+  "expected": [
+   [
+    6,
+    "PARALLEL was removed — in one STEP, start each piece with `DELEGATE~ <task> INTO <name> BY <agent>`, then `WAIT ALL`; one run per element of a list: `EACH <item> IN {{<list>}} MAX <n>:` with its DELEGATE or FORK lines beneath: \"PARALLEL something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"PARALLEL something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: CONTEXT",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "CONTEXT something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"CONTEXT something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: CONTEXT",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  CONTEXT something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"CONTEXT something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: CONTEXT",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "CONTEXT something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"CONTEXT something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: CONTEXT",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  CONTEXT something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"CONTEXT something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: CONTEXT",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  CONTEXT something"
+  ],
+  "expected": [
+   [
+    6,
+    "CONTEXT was removed — the form of a DELEGATE says the context: `DELEGATE … BY <agent>` hands over all of it, `DELEGATE … BY <agent> AS <template>` only what the template holds, `FORK …` the conversation itself: \"CONTEXT something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"CONTEXT something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: CONTEXT",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  CONTEXT something"
+  ],
+  "expected": [
+   [
+    6,
+    "CONTEXT was removed — the form of a DELEGATE says the context: `DELEGATE … BY <agent>` hands over all of it, `DELEGATE … BY <agent> AS <template>` only what the template holds, `FORK …` the conversation itself: \"CONTEXT something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"CONTEXT something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: BY",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "BY something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"BY something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: BY",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  BY something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"BY something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: BY",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "BY something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"BY something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: BY",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  BY something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"BY something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: BY",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  BY something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"BY something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: BY",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  BY something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a procedure: \"BY something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: MEMBER",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "MEMBER something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"MEMBER something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: MEMBER",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  MEMBER something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"MEMBER something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: MEMBER",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "MEMBER something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"MEMBER something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: MEMBER",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  MEMBER something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"MEMBER something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: MEMBER",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  MEMBER something"
+  ],
+  "expected": [
+   [
+    6,
+    "MEMBER is a line of a TEAM block — found inside ROLE",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"MEMBER something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: MEMBER",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  MEMBER something"
+  ],
+  "expected": [
+   [
+    6,
+    "MEMBER is a line of a TEAM block — found inside PROCEDURE",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"MEMBER something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: STRATEGY",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "STRATEGY something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"STRATEGY something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: STRATEGY",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  STRATEGY something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"STRATEGY something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: STRATEGY",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "STRATEGY something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"STRATEGY something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: STRATEGY",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  STRATEGY something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"STRATEGY something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: STRATEGY",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  STRATEGY something"
+  ],
+  "expected": [
+   [
+    6,
+    "STRATEGY was removed — a team runs by its own flows: a flow marks the zones and hands them out itself — in a STEP, `MARK <criterion> INTO <list> AS <spec>`, then `DELEGATE <list> BY <agent>`: \"STRATEGY something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"STRATEGY something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: STRATEGY",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  STRATEGY something"
+  ],
+  "expected": [
+   [
+    6,
+    "STRATEGY was removed — a team runs by its own flows: a flow marks the zones and hands them out itself — in a STEP, `MARK <criterion> INTO <list> AS <spec>`, then `DELEGATE <list> BY <agent>`: \"STRATEGY something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"STRATEGY something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: LEAD",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "LEAD something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"LEAD something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: LEAD",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  LEAD something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"LEAD something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: LEAD",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "LEAD something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"LEAD something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: LEAD",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  LEAD something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"LEAD something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: LEAD",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  LEAD something"
+  ],
+  "expected": [
+   [
+    6,
+    "LEAD was removed — whoever runs a flow leads it: a flow marks the zones and hands them out itself — in a STEP, `MARK <criterion> INTO <list> AS <spec>`, then `DELEGATE <list> BY <agent>`: \"LEAD something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"LEAD something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: LEAD",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  LEAD something"
+  ],
+  "expected": [
+   [
+    6,
+    "LEAD was removed — whoever runs a flow leads it: a flow marks the zones and hands them out itself — in a STEP, `MARK <criterion> INTO <list> AS <spec>`, then `DELEGATE <list> BY <agent>`: \"LEAD something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"LEAD something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: DOMAINS",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "DOMAINS something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"DOMAINS something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: DOMAINS",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  DOMAINS something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"DOMAINS something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: DOMAINS",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "DOMAINS something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"DOMAINS something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: DOMAINS",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  DOMAINS something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"DOMAINS something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: DOMAINS",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  DOMAINS something"
+  ],
+  "expected": [
+   [
+    6,
+    "DOMAINS was removed — the files of a domain are its `EXPORT DOMAIN <name>:` block's WRITES and READS, and a CONTRACT's `DOMAIN <name>` goes to an agent within it (`@WITHIN <name>`): \"DOMAINS something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"DOMAINS something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: DOMAINS",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  DOMAINS something"
+  ],
+  "expected": [
+   [
+    6,
+    "DOMAINS was removed — the files of a domain are its `EXPORT DOMAIN <name>:` block's WRITES and READS, and a CONTRACT's `DOMAIN <name>` goes to an agent within it (`@WITHIN <name>`): \"DOMAINS something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"DOMAINS something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: DOMAIN",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "DOMAIN something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"DOMAIN something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: DOMAIN",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  DOMAIN something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"DOMAIN something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: DOMAIN",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "DOMAIN something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"DOMAIN something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: DOMAIN",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  DOMAIN something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"DOMAIN something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: DOMAIN",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  DOMAIN something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"DOMAIN something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: DOMAIN",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  DOMAIN something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a procedure: \"DOMAIN something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: WITHIN",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "WITHIN something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"WITHIN something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: WITHIN",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  WITHIN something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"WITHIN something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: WITHIN",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "WITHIN something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"WITHIN something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: WITHIN",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  WITHIN something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"WITHIN something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: WITHIN",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  WITHIN something"
+  ],
+  "expected": [
+   [
+    6,
+    "a WITHIN line was a CONTRACT's — a contract may write beyond its zones by its MARK: `MARK … AS <spec> WITHIN <domain>`; work is put within a domain by `@WITHIN <domain>`: \"WITHIN something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"WITHIN something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: WITHIN",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  WITHIN something"
+  ],
+  "expected": [
+   [
+    6,
+    "a WITHIN line was a CONTRACT's — a contract may write beyond its zones by its MARK: `MARK … AS <spec> WITHIN <domain>`; work is put within a domain by `@WITHIN <domain>`: \"WITHIN something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"WITHIN something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: STORE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "STORE something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"STORE something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: STORE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  STORE something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"STORE something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: STORE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "STORE something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"STORE something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: STORE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  STORE something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"STORE something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: STORE",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  STORE something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"STORE something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: STORE",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  STORE something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a procedure: \"STORE something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: TYPE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "TYPE something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"TYPE something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: TYPE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  TYPE something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"TYPE something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: TYPE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "TYPE something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"TYPE something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: TYPE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  TYPE something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"TYPE something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: TYPE",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  TYPE something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"TYPE something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: TYPE",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  TYPE something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a procedure: \"TYPE something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: LASTS",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "LASTS something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"LASTS something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: LASTS",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  LASTS something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"LASTS something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: LASTS",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "LASTS something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"LASTS something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: LASTS",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  LASTS something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"LASTS something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: LASTS",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  LASTS something"
+  ],
+  "expected": [
+   [
+    6,
+    "LASTS: unknown value `something` (allowed: session, project)",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"LASTS something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: LASTS",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  LASTS something"
+  ],
+  "expected": [
+   [
+    6,
+    "LASTS: unknown value `something` (allowed: session, project)",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"LASTS something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: KEY",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "KEY something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"KEY something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: KEY",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  KEY something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"KEY something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: KEY",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "KEY something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"KEY something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: KEY",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  KEY something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"KEY something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: KEY",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  KEY something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"KEY something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: KEY",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  KEY something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a procedure: \"KEY something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: DIMENSION",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "DIMENSION something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"DIMENSION something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: DIMENSION",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  DIMENSION something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"DIMENSION something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: DIMENSION",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "DIMENSION something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"DIMENSION something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: DIMENSION",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  DIMENSION something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"DIMENSION something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: DIMENSION",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  DIMENSION something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"DIMENSION something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: DIMENSION",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  DIMENSION something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a procedure: \"DIMENSION something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: FOR",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "FOR something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"FOR something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: FOR",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  FOR something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"FOR something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: FOR",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "FOR something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"FOR something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: FOR",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  FOR something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"FOR something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: FOR",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  FOR something"
+  ],
+  "expected": [
+   [
+    6,
+    "FOR is a line of a DIMENSION block — found inside ROLE",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"FOR something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: FOR",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  FOR something"
+  ],
+  "expected": [
+   [
+    6,
+    "FOR is a line of a DIMENSION block — found inside PROCEDURE",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"FOR something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: EACH",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "EACH something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"EACH something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: EACH",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  EACH something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"EACH something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: EACH",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "EACH something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"EACH something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: EACH",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  EACH something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"EACH something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: EACH",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  EACH something"
+  ],
+  "expected": [
+   [
+    6,
+    "EACH is a line of a DIMENSION block — found inside ROLE",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"EACH something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: EACH",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  EACH something"
+  ],
+  "expected": [
+   [
+    6,
+    "EACH is a line of a DIMENSION block — found inside PROCEDURE",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"EACH something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: WRITES",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "WRITES something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"WRITES something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: WRITES",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  WRITES something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"WRITES something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: WRITES",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "WRITES something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"WRITES something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: WRITES",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  WRITES something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"WRITES something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: WRITES",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  WRITES something"
+  ],
+  "expected": [
+   [
+    6,
+    "WRITES is a line of a DOMAIN block — found inside ROLE",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"WRITES something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: WRITES",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  WRITES something"
+  ],
+  "expected": [
+   [
+    6,
+    "WRITES is a line of a DOMAIN block — found inside PROCEDURE",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"WRITES something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: READS",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "READS something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"READS something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: READS",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  READS something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"READS something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: READS",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "READS something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"READS something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: READS",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  READS something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"READS something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: READS",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  READS something"
+  ],
+  "expected": [
+   [
+    6,
+    "READS is a line of a DOMAIN block — found inside ROLE",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"READS something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: READS",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  READS something"
+  ],
+  "expected": [
+   [
+    6,
+    "READS is a line of a DOMAIN block — found inside PROCEDURE",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"READS something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: IN",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "IN something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"IN something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: IN",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  IN something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"IN something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: IN",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "IN something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"IN something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: IN",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  IN something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"IN something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: IN",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  IN something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"IN something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: IN",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  IN something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a procedure: \"IN something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: MUST",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "MUST something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: MUST",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  MUST something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: MUST",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "MUST something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: MUST",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  MUST something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: MUST",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  MUST something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: MUST",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  MUST something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: ALWAYS",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "ALWAYS something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: ALWAYS",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  ALWAYS something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: ALWAYS",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "ALWAYS something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: ALWAYS",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  ALWAYS something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: ALWAYS",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  ALWAYS something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: ALWAYS",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  ALWAYS something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: SHOULD",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "SHOULD something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: SHOULD",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  SHOULD something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: SHOULD",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "SHOULD something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: SHOULD",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  SHOULD something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: SHOULD",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  SHOULD something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: SHOULD",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  SHOULD something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: MAY",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "MAY something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: MAY",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  MAY something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: MAY",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "MAY something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: MAY",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  MAY something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: MAY",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  MAY something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: MAY",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  MAY something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: AS",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "AS something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: AS",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  AS something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: AS",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "AS something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: AS",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  AS something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: AS",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  AS something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: AS",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  AS something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: MEM",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "MEM something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: MEM",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  MEM something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: MEM",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "MEM something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: MEM",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  MEM something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: MEM",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  MEM something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: MEM",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  MEM something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: MUST-NOT",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "MUST-NOT something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: MUST-NOT",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  MUST-NOT something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: MUST-NOT",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "MUST-NOT something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: MUST-NOT",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  MUST-NOT something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: MUST-NOT",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  MUST-NOT something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: MUST-NOT",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  MUST-NOT something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: NON-NEGOTIABLE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "NON-NEGOTIABLE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: NON-NEGOTIABLE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  NON-NEGOTIABLE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: NON-NEGOTIABLE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "NON-NEGOTIABLE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: NON-NEGOTIABLE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  NON-NEGOTIABLE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: NON-NEGOTIABLE",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  NON-NEGOTIABLE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: NON-NEGOTIABLE",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  NON-NEGOTIABLE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: NEVER",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "NEVER something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: NEVER",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  NEVER something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: NEVER",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "NEVER something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: NEVER",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  NEVER something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: NEVER",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  NEVER something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: NEVER",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  NEVER something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: SHOULD-NOT",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "SHOULD-NOT something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: SHOULD-NOT",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  SHOULD-NOT something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: SHOULD-NOT",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "SHOULD-NOT something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: SHOULD-NOT",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  SHOULD-NOT something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: SHOULD-NOT",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  SHOULD-NOT something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: SHOULD-NOT",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  SHOULD-NOT something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: ON-INVOKE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "ON-INVOKE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: ON-INVOKE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  ON-INVOKE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: ON-INVOKE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "ON-INVOKE something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"ON-INVOKE something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: ON-INVOKE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  ON-INVOKE something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"ON-INVOKE something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: ON-INVOKE",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  ON-INVOKE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: ON-INVOKE",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  ON-INVOKE something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a procedure: \"ON-INVOKE something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: ON-AGENT-PROMPTED",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "ON-AGENT-PROMPTED something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: ON-AGENT-PROMPTED",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  ON-AGENT-PROMPTED something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: ON-AGENT-PROMPTED",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "ON-AGENT-PROMPTED something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"ON-AGENT-PROMPTED something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: ON-AGENT-PROMPTED",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  ON-AGENT-PROMPTED something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"ON-AGENT-PROMPTED something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: ON-AGENT-PROMPTED",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  ON-AGENT-PROMPTED something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: ON-AGENT-PROMPTED",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  ON-AGENT-PROMPTED something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a procedure: \"ON-AGENT-PROMPTED something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: ON-TASK-COMPLETED",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "ON-TASK-COMPLETED something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: ON-TASK-COMPLETED",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  ON-TASK-COMPLETED something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: ON-TASK-COMPLETED",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "ON-TASK-COMPLETED something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"ON-TASK-COMPLETED something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: ON-TASK-COMPLETED",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  ON-TASK-COMPLETED something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"ON-TASK-COMPLETED something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: ON-TASK-COMPLETED",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  ON-TASK-COMPLETED something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: ON-TASK-COMPLETED",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  ON-TASK-COMPLETED something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a procedure: \"ON-TASK-COMPLETED something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: ON-ERROR",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "ON-ERROR something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: ON-ERROR",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  ON-ERROR something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: ON-ERROR",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "ON-ERROR something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"ON-ERROR something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: ON-ERROR",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  ON-ERROR something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"ON-ERROR something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: ON-ERROR",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  ON-ERROR something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: ON-ERROR",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  ON-ERROR something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a procedure: \"ON-ERROR something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: ON-DELEGATE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "ON-DELEGATE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: ON-DELEGATE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  ON-DELEGATE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: ON-DELEGATE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "ON-DELEGATE something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"ON-DELEGATE something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: ON-DELEGATE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  ON-DELEGATE something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"ON-DELEGATE something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: ON-DELEGATE",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  ON-DELEGATE something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: ON-DELEGATE",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  ON-DELEGATE something"
+  ],
+  "expected": [
+   [
+    6,
+    "unexpected line in a procedure: \"ON-DELEGATE something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: !ALWAYS",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "!ALWAYS something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: !ALWAYS",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  !ALWAYS something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: !ALWAYS",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "!ALWAYS something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: !ALWAYS",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  !ALWAYS something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: !ALWAYS",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  !ALWAYS something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: !ALWAYS",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  !ALWAYS something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: SHOULD!",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "SHOULD! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: SHOULD!",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  SHOULD! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: SHOULD!",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "SHOULD! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: SHOULD!",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  SHOULD! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: SHOULD!",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  SHOULD! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: SHOULD!",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  SHOULD! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: !SHOULD",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "!SHOULD something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: !SHOULD",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  !SHOULD something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: !SHOULD",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "!SHOULD something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: !SHOULD",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  !SHOULD something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: !SHOULD",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  !SHOULD something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: !SHOULD",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  !SHOULD something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: MUST!!",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "MUST!! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: MUST!!",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  MUST!! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: MUST!!",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "MUST!! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: MUST!!",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  MUST!! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: MUST!!",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  MUST!! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: MUST!!",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  MUST!! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: MUST!",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "MUST! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: MUST!",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  MUST! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: MUST!",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "MUST! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: MUST!",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  MUST! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: MUST!",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  MUST! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: MUST!",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  MUST! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: !MUST",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "!MUST something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: !MUST",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  !MUST something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: !MUST",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "!MUST something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: !MUST",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  !MUST something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: !MUST",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  !MUST something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: !MUST",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  !MUST something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: MEM!!",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "MEM!! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: MEM!!",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  MEM!! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: MEM!!",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "MEM!! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: MEM!!",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  MEM!! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: MEM!!",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  MEM!! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: MEM!!",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  MEM!! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: AS!!",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "AS!! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: AS!!",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  AS!! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: AS!!",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "AS!! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: AS!!",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  AS!! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: AS!!",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  AS!! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: AS!!",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  AS!! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: MEM!",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "MEM! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: MEM!",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  MEM! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: MEM!",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "MEM! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: MEM!",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  MEM! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: MEM!",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  MEM! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: MEM!",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  MEM! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: !MEM",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "!MEM something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: !MEM",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  !MEM something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: !MEM",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "!MEM something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: !MEM",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  !MEM something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: !MEM",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  !MEM something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: !MEM",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  !MEM something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: AS!",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "AS! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: AS!",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  AS! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: AS!",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "AS! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: AS!",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  AS! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: AS!",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  AS! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: AS!",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  AS! something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: !AS",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "!AS something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role block: !AS",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  !AS something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure: !AS",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "!AS something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure block: !AS",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  !AS something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile role: !AS",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  !AS something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "lintFile procedure: !AS",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  !AS something"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role flat: DISTILL",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "DISTILL something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"DISTILL something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: DISTILL",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  DISTILL something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"DISTILL something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: DISTILL",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "DISTILL something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"DISTILL something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: DISTILL",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  DISTILL something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"DISTILL something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: DISTILL",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  DISTILL something"
+  ],
+  "expected": [
+   [
+    6,
+    "unknown keyword `DISTILL`",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"DISTILL something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: DISTILL",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  DISTILL something"
+  ],
+  "expected": [
+   [
+    6,
+    "unknown keyword `DISTILL`",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"DISTILL something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: DISTILL!",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "DISTILL! something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"DISTILL! something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: DISTILL!",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  DISTILL! something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"DISTILL! something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: DISTILL!",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "DISTILL! something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"DISTILL! something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: DISTILL!",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  DISTILL! something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"DISTILL! something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: DISTILL!",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  DISTILL! something"
+  ],
+  "expected": [
+   [
+    6,
+    "unknown keyword `DISTILL!`",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"DISTILL! something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: DISTILL!",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  DISTILL! something"
+  ],
+  "expected": [
+   [
+    6,
+    "unknown keyword `DISTILL!`",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"DISTILL! something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: DISTILL!!",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "DISTILL!! something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"DISTILL!! something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: DISTILL!!",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  DISTILL!! something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"DISTILL!! something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: DISTILL!!",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "DISTILL!! something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"DISTILL!! something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: DISTILL!!",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  DISTILL!! something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"DISTILL!! something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: DISTILL!!",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  DISTILL!! something"
+  ],
+  "expected": [
+   [
+    6,
+    "unknown keyword `DISTILL!!`",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"DISTILL!! something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: DISTILL!!",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  DISTILL!! something"
+  ],
+  "expected": [
+   [
+    6,
+    "unknown keyword `DISTILL!!`",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"DISTILL!! something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: !DISTILL",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "!DISTILL something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"!DISTILL something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: !DISTILL",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  !DISTILL something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"!DISTILL something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: !DISTILL",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "!DISTILL something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"!DISTILL something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: !DISTILL",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  !DISTILL something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"!DISTILL something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: !DISTILL",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  !DISTILL something"
+  ],
+  "expected": [
+   [
+    6,
+    "unknown keyword `!DISTILL`",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"!DISTILL something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: !DISTILL",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  !DISTILL something"
+  ],
+  "expected": [
+   [
+    6,
+    "unknown keyword `!DISTILL`",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"!DISTILL something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: TAGS",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "TAGS something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"TAGS something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: TAGS",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  TAGS something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"TAGS something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: TAGS",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "TAGS something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"TAGS something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: TAGS",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  TAGS something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"TAGS something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: TAGS",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  TAGS something"
+  ],
+  "expected": [
+   [
+    6,
+    "unknown keyword `TAGS` — did you mean `AS`?",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"TAGS something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: TAGS",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  TAGS something"
+  ],
+  "expected": [
+   [
+    6,
+    "unknown keyword `TAGS` — did you mean `AS`?",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"TAGS something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role flat: CHECKLIST",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO thing",
+   "CHECKLIST something"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"CHECKLIST something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role block: CHECKLIST",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  CHECKLIST something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"CHECKLIST something\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure: CHECKLIST",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO thing",
+   "CHECKLIST something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"CHECKLIST something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure block: CHECKLIST",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  CHECKLIST something"
+  ],
+  "expected": [
+   [
+    5,
+    "unexpected line in a procedure: \"CHECKLIST something\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile role: CHECKLIST",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  DO thing",
+   "  CHECKLIST something"
+  ],
+  "expected": [
+   [
+    6,
+    "unknown keyword `CHECKLIST`",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"CHECKLIST something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "lintFile procedure: CHECKLIST",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  DO thing",
+   "  CHECKLIST something"
+  ],
+  "expected": [
+   [
+    6,
+    "unknown keyword `CHECKLIST`",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "unexpected line in a procedure: \"CHECKLIST something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role valid",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  EXPERTISE a, b",
+   "  EXTENDS base",
+   "  APPLIES #x",
+   "  SCOPE all",
+   "  MUST do a",
+   "  NEVER do b",
+   "  WHEN asked:",
+   "    DO answer",
+   "  IF a AND b",
+   "    DO c",
+   "  ELSE",
+   "    DO d",
+   "  UNTIL done",
+   "    DO more",
+   "  VAR v",
+   "  RUN @main.procedures.p",
+   "  MEM keep x",
+   "  SHOULD! be",
+   "  MAY try"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role valid (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  EXPERTISE a, b",
+   "  EXTENDS base",
+   "  APPLIES #x",
+   "  SCOPE all",
+   "  MUST do a",
+   "  NEVER do b",
+   "  WHEN asked:",
+   "    DO answer",
+   "  IF a AND b",
+   "    DO c",
+   "  ELSE",
+   "    DO d",
+   "  UNTIL done",
+   "    DO more",
+   "  VAR v",
+   "  RUN @main.procedures.p",
+   "  MEM keep x",
+   "  SHOULD! be",
+   "  MAY try"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role two EXPERTISE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  EXPERTISE a",
+   "  EXPERTISE b",
+   "  DO x"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role two EXPERTISE (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  EXPERTISE a",
+   "  EXPERTISE b",
+   "  DO x"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role two EXPERTISE flat",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "EXPERTISE a",
+   "EXPERTISE b",
+   "DO x"
+  ],
+  "expected": [
+   [
+    1,
+    "role has 2 occurrences of EXPERTISE (expected at most 1)",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role two EXPERTISE flat (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "EXPERTISE a",
+   "EXPERTISE b",
+   "DO x"
+  ],
+  "expected": [
+   [
+    1,
+    "role has 2 occurrences of EXPERTISE (expected at most 1)",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role two EXTENDS flat",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "EXTENDS a",
+   "EXTENDS b",
+   "DO x"
+  ],
+  "expected": [
+   [
+    1,
+    "role has 2 EXTENDS clauses (expected at most 1)",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role two EXTENDS flat (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "EXTENDS a",
+   "EXTENDS b",
+   "DO x"
+  ],
+  "expected": [
+   [
+    1,
+    "role has 2 EXTENDS clauses (expected at most 1)",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role three EXPERTISE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "EXPERTISE a",
+   "EXPERTISE b",
+   "EXPERTISE c",
+   "DO x"
+  ],
+  "expected": [
+   [
+    1,
+    "role has 3 occurrences of EXPERTISE (expected at most 1)",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role three EXPERTISE (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "EXPERTISE a",
+   "EXPERTISE b",
+   "EXPERTISE c",
+   "DO x"
+  ],
+  "expected": [
+   [
+    1,
+    "role has 3 occurrences of EXPERTISE (expected at most 1)",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role two EXTENDS",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  EXTENDS a",
+   "  EXTENDS b",
+   "  DO x"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role two EXTENDS (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  EXTENDS a",
+   "  EXTENDS b",
+   "  DO x"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role three EXTENDS",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "EXTENDS a",
+   "EXTENDS b",
+   "EXTENDS c",
+   "DO x"
+  ],
+  "expected": [
+   [
+    1,
+    "role has 3 EXTENDS clauses (expected at most 1)",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role three EXTENDS (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "EXTENDS a",
+   "EXTENDS b",
+   "EXTENDS c",
+   "DO x"
+  ],
+  "expected": [
+   [
+    1,
+    "role has 3 EXTENDS clauses (expected at most 1)",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role no rules",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  EXPERTISE a"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role no rules (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "EXPORT ROLE r:",
+   "  ABOUT r",
+   "  EXPERTISE a"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role every finalize error, in order",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "EXTENDS a",
+   "EXTENDS b",
+   "EXPERTISE a",
+   "EXPERTISE b",
+   "MANDATE m",
+   "FLOW f",
+   "STEP s",
+   "gibberish line"
+  ],
+  "expected": [
+   [
+    7,
+    "MANDATE is only allowed inside an EXPORT AGENT block",
+    null,
+    "r.role.ap"
+   ],
+   [
+    8,
+    "FLOW is only allowed in a flow",
+    null,
+    "r.role.ap"
+   ],
+   [
+    9,
+    "STEP is only allowed in a flow",
+    null,
+    "r.role.ap"
+   ],
+   [
+    10,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"gibberish line\"",
+    null,
+    "r.role.ap"
+   ],
+   [
+    1,
+    "role has no rules (ALWAYS/NEVER/WHEN/DO)",
+    null,
+    "r.role.ap"
+   ],
+   [
+    1,
+    "role has 2 EXTENDS clauses (expected at most 1)",
+    null,
+    "r.role.ap"
+   ],
+   [
+    1,
+    "role has 2 occurrences of EXPERTISE (expected at most 1)",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role every finalize error, in order (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "EXTENDS a",
+   "EXTENDS b",
+   "EXPERTISE a",
+   "EXPERTISE b",
+   "MANDATE m",
+   "FLOW f",
+   "STEP s",
+   "gibberish line"
+  ],
+  "expected": [
+   [
+    7,
+    "MANDATE is only allowed inside an EXPORT AGENT block",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    8,
+    "FLOW is only allowed in a flow",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    9,
+    "STEP is only allowed in a flow",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    10,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"gibberish line\"",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    1,
+    "role has no rules (ALWAYS/NEVER/WHEN/DO)",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    1,
+    "role has 2 EXTENDS clauses (expected at most 1)",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    1,
+    "role has 2 occurrences of EXPERTISE (expected at most 1)",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role two ROLE headers",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ROLE a",
+   "ROLE b",
+   "ABOUT r",
+   "DO x"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role two ROLE headers (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "ROLE a",
+   "ROLE b",
+   "ABOUT r",
+   "DO x"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role bare ROLE",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ROLE",
+   "ABOUT r",
+   "DO x"
+  ],
+  "expected": [
+   [
+    2,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"ROLE\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role bare ROLE (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "ROLE",
+   "ABOUT r",
+   "DO x"
+  ],
+  "expected": [
+   [
+    2,
+    "ROLE needs its text on the same line",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    2,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"ROLE\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role bare ELSE without IF",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO x",
+   "ELSE",
+   "  DO y"
+  ],
+  "expected": [
+   [
+    4,
+    "ELSE must follow an IF in the same body",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role bare ELSE without IF (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO x",
+   "ELSE",
+   "  DO y"
+  ],
+  "expected": [
+   [
+    4,
+    "ELSE must follow an IF in the same body",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role IF without body",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "IF a",
+   "DO y"
+  ],
+  "expected": [
+   [
+    3,
+    "IF/ELSE block body must be indented (Python-style): \"IF a\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role IF without body (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "IF a",
+   "DO y"
+  ],
+  "expected": [
+   [
+    3,
+    "IF/ELSE block body must be indented (Python-style): \"IF a\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role IF OR",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "IF a OR b",
+   "  DO y"
+  ],
+  "expected": [
+   [
+    3,
+    "IF trigger: OR not supported in triggers — write separate rules instead",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role IF OR (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "IF a OR b",
+   "  DO y"
+  ],
+  "expected": [
+   [
+    3,
+    "IF trigger: OR not supported in triggers — write separate rules instead",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role WHEN OR",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "WHEN a OR b",
+   "DO y"
+  ],
+  "expected": [
+   [
+    3,
+    "WHEN trigger: OR not supported in triggers — write separate rules instead",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role WHEN OR (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "WHEN a OR b",
+   "DO y"
+  ],
+  "expected": [
+   [
+    3,
+    "WHEN trigger: OR not supported in triggers — write separate rules instead",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role WHEN only",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "WHEN a"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role WHEN only (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "WHEN a"
+  ],
+  "expected": []
+ },
+ {
+  "name": "role IF only",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "IF a",
+   "  THEN DO y"
+  ],
+  "expected": [
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"THEN DO y\"",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role IF only (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "IF a",
+   "  THEN DO y"
+  ],
+  "expected": [
+   [
+    4,
+    "unknown keyword `THEN` — did you mean `WHEN`?",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    4,
+    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"THEN DO y\"",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role no ABOUT",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "DO y"
+  ],
+  "expected": [
+   [
+    1,
+    "missing ABOUT",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role no ABOUT (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "DO y"
+  ],
+  "expected": [
+   [
+    1,
+    "missing ABOUT",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role long line",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  ],
+  "expected": [
+   [
+    3,
+    "line exceeds max length of 180 (203 chars)",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role long line (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   "# r",
+   "ABOUT r",
+   "DO xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  ],
+  "expected": [
+   [
+    3,
+    "line exceeds max length of 180 (203 chars)",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role empty",
+  "fn": "lintRole",
+  "file": "r.role.ap",
+  "lines": [
+   ""
+  ],
+  "expected": [
+   [
+    1,
+    "role has no rules (ALWAYS/NEVER/WHEN/DO)",
+    null,
+    "r.role.ap"
+   ],
+   [
+    1,
+    "missing ABOUT",
+    null,
+    "r.role.ap"
+   ]
+  ]
+ },
+ {
+  "name": "role empty (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/roles/r.ap",
+  "lines": [
+   ""
+  ],
+  "expected": [
+   [
+    1,
+    "role has no rules (ALWAYS/NEVER/WHEN/DO)",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    1,
+    "missing ABOUT",
+    null,
+    "agents/library/roles/r.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure valid",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  APPLIES #x",
+   "  SCOPE all",
+   "  LENS-IN t",
+   "  IMPORT a FROM @main.templates",
+   "  MUST do a",
+   "  NEVER do b",
+   "  AS out",
+   "  MEM keep",
+   "  IF a",
+   "    DO c",
+   "  ELSE",
+   "    DO d",
+   "  UNTIL done",
+   "    DO more",
+   "  VAR v",
+   "  RUN @main.procedures.q",
+   "  DELEGATE x BY y",
+   "  COMPUTE z",
+   "  SHOULD-NOT w",
+   "  MAY try"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure valid (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "EXPORT PROCEDURE p:",
+   "  ABOUT p",
+   "  APPLIES #x",
+   "  SCOPE all",
+   "  LENS-IN t",
+   "  IMPORT a FROM @main.templates",
+   "  MUST do a",
+   "  NEVER do b",
+   "  AS out",
+   "  MEM keep",
+   "  IF a",
+   "    DO c",
+   "  ELSE",
+   "    DO d",
+   "  UNTIL done",
+   "    DO more",
+   "  VAR v",
+   "  RUN @main.procedures.q",
+   "  DELEGATE x BY y",
+   "  COMPUTE z",
+   "  SHOULD-NOT w",
+   "  MAY try"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure no header",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "DO x"
+  ],
+  "expected": [
+   [
+    1,
+    "procedure has no PROCEDURE header",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure no header (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "DO x"
+  ],
+  "expected": [
+   [
+    1,
+    "procedure has no PROCEDURE header",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure two headers",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE a",
+   "PROCEDURE b",
+   "DO x"
+  ],
+  "expected": [
+   [
+    1,
+    "procedure has 2 PROCEDURE headers (expected 1)",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure two headers (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE a",
+   "PROCEDURE b",
+   "DO x"
+  ],
+  "expected": [
+   [
+    1,
+    "procedure has 2 PROCEDURE headers (expected 1)",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure three headers",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE a",
+   "PROCEDURE b",
+   "PROCEDURE c",
+   "DO x"
+  ],
+  "expected": [
+   [
+    1,
+    "procedure has 3 PROCEDURE headers (expected 1)",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure three headers (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE a",
+   "PROCEDURE b",
+   "PROCEDURE c",
+   "DO x"
+  ],
+  "expected": [
+   [
+    1,
+    "procedure has 3 PROCEDURE headers (expected 1)",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure bare PROCEDURE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE",
+   "DO x"
+  ],
+  "expected": [
+   [
+    3,
+    "unexpected line in a procedure: \"PROCEDURE\"",
+    null,
+    "p.procedure.ap"
+   ],
+   [
+    1,
+    "procedure has no PROCEDURE header",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure bare PROCEDURE (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE",
+   "DO x"
+  ],
+  "expected": [
+   [
+    3,
+    "PROCEDURE needs its text on the same line",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    3,
+    "unexpected line in a procedure: \"PROCEDURE\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    1,
+    "procedure has no PROCEDURE header",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure identity and flow lines, in order",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "EXPERTISE a",
+   "MANDATE m",
+   "FLOW f",
+   "STEP s",
+   "EXTENDS e",
+   "WHEN w",
+   "gibberish",
+   "DISTILL x"
+  ],
+  "expected": [
+   [
+    4,
+    "EXPERTISE is only allowed in a role — it is the bound role's identity; declare it in the role the agent binds via AS",
+    null,
+    "p.procedure.ap"
+   ],
+   [
+    5,
+    "MANDATE is only allowed inside an EXPORT AGENT block",
+    null,
+    "p.procedure.ap"
+   ],
+   [
+    6,
+    "FLOW is only allowed in a flow",
+    null,
+    "p.procedure.ap"
+   ],
+   [
+    7,
+    "STEP is only allowed in a flow",
+    null,
+    "p.procedure.ap"
+   ],
+   [
+    8,
+    "unexpected line in a procedure: \"EXTENDS e\"",
+    null,
+    "p.procedure.ap"
+   ],
+   [
+    9,
+    "unexpected line in a procedure: \"WHEN w\"",
+    null,
+    "p.procedure.ap"
+   ],
+   [
+    10,
+    "unexpected line in a procedure: \"gibberish\"",
+    null,
+    "p.procedure.ap"
+   ],
+   [
+    11,
+    "unexpected line in a procedure: \"DISTILL x\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure identity and flow lines, in order (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "EXPERTISE a",
+   "MANDATE m",
+   "FLOW f",
+   "STEP s",
+   "EXTENDS e",
+   "WHEN w",
+   "gibberish",
+   "DISTILL x"
+  ],
+  "expected": [
+   [
+    11,
+    "unknown keyword `DISTILL`",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    4,
+    "EXPERTISE is only allowed in a role — it is the bound role's identity; declare it in the role the agent binds via AS",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    5,
+    "MANDATE is only allowed inside an EXPORT AGENT block",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    6,
+    "FLOW is only allowed in a flow",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    7,
+    "STEP is only allowed in a flow",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    8,
+    "unexpected line in a procedure: \"EXTENDS e\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    9,
+    "unexpected line in a procedure: \"WHEN w\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    10,
+    "unexpected line in a procedure: \"gibberish\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    11,
+    "unexpected line in a procedure: \"DISTILL x\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure two EXPERTISE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "EXPERTISE a",
+   "EXPERTISE b",
+   "DO x"
+  ],
+  "expected": [
+   [
+    4,
+    "EXPERTISE is only allowed in a role — it is the bound role's identity; declare it in the role the agent binds via AS",
+    null,
+    "p.procedure.ap"
+   ],
+   [
+    5,
+    "EXPERTISE is only allowed in a role — it is the bound role's identity; declare it in the role the agent binds via AS",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure two EXPERTISE (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "EXPERTISE a",
+   "EXPERTISE b",
+   "DO x"
+  ],
+  "expected": [
+   [
+    4,
+    "EXPERTISE is only allowed in a role — it is the bound role's identity; declare it in the role the agent binds via AS",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    5,
+    "EXPERTISE is only allowed in a role — it is the bound role's identity; declare it in the role the agent binds via AS",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure bare ELSE",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "ELSE",
+   "  DO x"
+  ],
+  "expected": [
+   [
+    4,
+    "ELSE must follow an IF in the same body",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure bare ELSE (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "ELSE",
+   "  DO x"
+  ],
+  "expected": [
+   [
+    4,
+    "ELSE must follow an IF in the same body",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure IF without body",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "IF a",
+   "DO x"
+  ],
+  "expected": [
+   [
+    4,
+    "IF/ELSE block body must be indented (Python-style): \"IF a\"",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure IF without body (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "IF a",
+   "DO x"
+  ],
+  "expected": [
+   [
+    4,
+    "IF/ELSE block body must be indented (Python-style): \"IF a\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure IF OR",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "IF a OR b",
+   "  DO x"
+  ],
+  "expected": [
+   [
+    4,
+    "IF trigger: OR not supported in triggers — write separate rules instead",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure IF OR (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "IF a OR b",
+   "  DO x"
+  ],
+  "expected": [
+   [
+    4,
+    "IF trigger: OR not supported in triggers — write separate rules instead",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure no ABOUT",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "PROCEDURE p",
+   "DO x"
+  ],
+  "expected": [
+   [
+    1,
+    "missing ABOUT",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure no ABOUT (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "PROCEDURE p",
+   "DO x"
+  ],
+  "expected": [
+   [
+    1,
+    "missing ABOUT",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure nested non-top-level ignored",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO x",
+   "  gibberish nested",
+   "  MANDATE nested"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure nested non-top-level ignored (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   "# p",
+   "ABOUT p",
+   "PROCEDURE p",
+   "DO x",
+   "  gibberish nested",
+   "  MANDATE nested"
+  ],
+  "expected": []
+ },
+ {
+  "name": "procedure empty",
+  "fn": "lintProcedure",
+  "file": "p.procedure.ap",
+  "lines": [
+   ""
+  ],
+  "expected": [
+   [
+    1,
+    "procedure has no PROCEDURE header",
+    null,
+    "p.procedure.ap"
+   ],
+   [
+    1,
+    "missing ABOUT",
+    null,
+    "p.procedure.ap"
+   ]
+  ]
+ },
+ {
+  "name": "procedure empty (lintFile)",
+  "fn": "lintFile",
+  "file": "agents/library/procedures/p.ap",
+  "lines": [
+   ""
+  ],
+  "expected": [
+   [
+    1,
+    "procedure has no PROCEDURE header",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
+   [
+    1,
+    "missing ABOUT",
+    null,
+    "agents/library/procedures/p.ap"
+   ]
+  ]
+ },
+ {
+  "name": "agent file with a local ROLE and PROCEDURE",
+  "fn": "lintFile",
+  "file": "agents/standalone/a.ap",
+  "lines": [
+   "# a",
+   "",
+   "ROLE helper:",
+   "  ABOUT h",
+   "  EXPERTISE a",
+   "  EXPERTISE b",
+   "  EXTENDS x",
+   "  EXTENDS y",
+   "  DO x",
+   "  MANDATE m",
+   "",
+   "PROCEDURE step-it:",
+   "  ABOUT s",
+   "  EXPERTISE a",
+   "  DO x",
+   "  LENS-IN t",
+   "",
+   "EXPORT AGENT a AS helper:",
+   "  ABOUT a",
+   "  MANDATE do things",
+   "  RUN step-it"
+  ],
+  "expected": [
+   [
+    21,
+    "RUN is not allowed inside AGENT (expected one of: ABOUT, MANDATE, BUDGET, LENS-OUT, LENS-IN, IMPORT, ON-INVOKE, WHEN, VAR, MUST, ALWAYS, SHOULD, MAY, AS, MEM)",
+    null,
+    "agents/standalone/a.ap"
+   ]
+  ]
+ },
+ {
+  "name": "agent file with an exported ROLE",
+  "fn": "lintFile",
+  "file": "agents/standalone/a.ap",
+  "lines": [
+   "# a",
+   "",
+   "EXPORT ROLE helper:",
+   "  ABOUT h",
+   "  EXPERTISE a",
+   "  DO x",
+   "  WHEN w:",
+   "    DO y",
+   "",
+   "EXPORT AGENT a AS helper:",
+   "  ABOUT a",
+   "  MANDATE do things"
+  ],
+  "expected": []
+ },
+ {
+  "name": "team file with a ROLE and a PROCEDURE",
+  "fn": "lintFile",
+  "file": "agents/teams/t/flows.ap",
+  "lines": [
+   "# flows",
+   "",
+   "ROLE r:",
+   "  ABOUT r",
+   "  EXPERTISE a",
+   "  EXPERTISE b",
+   "  DO x",
+   "",
+   "PROCEDURE p:",
+   "  ABOUT p",
+   "  PROCEDURE q",
+   "  DO x",
+   "",
+   "EXPORT FLOW f:",
+   "  STEP s:",
+   "    DO x"
+  ],
+  "expected": []
+ },
+ {
+  "name": "library templates/library/roles/ap-author.ap",
+  "fn": "lintFile",
+  "file": "templates/library/roles/ap-author.ap",
+  "path": "templates/library/roles/ap-author.ap",
+  "expected": []
+ },
+ {
+  "name": "library templates/library/procedures/write-program.ap",
+  "fn": "lintFile",
+  "file": "templates/library/procedures/write-program.ap",
+  "path": "templates/library/procedures/write-program.ap",
+  "expected": []
+ }
+]

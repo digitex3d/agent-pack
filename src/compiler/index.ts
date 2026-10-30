@@ -8,12 +8,14 @@ import { unitNameFromPath } from '../ingest.js';
 import { projectAgentFiles } from '../agentDiscovery.js';
 import { Config, BundleConfig, LintConfig, libraryRoots as libraryRootsOf, librariesAliasMap } from '../config.js';
 import { BundleContext, RoleEntry } from '../dispatch/index.js';
+import { parseAgentSignature } from '../definitionArgs.js';
 import { processImports, resolveTargetWith, SKILL_IMPORT_HINT } from '../dispatch/imports.js';
 import { unappliedBlocks, unappliedIssue, withScopeLine } from '../withUse.js';
 import { readDecorator } from '../decoratorUse.js';
 import { resolveBundleDefaults, resolveTeamShared } from '../bundleDefaults.js';
 import { resolveTeamMembership } from '../services/teamMembership.js';
 import { findAgentFiles, readAgentFile, standaloneDir, agentNameOf, teamRootForAgentFile, readTeamFile, teamRosterIssues, legacyTeamIssue, teamNamesUnder } from '../services/teamMetadata.js';
+import { harnessesOf, harnessProblem, type HarnessRow } from '../harnesses.js';
 import { delegateTargetErrors, executorErrors, usesPrograms, WRITE_PROGRAM, type AgentIndexEntry } from '../executor.js';
 import { BUILTIN_AGENTS_DIR, resolveDelegateConfig, type DelegateConfig } from '../config.js';
 import { LintError, checkVocabulary, lineOfName, checkedHeadIssues, dimensionBlockErrors, domainBlockErrors, pluginBlockErrors, teamFileErrors } from '../lint.js';
@@ -70,6 +72,8 @@ export interface BundleOptions {
   checks?: ChecksConfig | null;
   /** Every agent of the project and its team — what `DELEGATE … BY` may name. Absent: not checked. */
   agentIndex?: AgentIndexEntry[];
+  /** The harnesses installed, enabled and delegable (src/harnesses.ts) — what `BY <harness>:<agent>` depends on (D66). Absent: none. */
+  harnesses?: HarnessRow[];
   /** The project's teams, by name — what a flow's `BY <team>` resolves against. Absent: not known. */
   teams?: readonly string[];
   /** The `delegate` config key: the default delegate and the agents' models. */
@@ -169,6 +173,7 @@ function buildBundleOpts(
     judge: overrides.judge,
     checks: config.checks ?? null,
     agentIndex: agentIndexOf(config),
+    harnesses: harnessesOf(config.adapters),
     teams: teamNamesUnder(config.teamsDir),
     ...(config.delegate ? { delegate: config.delegate } : {}),
   };
@@ -300,29 +305,45 @@ export async function resolveInlineBlocks(
 }
 
 /**
- * Resolve the agent's `AS <role>` binding into its `# Identity` block.
- *
- * The agent declares only `AS <role>`; the bound role (inline or imported,
- * already collected into `ctx.roles`) owns the display name (the de-slugified
- * block name), its ABOUT, optional EXPERTISE, and its behaviours. Copy the
- * display name, ABOUT and EXPERTISE into the agent's identity metadata so
- * `renderIdentityBlock` renders a complete identity, and hand back the bound
- * role so the caller can merge its behaviours and exclude it from the Roles
- * chapter. The agent's own MANDATE is untouched. A binding with no matching
- * role contributes no identity and returns null.
- *
- * Mutates `metadata` in place: sets ROLE / ROLE-ABOUT / EXPERTISE from the bound
- * role.
+ * The roles the agent binds with `AS <role>, …`, in the order written: each
+ * one found among the roles collected into `ctx.roles` (inline or imported).
+ * They are the agent's identity — their names, ABOUT, EXPERTISE and
+ * behaviours fuse into its `# Identity` block (AgentBlock.asMdIdentity) — so
+ * the caller leaves them out of the Roles chapter. One role is a list of one.
+ * A name no collected role answers is returned in `missing`.
  */
-function bindRoleIdentity(metadata: Map<string, string[]>, ctx: BundleContext): RoleEntry | null {
-  const binding = metadata.get('AS')?.[0]?.trim();
-  if (!binding) return null;
-  const role = ctx.roles.find(r => r.name === binding);
-  if (!role) return null;
-  if (role.role) metadata.set('ROLE', [role.role]);
-  if (role.about) metadata.set('ROLE-ABOUT', [role.about]);
-  if (role.expertise) metadata.set('EXPERTISE', [role.expertise]);
-  return role;
+function bindRoles(metadata: Map<string, string[]>, ctx: BundleContext): { roles: RoleEntry[]; missing: string[] } {
+  const names = parseAgentSignature(`AS ${metadata.get('AS')?.[0] ?? ''}`).roles;
+  const roles: RoleEntry[] = [];
+  const missing: string[] = [];
+  for (const name of names) {
+    const role = ctx.roles.find(r => r.name === name);
+    if (!role) missing.push(name);
+    else if (!roles.includes(role)) roles.push(role);
+  }
+  return { roles, missing };
+}
+
+/**
+ * Two bound roles that disagree on one rule — the same text under two
+ * different keywords (`ALWAYS x` in one, `NEVER x` in another): the agent
+ * could keep neither, so the compilation fails and says which.
+ */
+function roleConflicts(roles: readonly RoleEntry[], file: string): LintError[] {
+  const seen = new Map<string, { keyword: string; role: string }>();
+  const errors: LintError[] = [];
+  for (const role of roles) {
+    for (const line of role.body.split('\n')) {
+      const m = line.trim().match(/^([A-Z][A-Z-]*!{0,2})[ \t]+(.+)$/);
+      if (!m) continue;
+      const [, keyword, text] = m;
+      const prior = seen.get(text);
+      if (prior && prior.keyword !== keyword && prior.role !== role.name) {
+        errors.push({ file, line: lineOfName(file, role.name), message: `roles \`${prior.role}\` and \`${role.name}\` disagree: \`${prior.keyword} ${text}\` and \`${keyword} ${text}\` — bind one of them, or make them agree` });
+      } else if (!prior) seen.set(text, { keyword, role: role.name });
+    }
+  }
+  return errors;
 }
 
 
@@ -788,21 +809,20 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
   // bound role is also returned so its behaviours fuse into the Identity block
   // and it is excluded from the Roles chapter — the role IS the agent here, not a
   // separate cognitive layer.
-  const boundRole = bindRoleIdentity(metadata, ctx);
-  if (boundRole) {
-    ctx.roles = ctx.roles.filter(r => r !== boundRole);
-  }
+  const bound = bindRoles(metadata, ctx);
+  const boundRoles = bound.roles;
+  ctx.roles = ctx.roles.filter(r => !boundRoles.includes(r));
 
   // An `AS <role>` naming no role is a broken reference like any other.
-  const binding = metadata.get('AS')?.[0]?.trim();
-  if (binding && !boundRole) {
-    ctx.lintErrors.push({ file: agentFilePath, line: lineOfName(agentFilePath, binding), message: `unknown role \`${binding}\` — define it, or IMPORT it FROM @<lib>.roles` });
+  for (const name of bound.missing) {
+    ctx.lintErrors.push({ file: agentFilePath, line: lineOfName(agentFilePath, name), message: `unknown role \`${name}\` — define it, or IMPORT it FROM @<lib>.roles` });
   }
+  ctx.lintErrors.push(...roleConflicts(boundRoles, agentFilePath));
   reportLintIssues(ctx, 'Bundle');
 
   const structure = builder.finish(ctx, {
     metadata,
-    boundRole,
+    boundRoles,
     agentBody,
     agentFilePath,
     agentSpan: agentFile.span,
@@ -815,6 +835,13 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
   const delegate = opts.delegate ?? resolveDelegateConfig(undefined);
   if (Object.values(structure.meta.executors ?? {}).some(e => e.executor === 1 && !e.by)) structure.meta.delegate = delegate.default;
   if (delegate.models[agentName]) structure.meta.model = delegate.models[agentName];
+  // The recipe of each harness a delegation goes to, for the apx to fill when the piece starts (D66).
+  const used = new Set(Object.values(structure.meta.background ?? {}).map(w => w.harness).filter((h): h is string => !!h));
+  const recipes = Object.fromEntries([...used].flatMap(h => {
+    const row = (opts.harnesses ?? []).find(r => r.name === h);
+    return row?.invocation ? [[h, row.invocation]] : [];
+  }));
+  if (Object.keys(recipes).length > 0) structure.meta.harnesses = recipes;
   const declared = new Set(structure.byKind('var').map(b => b.name));
   // Every file sees the bodies' declarations and the implicit constants; an import, only the file that writes it.
   const imported = new Set(ctx.variables.map(v => v.name));
@@ -835,7 +862,7 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     ...pluginFileErrors(ctx),
     ...builder.varErrors.map(located),
     ...builder.checkIssues.map(located),
-    ...(opts.agentIndex ? delegateTargetErrors(structure, opts.agentIndex, teamRoot ? basename(teamRoot) : null) : []),
+    ...(opts.agentIndex ? delegateTargetErrors(structure, opts.agentIndex, teamRoot ? basename(teamRoot) : null, h => harnessProblem(h, opts.harnesses ?? [])) : []),
     ...executorErrors(structure),
     ...variableUseErrors(ctx, agentFilePath, file => visibleIn(file, ctx.variables, everywhere), libraryReadRule(ctx, agentFilePath)),
     ...templateNameErrors(ctx, [...declared, ...Object.keys(variables.constants)]),

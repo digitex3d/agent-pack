@@ -1,0 +1,17 @@
+# invoke-claude-code
+
+EXPORT TEMPLATE invoke-claude-code:
+    ABOUT  the command an orchestrator on another harness runs to hand one task to an agent of the claude-code harness
+
+    SLOTS:
+        project:  TEXT  "the folder the agent works in — the delegation's copy of the project"
+          MUST  run the command from the folder the apx prints — the copy, never the working folder
+        agent:    TEXT  "the agent, as `.claude/agents/<agent>.md` defines it"
+        prompt:   TEXT  "the file holding the task and what it is handed — the apx writes it"
+          MUST  never place a secret or a credential in the task or anywhere on the command line — the claude CLI reads its own credentials
+        answer:   TEXT  "the file the answer is written to — the apx reads it back at deliver"
+          MUST  give the process a generous timeout of your own: a run of several minutes is no error
+    BODY:
+        (cd {project} && claude -p --agent {agent} --output-format text --permission-mode acceptEdits) < {prompt} > {answer}
+    EXAMPLE:
+        (cd .agent-pack/work/s-1/dlg-1d06e0a6 && claude -p --agent edge-case-hunter --output-format text --permission-mode acceptEdits) < .agent-pack/work/s-1/dlg-1d06e0a6.prompt.md > .agent-pack/work/s-1/dlg-1d06e0a6.answer.txt

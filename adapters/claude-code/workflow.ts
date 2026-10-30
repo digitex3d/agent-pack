@@ -46,7 +46,8 @@ export function compileWorkflow(flow: ApBlock, doc: ApDocument): string | null {
     for (const line of node.body) {
       if (line.type !== 'directive') return null;
       if (line.keyword === DELEGATE_VERB) {
-        if (!line.by || teams.has(line.by)) return null;
+        // A team, the default delegate, another harness (D66): carried out as written.
+        if (!line.by || teams.has(line.by) || line.harness) return null;
         const call = { step: node.title, line, key: `d${k++}` };
         ops.push({ call });
         if (line.async) running.push(call);

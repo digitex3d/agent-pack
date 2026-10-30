@@ -165,21 +165,23 @@ export function renderIdentityBlock(
   metadata: Map<string, string[]>,
   roleBehaviours = '',
 ): string {
-  const role = metadata.get('ROLE')?.[0]?.trim() ?? '';
-  const about = metadata.get('ROLE-ABOUT')?.[0]?.trim() ?? '';
+  // One line per bound role; ROLE, ROLE-ABOUT and EXPERTISE align by position.
+  const roles = (metadata.get('ROLE') ?? []).map(r => r.trim());
+  const abouts = metadata.get('ROLE-ABOUT') ?? [];
+  const expertises = metadata.get('EXPERTISE') ?? [];
   const mandateRaw = metadata.get('MANDATE')?.[0]?.trim() ?? '';
-  const expertiseRaw = metadata.get('EXPERTISE')?.[0]?.trim() ?? '';
 
-  if (!role && !mandateRaw) return '';
+  if (roles.length === 0 && !mandateRaw) return '';
 
   const A = FORMULAS.blocks.agent;
   const lines: string[] = [A.identity, ''];
 
-  if (role) {
-    const expertise = splitList(expertiseRaw).map(item => fill(A.expertise, { item })).join(', ');
+  roles.forEach((role, k) => {
+    const about = abouts[k]?.trim() ?? '';
+    const expertise = splitList(expertises[k]?.trim() ?? '').map(item => fill(A.expertise, { item })).join(', ');
     const formula = expertise ? (about ? A.roleAboutExpertise : A.roleExpertise) : (about ? A.roleAbout : A.role);
     lines.push(fill(formula, { role, about, expertise }));
-  }
+  });
 
   if (mandateRaw) {
     lines.push('');

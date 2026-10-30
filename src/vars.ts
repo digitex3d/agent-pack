@@ -97,8 +97,8 @@ export function takesInto(keyword: string): boolean {
   return (ACTION_VERBS as readonly string[]).includes(keyword) || keyword === 'FORK' || keyword === 'RUN';
 }
 
-/** A trailing `BY <name>` — uppercase, at the very end of the line: anywhere else it is prose. */
-const BY_RE = new RegExp(`^(.*?)\\s+BY\\s+(${NAME})\\s*$`);
+/** A trailing `BY <name>` — uppercase, at the very end of the line: anywhere else it is prose. `<harness>:<agent>` names an agent of another harness (D66). */
+const BY_RE = new RegExp(`^(.*?)\\s+BY\\s+(${NAME}(?::${NAME})?)\\s*$`);
 
 /** A line's text and the agent it names, when it ends with `BY <name>` — else null. */
 export function splitBy(text: string): { text: string; name: string } | null {

@@ -788,8 +788,24 @@ export class TeamBlock extends ApBlock {
 export interface AgentSource {
   agentName: string;
   metadata: Map<string, string[]>;
-  boundRole: Definition | null;
+  /** The roles the agent binds with `AS <role>, …`, in order — empty when none. */
+  boundRoles: Definition[];
   agentBody: string;
+}
+
+/**
+ * The behaviours of the bound roles, in the order bound: a rule a later role
+ * repeats is kept once — the first role keeps all of its own, so one role
+ * renders exactly as it always did.
+ */
+function mergedBehaviours(roleBlocks: readonly ApBlock[]): ApNode[] {
+  const seen = new Set<string>();
+  const key = (n: ApNode) => JSON.stringify(n, (k, v) => (k === 'line' || k === 'col' || k === 'chars' ? undefined : v));
+  return roleBlocks.flatMap((role, k) => {
+    const kept = k === 0 ? role.body : role.body.filter(n => !seen.has(key(n)));
+    kept.forEach(n => seen.add(key(n)));
+    return kept;
+  });
 }
 
 export class AgentBlock extends ApBlock {
@@ -797,7 +813,8 @@ export class AgentBlock extends ApBlock {
   static readonly NAMESPACE = '@main.agents';
   readonly kind = 'agent';
   protected readonly idPrefix = AgentBlock.PREFIX;
-  role: ApRef | null = null;
+  /** The roles it binds, in the order of its `AS` list — one role is a list of one. */
+  roles: ApRef[] = [];
   mandate: string | null = null;
   /** `BUDGET <tier>`: the cost tier the adapter maps to a model. */
   budget: string | null = null;
@@ -805,7 +822,7 @@ export class AgentBlock extends ApBlock {
 
   static fromData(data: ApBlockData): AgentBlock {
     const block = restore(new AgentBlock(initOf(data)), data);
-    block.role = (data.args['role'] as ApRef | undefined) ?? null;
+    block.roles = (data.args['roles'] as ApRef[] | undefined) ?? [];
     block.mandate = (data.args['mandate'] as string | undefined) ?? null;
     block.budget = (data.args['budget'] as string | undefined) ?? null;
     block.lensIn = (data.args['lensIn'] as ApShape | undefined) ?? null;
@@ -818,16 +835,16 @@ export class AgentBlock extends ApBlock {
    * The agent's md preamble — Identity (via the ONE legacy composer) and the
    * lens binding lines. The block owns its own md; the backend composes.
    */
-  asMdIdentity(env: MdEnv, roleBlock: ApBlock | null): string {
+  asMdIdentity(env: MdEnv, roleBlocks: readonly ApBlock[]): string {
+    // One identity line per role, in the order bound; ROLE, ROLE-ABOUT and EXPERTISE align by position.
     const identityMeta = new Map<string, string[]>();
-    if (roleBlock) {
-      identityMeta.set('ROLE', [deslugifyRole(roleBlock.name)]);
-      if (roleBlock.about) identityMeta.set('ROLE-ABOUT', [roleBlock.about]);
-      const expertise = (roleBlock as { expertise?: string[] | null }).expertise;
-      if (expertise?.length) identityMeta.set('EXPERTISE', [expertise.join(', ')]);
+    if (roleBlocks.length) {
+      identityMeta.set('ROLE', roleBlocks.map(r => deslugifyRole(r.name)));
+      identityMeta.set('ROLE-ABOUT', roleBlocks.map(r => r.about ?? ''));
+      identityMeta.set('EXPERTISE', roleBlocks.map(r => ((r as { expertise?: string[] | null }).expertise ?? []).join(', ')));
     }
     if (this.mandate) identityMeta.set('MANDATE', [this.mandate]);
-    const behaviours = roleBlock ? renderNodes(env, roleBlock.body).join('\n') : '';
+    const behaviours = renderNodes(env, mergedBehaviours(roleBlocks)).join('\n');
     // Legacy composition: `${identityBlock}\n${lens}${body}` — keep the extra newline.
     let out = renderIdentityBlock(identityMeta, behaviours) + '\n';
 
@@ -846,13 +863,10 @@ export class AgentBlock extends ApBlock {
     const md = (k: string): string | null => src.metadata.get(k)?.[0]?.trim() ?? null;
     const block = new AgentBlock({ name: src.agentName, namespace: AgentBlock.NAMESPACE, about: md('ABOUT') });
 
-    const roleName = md('AS');
-    if (src.boundRole) {
-      const ns = cx.defInit(src.boundRole).namespace;
-      block.role = { id: refId('role', ns, src.boundRole.name), target: `${ns}/${src.boundRole.name}`, kind: 'role' };
-    } else if (roleName) {
-      block.role = { id: null, target: roleName, kind: 'role', resolved: false };
-    }
+    block.roles = src.boundRoles.map(role => {
+      const ns = cx.defInit(role).namespace;
+      return { id: refId('role', ns, role.name), target: `${ns}/${role.name}`, kind: 'role' };
+    });
     block.mandate = md('MANDATE');
     block.budget = md('BUDGET');
     const lensIn = md('LENS-IN');
@@ -866,7 +880,7 @@ export class AgentBlock extends ApBlock {
 
   protected override argsJson(): Record<string, unknown> {
     return {
-      ...(this.role ? { role: this.role } : {}),
+      ...(this.roles.length ? { roles: this.roles } : {}),
       ...(this.mandate ? { mandate: this.mandate } : {}),
       ...(this.budget ? { budget: this.budget } : {}),
       ...(this.lensIn ? { lensIn: this.lensIn } : {}),
@@ -893,7 +907,7 @@ export interface KindStrategy {
   /** Reference index this kind is looked up in, when a name points at it. */
   ref: RefClass | null;
   /** The Definitions of this kind collected by the bundle pipeline, if any. */
-  entries?: (ctx: BundleContext, opts: { boundRole: Definition | null }) => Definition[];
+  entries?: (ctx: BundleContext, opts: { boundRoles: Definition[] }) => Definition[];
   /** Build the block from one of those Definitions — delegates to the class. */
   from?: (def: Definition, cx: BlockCx) => ApBlock;
   /** Revive the block from its serialized data — delegates to the class. */
@@ -909,7 +923,7 @@ export const KIND_STRATEGIES: KindStrategy[] = [
   { kind: 'policy', revive: RuleBlock.fromData, folder: 'policies', chapterTitle: FORMULAS.blocks.policy.chapter, prefix: RuleBlock.PREFIXES['policy'],    ref: null,
     entries: ctx => ctx.policies,   from: RuleBlock.fromDefinition },
   { kind: 'role', revive: RoleBlock.fromData, folder: 'roles', chapterTitle: FORMULAS.blocks.role.chapter, prefix: RoleBlock.PREFIX,                ref: null,
-    entries: (ctx, opts) => [...(opts.boundRole ? [opts.boundRole] : []), ...ctx.roles],
+    entries: (ctx, opts) => [...opts.boundRoles, ...ctx.roles],
     from: RoleBlock.fromDefinition },
   { kind: 'template', revive: TemplateBlock.fromData, folder: 'templates', chapterTitle: FORMULAS.blocks.template.chapter, prefix: TemplateBlock.PREFIX,            ref: 'templates',
     entries: ctx => ctx.templates,  from: TemplateBlock.fromDefinition },

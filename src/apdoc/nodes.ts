@@ -59,6 +59,7 @@ export class DirectiveNode extends NodeBase implements ApDirectiveNode {
   into?: ApRef;
   uses?: ApRef[];
   by?: string;
+  harness?: string;
   as?: ApShape;
   async?: true;
   exe?: string;
@@ -91,6 +92,7 @@ export class DirectiveNode extends NodeBase implements ApDirectiveNode {
       ...(this.into ? { into: this.into } : {}),
       ...(this.uses ? { uses: this.uses } : {}),
       ...(this.by ? { by: this.by } : {}),
+      ...(this.harness ? { harness: this.harness } : {}),
       ...(this.as ? { as: this.as } : {}),
       ...(this.async ? { async: this.async } : {}),
       ...(this.exe ? { exe: this.exe } : {}),
@@ -110,6 +112,7 @@ export class DirectiveNode extends NodeBase implements ApDirectiveNode {
     if (n.into) node.into = n.into;
     if (n.uses) node.uses = n.uses;
     if (n.by) node.by = n.by;
+    if (n.harness) node.harness = n.harness;
     if (n.as) node.as = n.as;
     if (n.async) node.async = n.async;
     if (n.exe) node.exe = n.exe;

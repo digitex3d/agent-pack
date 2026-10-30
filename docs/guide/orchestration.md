@@ -241,6 +241,26 @@ See [The apx — Background work](/guide/apx#background-work).
 The flow is the same everywhere. How it runs differs.
 
 - **Claude Code.** A `~` runs as a background agent, and the session hears when it finishes — but only between turns. So a `WAIT` does not block the session: the lead does not go on until the notifications of the pieces it waits for have come, records one that ended without delivering, then checks the states with `apx wait … --now` — the limit counted from when each piece started. A `FORK` runs as a native fork; a `FORK … BY y` is one that reads `y`'s definition first (`y.apx scope`) and follows `y`'s rules from there. One hook of the project, in `.claude/settings.json`, keeps every perimeter: it runs inside subagents too, and a write outside the work in progress is denied before it happens. A fork shares the session of whoever started it, so it is held to every piece in progress that has a perimeter.
+- **Codex.** The agents are custom agents (`.codex/agents/<name>.toml`), the skills `.agents/skills/<name>/SKILL.md`; Codex reads `AGENTS.md` itself. It exports no session id to its commands, so session variables and the apx's registry cannot be used with Codex as the one running the flow.
 - **Other harnesses.** `apx wait` blocks until the pieces settle or the limit is reached. A `FORK … BY y` becomes a `DELEGATE … BY y` with all the context.
+
+### Delegating to another harness
+
+A line can hand its task to an agent of the project as another harness runs it: `BY <harness>:<agent>`.
+
+```
+STEP review:
+    DELEGATE~ trace every path of {{notes}} INTO gaps BY codex:hunter AS diff-only
+    WAIT gaps
+STEP write:
+    DELEGATE write the notes BY claude-code:writer
+```
+
+- **The harness is a dependency of the build.** It must be in `adapters:`, have a launch recipe, and its CLI must be on the PATH — `agent-pack harness list` shows what is installed, enabled and delegable.
+- **It is launched from outside, never by agent-pack.** `apx delegate start <dlg-id>` opens the piece's own copy of the project, carries in the agent's definition, writes the prompt — the task and the variables it reads, or the form of its `AS` — and prints the harness's command, filled, with the rules to run it by. The lead runs it with its shell.
+- **It ends in its copy.** `apx delegate deliver <dlg-id> --answer` takes the answer the command wrote and, of what changed in the copy, only what stays within the perimeter — the rest is left out and said. A `WAIT` merges it into the working folder.
+- **No conversation crosses.** A `FORK` to another harness is an error.
+
+Each adapter brings its recipe, `invoke.ap`: `claude-code` runs `claude -p --agent <agent>`, `codex` runs `codex exec` in the copy, its answer written with `-o` and bound with `--output-schema` when the line has an `AS`.
 
 Today a flow made only of `DELEGATE` lines can also run as a Claude Code Workflow script — see [The apx — Flows](/guide/apx#flows).
