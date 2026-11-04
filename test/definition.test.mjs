@@ -7,7 +7,7 @@
  * - strategyFor lookup
  * - allRunnables / resolveRunTarget
  */
-import { strict as assert } from 'assert';
+import { strict as assert } from 'node:assert';
 
 const {
   defaults,

@@ -6,7 +6,7 @@
  * bundler used to render it inline, but cross-references now take that role
  * (see test/crossReferences.test.mjs).
  */
-import { strict as assert } from 'assert';
+import { strict as assert } from 'node:assert';
 import { buildHierarchy } from '../dist/src/services/tags.js';
 
 function set(...items) {

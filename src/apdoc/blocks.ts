@@ -14,13 +14,13 @@
 import type { ApRef, ApShape, ApSlot, ApSlotType, ApNode, ApBlockData, ApStoreProjection, ApCheck } from './types.js';
 import type { Definition } from '../definition.js';
 import type { BundleContext } from '../dispatch/types.js';
-import { ApBlock, ApBlockInit } from './block.js';
+import { ApBlock, type ApBlockInit } from './block.js';
 import { stableId } from './ids.js';
 import { buildNamespace } from '../namespace.js';
 import { FORMULAS, fill } from '../formulas.js';
 import { withScopeLine } from '../withUse.js';
 import { executorKey, headerExecutorOf } from '../executor.js';
-import { MdEnv, slotTypePhrase, forceIntro, renderNodes, shapeLine, executorHow } from '../../adapters/md/toolkit.js';
+import { type MdEnv, slotTypePhrase, forceIntro, renderNodes, shapeLine, executorHow } from '../../adapters/md/toolkit.js';
 import {
   templateScaffoldIntro, scalarTemplateLine, FIELDS_LABEL, OPTIONAL_MARK,
   EXAMPLE_OPEN, EXAMPLE_CLOSE, lensInLine, lensBridgeLine, refName,
@@ -31,11 +31,11 @@ import { phraseOf, STORE_LIFETIMES, type StoreDecl, type StoreLifetime } from '.
 import { parseTemplate, templateLayout, composeExample, SLOT_NAME } from '../shapeCompiler.js';
 import type { VarScope } from '../vars.js';
 import { extractPrimitive, stripPrimitives, unwrapExportFile } from '../services/text.js';
-import { renderIdentityBlock, renderGlobs, enumPrimitiveFor } from '../primitives.js';
+import { renderIdentityBlock, renderGlobs, } from '../primitives.js';
 import { DirectiveNode, reviveNodes } from './nodes.js';
 import { deslugifyRole } from '../services/role.js';
-import { readFileSync, existsSync } from 'fs';
-import { resolve, basename, dirname } from 'path';
+import { readFileSync, existsSync } from 'node:fs';
+import { resolve, basename, dirname } from 'node:path';
 import type { Block } from '../parseBlocks.js';
 import { isTeamFile, type TeamFile } from '../services/teamMetadata.js';
 import { splitList } from '../lists.js';
@@ -119,10 +119,10 @@ export class RuleBlock extends ApBlock {
 
   static fromData(data: ApBlockData): RuleBlock {
     const block = restore(new RuleBlock(data.kind, initOf(data)), data);
-    block.shape = (data.args['shape'] as ApShape | undefined) ?? null;
-    block.lensIn = (data.args['lensIn'] as ApShape | undefined) ?? null;
-    block.executor = (data.args['executor'] as number | undefined) ?? null;
-    const exe = data.args['exe'] as string | undefined;
+    block.shape = (data.args.shape as ApShape | undefined) ?? null;
+    block.lensIn = (data.args.lensIn as ApShape | undefined) ?? null;
+    block.executor = (data.args.executor as number | undefined) ?? null;
+    const exe = data.args.exe as string | undefined;
     if (exe) block.exe = exe;
     const sections = data.args as { require?: ApNode[]; ensure?: ApNode[] };
     if (sections.require) block.require = reviveNodes(sections.require);
@@ -190,8 +190,8 @@ export class RoleBlock extends ApBlock {
 
   static fromData(data: ApBlockData): RoleBlock {
     const block = restore(new RoleBlock(initOf(data)), data);
-    block.expertise = (data.args['expertise'] as string[] | undefined) ?? null;
-    block.shape = (data.args['shape'] as ApShape | undefined) ?? null;
+    block.expertise = (data.args.expertise as string[] | undefined) ?? null;
+    block.shape = (data.args.shape as ApShape | undefined) ?? null;
     return block;
   }
 
@@ -225,10 +225,10 @@ export class StoreBlock extends ApBlock {
 
   static fromData(data: ApBlockData): StoreBlock {
     const block = restore(new StoreBlock(initOf(data)), data);
-    block.storeType = (data.args['storeType'] as string | undefined) ?? '';
-    block.lasts = (data.args['lasts'] as StoreLifetime | undefined) ?? 'session';
-    block.storeKey = (data.args['key'] as string | undefined) ?? null;
-    block.slots = (data.args['slots'] as ApSlot[] | undefined) ?? [];
+    block.storeType = (data.args.storeType as string | undefined) ?? '';
+    block.lasts = (data.args.lasts as StoreLifetime | undefined) ?? 'session';
+    block.storeKey = (data.args.key as string | undefined) ?? null;
+    block.slots = (data.args.slots as ApSlot[] | undefined) ?? [];
     return block;
   }
 
@@ -343,10 +343,10 @@ export class DimensionBlock extends ApBlock {
 
   static fromData(data: ApBlockData): DimensionBlock {
     const block = restore(new DimensionBlock(initOf(data)), data);
-    block.globs = (data.args['for'] as string[] | undefined) ?? [];
-    block.each = (data.args['each'] as string | undefined) ?? '';
-    block.eachRef = (data.args['eachRef'] as ApRef | undefined) ?? null;
-    block.shape = (data.args['shape'] as ApShape | undefined) ?? null;
+    block.globs = (data.args.for as string[] | undefined) ?? [];
+    block.each = (data.args.each as string | undefined) ?? '';
+    block.eachRef = (data.args.eachRef as ApRef | undefined) ?? null;
+    block.shape = (data.args.shape as ApShape | undefined) ?? null;
     return block;
   }
 
@@ -408,10 +408,10 @@ export class DomainBlock extends ApBlock {
 
   static fromData(data: ApBlockData): DomainBlock {
     const block = restore(new DomainBlock(initOf(data)), data);
-    block.writes = (data.args['writes'] as string[] | undefined) ?? [];
-    block.reads = (data.args['reads'] as string[] | undefined) ?? [];
-    block.formulas = (data.args['formulas'] as DomainFormula[] | undefined) ?? [];
-    block.thresholds = (data.args['thresholds'] as DomainThresholds | undefined) ?? null;
+    block.writes = (data.args.writes as string[] | undefined) ?? [];
+    block.reads = (data.args.reads as string[] | undefined) ?? [];
+    block.formulas = (data.args.formulas as DomainFormula[] | undefined) ?? [];
+    block.thresholds = (data.args.thresholds as DomainThresholds | undefined) ?? null;
     return block;
   }
 
@@ -486,7 +486,7 @@ export class PluginBlock extends ApBlock {
 
   static fromData(spec: PluginSpec, data: ApBlockData): PluginBlock {
     const block = restore(new PluginBlock(spec, initOf(data)), data);
-    block.fields = (data.args['fields'] as Record<string, unknown> | undefined) ?? {};
+    block.fields = (data.args.fields as Record<string, unknown> | undefined) ?? {};
     return block;
   }
 
@@ -530,12 +530,12 @@ export class TemplateBlock extends ApBlock {
 
   static fromData(data: ApBlockData): TemplateBlock {
     const block = restore(new TemplateBlock(initOf(data)), data);
-    const slots = (data.args['slots'] as ApSlot[] | undefined) ?? null;
+    const slots = (data.args.slots as ApSlot[] | undefined) ?? null;
     block.slots = slots ? slots.map(s => ({ ...s, rules: reviveNodes(s.rules) })) : null;
-    block.layout = (data.args['layout'] as string | undefined) ?? null;
-    block.example = (data.args['example'] as string | undefined) ?? null;
-    block.scalar = (data.args['scalar'] as { typePhrase: string; description?: string } | undefined) ?? null;
-    block.shape = (data.args['shape'] as ApShape | undefined) ?? null;
+    block.layout = (data.args.layout as string | undefined) ?? null;
+    block.example = (data.args.example as string | undefined) ?? null;
+    block.scalar = (data.args.scalar as { typePhrase: string; description?: string } | undefined) ?? null;
+    block.shape = (data.args.shape as ApShape | undefined) ?? null;
     return block;
   }
 
@@ -692,9 +692,9 @@ export class VarBlock extends ApBlock {
 
   static fromData(data: ApBlockData): VarBlock {
     const block = restore(new VarBlock(initOf(data)), data);
-    block.scope = (data.args['scope'] as VarScope | undefined) ?? 'private';
-    block.type = (data.args['type'] as ApRef | undefined) ?? null;
-    block.declared = (data.args['declared'] as string | undefined) ?? '';
+    block.scope = (data.args.scope as VarScope | undefined) ?? 'private';
+    block.type = (data.args.type as ApRef | undefined) ?? null;
+    block.declared = (data.args.declared as string | undefined) ?? '';
     return block;
   }
 
@@ -739,9 +739,9 @@ export class TeamBlock extends ApBlock {
 
   static fromData(data: ApBlockData): TeamBlock {
     const block = restore(new TeamBlock(initOf(data)), data);
-    block.members = (data.args['members'] as ApRef[] | undefined) ?? [];
-    block.routing = (data.args['routing'] as { when: string; run: ApRef }[] | undefined) ?? null;
-    block.shared = (data.args['shared'] as string | undefined) ?? null;
+    block.members = (data.args.members as ApRef[] | undefined) ?? [];
+    block.routing = (data.args.routing as { when: string; run: ApRef }[] | undefined) ?? null;
+    block.shared = (data.args.shared as string | undefined) ?? null;
     return block;
   }
 
@@ -822,12 +822,12 @@ export class AgentBlock extends ApBlock {
 
   static fromData(data: ApBlockData): AgentBlock {
     const block = restore(new AgentBlock(initOf(data)), data);
-    block.roles = (data.args['roles'] as ApRef[] | undefined) ?? [];
-    block.mandate = (data.args['mandate'] as string | undefined) ?? null;
-    block.budget = (data.args['budget'] as string | undefined) ?? null;
-    block.lensIn = (data.args['lensIn'] as ApShape | undefined) ?? null;
-    block.lensOut = (data.args['lensOut'] as ApShape | undefined) ?? null;
-    block.shape = (data.args['shape'] as ApShape | undefined) ?? null;
+    block.roles = (data.args.roles as ApRef[] | undefined) ?? [];
+    block.mandate = (data.args.mandate as string | undefined) ?? null;
+    block.budget = (data.args.budget as string | undefined) ?? null;
+    block.lensIn = (data.args.lensIn as ApShape | undefined) ?? null;
+    block.lensOut = (data.args.lensOut as ApShape | undefined) ?? null;
+    block.shape = (data.args.shape as ApShape | undefined) ?? null;
     return block;
   }
 
@@ -846,7 +846,7 @@ export class AgentBlock extends ApBlock {
     if (this.mandate) identityMeta.set('MANDATE', [this.mandate]);
     const behaviours = renderNodes(env, mergedBehaviours(roleBlocks)).join('\n');
     // Legacy composition: `${identityBlock}\n${lens}${body}` — keep the extra newline.
-    let out = renderIdentityBlock(identityMeta, behaviours) + '\n';
+    let out = `${renderIdentityBlock(identityMeta, behaviours)}\n`;
 
     if (this.lensIn) {
       out += `${lensInLine(refName(this.lensIn.ref), env.refOf(this.lensIn.ref.target))}\n\n`;
@@ -920,18 +920,18 @@ export const KIND_STRATEGIES: KindStrategy[] = [
   // Chapter kinds, in the md chapter order (mirror of definition.ts STRATEGIES:
   // policy → role → template → procedure → flow → goal) — the layout pass
   // iterates this list to number chapters.
-  { kind: 'policy', revive: RuleBlock.fromData, folder: 'policies', chapterTitle: FORMULAS.blocks.policy.chapter, prefix: RuleBlock.PREFIXES['policy'],    ref: null,
+  { kind: 'policy', revive: RuleBlock.fromData, folder: 'policies', chapterTitle: FORMULAS.blocks.policy.chapter, prefix: RuleBlock.PREFIXES.policy,    ref: null,
     entries: ctx => ctx.policies,   from: RuleBlock.fromDefinition },
   { kind: 'role', revive: RoleBlock.fromData, folder: 'roles', chapterTitle: FORMULAS.blocks.role.chapter, prefix: RoleBlock.PREFIX,                ref: null,
     entries: (ctx, opts) => [...opts.boundRoles, ...ctx.roles],
     from: RoleBlock.fromDefinition },
   { kind: 'template', revive: TemplateBlock.fromData, folder: 'templates', chapterTitle: FORMULAS.blocks.template.chapter, prefix: TemplateBlock.PREFIX,            ref: 'templates',
     entries: ctx => ctx.templates,  from: TemplateBlock.fromDefinition },
-  { kind: 'procedure', revive: RuleBlock.fromData, folder: 'procedures', chapterTitle: FORMULAS.blocks.procedure.chapter, prefix: RuleBlock.PREFIXES['procedure'], ref: 'runnables',
+  { kind: 'procedure', revive: RuleBlock.fromData, folder: 'procedures', chapterTitle: FORMULAS.blocks.procedure.chapter, prefix: RuleBlock.PREFIXES.procedure, ref: 'runnables',
     entries: ctx => ctx.procedures, from: RuleBlock.fromDefinition },
-  { kind: 'flow', revive: RuleBlock.fromData, folder: 'flows', chapterTitle: FORMULAS.blocks.flow.chapter, prefix: RuleBlock.PREFIXES['flow'],      ref: 'runnables',
+  { kind: 'flow', revive: RuleBlock.fromData, folder: 'flows', chapterTitle: FORMULAS.blocks.flow.chapter, prefix: RuleBlock.PREFIXES.flow,      ref: 'runnables',
     entries: ctx => ctx.flows,      from: RuleBlock.fromDefinition },
-  { kind: 'skill', revive: RuleBlock.fromData, folder: 'skills', chapterTitle: FORMULAS.blocks.skill.chapter, prefix: RuleBlock.PREFIXES['skill'], ref: null,
+  { kind: 'skill', revive: RuleBlock.fromData, folder: 'skills', chapterTitle: FORMULAS.blocks.skill.chapter, prefix: RuleBlock.PREFIXES.skill, ref: null,
     entries: ctx => ctx.skills,     from: RuleBlock.fromDefinition },
   { kind: 'store', revive: StoreBlock.fromData, folder: 'stores', chapterTitle: FORMULAS.blocks.store.chapter, prefix: StoreBlock.PREFIX,               ref: 'stores',
     entries: ctx => ctx.stores,     from: StoreBlock.fromDefinition },

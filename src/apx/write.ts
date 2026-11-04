@@ -5,8 +5,8 @@
  * configured: the apx is agent-pack's standard output. Adapters only choose
  * what goes into their harness: a pointer to the apx, or the complete `.md`.
  */
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { PACKAGE_ROOT, TABELI_ENGINE, JUDGE_LOCK_DEFAULT, packageVersion, type Config } from '../config.js';
 import type { EmittedFile } from '../../adapters/types.js';
 import { apxFile, type ApxLimits } from './payload.js';

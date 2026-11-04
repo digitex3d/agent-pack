@@ -16,7 +16,7 @@
  *
  * A program's contract (`PROCEDURE**`, `COMPUTE`) is the engine's `run`.
  */
-import { readFileSync } from 'fs';
+import { readFileSync } from 'node:fs';
 import { FORMULAS, fill } from '../../formulas.js';
 import { refName } from '../../../adapters/md/phrases.js';
 import { jsonExample } from '../../shapeSchema.js';

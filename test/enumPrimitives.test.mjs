@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { strict as assert } from 'assert';
+import { strict as assert } from 'node:assert';
 import { applyEnumPrimitives, renderEnumLegend } from '../dist/src/enumPrimitives.js';
 
 // Helper: build a minimal BundleContext stub with a lintErrors array

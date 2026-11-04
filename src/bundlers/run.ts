@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { resolve } from 'path';
-import { Config } from '../config.js';
-import { AdapterCtx, AdapterPlugin, Bundle, EmittedFile, Emitter, emitterFor, neutralEmitter } from '../../adapters/types.js';
+import { resolve } from 'node:path';
+import type { Config } from '../config.js';
+import { type AdapterCtx, type AdapterPlugin, type Bundle, type EmittedFile, type Emitter, emitterFor, neutralEmitter } from '../../adapters/types.js';
 import { detectAndBuild } from './detect.js';
-import { BuildAgentOptions } from './agent.js';
+import type { BuildAgentOptions } from './agent.js';
 import { apxFiles, apxChecks } from '../apx/write.js';
 import { FLOWS_DIR, flowScriptFile } from '../apx/paths.js';
 

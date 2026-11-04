@@ -15,11 +15,11 @@
  * unwrap seam), and namespace derivation to `buildNamespace`.
  */
 
-import { readdirSync, statSync, readFileSync } from 'fs';
-import { dirname, join, resolve } from 'path';
-import { ingestRaw, IngestKind, kindFromDir, BLOCK_KINDS } from './ingest.js';
+import { readdirSync, statSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { ingestRaw, type IngestKind, kindFromDir, BLOCK_KINDS } from './ingest.js';
 import { extractPrimitives, extractAbout, exportedBlocksOf } from './services/text.js';
-import { parseBlocks, isExportedVar, Block } from './parseBlocks.js';
+import { parseBlocks, isExportedVar, type Block } from './parseBlocks.js';
 import { buildNamespace } from './namespace.js';
 import { librariesAliasMap } from './config.js';
 import type { Config } from './config.js';

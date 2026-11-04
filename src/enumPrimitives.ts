@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { ENUM_PRIMITIVES, EnumPrimitive, enumPrimitiveFor } from './primitives.js';
+import { ENUM_PRIMITIVES, type EnumPrimitive, enumPrimitiveFor } from './primitives.js';
 import type { BundleContext } from './dispatch/types.js';
 
 /**

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { existsSync } from 'fs';
-import { resolve } from 'path';
-import { Config, AGENTS_MD, PROJECT_SOURCE } from './config.js';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { type Config, AGENTS_MD, PROJECT_SOURCE } from './config.js';
 import { bundleStandaloneToString } from './compiler/index.js';
 import { ensureMdBlock } from './services/mdBlock.js';
-import { AdapterPlugin } from '../adapters/types.js';
+import type { AdapterPlugin } from '../adapters/types.js';
 
 export { AGENTS_MD, PROJECT_SOURCE };
 

@@ -7,10 +7,10 @@
  * else. Every consumer of a step carries the branch: the lint, the document
  * (`lines()` with containers [step, if]), the md of AGENTS.md, `apx flow`, the Workflow script.
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { teamSource } from './helpers/team.mjs';
 
 const { lintFile, lintFlow } = await import('../dist/src/lint.js');
@@ -40,7 +40,7 @@ const lib = join(tmp, 'library');
 const team = join(tmp, 'teams', 'crew');
 mkdirSync(lib, { recursive: true });
 mkdirSync(team, { recursive: true });
-const write = (file, lines) => { writeFileSync(file, lines.join('\n') + '\n'); return file; };
+const write = (file, lines) => { writeFileSync(file, `${lines.join('\n')}\n`); return file; };
 const crew = lines => teamSource('crew', ['builder'], lines);
 const flowsFile = write(join(team, 'crew.ap'), crew([
   'ABOUT  a crew',                                     // 1
@@ -62,7 +62,7 @@ const agentFile = write(join(team, 'builder.ap'), [
 
 try {
   // --- lint: the team file and a flow file both take the IF/ELSE ---
-  assert.deepEqual(lintFile(flowsFile, crew(['ABOUT  a crew', '', ...FLOW]).join('\n') + '\n'), [], 'a team file lints clean');
+  assert.deepEqual(lintFile(flowsFile, `${crew(['ABOUT  a crew', '', ...FLOW]).join('\n')}\n`), [], 'a team file lints clean');
   const flowFile = join(tmp, 'flows', 'ship.ap');
   const lintShip = (...lines) => lintFlow(flowFile, ['# ship', '', 'ABOUT  ship it', '', 'FLOW ship', ...lines, ''].join('\n'));
   assert.deepEqual(lintShip(...FLOW.slice(1)), [], 'a flow file lints clean — a step whose DO all sit under an IF included');

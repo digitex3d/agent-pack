@@ -14,7 +14,7 @@
  * without ad-hoc string slicing.
  */
 
-import { dirname, resolve, relative, sep } from 'path';
+import { dirname, resolve, relative, sep } from 'node:path';
 
 /**
  * Build the alias-qualified dotted namespace for a file from its path.

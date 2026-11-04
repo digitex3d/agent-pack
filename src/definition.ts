@@ -95,9 +95,9 @@ export function defaults(kind: string): DefinitionStrategy {
     kind,
     headerKeyword: kind.toUpperCase() as Keyword,
     runnable: false,
-    sectionTitle: capitalize(kind) + 's',
+    sectionTitle: `${capitalize(kind)}s`,
     formatHeading: name => `\`${name}\``,
-    getEntries: ctx => (ctx as any)[kind + 's'] as Definition[],
+    getEntries: ctx => (ctx as any)[`${kind}s`] as Definition[],
     afterEmit: propagateRefId,
   };
 }

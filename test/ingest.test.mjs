@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { strict as assert } from 'assert';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { ingestFile, kindFromDir, unitKindOf, deriveNamespace } from '../dist/src/ingest.js';
 
 // --- kindFromDir: the dir-fallback. The kind comes from the kind-folder, never
@@ -212,14 +212,10 @@ try {
     assert.equal(r.kind, 'generic', 'no EXPORT AGENT block: not an agent kind');
     assert.equal(r.name, 'fallback-header', 'falls back to H1 for the name');
   }
-
-  // --- File not found throws ---
-  {
     assert.throws(
       () => ingestFile(join(tmp, 'does-not-exist.ap'), { libraryRoot: tmp }),
       /file not found/,
     );
-  }
 } finally {
   rmSync(tmp, { recursive: true });
 }

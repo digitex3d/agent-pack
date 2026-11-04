@@ -10,10 +10,10 @@
  * without one; a domain names files that are there; WRITES and READS in an
  * agent, and OWNS, fail with the rewrite.
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
-import { join, dirname } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const { bundleAgentObject } = await import('../dist/src/compiler/index.js');
 const { lintFile } = await import('../dist/src/lint.js');
@@ -24,7 +24,7 @@ const { UnitStore } = await import('../dist/src/judge/units.js');
 
 const root = mkdtempSync(join(tmpdir(), 'ap-perimeter-'));
 const lib = join(root, 'library');
-const write = (file, lines) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, lines.join('\n') + '\n'); return file; };
+const write = (file, lines) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, `${lines.join('\n')}\n`); return file; };
 for (const f of ['src/api/routes.ts', 'src/shared/http.ts', 'src/db/schema.ts', 'docs/index.md']) write(join(root, f), ['x']);
 const domain = (name, lines) => write(join(lib, 'domains', `${name}.ap`), [`EXPORT DOMAIN ${name}:`, ...lines.map(l => `    ${l}`)]);
 domain('api', ['ABOUT   the HTTP layer', 'APPLIES #backend', 'WRITES  IN src/api/**, src/shared/http.ts', 'READS   IN src/db/**']);
@@ -81,7 +81,7 @@ try {
 
   // --- the names: a domain it imports; files that are there ---
   await assert.rejects(compile(['@WITHIN nope']), /`@WITHIN nope`: no imported domain is called `nope`/);
-  await assert.rejects(compile(['@WITHIN ghost'], [], ['IMPORT ghost FROM @main.domains', '']), /ghost\.ap:1  DOMAIN ghost: no file of the project matches `nowhere\/\*\*`/);
+  await assert.rejects(compile(['@WITHIN ghost'], [], ['IMPORT ghost FROM @main.domains', '']), /ghost\.ap:1 {2}DOMAIN ghost: no file of the project matches `nowhere\/\*\*`/);
 
   // --- where @WITHIN stands: right above an AGENT, a TEAM, a FLOW or a STEP — never in a body, never opening a block ---
   await assert.rejects(compile([], ['    @WITHIN api', '    WHEN asked:', '        DO  it']), /`@WITHIN` stands above WHEN — @WITHIN stands only right above AGENT, TEAM, FLOW or STEP/);
@@ -93,7 +93,7 @@ try {
 
   // --- a domain file: ABOUT, WRITES and READS lines, globs inside the project, a formula only with a judge ---
   {
-    const lint = lines => lintFile(write(join(lib, 'domains', 'web.ap'), lines), lines.join('\n') + '\n').map(e => e.message);
+    const lint = lines => lintFile(write(join(lib, 'domains', 'web.ap'), lines), `${lines.join('\n')}\n`).map(e => e.message);
     const web = (...lines) => lint(['EXPORT DOMAIN web:', '    ABOUT  the web app', ...lines.map(l => `    ${l}`)]);
     assert.deepEqual(web('WRITES IN web/**', 'WRITES IN shared/ui.ts', 'READS IN lib/**'), [], 'lines add up');
     assert.ok(web().some(m => /DOMAIN block requires at least one of: WRITES, READS/.test(m)), 'a domain says its files');
@@ -108,7 +108,7 @@ try {
   }
   // --- where a DOMAIN goes: the file top or an agent's body; WRITES stands in a DOMAIN only ---
   {
-    const msgs = lines => lintFile(join(root, 'p.ap'), lines.join('\n') + '\n').map(e => e.message);
+    const msgs = lines => lintFile(join(root, 'p.ap'), `${lines.join('\n')}\n`).map(e => e.message);
     assert.ok(msgs(['EXPORT PROCEDURE p:', '    ABOUT  p', '    DOMAIN docs:', '        ABOUT  d', '        WRITES IN docs/**'])
       .some(m => m === "a DOMAIN is declared at the file top or directly in an agent's body — found inside PROCEDURE"));
     assert.ok(msgs(['EXPORT PROCEDURE p:', '    ABOUT  p', '    FOR    docs/**']).some(m => m === 'FOR is a line of a DIMENSION block — found inside PROCEDURE'));
@@ -138,7 +138,7 @@ try {
 
     // No judge: a formula is an error, at its line.
     http('WRITES! the code that serves HTTP');
-    await assert.rejects(compile(['@WITHIN http'], [], top), /http\.ap:3  WRITES! the code that serves HTTP: a domain formula needs a judge — add `judge` to the config/);
+    await assert.rejects(compile(['@WITHIN http'], [], top), /http\.ap:3 {2}WRITES! the code that serves HTTP: a domain formula needs a judge — add `judge` to the config/);
 
     // `!`: at or above `in` within, at or below `out` outside, between them the agent decides.
     let run = open();
@@ -209,9 +209,9 @@ try {
     assert.deepEqual([flow.body[0].keyword, flow.body[0].uses.length], ['@WITHIN', 2], "the team's @WITHIN decorates its flow");
     assert.ok(flow.body[0].body.some(n => n.keyword === '@WITHIN' && n.body.some(m => m.type === 'step' && m.title === 'build it')), "the step's, inside it");
     crew(['@WITHIN api'], [], ['@WITHIN db']);
-    await assert.rejects(build(), /crew\.ap:12  `@WITHIN db`: the @WITHIN around it names `api` — a nested @WITHIN names only what that one does/);
+    await assert.rejects(build(), /crew\.ap:12 {2}`@WITHIN db`: the @WITHIN around it names `api` — a nested @WITHIN names only what that one does/);
     crew([], ['@WITHIN db'], []);
-    await assert.rejects(build(), /crew\.ap:13  @WITHIN db: `builder`, whom this line delegates to, works within `api` — a step's @WITHIN names only domains of the agents it delegates to/);
+    await assert.rejects(build(), /crew\.ap:13 {2}@WITHIN db: `builder`, whom this line delegates to, works within `api` — a step's @WITHIN names only domains of the agents it delegates to/);
     member('builder');
     await build();
   }

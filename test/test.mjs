@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { writeFileSync, mkdirSync, rmSync } from 'fs';
-import { strict as assert } from 'assert';
-import { join, resolve } from 'path';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { strict as assert } from 'node:assert';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { dirname } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '..');
@@ -115,7 +115,7 @@ console.log('Block-scoped lint (EXPORT) tests passed.');
   const { emitProjectContext, ensureProjectPointers } = await import('../dist/src/projectContext.js');
   const { loadConfig } = await import('../dist/src/config.js');
   const { default: claudeCodeAdapter } = await import('../dist/adapters/claude-code/index.js');
-  const { existsSync, readFileSync } = await import('fs');
+  const { existsSync, readFileSync } = await import('node:fs');
 
   const tmp = '/tmp/agent-pack-project-context-test';
   rmSync(tmp, { recursive: true, force: true });
@@ -208,7 +208,7 @@ await import('./identity.test.mjs');
 // --- resolveImports: tools kind ---
 {
   const { resolveImports } = await import('../dist/src/dispatch/imports.js');
-  const { existsSync } = await import('fs');
+  const { existsSync } = await import('node:fs');
 
   // Self-contained fixture: the legacy templates/library tools were removed, so
   // build a throwaway library on disk to exercise the tools-kind resolution.
@@ -387,5 +387,8 @@ await import('./dimensions.test.mjs');
 
 // --- plugins: a block and the apx commands that serve it, from a plugin folder in the config ---
 await import('./plugins.test.mjs');
+
+// --- lint: one switch over the block kinds ---
+await import('./lintKindSwitch.test.mjs');
 
 console.log('All tests passed.');

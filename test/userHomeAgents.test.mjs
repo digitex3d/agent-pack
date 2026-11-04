@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { strict as assert } from 'assert';
-import { writeFileSync, mkdtempSync, mkdirSync, rmSync } from 'fs';
-import { join, resolve } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
+import { writeFileSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { teamSource } from './helpers/team.mjs';
 
 const { loadConfig } = await import('../dist/src/config.js');

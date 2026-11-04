@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { mkdirSync, writeFileSync } from 'fs';
-import { resolve, dirname, relative, sep } from 'path';
-import { loadConfig, Config, libraryRoots as libraryRootsOf, librariesAliasMap, BUILTIN_LIBRARY_ROOT, packageInfo } from '../config.js';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { resolve, dirname, relative, sep } from 'node:path';
+import { loadConfig, type Config, libraryRoots as libraryRootsOf, librariesAliasMap, BUILTIN_LIBRARY_ROOT, packageInfo } from '../config.js';
 import { AdapterRegistry } from '../adapter-registry.js';
-import { AdapterCtx, AdapterPlugin, EmittedFile } from '../../adapters/types.js';
+import type { AdapterCtx, AdapterPlugin, EmittedFile } from '../../adapters/types.js';
 import { bundleAndEmit } from '../bundlers/run.js';
 import { orphanPrograms } from '../executor.js';
 import { emitProjectContext, ensureProjectPointers, AGENTS_MD, PROJECT_SOURCE } from '../projectContext.js';

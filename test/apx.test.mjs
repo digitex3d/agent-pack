@@ -9,12 +9,12 @@
  * policy, a role, a template, a procedure, a WHEN workflow, a store, the
  * team with its routing and flow, and a fellow member defined elsewhere.
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
-import { join, resolve, dirname } from 'path';
-import { tmpdir } from 'os';
-import { spawnSync } from 'child_process';
-import { fileURLToPath } from 'url';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { join, resolve, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { bundleAgentObject } from '../dist/src/compiler/index.js';
 import { ApDocument } from '../dist/src/apdoc/document.js';
 import { ApxEngine } from '../dist/src/apx/engine.js';
@@ -192,7 +192,7 @@ const answers = quiz.map((q, i) => `${i + 1}=${q.right}`);
 }
 
 // --- md: the whole prompt, the same text the harness .md carries ---
-assert.equal(run('md').out + '\n', renderMd(doc), 'md is the md projection');
+assert.equal(`${run('md').out}\n`, renderMd(doc), 'md is the md projection');
 assert.equal(renderMd(doc), compiled.body, 'the round-tripped document renders the md the compiler wrote');
 
 // --- version and help ---

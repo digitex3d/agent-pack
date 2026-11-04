@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { AgentBundle, SkillBundle, AdapterPlugin } from '../../adapters/types.js';
-import { Config } from '../config.js';
+import { AgentBundle, SkillBundle, type AdapterPlugin } from '../../adapters/types.js';
+import type { Config } from '../config.js';
 import { bundleAgentObjectFromConfig } from '../compiler/index.js';
-import { dirname } from 'path';
+import { dirname } from 'node:path';
 import type { JudgeRun } from '../judge/phase.js';
 
 export interface BuildAgentOptions {

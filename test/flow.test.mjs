@@ -7,11 +7,11 @@
  * Parser-specific tests (parseFlowFile, FlowEntry fields) are removed: the
  * generic file.ts collect pipeline handles flow files without a custom parser.
  */
-import { strict as assert } from 'assert';
-import { mkdirSync, writeFileSync, rmSync } from 'fs';
-import { join } from 'path';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+import { strict as assert } from 'node:assert';
+import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { dirname } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

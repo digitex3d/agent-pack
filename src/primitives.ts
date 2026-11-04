@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { renderKeywordBlock, escapeRegex } from './services/text.js';
+import { renderKeywordBlock, } from './services/text.js';
 import { FORMULAS, fill, refSuffix } from './formulas.js';
-import { lex, Keyword } from './lexer.js';
+import { lex, type Keyword } from './lexer.js';
 import type { BundleContext } from './dispatch/types.js';
 import { resolveRunTarget } from './definition.js';
 import { applyVars } from './vars.js';
@@ -122,7 +122,7 @@ export const MandatePrimitive: PrimitiveStrategy = {
  */
 export const LensOutPrimitive: PrimitiveStrategy = {
   keyword: 'LENS-OUT',
-  renderNeutral: values => values.length === 0 ? '' : values.map(v => `AS! ${v.trim()}`).join('\n') + '\n\n',
+  renderNeutral: values => values.length === 0 ? '' : `${values.map(v => `AS! ${v.trim()}`).join('\n')}\n\n`,
   contributesFrontmatter: () => null,
 };
 
@@ -138,7 +138,7 @@ export const LensOutPrimitive: PrimitiveStrategy = {
 export const LensInPrimitive: PrimitiveStrategy = {
   keyword: 'LENS-IN',
   renderNeutral: values => values.length === 0 ? '' :
-    values.map(v => `You must read every request through the template @shape(${v.trim()}) — it is the shape your input arrives in.`).join('\n') + '\n\n',
+    `${values.map(v => `You must read every request through the template @shape(${v.trim()}) — it is the shape your input arrives in.`).join('\n')}\n\n`,
   contributesFrontmatter: () => null,
 };
 
@@ -347,9 +347,9 @@ export function createBulletGroupPrimitive(opts: {
     renderNeutral: (values, _ctx?) => {
       if (values.length === 0) return '';
       if (opts.inline && values.length <= opts.inline.maxCount) {
-        return opts.inline.format(values) + '\n\n';
+        return `${opts.inline.format(values)}\n\n`;
       }
-      return renderKeywordBlock(opts.intro, values) + '\n\n';
+      return `${renderKeywordBlock(opts.intro, values)}\n\n`;
     },
     contributesFrontmatter: (adapter, values) => {
       if (values.length === 0 || !claimedBy.includes(adapter)) return null;
@@ -392,7 +392,7 @@ export const RunPrimitive: BulletGroupPrimitive = {
   renderNeutral: (values, ctx?) => {
     if (values.length === 0) return '';
     // No context: fallback rendering (lint pass, pre-bundle processing).
-    if (!ctx) return bareRun(values) + '\n\n';
+    if (!ctx) return `${bareRun(values)}\n\n`;
     const R = FORMULAS.keywords.RUN;
     const rendered = values.map(name => {
       const target = resolveRunTarget(name, ctx);
@@ -402,8 +402,8 @@ export const RunPrimitive: BulletGroupPrimitive = {
       }
       return fill(R.line, { kind: target.kind, name, ref: refSuffix(target.refId) });
     });
-    if (rendered.length === 1) return rendered[0] + '\n\n';
-    return rendered.join('\n') + '\n\n';
+    if (rendered.length === 1) return `${rendered[0]}\n\n`;
+    return `${rendered.join('\n')}\n\n`;
   },
   contributesFrontmatter: () => null,
 };

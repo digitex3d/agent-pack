@@ -11,7 +11,7 @@
  * derived. The plugins this file installs live in this process only, so the
  * file runs on its own: `node test/lintKindSwitch.test.mjs`.
  */
-import { strict as assert } from 'assert';
+import { strict as assert } from 'node:assert';
 
 const { lintFile } = await import('../dist/src/lint.js');
 const { installPlugin } = await import('../dist/src/pluginLoader.js');
@@ -48,7 +48,7 @@ pin('/lib/dimensions/x.ap', FOO, [VOCAB_FOO, [1, 'dimension has no DIMENSION blo
 pin('/lib/domains/x.ap', FOO, [VOCAB_FOO, [1, 'domain has no DOMAIN block', null]]);
 
 // The options reach every built-in linter (maxLineLength).
-const LONG = 'ABOUT ' + 'word '.repeat(10) + '\n';
+const LONG = `ABOUT ${'word '.repeat(10)}\n`;
 for (const [dir, message] of Object.entries(BUILT_IN)) {
   pin(`/lib/${dir}/x.ap`, LONG, [[1, 'line exceeds max length of 20 (56 chars)', null], [1, message, null]], { maxLineLength: 20 });
 }

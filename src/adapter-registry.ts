@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { AdapterPlugin } from '../adapters/types.js';
-import { Config } from './config.js';
+import type { AdapterPlugin } from '../adapters/types.js';
+import type { Config } from './config.js';
 import claudeCodeAdapter from '../adapters/claude-code/index.js';
 import claudeCodeApxAdapter from '../adapters/claude-code-apx/index.js';
 import codexAdapter from '../adapters/codex/index.js';

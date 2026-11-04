@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { resolve } from 'path';
-import { AdapterPlugin, AgentBundle, SkillBundle, Emitter } from '../types.js';
+import { resolve } from 'node:path';
+import type { AdapterPlugin, AgentBundle, SkillBundle, Emitter } from '../types.js';
 import { descriptionOf } from '../skill-frontmatter.js';
 
 export interface CursorOptions {

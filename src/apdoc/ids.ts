@@ -12,7 +12,7 @@
  *                      (Distinct from `embedding.contentHash`, which hashes the
  *                      embedder INPUT text — see libraryIndex.embeddingInputFor.)
  */
-import { createHash } from 'crypto';
+import { createHash } from 'node:crypto';
 import type { ApBlockData } from './types.js';
 
 /** The sha256 of a text, in hex — the one hash every id, key and fingerprint is cut from. */

@@ -10,7 +10,7 @@
  * The payload is `{ build, document }`: build provenance (the tabeli engine
  * and the `checks` a checked condition needs included) and the agent's compiled document, exactly as `ApDocument.asJson()` wrote it.
  */
-import { gzipSync, gunzipSync } from 'zlib';
+import { gzipSync, gunzipSync } from 'node:zlib';
 import type { ApxBuild, ApxChecks } from './engine.js';
 import { sha256Hex } from '../apdoc/ids.js';
 

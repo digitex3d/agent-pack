@@ -15,10 +15,10 @@
  *
  * Mirrors the harness of import-metadata-leak.test.mjs (same real entry point).
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { bundleAgentToString } from '../dist/src/compiler/index.js';
 
 /** Bundle an agent that imports a single policy module with the given source text. */
@@ -33,7 +33,7 @@ async function bundlePolicy(policyText) {
     const agentDir = join(tmp, 'agent');
     mkdirSync(agentDir, { recursive: true });
     const agentFile = join(agentDir, 'parity-agent.ap');
-    writeFileSync(agentFile, ['IMPORT ctx FROM library.policies', '', 'EXPORT AGENT parity-agent:', '    ABOUT  agent that imports the ctx policy'].join('\n') + '\n', 'utf-8');
+    writeFileSync(agentFile, `${['IMPORT ctx FROM library.policies', '', 'EXPORT AGENT parity-agent:', '    ABOUT  agent that imports the ctx policy'].join('\n')}\n`, 'utf-8');
 
     return await bundleAgentToString({
       agentName: 'parity-agent', agentFile,
@@ -47,18 +47,18 @@ async function bundlePolicy(policyText) {
 }
 
 // Same module, two authored forms.
-const LEGACY = [
+const LEGACY = `${[
   '# ctx',
   'ABOUT  context-engineering rules for multi-agent work',
   'APPLIES   #context-engineering, #multi-agent, #orchestration, universal',
   'ALWAYS  engineer the informational environment as a structured blueprint',
   'ALWAYS  chain context: feed each step output as the typed input of the next',
   'NEVER  rely on a single shared prompt across multiple agents',
-].join('\n') + '\n';
+].join('\n')}\n`;
 
 // EXPORT form exactly as the codemod emits it (opener at indent 0, metadata +
 // body re-indented one step as block children).
-const EXPORTED = [
+const EXPORTED = `${[
   '# ctx',
   'EXPORT POLICY ctx:',
   '  ABOUT  context-engineering rules for multi-agent work',
@@ -67,7 +67,7 @@ const EXPORTED = [
   '  ALWAYS  engineer the informational environment as a structured blueprint',
   '  ALWAYS  chain context: feed each step output as the typed input of the next',
   '  NEVER  rely on a single shared prompt across multiple agents',
-].join('\n') + '\n';
+].join('\n')}\n`;
 
 const legacyBundle = await bundlePolicy(LEGACY);
 const exportBundle = await bundlePolicy(EXPORTED);

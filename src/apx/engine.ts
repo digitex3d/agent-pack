@@ -13,18 +13,18 @@
  * one `# error:` line carrying the command that fixes it. `check` answers on its
  * first line, `open` (exit 0) or `closed` (exit 1, or 2 on a usage or config error).
  */
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs';
-import { dirname, join, resolve } from 'path';
-import { spawnSync, type SpawnSyncOptionsWithStringEncoding } from 'child_process';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { spawnSync, type SpawnSyncOptionsWithStringEncoding } from 'node:child_process';
 import { ApDocument as ApDocumentClass, type ApDocument } from '../apdoc/document.js';
 import type { ApBlock } from '../apdoc/block.js';
 import type { ApRef, ApNode, ApWhenNode, ApRunNode, ApDirectiveNode } from '../apdoc/types.js';
-import { KIND_STRATEGIES, type AgentBlock, type TeamBlock, type StoreBlock, type VarBlock, type DimensionBlock, type TemplateBlock, type DomainBlock } from '../apdoc/blocks.js';
+import { KIND_STRATEGIES, type AgentBlock, type TeamBlock, type VarBlock, type DimensionBlock, type DomainBlock } from '../apdoc/blocks.js';
 import { mdEnv, renderPreamble, renderEntry, renderMd } from '../../adapters/md/index.js';
 import type { MdEnv } from '../../adapters/md/toolkit.js';
 import { FORMULAS, fill, type QuizQuestion } from '../formulas.js';
-import { DISTILLED_DIR, FLOWS_DIR, WORK_DIR, apxPath, flowScriptStem, projectRootOf, projectStoreDir } from './paths.js';
-import { type ApxVerb } from './verbs.js';
+import { FLOWS_DIR, WORK_DIR, apxPath, flowScriptStem, projectRootOf, } from './paths.js';
+import type { ApxVerb } from './verbs.js';
 import { openSessionVars, type SessionVars, type CheckRecord, type ExecutorRecord } from './sessionVars.js';
 import { checkedKeyword, roundLine, roundOf, stateOf, type ApCheckSpec } from '../check.js';
 import { PROGRAM, WRITE_PROGRAM, executorKey, programDir, programFolders, type ApExecutorSpec } from '../executor.js';
@@ -42,14 +42,11 @@ import { splitHarness, type ApMark, type HarnessInvocation } from '../delegation
 import { parsePayload } from './payload.js';
 import { resolveWorkspace } from '../workspace/registry.js';
 import type { Allowed, WorkspaceSession } from '../workspace/types.js';
-import { splitList } from '../lists.js';
-import { fingerprint } from './dimensions.js';
 import { constantOf, readsOf } from '../vars.js';
-import { dimensionDefHash, dimensionTemplates } from './dimensions.js';
 import { servicesOf, serviceOf } from './services/registry.js';
 import { waitFor, OLD_DELEGATE_KIND } from './services/delegate.js';
 import { countOf } from './service.js';
-import { enumPrimitiveFor, type PerimeterGlobs } from '../primitives.js';
+import { type PerimeterGlobs } from '../primitives.js';
 import { globRegExp, matchesAnyGlob, literalGlob } from '../services/glob.js';
 
 /** The exit of an UNTIL*'s answer at its round limit: the loop ends (src/check.ts roundLine). */
@@ -664,7 +661,7 @@ export class ApxEngine {
           : 'out' in ran ? (sameJson(ran.out, test.output) ? null : `it answered ${ran.out.trim()}`) : `it gave no answer (${'refused' in ran ? ran.refused : 'timeout' in ran ? 'timeout' : ran.error})`;
         if (failed) return this.fail(6, `the program of ${id} fails its own test "${test.why}": ${failed} — fix the program or the test, then run again`);
       }
-      writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ ...manifest, tested: proof }, null, 2) + '\n');
+      writeFileSync(join(dir, 'manifest.json'), `${JSON.stringify({ ...manifest, tested: proof }, null, 2)}\n`);
     }
     let extra: Record<string, unknown> = {};
     if (spec.input.in) {
@@ -850,7 +847,7 @@ export class ApxEngine {
       for (const r of team.routing) out.push(`  WHEN ${r.when}  -> ${this.refLabel(r.run)}`);
     }
     if (team.shared) out.push(`shared: ${team.shared}`);
-    return out.join('\n') + '\n';
+    return `${out.join('\n')}\n`;
   }
 
   /** `uses:` and `used by:` of a block, each with its command. */

@@ -10,7 +10,7 @@
  * that are new or changed (or all of them, when the formula changes); a human
  * decision in the lock wins. Without a judge a formula is an error.
  */
-import { readFileSync } from 'fs';
+import { readFileSync } from 'node:fs';
 import type { ApDocument } from '../apdoc/document.js';
 import type { DomainBlock } from '../apdoc/blocks.js';
 import type { BundleContext } from '../dispatch/types.js';
@@ -18,7 +18,7 @@ import type { LintError } from '../lint.js';
 import { formulaQuestion, noJudgeMessage, type DomainFormula } from '../domains.js';
 import { projectFiles, relativeWithin } from '../services/fs.js';
 import { matchesAnyGlob } from '../services/glob.js';
-import { resolve } from 'path';
+import { resolve } from 'node:path';
 import type { JudgeRun } from './phase.js';
 
 /** The 1-based line of a formula in its domain file — the first line of its keyword, its `!`s and its text. */

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { dirname, resolve } from 'path';
-import { fileURLToPath } from 'url';
-import { AdapterPlugin, AgentBundle, Emitter } from '../types.js';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import type { AdapterPlugin, AgentBundle, Emitter } from '../types.js';
 import { descriptionOf } from '../skill-frontmatter.js';
 import type { BudgetModels } from '../budget.js';
 import { makeClaudeSkillEmitter } from '../claude-code/emitters/claude-skill.js';

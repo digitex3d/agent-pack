@@ -13,8 +13,8 @@
  * `permissionDecision: "deny"` stops the write. The check is the apx's
  * (`guard`, src/apx/engine.ts).
  */
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { dirname, resolve } from 'path';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { RUNTIME_DIR, APX_DIR } from '../../../src/apx/paths.js';
 
 /** Where the hook's script is written, from the project root. */

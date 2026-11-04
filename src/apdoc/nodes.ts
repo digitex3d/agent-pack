@@ -24,7 +24,7 @@ import type {
 import { checkHead, type ApCondCheck, type CheckKind } from '../check.js';
 import { FORMULAS, fill } from '../formulas.js';
 import {
-  MdEnv, renderNodes, renderDirectiveGroup, directiveText, executorHow, indentLines, runIntoLines, shapeLine, storeVarLine,
+  type MdEnv, renderNodes, renderDirectiveGroup, directiveText, executorHow, indentLines, runIntoLines, shapeLine, storeVarLine,
 } from '../../adapters/md/toolkit.js';
 import {
   controlHead, executorHead, executorRounds, refName, runLine, unresolvedRun,
@@ -143,7 +143,7 @@ export class DirectiveNode extends NodeBase implements ApDirectiveNode {
       ];
     }
     return [
-      ...indentLines(renderDirectiveGroup(env, this.keyword, this.force, [directiveText(this, env) + ':']), this.indent ?? 0),
+      ...indentLines(renderDirectiveGroup(env, this.keyword, this.force, [`${directiveText(this, env)}:`]), this.indent ?? 0),
       ...renderNodes(env, this.body ?? [], ordered),
     ];
   }

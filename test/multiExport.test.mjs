@@ -14,11 +14,11 @@
  *
  * Uses the real bundle entry point (same harness as export-block-bundle-parity).
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'fs';
-import { join, resolve, dirname } from 'path';
-import { tmpdir } from 'os';
-import { fileURLToPath } from 'url';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { join, resolve, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { bundleAgentToString } from '../dist/src/compiler/index.js';
 
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -81,13 +81,13 @@ const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
     const agentDir = join(tmp, 'agent');
     mkdirSync(agentDir, { recursive: true });
     const agentFile = join(agentDir, 'repro-agent.ap');
-    writeFileSync(agentFile, [
+    writeFileSync(agentFile, `${[
       'IMPORT card, feature-card FROM @main.templates',
       '',
       'EXPORT AGENT repro-agent:',
       '    ABOUT  binds a non-first export of a multi-template module',
       '    LENS-OUT feature-card',
-    ].join('\n') + '\n', 'utf-8');
+    ].join('\n')}\n`, 'utf-8');
 
     const out = await bundleAgentToString({
       agentName: 'repro-agent', agentFile, agentDir,

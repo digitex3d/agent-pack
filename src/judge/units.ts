@@ -20,8 +20,8 @@
  * change asks every line again. A diagnostic
  * has the shape of a LintError without its file — the unit names the source.
  */
-import { existsSync, readFileSync, unlinkSync } from 'fs';
-import { basename, dirname, join, resolve } from 'path';
+import { existsSync, readFileSync, unlinkSync } from 'node:fs';
+import { basename, dirname, join, resolve } from 'node:path';
 import { isProbability } from './lock.js';
 import { sha256Hex } from '../apdoc/ids.js';
 import { filesUnder, readJsonFile, relativeWithin, removeEmptyDirs, writeFileAtomic } from '../services/fs.js';
@@ -112,7 +112,7 @@ export class UnitStore {
   /** Write a source's unit when it changed. */
   write(file: string, unit: Unit): void {
     const path = this.pathOf(file);
-    const text = JSON.stringify(unit, null, 2) + '\n';
+    const text = `${JSON.stringify(unit, null, 2)}\n`;
     if (existsSync(path) && readFileSync(path, 'utf-8') === text) return;
     writeFileAtomic(path, text);
   }

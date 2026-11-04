@@ -7,10 +7,10 @@
  * The phrase is neutral unless the adapter renders it (Claude Code: its agent
  * memory, with `memory: project` in the frontmatter).
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const { bundleAgentObject } = await import('../dist/src/compiler/index.js');
 const { renderTree } = await import('../dist/src/bundlers/renderTree.js');

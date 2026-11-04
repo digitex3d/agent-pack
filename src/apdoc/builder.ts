@@ -25,17 +25,16 @@
 import { readDecorator, decoratorPhrase, lookupIn } from '../decoratorUse.js';
 import { DecoratorScope, DECORATOR_MARK, escapeMessage, workless, type DecoratorLine } from '../decorators.js';
 import { plugins, pluginOf } from '../plugins.js';
-import { existsSync } from 'fs';
-import { resolve, basename } from 'path';
+import { basename } from 'node:path';
 import type { BundleContext } from '../dispatch/types.js';
 import type { Definition } from '../definition.js';
-import { lex, Token } from '../lexer.js';
-import { buildTree, isStructural, stripTrailingColon, rawOf, restOf, Node as WalkNode } from '../bundlers/renderTree.js';
+import { lex, type Token } from '../lexer.js';
+import { buildTree, isStructural, stripTrailingColon, rawOf, restOf, type Node as WalkNode } from '../bundlers/renderTree.js';
 import { condCheckOf, checkedKeyword, checkedVars, questionOf, sugaredHead, splitMax, maxIssue, type ApCheckSpec, type CheckKind, type CheckLevel, type CheckSite } from '../check.js';
 import { sequencePrimitiveFor } from '../sequencePrimitives.js';
-import { parseTypeSpec, jsonExample, templateClosure } from '../shapeSchema.js';
+import { parseTypeSpec, templateClosure } from '../shapeSchema.js';
 import { refName } from '../../adapters/md/phrases.js';
-import { extractPrimitive, stripPrimitives, exportedBlockBodies } from '../services/text.js';
+import { extractPrimitive, stripPrimitives, } from '../services/text.js';
 import { strategyFor } from '../definition.js';
 import { stripHeaderKeyword } from '../primitives.js';
 import { buildNamespace } from '../namespace.js';
@@ -51,14 +50,14 @@ import {
   readTeamFile,
   teamRootForAgentFile,
 } from '../services/teamMetadata.js';
-import { parseBlocks, type Block } from '../parseBlocks.js';
+import { type Block } from '../parseBlocks.js';
 import type { ApNode, ApRef, ApShape, ApSlotType, ApStepNode, ApIfNode, ApDocumentMeta, ApStoreProjection } from './types.js';
 import { parseVarLine, eachHeadOf, readsOf, splitInto, takesInto, constantOf, type VarScope } from '../vars.js';
 import { isDelegationVerb, parseDelegation, bindBackgroundWork, parseMark, contractListOf, delegationPhrases, MARK_VERB, type ApMark } from '../delegation.js';
 import { splitHarness } from '../delegation.js';
 import { shortId } from './ids.js';
 import type { PlacedVariable } from '../exportedVars.js';
-import { introOf, fill, refSuffix, FORMULAS } from '../formulas.js';
+import { introOf, refSuffix, } from '../formulas.js';
 import { parseForceLevel, toCanonicalKeyword, getIntroByKeyword, forceLevelFamilies } from '../forceLevelConfig.js';
 
 /** Keyword (post-desugar or alias) → family base + numeric force; null force for bullets. */
@@ -72,12 +71,11 @@ function parseForce(keyword: string): { base: string; force: number | null } {
 function stripColon(s: string): string {
   return stripTrailingColon(s).trim();
 }
-import { ApBlock, ApBlockInit } from './block.js';
+import type { ApBlock, ApBlockInit } from './block.js';
 import {
-  BlockCx, RuleBlock, TeamBlock, AgentBlock, VarBlock,
-  TemplateBlock, TeamScan, KIND_STRATEGIES, strategyOf, kindOfFolder, refId, namespaceOf, RefClass,
+  type BlockCx, RuleBlock, TeamBlock, AgentBlock, VarBlock,type TeamScan, KIND_STRATEGIES, strategyOf, kindOfFolder, refId, namespaceOf, type RefClass,
 } from './blocks.js';
-import { ApDocument, BlockProvenance } from './document.js';
+import { ApDocument, type BlockProvenance } from './document.js';
 import { COMPUTE_SECTIONS, executorMark, executorSpecs, returnShape } from '../executor.js';
 import { DirectiveNode, RunNode, TextNode, IfNode, UntilNode, WhenNode, StepNode, EachNode, InNode, VarNode } from './nodes.js';
 import { splitList } from '../lists.js';
@@ -1058,7 +1056,7 @@ export class DocumentBuilder implements BlockCx {
       );
     }
 
-    const flowRun = ctx.renderings?.['FLOW']?.['run'];
+    const flowRun = ctx.renderings?.FLOW?.run;
     const phrases = delegationPhrases(ctx.renderings);
     return {
       root: `${AgentBlock.NAMESPACE}/${ctx.agentName}`,

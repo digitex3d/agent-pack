@@ -6,9 +6,9 @@
  * table, reading answers and adding-or-updating by key are written once, here.
  * The engine is the one agent-pack builds (`tabeli/`), recorded in the apx.
  */
-import { existsSync, mkdirSync } from 'fs';
-import { dirname } from 'path';
-import { spawnSync, type SpawnSyncReturns } from 'child_process';
+import { existsSync, mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
 
 /** The oldest tabeli the apx works with: v1 stored a value's bytes lossily. */
 const MIN_TABELI = 2;

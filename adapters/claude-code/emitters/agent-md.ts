@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { resolve } from 'path';
-import { Emitter, AgentBundle } from '../../types.js';
-import { collectFrontmatter, serializeFrontmatter, FrontmatterField } from '../../../src/primitives.js';
+import { resolve } from 'node:path';
+import type { Emitter, AgentBundle } from '../../types.js';
+import { collectFrontmatter, serializeFrontmatter, type FrontmatterField } from '../../../src/primitives.js';
 import { someNode } from '../../../src/apdoc/nodes.js';
 import { DEFAULT_DELEGATE } from '../../../src/config.js';
 import { budgetModel, type BudgetModels } from '../../budget.js';
@@ -49,7 +49,7 @@ export function buildAgentFrontmatter(b: AgentBundle, tools: string, models: Bud
   ].map(f => Array.isArray(f.value) || f.value === NO_TOOLS ? f : { ...f, value: quoteIfNeeded(f.value as string) });
 
   // The perimeter's hook is the project's, in its settings (emitters/guard-hook.ts): no agent carries one.
-  return serializeFrontmatter(fields) + '\n';
+  return `${serializeFrontmatter(fields)}\n`;
 }
 
 /**

@@ -12,10 +12,10 @@
  *   - the orchestration reads the same file: purpose, members, routing, flows
  */
 
-import { strict as assert } from 'assert';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { teamSource } from './helpers/team.mjs';
 
 const { bundleAgentObject } = await import('../dist/src/compiler/index.js');
@@ -29,7 +29,7 @@ const teams = join(tmp, 'teams');
 const team = join(teams, 'crew');
 mkdirSync(join(lib, 'templates'), { recursive: true });
 mkdirSync(team, { recursive: true });
-const write = (file, lines) => { writeFileSync(file, lines.join('\n') + '\n'); return file; };
+const write = (file, lines) => { writeFileSync(file, `${lines.join('\n')}\n`); return file; };
 
 write(join(lib, 'templates', 'report.ap'), ['EXPORT TEMPLATE report:', '    ABOUT  a report', '    SLOTS:', '        text: TEXT  "the text"', '    BODY:', '        {text}']);
 const member = (name, about = 'a member') => write(join(team, `${name}.ap`), [
@@ -109,22 +109,22 @@ try {
 
   // --- the roster is authoritative ---
   writeTeam(TEAM_BODY, ['builder']);
-  await assert.rejects(compile(), /crew\.ap:3  TEAM crew: the agent `checker` \(checker\.ap\) is in the folder but not among its MEMBER lines/);
+  await assert.rejects(compile(), /crew\.ap:3 {2}TEAM crew: the agent `checker` \(checker\.ap\) is in the folder but not among its MEMBER lines/);
   writeTeam(TEAM_BODY, ['builder', 'checker', 'ghost']);
-  await assert.rejects(compile(), /crew\.ap:4  MEMBER ghost: no agent file in `crew\/` declares `EXPORT AGENT ghost`/);
+  await assert.rejects(compile(), /crew\.ap:4 {2}MEMBER ghost: no agent file in `crew\/` declares `EXPORT AGENT ghost`/);
   writeTeam(TEAM_BODY, ['builder', 'checker', 'builder']);
-  await assert.rejects(compile(), /crew\.ap:4  MEMBER builder: listed twice/);
+  await assert.rejects(compile(), /crew\.ap:4 {2}MEMBER builder: listed twice/);
   write(teamFile, teamSource('squad', ['builder', 'checker'], TEAM_BODY));
-  await assert.rejects(compile(), /crew\.ap:3  TEAM squad: a team is named like its folder — `crew`/);
+  await assert.rejects(compile(), /crew\.ap:3 {2}TEAM squad: a team is named like its folder — `crew`/);
   await assert.rejects(orchestration(), /TEAM squad: a team is named like its folder/);
 
   // --- the block's own contract ---
   write(teamFile, ['EXPORT TEAM crew:', '    MEMBER  builder, checker']);
-  await assert.rejects(compile(), /crew\.ap:1  TEAM block requires at least one ABOUT/);
+  await assert.rejects(compile(), /crew\.ap:1 {2}TEAM block requires at least one ABOUT/);
   write(teamFile, ['EXPORT TEAM crew:', '    ABOUT   a crew']);
-  await assert.rejects(compile(), /crew\.ap:1  TEAM block requires at least one MEMBER/);
+  await assert.rejects(compile(), /crew\.ap:1 {2}TEAM block requires at least one MEMBER/);
   write(teamFile, ['EXPORT TEAM crew:', '    ABOUT   a crew', '    MEMBER  builder, checker', '    MANDATE ship']);
-  await assert.rejects(compile(), /crew\.ap:4  MANDATE is not allowed inside TEAM/);
+  await assert.rejects(compile(), /crew\.ap:4 {2}MANDATE is not allowed inside TEAM/);
   write(teamFile, ['TEAM crew:', '    ABOUT   a crew', '    MEMBER  builder, checker']);
   assert.ok(lintFile(teamFile, 'TEAM crew:\n    ABOUT   a crew\n    MEMBER  builder, checker\n').some(e => /a team is exported — write `EXPORT TEAM crew:`/.test(e.message)));
   assert.ok(lintFile(teamFile, ['EXPORT TEAM crew:', '    ABOUT   a', '    MEMBER  builder', 'EXPORT TEAM crew:', '    ABOUT   b', '    MEMBER  checker', ''].join('\n'))
@@ -134,8 +134,8 @@ try {
   // --- a flows.ap left behind is the error that names its replacement ---
   writeTeam(TEAM_BODY);
   write(join(team, 'flows.ap'), ['ABOUT  the old way']);
-  await assert.rejects(compile(), /flows\.ap:1  flows\.ap was replaced by `EXPORT TEAM crew:` in `crew\.ap`/);
-  await assert.rejects(orchestration(), /flows\.ap:1  flows\.ap was replaced by `EXPORT TEAM crew:`/);
+  await assert.rejects(compile(), /flows\.ap:1 {2}flows\.ap was replaced by `EXPORT TEAM crew:` in `crew\.ap`/);
+  await assert.rejects(orchestration(), /flows\.ap:1 {2}flows\.ap was replaced by `EXPORT TEAM crew:`/);
   rmSync(join(team, 'flows.ap'));
   // a folder with only a flows.ap is no team any more: its agents compile standalone, and the error still names the file
   const old = join(teams, 'old');
@@ -144,7 +144,7 @@ try {
   write(join(old, 'lone.ap'), ['EXPORT AGENT lone AS lone-role:', '    ABOUT  alone', '    MANDATE  work', '', 'ROLE lone-role:', '    ABOUT  a', '    ALWAYS  b']);
   assert.equal(teamRootForAgentFile(join(old, 'lone.ap')), null);
   await assert.rejects(bundleAgentObject({ agentName: 'lone', agentFile: join(old, 'lone.ap'), agentDir: old, libraryRoot: lib, libraryRoots: [lib], libraries: { '@main': lib }, bundleConfig: { runtime: false } }),
-    /flows\.ap:1  flows\.ap was replaced by `EXPORT TEAM old:` in `old\.ap`/);
+    /flows\.ap:1 {2}flows\.ap was replaced by `EXPORT TEAM old:` in `old\.ap`/);
   rmSync(old, { recursive: true });
 
   // --- the orchestration reads the same file ---

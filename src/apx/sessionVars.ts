@@ -12,7 +12,7 @@
  * tabeli's verbs — the grammar, the compiler and the prompts only ever say
  * `get`, `set` and `check`.
  */
-import { join } from 'path';
+import { join } from 'node:path';
 import { STATE_DIR } from './paths.js';
 import { openTable, queryTable, runTable, tabeliVersionError, upsertBy } from './tabeli.js';
 import type { VarScope } from '../vars.js';

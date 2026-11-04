@@ -5,10 +5,10 @@
  * line written directly in a `WHEN <trigger>:` (an `ON-…` hook too) shapes that
  * moment's answer, opening its body; it never becomes the agent's own shape.
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const { bundleAgentObject } = await import('../dist/src/compiler/index.js');
 

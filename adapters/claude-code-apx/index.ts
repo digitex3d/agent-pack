@@ -10,10 +10,10 @@
  * A skill's `SKILL.md` does the same. Everything else — the CLAUDE.md pointer
  * to AGENTS.md, the renderings — is the claude-code adapter's, taken as is.
  */
-import { resolve } from 'path';
-import { AdapterPlugin, AgentBundle, Emitter } from '../types.js';
+import { resolve } from 'node:path';
+import type { AdapterPlugin, AgentBundle, Emitter } from '../types.js';
 import { makeClaudeSkillEmitter } from '../claude-code/emitters/claude-skill.js';
-import claudeCodeAdapter, { ClaudeCodeOptions } from '../claude-code/index.js';
+import claudeCodeAdapter, { type ClaudeCodeOptions } from '../claude-code/index.js';
 import type { BudgetModels } from '../budget.js';
 import { buildAgentFrontmatter } from '../claude-code/emitters/agent-md.js';
 import { apxPath, apxCommand } from '../../src/apx/paths.js';

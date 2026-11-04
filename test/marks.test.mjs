@@ -14,19 +14,19 @@
  *   - the apx: mark (spec checked, MAX), start (zones, one copy each), get,
  *     within, deliver from the copy, wait (merge and land), one registry
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'fs';
-import { join, dirname } from 'path';
-import { tmpdir } from 'os';
-import { spawnSync } from 'child_process';
-import { fileURLToPath } from 'url';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const CLI = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'index.js');
 const { checkVocabulary, teamFileErrors } = await import('../dist/src/lint.js');
 const { STATE_DIR } = await import('../dist/src/apx/paths.js');
 const { queryTable } = await import('../dist/src/apx/tabeli.js');
 
-const write = (file, lines) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, (Array.isArray(lines) ? lines.join('\n') : lines) + '\n'); return file; };
+const write = (file, lines) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, `${Array.isArray(lines) ? lines.join('\n') : lines}\n`); return file; };
 const has = (out, ...needles) => { for (const n of needles) assert.ok(out.includes(n), `missing ${JSON.stringify(n)} in:\n${out}`); };
 const messages = (file, body) => [...checkVocabulary(file, body), ...teamFileErrors(file, body)].map(e => `${e.line}: ${e.message}`).join('\n');
 

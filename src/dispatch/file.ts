@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
 import { pluginOf } from '../plugins.js';
-import { BundleContext } from './types.js';
+import type { BundleContext } from './types.js';
 import { numberSteps } from '../refactor.js';
 import { applyVars } from '../vars.js';
 import { headingLine } from '../formulas.js';
-import { loadImport, resolveImportPath, readAndLint, allLibraryRoots, alreadyRegistered, processImportsOf, LoadRequest } from './shared.js';
+import { loadImport, resolveImportPath, readAndLint, allLibraryRoots, alreadyRegistered, processImportsOf, type LoadRequest } from './shared.js';
 import { ingestExportBlock, type IngestedFile, type BreadcrumbSegment } from '../ingest.js';
 import { exportedBlockBodies, nonExportedSource, type ExportedBlockBody } from '../services/text.js';
 

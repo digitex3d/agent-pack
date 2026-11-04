@@ -14,9 +14,9 @@
  * substitution, IMPORT expansion) only delete lines or rewrite inside a line —
  * never reorder — so an in-order scan finds every surviving line.
  */
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
-import { parseBlocks, agentNestedBlocks, ParseResult, Block } from './parseBlocks.js';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { parseBlocks, agentNestedBlocks, type ParseResult, type Block } from './parseBlocks.js';
 import { TEAM_KEY } from './blockTypes.js';
 import type { ApPos } from './apdoc/types.js';
 import { splitOnReads } from './vars.js';

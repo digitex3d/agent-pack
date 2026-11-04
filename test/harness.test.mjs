@@ -15,17 +15,17 @@
  *     and prints the recipe filled; deliver keeps the answer and, of what the
  *     copy changed, what stays within the perimeter; the WAIT merges it
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync, chmodSync } from 'fs';
-import { join, dirname, delimiter } from 'path';
-import { tmpdir } from 'os';
-import { spawnSync } from 'child_process';
-import { fileURLToPath } from 'url';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync, chmodSync } from 'node:fs';
+import { join, dirname, delimiter } from 'node:path';
+import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { teamSource } from './helpers/team.mjs';
 
 const CLI = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'index.js');
 const has = (out, ...needles) => { for (const n of needles) assert.ok(out.includes(n), `missing ${JSON.stringify(n)} in:\n${out}`); };
-const write = (file, lines) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, lines.join('\n') + '\n'); return file; };
+const write = (file, lines) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, `${lines.join('\n')}\n`); return file; };
 
 const proj = mkdtempSync(join(tmpdir(), 'ap-harness-'));
 const bin = mkdtempSync(join(tmpdir(), 'ap-harness-bin-'));

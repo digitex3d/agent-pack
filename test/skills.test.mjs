@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { strict as assert } from 'assert';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
-import { join, dirname } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
 
 /**
  * A skill is an agent: an `EXPORT SKILL <name> AS <role>:` block in the
@@ -20,7 +20,7 @@ const { default: codexAdapter } = await import('../dist/adapters/codex/index.js'
 
 const tmp = mkdtempSync(join(tmpdir(), 'ap-skills-'));
 const prevCwd = process.cwd();
-const write = (path, lines) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, lines.join('\n') + '\n', 'utf-8'); return path; };
+const write = (path, lines) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, `${lines.join('\n')}\n`, 'utf-8'); return path; };
 
 try {
   write(join(tmp, 'agent-pack.config.mjs'), ['export default {', "  libraryRoot: 'library',", "  agentsDir: 'agents',", '};']);
@@ -288,7 +288,7 @@ try {
     // an unknown item of an imported procedure is reported where it was written
     write(join(tmp, 'library', 'procedures', 'broken.ap'), ['EXPORT PROCEDURE broken:', '    ABOUT  broken', '    @WITH nosuch:', '        DO  work']);
     project(['ABOUT  project rules', 'IMPORT broken FROM @main.procedures', '', 'WHEN asked:', '  RUN broken']);
-    await assert.rejects(() => bundleStandaloneToString(join(tmp, 'PROJECT.ap'), config), /broken\.ap:3  `@WITH nosuch`: no imported skill, policy or dimension is called `nosuch`/);
+    await assert.rejects(() => bundleStandaloneToString(join(tmp, 'PROJECT.ap'), config), /broken\.ap:3 {2}`@WITH nosuch`: no imported skill, policy or dimension is called `nosuch`/);
     rmSync(join(tmp, 'library', 'procedures', 'broken.ap'));
     // an AS naming no template fails here too
     project(['ABOUT  project rules', 'IMPORT pdf FROM @harness.skills', '', 'PROCEDURE p:', '  ABOUT  p', '  @WITH pdf AS nope:', '    DO  read']);

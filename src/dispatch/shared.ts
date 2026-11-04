@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { existsSync } from 'fs';
-import { resolve, basename, isAbsolute } from 'path';
-import { BundleContext } from './types.js';
+import { existsSync } from 'node:fs';
+import { resolve, basename, isAbsolute } from 'node:path';
+import type { BundleContext } from './types.js';
 import { lintFile, type LintError } from '../lint.js';
-import { ingestRaw, IngestedFile } from '../ingest.js';
+import { ingestRaw, type IngestedFile } from '../ingest.js';
 
 /**
  * Minimal load request shape — replaces the legacy `ImportDirective` once the

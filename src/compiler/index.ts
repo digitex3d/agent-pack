@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
 import { plugins } from '../plugins.js';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { FORMULAS, fill, introOf } from '../formulas.js';
-import { resolve, join, dirname, basename, sep } from 'path';
+import { resolve, dirname, basename, sep } from 'node:path';
 import { unitNameFromPath } from '../ingest.js';
 import { projectAgentFiles } from '../agentDiscovery.js';
-import { Config, BundleConfig, LintConfig, libraryRoots as libraryRootsOf, librariesAliasMap } from '../config.js';
-import { BundleContext, RoleEntry } from '../dispatch/index.js';
+import { type Config, type BundleConfig, type LintConfig, libraryRoots as libraryRootsOf, librariesAliasMap } from '../config.js';
+import type { BundleContext, RoleEntry } from '../dispatch/index.js';
 import { parseAgentSignature } from '../definitionArgs.js';
-import { processImports, resolveTargetWith, SKILL_IMPORT_HINT } from '../dispatch/imports.js';
+import { processImports, SKILL_IMPORT_HINT } from '../dispatch/imports.js';
 import { unappliedBlocks, unappliedIssue, withScopeLine } from '../withUse.js';
 import { readDecorator } from '../decoratorUse.js';
 import { resolveBundleDefaults, resolveTeamShared } from '../bundleDefaults.js';
@@ -18,7 +18,7 @@ import { findAgentFiles, readAgentFile, standaloneDir, agentNameOf, teamRootForA
 import { harnessesOf, harnessProblem, agentModels, modelProblem, type HarnessRow } from '../harnesses.js';
 import { delegateTargetErrors, executorErrors, usesPrograms, WRITE_PROGRAM, type AgentIndexEntry } from '../executor.js';
 import { BUILTIN_AGENTS_DIR, resolveDelegateConfig, type DelegateConfig } from '../config.js';
-import { LintError, checkVocabulary, lineOfName, checkedHeadIssues, dimensionBlockErrors, domainBlockErrors, pluginBlockErrors, teamFileErrors } from '../lint.js';
+import { type LintError, checkVocabulary, lineOfName, checkedHeadIssues, dimensionBlockErrors, domainBlockErrors, pluginBlockErrors, teamFileErrors } from '../lint.js';
 import { CompileError, reporter } from '../report.js';
 import { extractInlineDefinitions } from '../dispatch/inlineBlocks.js';
 import { renderTree } from '../bundlers/renderTree.js';
@@ -27,14 +27,13 @@ import { partitionMetadata, mergeMetadata, protectVerbatim } from '../services/t
 import { lex, opensBlock } from '../lexer.js';
 import { applyBodySubstitutions, stripHeaderKeyword, AGENT_METADATA_KEYWORDS, renderGlobs } from '../primitives.js';
 import { resolveShapeRefs } from '../shapeCompiler.js';
-import { AdapterPlugin } from '../../adapters/types.js';
+import type { AdapterPlugin } from '../../adapters/types.js';
 import { renderMd } from '../../adapters/md/index.js';
 import { emitChapter } from '../bundlers/sections.js';
-import { STRATEGIES, strategyFor, type DefinitionStrategy, type Definition } from '../definition.js';
-import { parseNamespace } from '../namespace.js';
+import { STRATEGIES, type DefinitionStrategy, type Definition } from '../definition.js';
 import { DocumentBuilder } from '../apdoc/builder.js';
 import type { ApDocument } from '../apdoc/document.js';
-import type { AgentBlock, StoreBlock, DimensionBlock, DomainBlock, TemplateBlock, TeamBlock } from '../apdoc/blocks.js';
+import type { StoreBlock, DimensionBlock, DomainBlock, TemplateBlock, } from '../apdoc/blocks.js';
 import { hasProjectFile } from '../services/fs.js';
 import { matchesAnyGlob } from '../services/glob.js';
 import { DECORATOR_MARK, WITHIN_DECORATOR } from '../decorators.js';
@@ -584,7 +583,7 @@ export function postProcessBody(
   ctx: BundleContext,
   vars?: Record<string, string>,
 ): string {
-  return protectVerbatim(body.trimEnd() + '\n', masked => {
+  return protectVerbatim(`${body.trimEnd()}\n`, masked => {
     let result = applyBodySubstitutions(masked, {
       vars,
       templates: ctx.templates,

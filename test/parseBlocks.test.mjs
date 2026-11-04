@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { strict as assert } from 'assert';
+import { strict as assert } from 'node:assert';
 import { parseBlocks } from '../dist/src/parseBlocks.js';
 
 // --- 1. Single PROCEDURE block ---
@@ -110,7 +110,7 @@ PROCEDURE draw-component-diagram:
   DO label every edge
 `;
   const r = parseBlocks(src);
-  assert.equal(r.errors.length, 0, '7: no errors, got: ' + JSON.stringify(r.errors));
+  assert.equal(r.errors.length, 0, `7: no errors, got: ${JSON.stringify(r.errors)}`);
   assert.equal(r.blocks.length, 2, '7: two top-level blocks');
 
   const agent = r.blocks[0];
@@ -268,7 +268,7 @@ PROCEDURE foo:
   ALWAYS engineer the informational environment
 `;
   const r = parseBlocks(src);
-  assert.equal(r.errors.length, 0, '15: no errors, got: ' + JSON.stringify(r.errors));
+  assert.equal(r.errors.length, 0, `15: no errors, got: ${JSON.stringify(r.errors)}`);
   assert.equal(r.blocks.length, 1, '15: one top-level block');
   const b = r.blocks[0];
   assert.equal(b.key, 'POLICY', '15: modifier unwrapped to inner KIND');
@@ -303,7 +303,7 @@ PROCEDURE foo:
   const r = parseBlocks(src);
   assert.ok(
     r.errors.some(e => /EXPORT names an unknown block KIND "WIDGET"/.test(e.message)),
-    '17: unknown inner KIND reported, got: ' + JSON.stringify(r.errors),
+    `17: unknown inner KIND reported, got: ${JSON.stringify(r.errors)}`,
   );
   console.log('17. EXPORT unknown KIND error ok');
 }
@@ -316,7 +316,7 @@ PROCEDURE foo:
   const r = parseBlocks(src);
   assert.ok(
     r.errors.some(e => /EXPORT requires a block KIND before the name/.test(e.message)),
-    '18: missing KIND reported, got: ' + JSON.stringify(r.errors),
+    `18: missing KIND reported, got: ${JSON.stringify(r.errors)}`,
   );
   console.log('18. EXPORT missing KIND error ok');
 }
@@ -329,10 +329,10 @@ PROCEDURE foo:
   const r = parseBlocks(src);
   assert.ok(
     r.errors.some(e => /EXPORT POLICY requires a name/.test(e.message)),
-    '19: missing name reported, got: ' + JSON.stringify(r.errors),
+    `19: missing name reported, got: ${JSON.stringify(r.errors)}`,
   );
   // Exactly one diagnostic — the generic "requires a name" check must not pile on.
-  assert.equal(r.errors.length, 1, '19: single diagnostic, got: ' + JSON.stringify(r.errors));
+  assert.equal(r.errors.length, 1, `19: single diagnostic, got: ${JSON.stringify(r.errors)}`);
   console.log('19. EXPORT missing name error ok');
 }
 
@@ -345,7 +345,7 @@ PROCEDURE foo:
   const r = parseBlocks(src);
   assert.ok(
     r.errors.some(e => /EXPORT is only allowed on a top-level block/.test(e.message)),
-    '20: non-top-level EXPORT reported, got: ' + JSON.stringify(r.errors),
+    `20: non-top-level EXPORT reported, got: ${JSON.stringify(r.errors)}`,
   );
   // Recovery: the inner block still parses (as a private nested POLICY).
   const agent = r.blocks[0];

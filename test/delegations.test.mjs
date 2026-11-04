@@ -13,12 +13,12 @@
  *     were delivered
  *   - `WAIT … MAX <duration>` and the `wait.max` config key, checked
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'fs';
-import { join, dirname } from 'path';
-import { tmpdir } from 'os';
-import { spawnSync } from 'child_process';
-import { fileURLToPath } from 'url';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { teamSource } from './helpers/team.mjs';
 
 const CLI = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'index.js');
@@ -26,7 +26,7 @@ const { lintFile } = await import('../dist/src/lint.js');
 const { parseWait, parseDuration } = await import('../dist/src/delegation.js');
 
 const has = (out, ...needles) => { for (const n of needles) assert.ok(out.includes(n), `missing ${JSON.stringify(n)} in:\n${out}`); };
-const write = (file, lines) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, lines.join('\n') + '\n'); return file; };
+const write = (file, lines) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, `${lines.join('\n')}\n`); return file; };
 
 // --- the forms: a WAIT's MAX, a duration ---
 assert.deepEqual(parseWait('style, tests MAX 10m'), { names: ['style', 'tests'], max: '10m' });

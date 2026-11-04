@@ -19,7 +19,7 @@
 // which TypeScript erases at compile time. The runtime dependency graph is
 // strictly one-directional: lexer.js → desugar.js (no back-edge).
 import { desugar } from './desugar.js';
-import { getFamilyBases, getAliasNames, splitBangs, forceLevelBaseOf } from './forceLevelConfig.js';
+import { getFamilyBases, getAliasNames, splitBangs, } from './forceLevelConfig.js';
 import { getLifecycleAliases } from './lifecycleConfig.js';
 import { CHECK_KINDS, MAX_CHECK_LEVEL, type CheckKind } from './check.js';
 import { splitExecutorMark } from './executor.js';
@@ -210,7 +210,7 @@ const KW_GROUP = `(?:${CONTROL_ALT}|${DOMAIN_LINE_ALT}|${ASYNC_ALT}|PROCEDURE\\*
 
 const KEYWORD_WITH_REST_RE = new RegExp(`^([ \\t]*)(${KW_GROUP})[ \\t]+(.+?)[ \\t]*$`);
 // Keywords that stand alone on a line: IF, ELSE, PARALLEL and the DISTILL levels.
-const KEYWORD_BARE_RE = new RegExp(`^([ \\t]*)(IF|ELSE|PARALLEL|!?DISTILL!{0,2})[ \\t]*$`);
+const KEYWORD_BARE_RE = /^([ \t]*)(IF|ELSE|PARALLEL|!?DISTILL!{0,2})[ \t]*$/;
 
 // Lifecycle hook opener: `ON-X` or `ON-X:` (bare keyword, optional block colon).
 // The optional trailing colon is captured into the keyword's rest so a colon

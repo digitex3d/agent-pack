@@ -5,8 +5,8 @@
  * file: read and write one, find across files, and keep the cache.
  * `<apx> dimension <op> <dim-id> …`; `dimension` alone lists the agent's.
  */
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { DimensionBlock, TemplateBlock } from '../../apdoc/blocks.js';
 import { refName } from '../../../adapters/md/phrases.js';
 import { relativeWithin } from '../../services/fs.js';

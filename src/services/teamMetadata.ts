@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { readFileSync, readdirSync, existsSync, statSync } from 'fs';
-import { resolve, dirname, basename } from 'path';
+import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
+import { resolve, dirname, basename } from 'node:path';
 import { parseAgentSignature } from '../definitionArgs.js';
-import { exportedBlockBodies, nonExportedSource, nonExportedLines, extractPrimitive, extractPrimitives, ExportedBlockBody } from './text.js';
+import { exportedBlockBodies, nonExportedSource, nonExportedLines, extractPrimitive, extractPrimitives, type ExportedBlockBody } from './text.js';
 import { parseApplies } from './tags.js';
 import { SourceRegistry, type SourceSpan } from '../sources.js';
 import { AGENT_KEYS, TEAM_KEY } from '../blockTypes.js';
@@ -298,11 +298,11 @@ export function readAgentFile(path: string, sources: SourceRegistry = new Source
     .filter(b => b !== agent && b !== role)
     .map(asInlineDeclaration);
 
-  const unitSource = [nonExportedSource(source), role ? asInlineRole(role) : '', ...own, asAgentBody(agent)]
+  const unitSource = `${[nonExportedSource(source), role ? asInlineRole(role) : '', ...own, asAgentBody(agent)]
     .filter(Boolean)
     .join('\n\n')
     .replace(/\n{3,}/g, '\n\n')
-    .trim() + '\n';
+    .trim()}\n`;
 
   const lines = source.split(/\r?\n/);
   const agentSpan = sources.span(path, agent.key, agent.name);

@@ -10,16 +10,16 @@
  * (exit ≠ 0) stops the procedure; a timeout hands that one run to the agent.
  * Every run and answer is recorded in the session. No network, no model.
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, rmSync, readdirSync } from 'fs';
-import { join, resolve } from 'path';
-import { tmpdir } from 'os';
-import { spawnSync } from 'child_process';
-import { fileURLToPath } from 'url';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, rmSync, readdirSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const CLI = resolve(fileURLToPath(import.meta.url), '../../dist/index.js');
 const root = mkdtempSync(join(tmpdir(), 'ap-programs-'));
-const write = (file, lines) => { mkdirSync(join(file, '..'), { recursive: true }); writeFileSync(file, lines.join('\n') + '\n'); return file; };
+const write = (file, lines) => { mkdirSync(join(file, '..'), { recursive: true }); writeFileSync(file, `${lines.join('\n')}\n`); return file; };
 const bundle = () => spawnSync(process.execPath, [CLI, 'bundle', 'all'], { cwd: root, encoding: 'utf-8' });
 const apx = (args, input) => {
   const r = spawnSync(process.execPath, [join(root, '.agent-pack', 'apx', 'clerk.apx'), ...args], {

@@ -8,10 +8,10 @@
  * the one written at a file position, and each source file is read once per
  * compilation, through the source registry.
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'fs';
-import { join, basename } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
+import { join, basename } from 'node:path';
+import { tmpdir } from 'node:os';
 import { teamSource } from './helpers/team.mjs';
 
 const { SourceRegistry, align } = await import('../dist/src/sources.js');

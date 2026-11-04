@@ -4,7 +4,7 @@
  * Tests for the recursive body renderer (renderTree): sequence grouping plus
  * byte-identical reuse of the leaf primitive renderers.
  */
-import { strict as assert } from 'assert';
+import { strict as assert } from 'node:assert';
 
 const { renderTree } = await import('../dist/src/bundlers/renderTree.js');
 

@@ -4,10 +4,10 @@
  * A config names the built-in adapters instead of importing them, so it loads
  * with a global install and in projects that are not Node packages.
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, writeFileSync, rmSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const { loadConfig } = await import('../dist/src/config.js');
 const { AdapterRegistry } = await import('../dist/src/adapter-registry.js');

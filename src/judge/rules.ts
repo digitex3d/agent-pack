@@ -8,7 +8,7 @@
  * each of its values), its slot rules are the checks. A rule's force gives the
  * severity — MUST an error, SHOULD a warning (SHOULD-NOT too); any other force is a load error.
  */
-import { resolve } from 'path';
+import { resolve } from 'node:path';
 import type { Config } from '../config.js';
 import { BUILTIN_LIBRARY_ROOT, librariesAliasMap } from '../config.js';
 import { buildMetadataIndex } from '../libraryIndex.js';

@@ -11,7 +11,7 @@
  * entry whose tags satisfy several sibling nodes still renders exactly once.
  * Untagged entries render flat, directly under the chapter H1.
  */
-import { strict as assert } from 'assert';
+import { strict as assert } from 'node:assert';
 import { emitChapter } from '../dist/src/bundlers/sections.js';
 
 function makeCtx() {

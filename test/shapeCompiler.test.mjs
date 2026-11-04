@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { strict as assert } from 'assert';
+import { strict as assert } from 'node:assert';
 import { parseTemplate, renderTemplate, resolveShapeRefs } from '../dist/src/shapeCompiler.js';
 import { markVerbatim, protectVerbatim } from '../dist/src/services/text.js';
 import { lintFile } from '../dist/src/lint.js';
@@ -150,7 +150,7 @@ console.log('shapeCompiler EXAMPLE-composition tests passed.');
   assert.ok(t.slots[1].rules[0].startsWith('You must never make a check aspirational'), 'NEVER alias resolves');
 
   const out = renderTemplate(body, 'problems-report');
-  assert.ok(/- \*\*problems\*\* — list of @shape\(problem-line\) \(≥1\) — every SEO issue found\n  - .*include every issue/.test(out), 'rules render as sub-bullets under the slot');
+  assert.ok(/- \*\*problems\*\* — list of @shape\(problem-line\) \(≥1\) — every SEO issue found\n {2}- .*include every issue/.test(out), 'rules render as sub-bullets under the slot');
 }
 
 {
@@ -207,7 +207,7 @@ console.log('shapeCompiler per-slot rules tests passed.');
 
 {
   // markVerbatim regions survive the transform untouched; markers never leak.
-  const masked = 'before ' + markVerbatim('MUST stay verbatim\n$term @shape(x) {{var}}') + ' after';
+  const masked = `before ${markVerbatim('MUST stay verbatim\n$term @shape(x) {{var}}')} after`;
   const out = protectVerbatim(masked, t => t.toUpperCase());
   assert.ok(out.includes('MUST stay verbatim'), 'verbatim content untouched by transform');
   assert.ok(out.includes('$term @shape(x) {{var}}'), 'verbatim tokens untouched');
@@ -250,7 +250,7 @@ console.log('shapeCompiler back-compat tests passed.');
 // ---------------------------------------------------------------------------
 
 {
-  const file = '# problem-line\n\nABOUT   one SEO problem\nAPPLIES    #seo\n\n' + PROBLEM_LINE;
+  const file = `# problem-line\n\nABOUT   one SEO problem\nAPPLIES    #seo\n\n${PROBLEM_LINE}`;
   const errors = lintFile('problem-line.template.ap', file).filter(e => e.severity !== 'warning');
   assert.deepEqual(errors, [], 'v3 template lints clean (regions are indented, skipped by topLevelOnly)');
 }

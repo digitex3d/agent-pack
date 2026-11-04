@@ -5,7 +5,7 @@
  * line takes several, a comma inside `{…}` kept in its glob, and the old
  * space-separated form refused with the line to write.
  */
-import { strict as assert } from 'assert';
+import { strict as assert } from 'node:assert';
 
 const { splitList, spacedListError } = await import('../dist/src/lists.js');
 const { checkVocabulary } = await import('../dist/src/lint.js');

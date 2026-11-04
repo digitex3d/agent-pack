@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { resolve } from 'path';
-import { Emitter, SkillBundle } from '../../types.js';
+import { resolve } from 'node:path';
+import type { Emitter, SkillBundle } from '../../types.js';
 import { buildSkillFrontmatter } from '../../skill-frontmatter.js';
 
 /** A skill's `SKILL.md`: the frontmatter, then `body` — the compiled definition by default. */

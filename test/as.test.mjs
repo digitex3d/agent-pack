@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { strict as assert } from 'assert';
+import { strict as assert } from 'node:assert';
 import { applyBodySubstitutions } from '../dist/src/primitives.js';
 import { applyForceLevels } from '../dist/src/forceLevel.js';
 

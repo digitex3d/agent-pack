@@ -4,16 +4,16 @@
  * folder in the config, the real `bundle all`, the agent's apx run with a
  * session id.
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'fs';
-import { join, resolve, dirname } from 'path';
-import { tmpdir } from 'os';
-import { spawnSync } from 'child_process';
-import { fileURLToPath } from 'url';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { join, resolve, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const CLI = resolve(fileURLToPath(import.meta.url), '../../dist/index.js');
 const root = mkdtempSync(join(tmpdir(), 'ap-plugins-'));
-const write = (file, lines) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, Array.isArray(lines) ? lines.join('\n') + '\n' : lines); return file; };
+const write = (file, lines) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, Array.isArray(lines) ? `${lines.join('\n')}\n` : lines); return file; };
 const has = (out, ...needles) => { for (const n of needles) assert.ok(out.includes(n), `missing ${JSON.stringify(n)} in:\n${out}`); };
 
 // The example the package ships (templates/examples/plugin-example) — the test runs it as a project would.
@@ -57,8 +57,8 @@ try {
   };
   const listed = apx(['checklist']);
   assert.equal(listed.code, 0, listed.out);
-  const ID = listed.out.match(/^(che-[0-9a-f]{8})  before-release/m)?.[1];
-  const DEPLOY = listed.out.match(/^(che-[0-9a-f]{8})  before-deploy/m)?.[1];
+  const ID = listed.out.match(/^(che-[0-9a-f]{8}) {2}before-release/m)?.[1];
+  const DEPLOY = listed.out.match(/^(che-[0-9a-f]{8}) {2}before-deploy/m)?.[1];
   assert.ok(ID && DEPLOY, `both checklists, the inline one and the imported one:\n${listed.out}`);
   has(md, 'Checklists', 'a list of checks an agent goes through before it delivers',
     '- ITEM: the tests pass', '- ITEM: the changelog has an entry', 'Its commands:',
@@ -119,7 +119,7 @@ try {
   assert.notEqual(r.code, 0);
   has(r.out, 'plugin domain: its name');
   // The manifest's shape is checked by the language's own contracts — every line wrong, at once.
-  r = bundle(project('shape', { manifest: MANIFEST.filter(l => !/^    ABOUT/.test(l)).map(l => l.replace('        ABOUT  mark one item done', '        EACH   item')) }));
+  r = bundle(project('shape', { manifest: MANIFEST.filter(l => !/^ {4}ABOUT/.test(l)).map(l => l.replace('        ABOUT  mark one item done', '        EACH   item')) }));
   assert.notEqual(r.code, 0);
   assert.ok(!r.out.includes('inside PLUGIN'), `an OPERATION's line is its own contract's, said once:\n${r.out}`);
   // One line fewer above the tick's ABOUT: the PLUGIN's own ABOUT is gone.

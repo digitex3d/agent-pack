@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
 import { refSuffix, introOf, FORMULAS, fill } from './formulas.js';
-import { readFileSync, readdirSync, existsSync, statSync } from 'fs';
-import { resolve } from 'path';
-import { ensureMdBlock, MdBlockResult } from './services/mdBlock.js';
+import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { ensureMdBlock, type MdBlockResult } from './services/mdBlock.js';
 import { partitionMetadata } from './services/text.js';
 import {
   makeBundleContext,
@@ -15,19 +15,19 @@ import {
   strayDimensionErrors,
 } from './compiler/index.js';
 import { checkedHeadIssues, lineOfName, teamFileErrors } from './lint.js';
-import { Config } from './config.js';
+import type { Config } from './config.js';
 import { AGENTS_MD } from './projectContext.js';
 import { apxCommand } from './apx/paths.js';
 import { resolveReads, constantOf } from './vars.js';
 import { importedVariables, type ImportedVariable } from './exportedVars.js';
 import { varCommand } from '../adapters/md/phrases.js';
-import { BundleContext } from './dispatch/index.js';
+import type { BundleContext } from './dispatch/index.js';
 import { parseBlocks } from './parseBlocks.js';
-import { buildRoleIndex, resolveRole, roleHolders, ambiguousRoleMessage, RoleIndex } from './roleIndex.js';
+import { buildRoleIndex, resolveRole, roleHolders, ambiguousRoleMessage, type RoleIndex } from './roleIndex.js';
 import { DELEGATION_VERBS, ASYNC_MARK } from './delegation.js';
 import { escapeRegex } from './lexer.js';
 import {
-  AgentInfo,
+  type AgentInfo,
   readTeamMembers,
   readTeamFile,
   teamRosterIssues,

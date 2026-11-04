@@ -9,11 +9,11 @@
  * a land that writes the result into the working folder — never the index,
  * never a branch — or writes nothing when it conflicts.
  */
-import { strict as assert } from 'assert';
-import { spawnSync } from 'child_process';
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { strict as assert } from 'node:assert';
+import { spawnSync } from 'node:child_process';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const { resolveWorkspace } = await import('../dist/src/workspace/registry.js');
 const engine = resolveWorkspace('git');

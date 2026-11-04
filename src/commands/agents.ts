@@ -3,7 +3,7 @@
 import { loadConfig } from '../config.js';
 import { buildMetadataIndex, resolveLibraryOutputDir } from '../libraryIndex.js';
 import type { ExportEntry } from '../libraryIndex.js';
-import { resolve } from 'path';
+import { resolve } from 'node:path';
 import type { Config } from '../config.js';
 import { standaloneDir } from '../services/teamMetadata.js';
 import { parseNamespace } from '../namespace.js';

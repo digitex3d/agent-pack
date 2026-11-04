@@ -13,8 +13,8 @@
  * The judge writes the lock only to pin the model from its first answer; after
  * that only humans edit it. A decision wins over any machine verdict.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
-import { dirname } from 'path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import type { JudgeCheck, JudgeQuestion } from './types.js';
 import { sha256Hex } from '../apdoc/ids.js';
 
@@ -114,6 +114,6 @@ export class JudgeLock {
       decisions: Object.fromEntries(keys.map(k => [k, this.data.decisions[k]])),
     };
     mkdirSync(dirname(this.path), { recursive: true });
-    writeFileSync(this.path, JSON.stringify(out, null, 2) + '\n', 'utf-8');
+    writeFileSync(this.path, `${JSON.stringify(out, null, 2)}\n`, 'utf-8');
   }
 }

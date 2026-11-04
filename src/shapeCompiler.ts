@@ -213,7 +213,6 @@ function parseSlots(lines: string[]): Slot[] {
         }
         cur.rules.push(`${intro} ${rm[2].trim()}`);
         cur.rawRules!.push({ keyword: rm[1], text: rm[2].trim() });
-        continue;
       }
     }
     // anything else: skipped silently (no lint by design; MCP validates strict templates)
@@ -241,12 +240,12 @@ export function parseTemplate(body: string): ParsedTemplate | null {
     }
   }
 
-  const example = regions['EXAMPLE'] ? dedent(regions['EXAMPLE']) : null;
+  const example = regions.EXAMPLE ? dedent(regions.EXAMPLE) : null;
 
-  if (regions['SLOTS']) {
-    const slots = parseSlots(regions['SLOTS']);
+  if (regions.SLOTS) {
+    const slots = parseSlots(regions.SLOTS);
     if (slots.length === 0) return null;
-    const bodyLayout = regions['BODY'] ? dedent(regions['BODY']) : null;
+    const bodyLayout = regions.BODY ? dedent(regions.BODY) : null;
     return { slots, bodyLayout, example, scalar: null };
   }
 

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { existsSync, statSync } from 'fs';
-import { resolve } from 'path';
-import { Bundle } from '../../adapters/types.js';
-import { Config } from '../config.js';
-import { buildAgentBundle, BuildAgentOptions } from './agent.js';
+import { existsSync, statSync } from 'node:fs';
+import { resolve } from 'node:path';
+import type { Bundle } from '../../adapters/types.js';
+import type { Config } from '../config.js';
+import { buildAgentBundle, type BuildAgentOptions } from './agent.js';
 import { agentNameOf } from '../services/teamMetadata.js';
 
 export async function detectAndBuild(

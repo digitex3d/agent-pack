@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
 import { FORMULAS, introOf } from './formulas.js';
-import { readFileSync, existsSync } from 'fs';
-import { resolve } from 'path';
+import { readFileSync, existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { lex } from './lexer.js';
 import { stripAbout } from './services/text.js';
 import { teamRootForAgentFile } from './services/teamMetadata.js';

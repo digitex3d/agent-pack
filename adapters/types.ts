@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { resolve } from 'path';
+import { resolve } from 'node:path';
 import type { ApDocument } from '../src/apdoc/document.js';
 import type { ApBlock } from '../src/apdoc/block.js';
 import type { BudgetModels } from './budget.js';

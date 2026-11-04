@@ -4,10 +4,10 @@
  * The reporters: the core reports through `src/report.ts`; the plain reporter
  * prints as agent-pack always did, the pretty one (reporters/pretty) after rustc.
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, writeFileSync, rmSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const { CompileError, plainReporter, reporter, useReporter } = await import('../dist/src/report.js');
 const { prettyReporter } = await import('../dist/reporters/pretty/index.js');

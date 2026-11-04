@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
 import { DECORATOR_MARK, decoratorOf, decoratorItemError, splitDecoratorRest, unknownDecoratorMessage } from './decorators.js';
-import { existsSync, readFileSync } from 'fs';
-import { basename } from 'path';
-import { lex, Token, Keyword, KEYWORDS, GLOBS_LINE, DOMAIN_LINES, isTriggerKind, opensBlock, type DimensionLine, type DomainLine } from './lexer.js';
+import { existsSync, readFileSync } from 'node:fs';
+import { lex, type Token, type Keyword, KEYWORDS, GLOBS_LINE, DOMAIN_LINES, isTriggerKind, opensBlock, type DimensionLine, type DomainLine } from './lexer.js';
 import { parseDomainLine, domainLineIssue } from './domains.js';
 import { ACTION_VERBS } from './actionVerbs.js';
 import { desugar } from './desugar.js';
 import { parseApplies, PERIMETER_FORMS, PERIMETER_KINDS } from './services/tags.js';
-import { getFamilyBases, getIntroByKeyword, forceLevelBaseOf, splitBangs, forceLevelFamilies, toCanonicalKeyword, parseForceLevel, NON_RULE_FAMILIES } from './forceLevelConfig.js';
+import { getFamilyBases, getIntroByKeyword, forceLevelBaseOf, splitBangs, forceLevelFamilies, toCanonicalKeyword, NON_RULE_FAMILIES } from './forceLevelConfig.js';
 import { enumPrimitiveFor } from './primitives.js';
-import { BLOCK_CONTRACTS, BlockContract, VAR_BLOCK } from './blockContracts.js';
+import { BLOCK_CONTRACTS, type BlockContract, VAR_BLOCK } from './blockContracts.js';
 import { TEAM_KEY } from './services/teamMetadata.js';
 import { parseBlocks, agentNestedBlocks, exportedVar, readExportedVar, isExportedVar, type Block, type Node, type Line } from './parseBlocks.js';
 import { isExportFile } from './services/text.js';

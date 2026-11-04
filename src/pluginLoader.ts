@@ -6,9 +6,9 @@
  * one row in each table the core already reads a block kind from. Nothing
  * else in the core knows a plugin exists.
  */
-import { existsSync, readFileSync } from 'fs';
-import { join, resolve } from 'path';
-import { pathToFileURL } from 'url';
+import { existsSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { parseBlocks, type Block, type Line } from './parseBlocks.js';
 import { exportedBlockBodies } from './services/text.js';
 import { parseTemplate } from './shapeCompiler.js';

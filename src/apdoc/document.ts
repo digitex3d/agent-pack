@@ -16,11 +16,11 @@
  * contract); the class only adds addressing, queries and projections — no
  * consumer ever needs `instanceof` (duck-typing survives module realms).
  */
-import { resolve as resolvePath } from 'path';
+import { resolve as resolvePath } from 'node:path';
 import type { ApDocumentMeta, ApMdMeta, ApOutlineItem, ApOutlinePart, ApRef, ApNode, ApLine } from './types.js';
 import { walk, type LineHead } from './nodes.js';
 import { DISTILLED_DIR } from '../apx/paths.js';
-import { ApBlock } from './block.js';
+import type { ApBlock } from './block.js';
 import type { AgentBlock, DomainBlock, TemplateBlock } from './blocks.js';
 import { DECORATOR_MARK, WITHIN_DECORATOR } from '../decorators.js';
 import type { PerimeterGlobs } from '../primitives.js';
@@ -30,7 +30,7 @@ import { KIND_STRATEGIES, strategyOf, installPluginKind } from './blocks.js';
 import { registerPlugin } from '../plugins.js';
 import { FORMULAS } from '../formulas.js';
 import { buildHierarchy } from '../services/tags.js';
-import { assignLeafNodes, buildTagRenderTree, TagRenderNode } from '../bundlers/sections.js';
+import { assignLeafNodes, buildTagRenderTree, type TagRenderNode } from '../bundlers/sections.js';
 
 /**
  * Where a block came from — construction metadata, NEVER serialized (it does
@@ -265,7 +265,7 @@ export class ApDocument {
       if (key === rootKey) continue;
       ordered[key] = block;
     }
-    return JSON.stringify({ schemaVersion: this.schemaVersion, meta: this.docMeta, blocks: ordered }, null, 2) + '\n';
+    return `${JSON.stringify({ schemaVersion: this.schemaVersion, meta: this.docMeta, blocks: ordered }, null, 2)}\n`;
   }
 
   // ----------------------------------------------------------------- layout

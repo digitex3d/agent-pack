@@ -2,11 +2,11 @@
 // Copyright (c) 2026 Giuseppe Federico
 import { loadPlugins } from './pluginLoader.js';
 import type { PluginSpec } from './plugins.js';
-import { dirname, resolve } from 'path';
-import { fileURLToPath } from 'url';
-import { existsSync, readFileSync } from 'fs';
-import { homedir } from 'os';
-import { AdapterPlugin } from '../adapters/types.js';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { existsSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import type { AdapterPlugin } from '../adapters/types.js';
 import { resolveAdapter, resolveJudge } from './adapter-registry.js';
 import type { ChecksConfig, JudgeConfig, JudgePlugin } from './judge/types.js';
 import { defaultBundleConfig } from './bundleDefaults.js';

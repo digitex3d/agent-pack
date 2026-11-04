@@ -5,9 +5,9 @@
  * it, so this copies it there — run by `npm version` (the `version` hook,
  * after the bump and before the commit), and checked by test/version.test.mjs.
  */
-import { readFileSync, writeFileSync } from 'fs';
-import { resolve, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const { version } = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf-8'));

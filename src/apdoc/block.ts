@@ -14,7 +14,7 @@
 import type { ApBlockData, ApNode, ApShape, ApSource } from './types.js';
 import { stableId, blockContentHash } from './ids.js';
 import { measure } from './measure.js';
-import { renderNodes, shapeLine, MdEnv } from '../../adapters/md/toolkit.js';
+import { renderNodes, shapeLine, type MdEnv } from '../../adapters/md/toolkit.js';
 
 /** The universal (identity + catalog) fields a block is born with. */
 export interface ApBlockInit {

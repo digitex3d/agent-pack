@@ -1,12 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { strict as assert } from 'assert';
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
 import { applyVars } from '../dist/src/vars.js';
 
-import { bundleAgentToString } from '../dist/src/compiler/index.js';
 
 // --- applyVars ---
 

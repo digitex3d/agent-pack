@@ -9,10 +9,10 @@
  * while `AS <template>`, the block's output contract, stays in the body.
  */
 
-import { strict as assert } from 'assert';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const { extractInlineDefinitions } = await import('../dist/src/dispatch/inlineBlocks.js');
 const { makeBundleContext } = await import('../dist/src/compiler/index.js');

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { existsSync } from 'fs';
-import { resolve, basename, dirname } from 'path';
-import { BundleContext, RoleEntry } from './types.js';
+import { existsSync } from 'node:fs';
+import { resolve, basename, dirname } from 'node:path';
+import type { BundleContext, RoleEntry } from './types.js';
 import { lintFile } from '../lint.js';
-import { checkAndRegister, findInRoots, allLibraryRoots, processImportsOf, LoadRequest } from './shared.js';
+import { checkAndRegister, findInRoots, allLibraryRoots, processImportsOf, type LoadRequest } from './shared.js';
 import { parseApplies } from '../services/tags.js';
 import { extractPrimitives, stripPrimitives, unwrapExportFile, liftRoleIdentity, exportedBlocksOf } from '../services/text.js';
 import { parseBlocks } from '../parseBlocks.js';

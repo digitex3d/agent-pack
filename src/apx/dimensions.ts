@@ -16,8 +16,8 @@
  * was written against. The fingerprint reads the file as code: line endings,
  * trailing whitespace and blank lines do not count; indentation and comments do.
  */
-import { readFileSync, rmSync, statSync } from 'fs';
-import { dirname, join, resolve } from 'path';
+import { readFileSync, rmSync, statSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { nameFreeContent, sha256Hex } from '../apdoc/ids.js';
 import type { ApBlock } from '../apdoc/block.js';
 import type { DimensionBlock } from '../apdoc/blocks.js';
@@ -165,7 +165,7 @@ export class DimensionCache {
   }
 
   write(entry: CacheEntry): void {
-    writeFileAtomic(this.entryPath(entry.file), JSON.stringify(entry, null, 1) + '\n');
+    writeFileAtomic(this.entryPath(entry.file), `${JSON.stringify(entry, null, 1)}\n`);
   }
 
   remove(file: string): void {
@@ -231,7 +231,7 @@ export class DimensionCache {
     try {
       const s = this.stats();
       s[outcome]++;
-      writeFileAtomic(this.statsPath(), JSON.stringify(s) + '\n');
+      writeFileAtomic(this.statsPath(), `${JSON.stringify(s)}\n`);
     } catch { /* the counters are a convenience */ }
   }
 }

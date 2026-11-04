@@ -6,8 +6,8 @@
  * whole, reading a JSON file and pruning what is left empty. Node's `fs` and
  * `path` only: the apx bundle imports it.
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync, statSync, writeFileSync, type Dirent } from 'fs';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'path';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync, statSync, writeFileSync, type Dirent } from 'node:fs';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 /**
  * Every file under `dir` whose name ends with `ext`, recursively, as absolute

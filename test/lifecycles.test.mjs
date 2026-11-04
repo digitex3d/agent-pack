@@ -10,7 +10,7 @@
  * colon survives (`ON-X:` → `WHEN <phase>:` — a block opener byte-identical to
  * a hand-written WHEN), and that the legacy `ON-INVOKE` forms are unchanged.
  */
-import { strict as assert } from 'assert';
+import { strict as assert } from 'node:assert';
 import { lex, lexRaw } from '../dist/src/lexer.js';
 import { getLifecycleAliases, lifecycleToWhen } from '../dist/src/lifecycleConfig.js';
 

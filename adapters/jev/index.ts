@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { existsSync, readFileSync } from 'fs';
-import { resolve } from 'path';
-import { homedir } from 'os';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { homedir } from 'node:os';
 import { JudgeError, isDirect, type JudgeCheck, type JudgeQuestion, type JudgePlugin, type JudgeAnswer } from '../../src/judge/types.js';
 
 /**

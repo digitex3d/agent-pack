@@ -9,13 +9,13 @@
  * judges nothing. No network
  * here: a fake judge in the config, and a stubbed `fetch` for the Jev adapter.
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, statSync } from 'fs';
-import { createHash } from 'crypto';
-import { join, resolve } from 'path';
-import { tmpdir } from 'os';
-import { spawnSync } from 'child_process';
-import { fileURLToPath } from 'url';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const { loadConfig } = await import('../dist/src/config.js');
 const { formatErrors } = await import('../dist/src/lint.js');
@@ -88,7 +88,7 @@ try {
     // Rules are keyed by their address; the fixtures are asserted, never the whole builtin set.
     const byId = Object.fromEntries(rules.map(r => [r.template.name, r]));
     assert.ok(byId['one-action'] && byId['when-rule'], 'the #judge templates of the library');
-    assert.ok(!byId['plain'], 'a template without #judge is no rule');
+    assert.ok(!byId.plain, 'a template without #judge is no rule');
     assert.ok(rules.some(r => r.template.namespace !== byId['one-action'].template.namespace), 'the builtin library\'s rules join them');
     assert.equal(byId['one-action'].id, byId['one-action'].template.address, 'a rule id is its template\'s address');
     assert.deepEqual(byId['one-action'].primitives, ['DO'], 'the first word of the layout is the primitive');
@@ -493,7 +493,7 @@ try {
     const readKey = Object.keys(readUnit(alphaFile).verdicts);
     assert.equal(readUnit(alphaFile).model, 'fake-1.0', 'a unit names the model of its verdicts');
     const before = readUnit(alphaFile).verdicts;
-    writeFileSync(lockPath, JSON.stringify({ ...lock, model: 'fake-2.0' }, null, 2) + '\n');
+    writeFileSync(lockPath, `${JSON.stringify({ ...lock, model: 'fake-2.0' }, null, 2)}\n`);
     const saved = globalThis.__judgeAsk;
     // fake-2.0 judges "read the task" otherwise
     globalThis.__judgeAsk = async (state, checks, model) => {
@@ -518,7 +518,7 @@ try {
     globalThis.__judgeAsk = saved;
 
     // Back to the old model: asked again, the units follow.
-    writeFileSync(lockPath, JSON.stringify(lock, null, 2) + '\n');
+    writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
     asks.length = 0;
     await captured(async () => { const run = openJudgeRun(config, proj); await compileBoth(run); finishJudgeRun(run, { prune: false }); });
     assert.ok(asks.length > 0 && asks.every(a => a.model === 'fake-1.0'), 'the old model again: every line asked of it');
@@ -542,7 +542,7 @@ try {
     const key = firstWarnings.find(w => w.code === 'one-action.action.1').data.key;
     const lock = readLock();
     lock.decisions[key] = { p: 1, by: 'human' };
-    writeFileSync(lockPath, JSON.stringify(lock, null, 2) + '\n');
+    writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
     const decided = readFileSync(lockPath, 'utf-8');
 
     asks.length = 0;
@@ -569,7 +569,7 @@ try {
     const text = 'sign the release';
     const keys = loadJudgeRules(config).filter(r => r.primitives.includes('DO')).flatMap(r => r.checks.map(c => verdictKey(c, judgeState(r, text))));
     const lock = readLock();
-    writeFileSync(lockPath, JSON.stringify({ ...lock, decisions: { ...lock.decisions, ...Object.fromEntries(keys.map(k => [k, { p: 1, by: 'human' }])) } }, null, 2) + '\n');
+    writeFileSync(lockPath, `${JSON.stringify({ ...lock, decisions: { ...lock.decisions, ...Object.fromEntries(keys.map(k => [k, { p: 1, by: 'human' }])) } }, null, 2)}\n`);
     write(alphaFile, alphaLines.map(l => l.replace('DO  read the task', `DO  ${text}`)));
     asks.length = 0;
     await captured(async () => { const run = openJudgeRun(config, proj); await compileBoth(run); finishJudgeRun(run, { prune: false }); });
@@ -579,7 +579,7 @@ try {
     assert.equal(again.files.get(alphaFile).rejudged, false, 'its file is taken from its unit on the next run');
     assert.equal(again.stats.pairs, 0);
     await captured(() => finishJudgeRun(again, { prune: false }));
-    writeFileSync(lockPath, JSON.stringify(lock, null, 2) + '\n');
+    writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
     write(alphaFile, alphaLines);
   }
 
@@ -597,7 +597,7 @@ try {
     assert.equal(readFileSync(unitPath(alphaFile), 'utf-8'), unitBefore, 'a file not fully judged keeps its old unit');
 
     const strict = openJudgeRun({ ...config, judge: { ...config.judge, offline: 'error' } }, proj);
-    await assert.rejects(bundleAgentObject({ ...opts('alpha'), judge: strict }), new RegExp(`alpha\\.ap:6:5  \\[[a-z.-]+\\.1\\] not judged yet`));
+    await assert.rejects(bundleAgentObject({ ...opts('alpha'), judge: strict }), /alpha\.ap:6:5 {2}\[[a-z.-]+\.1\] not judged yet/);
     await captured(() => finishJudgeRun(strict, { prune: false }));
     down = false;
     asks.length = 0;
@@ -620,10 +620,10 @@ try {
       answers: Object.fromEntries(checks.map(c => [c.id, c.id === 'english.action.1' && state === 'lire la tâche' ? 0.05 : 0.95])),
     });
     const run = openJudgeRun(config, proj);
-    await assert.rejects(bundleAgentObject({ ...opts('alpha'), judge: run }), /alpha\.ap:7:5  \[english\.action\.1\] /);
+    await assert.rejects(bundleAgentObject({ ...opts('alpha'), judge: run }), /alpha\.ap:7:5 {2}\[english\.action\.1\] /);
     await captured(() => finishJudgeRun(run, { prune: false }));
     const again = openJudgeRun(config, proj);
-    await assert.rejects(bundleAgentObject({ ...opts('alpha'), judge: again }), /alpha\.ap:7:5  \[english\.action\.1\] /, 'an unchanged file fails from its unit too');
+    await assert.rejects(bundleAgentObject({ ...opts('alpha'), judge: again }), /alpha\.ap:7:5 {2}\[english\.action\.1\] /, 'an unchanged file fails from its unit too');
     assert.equal(again.stats.pairs, 0);
     await captured(() => finishJudgeRun(again, { prune: false }));
     rmSync(strictRule);
@@ -646,7 +646,7 @@ try {
       return { model: model ?? 'fake-1.0', answers: Object.fromEntries(checks.map(c => [c.id, c.id === 'no-file.action.1' && state.includes('lire') ? 0.1 : 0.95])) };
     };
     const run = openJudgeRun(config, proj);
-    await assert.rejects(bundleAgentObject({ ...opts('alpha'), judge: run }), /alpha\.ap:7:5  \[no-file\.action\.1\] DO line breaks the rule "never name a file in a foreign language"/);
+    await assert.rejects(bundleAgentObject({ ...opts('alpha'), judge: run }), /alpha\.ap:7:5 {2}\[no-file\.action\.1\] DO line breaks the rule "never name a file in a foreign language"/);
     await captured(() => finishJudgeRun(run, { prune: false }));
     const planted = states.find(s => s.line === 'lire la tâche');
     assert.deepEqual(planted, { role: 'an action of the agent', line: 'lire la tâche', inputs: [], reference_examples: [{ line: 'read the task', verdict: 'fine' }] },
@@ -702,7 +702,7 @@ try {
     const oneAction = loadJudgeRules(config).find(r => r.template.name === 'one-action');
     const used = verdictKey(oneAction.checks[1], 'commit and push the work');
     const lockBefore = readLock();
-    writeFileSync(lockPath, JSON.stringify({ ...lockBefore, decisions: { ...lockBefore.decisions, [used]: { p: 1, by: 'human' } } }, null, 2) + '\n');
+    writeFileSync(lockPath, `${JSON.stringify({ ...lockBefore, decisions: { ...lockBefore.decisions, [used]: { p: 1, by: 'human' } } }, null, 2)}\n`);
     const printed = await captured(async () => {
       const ok = await bundleAllOnce(config, config.adapters, { projectRoot: proj, outputDir: config.outputDir });
       assert.ok(ok, 'the bundle all is clean');
@@ -718,7 +718,7 @@ try {
     assert.equal(orphans.length, 1, `one line names the decisions no line uses: ${printed}`);
     assert.ok(orphans[0].includes(human) && !orphans[0].includes(used), orphans[0]);
     assert.deepEqual(Object.keys(readLock().decisions).sort(), [human, used].sort(), 'reported, never deleted');
-    writeFileSync(lockPath, JSON.stringify(lockBefore, null, 2) + '\n');
+    writeFileSync(lockPath, `${JSON.stringify(lockBefore, null, 2)}\n`);
     write(alphaFile, alphaLines);
   }
 

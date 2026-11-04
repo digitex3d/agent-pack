@@ -22,7 +22,7 @@
  * bounded by the block contracts (STEP cannot nest STEP), so depth is shallow.
  */
 import { readDecorator, decoratorPhrase } from '../decoratorUse.js';
-import { lex, Token } from '../lexer.js';
+import { lex, type Token } from '../lexer.js';
 import { applyForceLevels } from '../forceLevel.js';
 import { applyEnumPrimitives } from '../enumPrimitives.js';
 import { sequencePrimitiveFor } from '../sequencePrimitives.js';

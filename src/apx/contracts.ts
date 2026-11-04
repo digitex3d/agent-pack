@@ -9,8 +9,8 @@
  * the copy's diff, so its delivery keeps its zones, the files it created and
  * its MARK's WITHIN domain, and names the rest. The marks stay in the code.
  */
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { projectFiles } from '../services/fs.js';
 import { matchesAnyGlob } from '../services/glob.js';
 

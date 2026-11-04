@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
 import { lineOfName } from '../lint.js';
-import { readFileSync, existsSync } from 'fs';
-import { resolve as resolvePath, relative as relativeFrom, sep } from 'path';
-import { BundleContext } from './types.js';
+import { readFileSync, existsSync } from 'node:fs';
+import { resolve as resolvePath, relative as relativeFrom, sep } from 'node:path';
+import type { BundleContext } from './types.js';
 import { resolveFile, exportBlocksOf } from './file.js';
 import { resolveRole } from './role.js';
-import { findInRoots, LoadRequest } from './shared.js';
-import { unwrapExportFile } from '../services/text.js';
+import { findInRoots, type LoadRequest } from './shared.js';
 import { lex } from '../lexer.js';
 import { parseNamespace } from '../namespace.js';
-import { parseBlocks, isExportedVar, Block } from '../parseBlocks.js';
+import { parseBlocks, isExportedVar, type Block } from '../parseBlocks.js';
 import { KIND_DIRS } from '../ingest.js';
 import { importVariable } from '../exportedVars.js';
 import { apFilesUnder } from '../services/fs.js';
@@ -123,7 +122,7 @@ function resolveExportUnit(
   roots: string[],
 ): Resolution {
   let foundPrivate = false;
-  const scopePath = `${kind}${scope.length ? '/' + scope.join('/') : ''}`;
+  const scopePath = `${kind}${scope.length ? `/${scope.join('/')}` : ''}`;
   for (const dir of namespaceDirs(kind, scope, roots)) {
     // Recursive: the namespace dir is the SEARCH ROOT, not the exact leaf — a
     // block resolves by name regardless of how deeply its folder nests under it.
@@ -374,7 +373,7 @@ export async function processImports(body: string, ctx: BundleContext, sourcePat
       const handlerResult = target.kind === 'roles'
         ? await resolveRole(req, ctx)
         : await resolveFile(req, ctx);
-      if (handlerResult) replacement += handlerResult + '\n';
+      if (handlerResult) replacement += `${handlerResult}\n`;
     }
 
     result += replacement.trimEnd();
@@ -402,7 +401,7 @@ function skillInfo(path: string, ctx: BundleContext) {
 function collectSkill(skill: { name: string; about: string | null; path: string; native: boolean; tags?: string[]; scopes?: string[] }, ctx: BundleContext): void {
   if (ctx.skills.some(s => s.name === skill.name)) return;
   const how = skill.native ? 'harness' : 'apx';
-  const line = fill(ctx.renderings?.['SKILL']?.[how] ?? FORMULAS.blocks.skill[how], { name: skill.name, command: apxCommand(skill.name, 'start') });
+  const line = fill(ctx.renderings?.SKILL?.[how] ?? FORMULAS.blocks.skill[how], { name: skill.name, command: apxCommand(skill.name, 'start') });
   ctx.skills.push({
     kind: 'skill', name: skill.name, about: skill.about, body: line, path: skill.path,
     tags: skill.tags ?? [], scopes: skill.scopes ?? [], breadcrumb: [], breadcrumbSegments: [],

@@ -57,7 +57,7 @@ export function forceIntro(env: MdEnv, keyword: string, force: number | null): s
 
 /** `AS`-family binding line: calibrated intro + `name` + its reference. */
 export function shapeLine(env: MdEnv, shape: ApShape): string {
-  const intro = env.forceLevels['AS']?.[String(shape.force)] ?? SHAPE_INTRO_FALLBACK;
+  const intro = env.forceLevels.AS?.[String(shape.force)] ?? SHAPE_INTRO_FALLBACK;
   return fill(FORMULAS.keywords.AS.line, { intro, name: refName(shape.ref), ref: env.refOf(shape.ref.target) });
 }
 

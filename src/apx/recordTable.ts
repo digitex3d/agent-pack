@@ -8,7 +8,7 @@
  * state to another as a tabeli compare-and-swap, so two agents never move the
  * same record twice. Every field is text: tabeli is flat.
  */
-import { join } from 'path';
+import { join } from 'node:path';
 import { STATE_DIR } from './paths.js';
 import { openTable, queryTable, runTable, tabeliVersionError } from './tabeli.js';
 

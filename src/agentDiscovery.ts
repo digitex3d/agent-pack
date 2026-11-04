@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { Config, libraryRoots } from './config.js';
-import { DiscoveredAgent } from './agentTypes.js';
+import { type Config, libraryRoots } from './config.js';
+import type { DiscoveredAgent } from './agentTypes.js';
 import { allAgentFiles, allUserAgentFiles, findSkillFiles, agentNameOf } from './services/teamMetadata.js';
 
 /**

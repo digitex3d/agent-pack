@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { strict as assert } from 'assert';
+import { strict as assert } from 'node:assert';
 import { desugar, STATIC_ALIASES, FORCE_LEVEL_ALIASES } from '../dist/src/desugar.js';
 import { lex, lexRaw } from '../dist/src/lexer.js';
 

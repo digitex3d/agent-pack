@@ -5,10 +5,10 @@
  * agent's file: a procedure's LENS-IN, a bare ELSE in a role's WHEN, a role's
  * IMPORTs. And a team's flows render the reads of the variables they import in AGENTS.md.
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { teamSource } from './helpers/team.mjs';
 
 const { lintProcedure, lintRole } = await import('../dist/src/lint.js');
@@ -92,7 +92,7 @@ try {
     'FLOW note:', '    STEP note it:', '        DELEGATE keep {{notes}} BY n']));
   await assert.rejects(buildOrchestrationContent({
     cwd: tmp, standaloneAgentsDir: join(tmp, 'standalone'), teamsDir: join(tmp, 'teams'), libraryRoots: [lib], libraries: { '@main': lib },
-  }), /u\.ap:2  IMPORT mine: `mine` is a private variable — each member would have its own/);
+  }), /u\.ap:2 {2}IMPORT mine: `mine` is a private variable — each member would have its own/);
 
   console.log('Library unit tests passed.');
 } finally {

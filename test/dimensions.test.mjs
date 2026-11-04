@@ -10,12 +10,12 @@
  * produces any more. Driven the way a harness drives it: the real `bundle all`,
  * the real `.apx`, lines out and an exit code back.
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, renameSync, readdirSync } from 'fs';
-import { join, resolve, dirname } from 'path';
-import { tmpdir } from 'os';
-import { spawnSync } from 'child_process';
-import { fileURLToPath } from 'url';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, renameSync, readdirSync } from 'node:fs';
+import { join, resolve, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { teamSource } from './helpers/team.mjs';
 
 const { bundleAgentObject } = await import('../dist/src/compiler/index.js');
@@ -25,7 +25,7 @@ const { lintFile } = await import('../dist/src/lint.js');
 
 const CLI = resolve(fileURLToPath(import.meta.url), '../../dist/index.js');
 const root = mkdtempSync(join(tmpdir(), 'ap-dimensions-'));
-const write = (file, lines) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, Array.isArray(lines) ? lines.join('\n') + '\n' : lines); return file; };
+const write = (file, lines) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, Array.isArray(lines) ? `${lines.join('\n')}\n` : lines); return file; };
 const has = (out, ...needles) => { for (const n of needles) assert.ok(out.includes(n), `missing ${JSON.stringify(n)} in:\n${out}`); };
 const stderrOf = async run => { const prior = console.error; const seen = []; console.error = (...a) => seen.push(a.join(' ')); try { return { result: await run(), stderr: seen.join('\n') }; } finally { console.error = prior; } };
 
@@ -120,7 +120,7 @@ try {
     }
 
     // --- N5: a keyword alone on its line says what it lacks ---
-    await assert.rejects(compile(dimension({ forLine: '    FOR' })), /:\d+  FOR needs at least one glob/);
+    await assert.rejects(compile(dimension({ forLine: '    FOR' })), /:\d+ {2}FOR needs at least one glob/);
     await assert.rejects(compile(dimension({ each: '    EACH' })), /EACH needs what to translate in a file/);
     await assert.rejects(compile(dimension({ as: '    AS' })), /AS needs the template it names/);
     const bare = write(join(lib, 'dimensions', 'bare.ap'), dimension({ name: 'bare', exported: true, forLine: '    FOR' }));
@@ -139,7 +139,7 @@ try {
       // !WITH is gone: no negation
       await assert.rejects(compile(dimension(), [], ['    @WITH pseudocode:', '        DO  read it first', '    !WITH pseudocode:', '        DO  guess'], false), /!WITH was removed/);
       // named nowhere: it applies nowhere — a warning, where a policy gets an error: the apx serves it all the same
-      const nowhere = /a\.ap:\d+  dimension `pseudocode` applies nowhere — name it with `@WITH pseudocode` above the lines that read it/;
+      const nowhere = /a\.ap:\d+ {2}dimension `pseudocode` applies nowhere — name it with `@WITH pseudocode` above the lines that read it/;
       for (const [lines, body] of [[dimension(), []], [dimension({ exported: true }), []]]) {
         const { result, stderr } = await stderrOf(() => compile(lines, [], body, false));
         assert.match(stderr, nowhere);
@@ -258,7 +258,7 @@ try {
     return { code: r.status, out: `${r.stdout}${r.stderr}`.trimEnd() };
   };
   // A dimension is reached by its id, like every block: `<apx> dimension <dim-id> <verb>`.
-  const DIM = apx(['dimension']).out.match(/^(dim-[0-9a-f]{8})  pseudocode/m)?.[1];
+  const DIM = apx(['dimension']).out.match(/^(dim-[0-9a-f]{8}) {2}pseudocode/m)?.[1];
   assert.ok(DIM, apx(['dimension']).out);
   const CMD = op => `${CMD0} dimension ${op} ${DIM}`;
   const value = [{ name: 'a', steps: 'calls b, returns what it gives' }];
@@ -328,7 +328,7 @@ try {
     const why = apx(['dimension', 'why', DIM, 'src/a.py']);
     assert.equal(why.code, 0);
     assert.match(why.out, /^stale pseudocode src\/a\.py — changed: src\/a\.py/);
-    assert.match(why.out, /file  src\/a\.py  kept [0-9a-f]{12}  now [0-9a-f]{12}  changed/);
+    assert.match(why.out, /file {2}src\/a\.py {2}kept [0-9a-f]{12} {2}now [0-9a-f]{12} {2}changed/);
   }
 
   // --- write refusals: outside FOR, a file that does not exist, a bad value, an answer still fresh ---
@@ -425,10 +425,10 @@ try {
   {
     const ls = apx(['dimension', 'ls', DIM]);
     assert.equal(ls.code, 0);
-    assert.match(ls.out, /^gone   src\/a\.py  — file not found  \(by coder, /m);
-    assert.match(ls.out, /^stale  src\/moved\.py  — ref gone: src\/a\.py  \(by coder, /m);
-    assert.match(ls.out, /^fresh  src\/util\/c\.py  \(by coder, /m);
-    assert.match(ls.out, /# pseudocode  \.agent-pack\/cache\/[0-9a-f]{8}\/  3 entries: 1 fresh, 1 stale, 1 gone — \d+ hits, \d+ misses, hit rate \d+%/);
+    assert.match(ls.out, /^gone {3}src\/a\.py {2}— file not found {2}\(by coder, /m);
+    assert.match(ls.out, /^stale {2}src\/moved\.py {2}— ref gone: src\/a\.py {2}\(by coder, /m);
+    assert.match(ls.out, /^fresh {2}src\/util\/c\.py {2}\(by coder, /m);
+    assert.match(ls.out, /# pseudocode {2}\.agent-pack\/cache\/[0-9a-f]{8}\/ {2}3 entries: 1 fresh, 1 stale, 1 gone — \d+ hits, \d+ misses, hit rate \d+%/);
     has(apx(['dimension', 'ls', DIM, 'src/util/**']).out, '1 entry: 1 fresh');
     const gc = apx(['dimension', 'gc', DIM]);
     assert.equal(gc.code, 0);
@@ -474,15 +474,15 @@ try {
     const library = join(proj, 'library');
     const config = { libraryRoot: library, sharedLibraries: [] };
     const project = write(join(proj, 'PROJECT.ap'), ['ABOUT  the project', '', 'IMPORT pseudocode FROM @main.dimensions', '', 'WHEN you start:', '    DO  read the code']);
-    await assert.rejects(bundleStandaloneToString(project, config), /PROJECT\.ap:3  DIMENSION pseudocode: a dimension belongs to an agent — it is read and written through that agent's apx/);
+    await assert.rejects(bundleStandaloneToString(project, config), /PROJECT\.ap:3 {2}DIMENSION pseudocode: a dimension belongs to an agent — it is read and written through that agent's apx/);
     write(project, ['ABOUT  the project', '', ...dimension({ name: 'inline' }), '', 'WHEN you start:', '    DO  read the code']);
-    await assert.rejects(bundleStandaloneToString(project, config), /PROJECT\.ap:3  DIMENSION inline: a dimension belongs to an agent/);
+    await assert.rejects(bundleStandaloneToString(project, config), /PROJECT\.ap:3 {2}DIMENSION inline: a dimension belongs to an agent/);
     rmSync(project);
     const team = join(proj, 'agents', 'teams', 'crew');
     write(join(team, 'builder.ap'), ['EXPORT AGENT builder AS builder-role:', '    ABOUT    builds', '    MANDATE  ship', '', 'ROLE builder-role:', '    ABOUT   a builder', '    ALWAYS  test first']);
     write(join(team, 'crew.ap'), teamSource('crew', ['builder'], ['ABOUT  a crew', '', 'IMPORT pseudocode FROM @main.dimensions', '', 'WHEN asked to ship:', '    DO  ship it']));
     await assert.rejects(buildOrchestrationContent({ cwd: proj, standaloneAgentsDir: join(proj, 'agents', 'standalone'), teamsDir: join(proj, 'agents', 'teams'), libraryRoots: [library], libraries: { '@main': library } }),
-      /crew\.ap:1  DIMENSION pseudocode: a dimension belongs to an agent/);
+      /crew\.ap:1 {2}DIMENSION pseudocode: a dimension belongs to an agent/);
     rmSync(join(proj, 'agents', 'teams'), { recursive: true });
   }
 

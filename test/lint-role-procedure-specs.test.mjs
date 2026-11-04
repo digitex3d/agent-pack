@@ -9,10 +9,10 @@
  * the duplicate/missing counts, the identity and flow-only rejections, and ROLE /
  * PROCEDURE blocks held in an agent's or a team's file (no new errors there).
  */
-import { strict as assert } from 'assert';
-import { readFileSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { strict as assert } from 'node:assert';
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lint = await import('../dist/src/lint.js');
@@ -20,7 +20,7 @@ const fixtures = JSON.parse(readFileSync(join(ROOT, 'test', 'lint-role-procedure
 
 assert.ok(fixtures.length > 500, 'the fixtures are all there');
 for (const f of fixtures) {
-  const body = f.path ? readFileSync(join(ROOT, f.path), 'utf8') : f.lines.join('\n') + '\n';
+  const body = f.path ? readFileSync(join(ROOT, f.path), 'utf8') : `${f.lines.join('\n')}\n`;
   const got = lint[f.fn](f.file, body).map(e => [e.line, e.message, e.severity ?? null, e.file]);
   assert.deepEqual(got, f.expected, `${f.name}: ${f.fn}(${f.file}) changed`);
 }

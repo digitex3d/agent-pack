@@ -8,10 +8,10 @@
  * closed when in doubt, and records every check. A fake judge answers here:
  * no test ever reaches Jev or needs a key.
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
-import { join, dirname } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
 import { teamSource } from './helpers/team.mjs';
 
 const { bundleAgentObject } = await import('../dist/src/compiler/index.js');
@@ -31,7 +31,7 @@ const { default: claudeCode } = await import('../dist/adapters/claude-code/index
 const tmp = mkdtempSync(join(tmpdir(), 'ap-check-'));
 const lib = join(tmp, 'library');
 mkdirSync(lib);
-const write = (file, lines) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, lines.join('\n') + '\n'); return file; };
+const write = (file, lines) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, `${lines.join('\n')}\n`); return file; };
 
 /** A session id variable of these tests' own: the harness running them may set the real one. */
 const SESSION = 'AP_TEST_CHECK_SESSION';
@@ -145,7 +145,7 @@ try {
 
   // --- what a checked condition must read, and how its question is built ---
   {
-    assert.match(await errorsOf(['    IF! the tests pass:', '        DO  ship']), /a\.ap:4  IF!: a checked condition reads at least one variable/);
+    assert.match(await errorsOf(['    IF! the tests pass:', '        DO  ship']), /a\.ap:4 {2}IF!: a checked condition reads at least one variable/);
     assert.match(await errorsOf(['    IF! the {{lang}} tests pass:', '        DO  ship'], { vars: { lang: 'go' } }), /IF!: a checked condition reads at least one variable/, 'a constant is no state');
     assert.match(await errorsOf(['    VAR report AS verdict', '    IF! {{report.decision}} is accept:', '        DO  ship']), /`\{\{report\.decision\}\}`: reading a field of a variable is not supported yet/);
     const shaped = await compile(['    VAR notes', '    IF! {{notes AS verdict}} accepts the change in {{lang}}:', '        DO  merge'], { vars: { lang: 'Go' } });
@@ -176,7 +176,7 @@ try {
     const id = idOf(sugar.structure);
     assert.equal(sugar.structure.meta.checks[id].kind, 'IF');
     assert.ok(sugar.body.includes(`When \`request\` (read its value: \`node .agent-pack/apx/a.apx get request\`) submits one idea:\n    If \`request\``), sugar.body);
-    assert.match(await errorsOf(['    WHEN! the tests pass:', '        DO  ship']), /a\.ap:4  WHEN!: a checked condition reads at least one variable/, 'the IF! rule holds, named WHEN!, at the WHEN! line');
+    assert.match(await errorsOf(['    WHEN! the tests pass:', '        DO  ship']), /a\.ap:4 {2}WHEN!: a checked condition reads at least one variable/, 'the IF! rule holds, named WHEN!, at the WHEN! line');
     // WHEN!! has no moment the agent could see; !WHEN means nothing
     assert.deepEqual(checkVocabulary('t.ap', ['EXPORT AGENT t:', '    WHEN!! {{r}} is clean:', '        DO  x', '    !WHEN {{r}} is clean:', '        DO  x', ''].join('\n')).map(e => [e.line, e.message]), [
       [2, '`WHEN!!` is not allowed — a sealed trigger has no moment the agent could see: write `WHEN <moment>:` with `IF!! <condition>:` beneath: "WHEN!! {{r}} is clean:"'],
@@ -187,11 +187,11 @@ try {
   // --- without `checks`: IF! warns and reads as IF; IF!! fails ---
   {
     const { result, stderr } = await stderrOf(() => compile(['    VAR report', '    IF! {{report}} is clean:', '        DO  ship'], { checks: null }));
-    assert.match(stderr, /a\.ap:5  IF!: no judge for checked conditions is configured — the condition is the agent's: it reads as IF; to have a judge decide it, add checks: \{ adapter: 'jev' \}/);
+    assert.match(stderr, /a\.ap:5 {2}IF!: no judge for checked conditions is configured — the condition is the agent's: it reads as IF; to have a judge decide it, add checks: \{ adapter: 'jev' \}/);
     assert.ok(result.body.includes('If `report` (read its value: `node .agent-pack/apx/a.apx get report`) is clean:\n    Do ship'), result.body);
     assert.equal(result.structure.meta.checks, undefined);
     assert.match(await errorsOf(['    VAR report', '    IF!! {{report}} is clean:', '        DO  ship'], { checks: null }),
-      /a\.ap:5  IF!! needs checks: \{ adapter: 'jev' \} in agent-pack\.config\.mjs/);
+      /a\.ap:5 {2}IF!! needs checks: \{ adapter: 'jev' \} in agent-pack\.config\.mjs/);
   }
   console.log('checked conditions: compile tests passed.');
 
@@ -346,33 +346,33 @@ try {
 
     // a variable the BY agent does not see
     flows(['    STEP judge it:', '        DELEGATE judge the report BY builder:', '            IF! {{verdict}} says clean:', '                DO  hand it on']);
-    assert.match(await stepErrors('builder'), /crew\.ap:12  IF!: `\{\{verdict\}\}` is no variable the agent it is delegated to sees/);
+    assert.match(await stepErrors('builder'), /crew\.ap:12 {2}IF!: `\{\{verdict\}\}` is no variable the agent it is delegated to sees/);
 
     // BY names a team: no one agent to answer for the check
     flows(['    STEP judge it:', '        DELEGATE judge the report BY crew:', '            IF! {{report}} says clean:', '                DO  hand it on']);
-    assert.match(await stepErrors('lead'), /crew\.ap:12  IF!: a checked condition needs the agent of its DELEGATE block: BY must name an agent/);
+    assert.match(await stepErrors('lead'), /crew\.ap:12 {2}IF!: a checked condition needs the agent of its DELEGATE block: BY must name an agent/);
 
     // a checked condition at the flow's own level: not supported yet
     flows(['    UNTIL!! {{report}} says clean MAX 3:', '        STEP fix it:', '            DELEGATE fix the next failure BY builder']);
-    assert.match(await stepErrors('lead'), /crew\.ap:10  UNTIL!! in a flow is not supported yet outside a DELEGATE block — put it inside `DELEGATE … BY <agent>:`/);
+    assert.match(await stepErrors('lead'), /crew\.ap:10 {2}UNTIL!! in a flow is not supported yet outside a DELEGATE block — put it inside `DELEGATE … BY <agent>:`/);
     // and in a step, outside a DELEGATE block: whoever runs the flow checks none yet
     flows(['    STEP judge it:', '        IF! {{report}} says clean:', '            DELEGATE hand it on BY builder']);
-    assert.match(await stepErrors('lead'), /crew\.ap:11  IF! in a flow is not supported yet outside a DELEGATE block/);    // the routing of the team: no executable — IF! warns and reads as IF, IF!! fails
+    assert.match(await stepErrors('lead'), /crew\.ap:11 {2}IF! in a flow is not supported yet outside a DELEGATE block/);    // the routing of the team: no executable — IF! warns and reads as IF, IF!! fails
     const routing = lines => write(join(team, 'crew.ap'), teamSource('crew', ['builder', 'lead'], ['IMPORT report FROM @main.vars', 'ABOUT  a crew', 'WHEN asked to ship:', ...lines, '',
       'FLOW ship:', '    STEP judge it:', '        DELEGATE hand it on BY builder']));
     routing(['    IF! the request is urgent:', '        RUN ship']);
     const routed = await stderrOf(orchestration);
-    assert.match(routed.stderr, /crew\.ap:7  IF!: no executable here — the condition is the agent's: it reads as IF; checks run in an agent's body, a procedure an agent runs, or a flow's `DELEGATE … BY <agent>:` block/);
+    assert.match(routed.stderr, /crew\.ap:7 {2}IF!: no executable here — the condition is the agent's: it reads as IF; checks run in an agent's body, a procedure an agent runs, or a flow's `DELEGATE … BY <agent>:` block/);
     assert.ok(routed.result.includes('If the request is urgent:'), routed.result);
     // WHEN! in the routing: the same pair, the same fallback, at the WHEN! line
     const routingWhen = lines => write(join(team, 'crew.ap'), teamSource('crew', ['builder', 'lead'], ['IMPORT report FROM @main.vars', 'ABOUT  a crew', ...lines, '',
       'FLOW ship:', '    STEP judge it:', '        DELEGATE hand it on BY builder']));
     routingWhen(['WHEN! {{report}} says the request is urgent:', '    RUN ship']);
     const sugared = await stderrOf(orchestration);
-    assert.match(sugared.stderr, /crew\.ap:6  WHEN!: no executable here — the condition is the agent's: it reads as WHEN/);
+    assert.match(sugared.stderr, /crew\.ap:6 {2}WHEN!: no executable here — the condition is the agent's: it reads as WHEN/);
     assert.ok(sugared.result.includes('When `report` (read its value: `node .agent-pack/apx/builder.apx get report`) says the request is urgent:\n    If `report`'), sugared.result);
     routing(['    IF!! the request is urgent:', '        RUN ship']);
-    await assert.rejects(orchestration, /crew\.ap:7  IF!!: no executable here — a sealed condition can never be checked here/);
+    await assert.rejects(orchestration, /crew\.ap:7 {2}IF!!: no executable here — a sealed condition can never be checked here/);
 
     // BY written as the role its member takes: AGENTS.md and the member's apx resolve the same agent, the same id
     flows(['    STEP judge it:', '        DELEGATE judge the report BY builder-role:', '            IF!! {{report}} shows no regression:', '                DO  hand it on']);
@@ -388,10 +388,10 @@ try {
     const standalone = lines => write(join(tmp, 'release.ap'), ['# release', 'ABOUT  cut a release', 'DO  read the changes', ...lines]);
     standalone(['IF! the changes are small:', '    DO  release now']);
     const { result, stderr } = await stderrOf(() => bundleStandaloneToString(join(tmp, 'release.ap'), config));
-    assert.match(stderr, /release\.ap:4  IF!: no executable here — the condition is the agent's: it reads as IF/);
+    assert.match(stderr, /release\.ap:4 {2}IF!: no executable here — the condition is the agent's: it reads as IF/);
     assert.ok(result.includes('If the changes are small:'), result);
     standalone(['IF!! the changes are small:', '    DO  release now']);
-    await assert.rejects(() => bundleStandaloneToString(join(tmp, 'release.ap'), config), /release\.ap:4  IF!!: no executable here — a sealed condition can never be checked here/);
+    await assert.rejects(() => bundleStandaloneToString(join(tmp, 'release.ap'), config), /release\.ap:4 {2}IF!!: no executable here — a sealed condition can never be checked here/);
   }
   console.log('checked conditions: standalone tests passed.');
 } finally {

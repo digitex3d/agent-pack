@@ -6,8 +6,8 @@
  * (e.g. `ABOUT …`, `WRITES …`, `WHEN …`).
  */
 import { FORMULAS } from '../formulas.js';
-import { lex, escapeRegex, Keyword } from '../lexer.js';
-import { parseBlocks, Block } from '../parseBlocks.js';
+import { lex, escapeRegex, type Keyword } from '../lexer.js';
+import { parseBlocks, type Block } from '../parseBlocks.js';
 export { escapeRegex };
 
 // ---------------------------------------------------------------------------

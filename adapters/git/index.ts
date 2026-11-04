@@ -27,9 +27,9 @@
  * A delivery limited to lines keeps only the hunks inside them (`diff -U0`,
  * `apply --cached`); the others are left out.
  */
-import { spawnSync } from 'child_process';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, unlinkSync, appendFileSync, realpathSync, writeFileSync } from 'fs';
-import { dirname, join, resolve } from 'path';
+import { spawnSync } from 'node:child_process';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, appendFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { RUNTIME_DIR, WORK_DIR } from '../../src/apx/paths.js';
 import { globRegExp, matchesAnyGlob } from '../../src/services/glob.js';
 import type { Allowed, Delivery, LandResult, MergeResult, Perimeter, Prefer, WorkspaceEngine, WorkspaceSession } from '../../src/workspace/types.js';
@@ -400,7 +400,7 @@ class GitSession implements WorkspaceSession {
   }
 
   private writeState(dir: string, state: CopyState): void {
-    writeFileSync(this.statePath(dir), JSON.stringify(state, null, 1) + '\n');
+    writeFileSync(this.statePath(dir), `${JSON.stringify(state, null, 1)}\n`);
   }
 
   private readState(dir: string): CopyState {

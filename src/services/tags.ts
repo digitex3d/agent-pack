@@ -362,9 +362,9 @@ function useTagRegistry() {
 
 export {
   // types
-  LibraryIndexError,
-  TagRegistrationResult,
-  TagRegistrySnapshot,
+  type LibraryIndexError,
+  type TagRegistrationResult,
+  type TagRegistrySnapshot,
   // constants
   TAG_RE,
   PERIMETER_RE,

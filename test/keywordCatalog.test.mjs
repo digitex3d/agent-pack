@@ -4,8 +4,8 @@
  * The keyword catalog — every word of the language with its role, built from
  * the compiler's registries — and the dist/keywords.json the build writes from it.
  */
-import { strict as assert } from 'assert';
-import { readFileSync } from 'fs';
+import { strict as assert } from 'node:assert';
+import { readFileSync } from 'node:fs';
 
 const { keywordCatalog } = await import('../dist/src/keywordCatalog.js');
 const { KEYWORDS } = await import('../dist/src/lexer.js');

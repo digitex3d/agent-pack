@@ -16,14 +16,14 @@
  * a file several agents use is judged once, a line text asked once, the
  * warnings collected and printed once at the end, the units written once.
  */
-import { join, sep } from 'path';
+import { join, sep } from 'node:path';
 import { writtenKeyword } from '../forceLevelConfig.js';
 import { BUILTIN_AGENTS_DIR, BUILTIN_LIBRARY_ROOT, librariesAliasMap, type Config } from '../config.js';
 import type { ApDocument } from '../apdoc/document.js';
 import type { ApLine } from '../apdoc/types.js';
 import type { SourceRegistry } from '../sources.js';
 import { resolveLibraryOutputDir } from '../libraryIndex.js';
-import { type LintError } from '../lint.js';
+import type { LintError } from '../lint.js';
 import { reporter } from '../report.js';
 import { judgeState, loadJudgeRules, severityOf } from './rules.js';
 import { AGENT, DELEGATE, PROGRAM, executorOf, scriptRuleLines } from '../executor.js';

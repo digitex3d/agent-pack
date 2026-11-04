@@ -5,8 +5,8 @@
  * there (packageVersion), and CITATION.cff carries a copy that `npm version`
  * writes (scripts/sync-version.mjs) — this fails when the copy drifts.
  */
-import { strict as assert } from 'assert';
-import { readFileSync } from 'fs';
+import { strict as assert } from 'node:assert';
+import { readFileSync } from 'node:fs';
 
 const { packageVersion } = await import('../dist/src/config.js');
 const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8'));

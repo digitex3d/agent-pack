@@ -5,7 +5,7 @@
  * it shares with the shape compiler, and record validation against a TEMPLATE.
  */
 
-import { strict as assert } from 'assert';
+import { strict as assert } from 'node:assert';
 
 const { parseTypeSpec, validateSlots, formatIssues } = await import('../dist/src/shapeSchema.js');
 const { parseTemplate } = await import('../dist/src/shapeCompiler.js');

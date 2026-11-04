@@ -16,8 +16,8 @@
  * Declarative throughout: this module reads recipes and checks names; the
  * command is run by the agent, with its own shell, as the compiled text says.
  */
-import { accessSync, constants, readFileSync } from 'fs';
-import { delimiter, join } from 'path';
+import { accessSync, constants, readFileSync } from 'node:fs';
+import { delimiter, join } from 'node:path';
 import type { AdapterPlugin } from '../adapters/types.js';
 import { builtinAdapters } from './adapter-registry.js';
 import { parseTemplate } from './shapeCompiler.js';

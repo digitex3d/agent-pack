@@ -19,7 +19,7 @@
  */
 
 import { DECORATOR_MARK, decoratorOf, placementMessage, danglingDecoratorMessage, emptyDecoratorMessage, definitionInDecoratorMessage, type DecoratorLine } from './decorators.js';
-import { lex, Token } from './lexer.js';
+import { lex, type Token } from './lexer.js';
 import { blockTypeOf, EXPORT_MODIFIER, AGENT_KEYS } from './blockTypes.js';
 import { computeHead, splitExecutorMark } from './executor.js';
 import { parseExportedVar, type VarDecl } from './vars.js';

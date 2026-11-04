@@ -4,10 +4,10 @@
  * EXTENDS — a role takes its parent's rules first, then its own. A parent that
  * cannot be found, or a chain that loops back, fails the compilation.
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const { bundleAgentObject } = await import('../dist/src/compiler/index.js');
 
@@ -29,7 +29,7 @@ try {
   const md = (await compile('base')).body;
   assert.ok(md.indexOf('rule of base') < md.indexOf('rule of child'), "the parent's rules come first");
 
-  await assert.rejects(compile('nobody'), /child\.ap:3  EXTENDS nobody: no role `nobody`/, 'a missing parent fails');
+  await assert.rejects(compile('nobody'), /child\.ap:3 {2}EXTENDS nobody: no role `nobody`/, 'a missing parent fails');
 
   role('loop', 'child');
   await assert.rejects(compile('loop'), /EXTENDS child: circular/, 'a cycle fails');

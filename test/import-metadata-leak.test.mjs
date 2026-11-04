@@ -7,10 +7,10 @@
  * Regression for: imported module bodies were inlined via ingestRaw without
  * stripping AGENT_METADATA_KEYWORDS — only ABOUT was stripped.
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { bundleAgentToString } from '../dist/src/compiler/index.js';
 
 const tmp = mkdtempSync(join(tmpdir(), 'ap-import-leak-'));
@@ -24,13 +24,13 @@ try {
   // A policy module that carries APPLIES (catalog metadata) plus real rule content.
   writeFileSync(
     join(policiesDir, 'test-rules.ap'),
-    [
+    `${[
       '# test-rules',
       'ABOUT  rules used in import-metadata-leak test',
       'APPLIES #test-tag, #leak-check, universal',
       'ALWAYS follow the test-rules policy',
       'NEVER skip the test-rules policy',
-    ].join('\n') + '\n',
+    ].join('\n')}\n`,
     'utf-8',
   );
 
@@ -41,12 +41,12 @@ try {
   const agentFile = join(agentDir, 'leak-check-agent.ap');
   writeFileSync(
     agentFile,
-    [
+    `${[
       'IMPORT test-rules FROM library.policies',
       '',
       'EXPORT AGENT leak-check-agent:',
       '    ABOUT  agent that imports a module with metadata keywords',
-    ].join('\n') + '\n',
+    ].join('\n')}\n`,
     'utf-8',
   );
 

@@ -10,10 +10,10 @@
  *     the agent's own content; a team without team.ap injects nothing
  *  */
 
-import { strict as assert } from 'assert';
-import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, rmSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { teamSource } from './helpers/team.mjs';
 
 const { resolveTeamShared, TEAM_SHARED_FILE } = await import('../dist/src/bundleDefaults.js');
@@ -29,7 +29,7 @@ function makeTeamMember(root, team, agent) {
   mkdirSync(teamDir, { recursive: true });
   const file = join(teamDir, `${agent}.ap`);
   writeFileSync(file, [`EXPORT AGENT ${agent} AS ${agent}-role:`, '  ABOUT a flat agent', '  MANDATE ship the change', '', `ROLE ${agent}-role:`, '  ABOUT a worker', '  ALWAYS ship the change', ''].join('\n'), 'utf-8');
-  writeFileSync(join(teamDir, `${team}.ap`), teamSource(team, [agent], ['ABOUT a test team']).join('\n') + '\n', 'utf-8');
+  writeFileSync(join(teamDir, `${team}.ap`), `${teamSource(team, [agent], ['ABOUT a test team']).join('\n')}\n`, 'utf-8');
   return file;
 }
 

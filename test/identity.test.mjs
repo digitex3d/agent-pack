@@ -9,10 +9,10 @@
  *   - Bundle integration: round-trip from agent.ap with identity fields
  */
 
-import { strict as assert } from 'assert';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 // --------------------------------------------------------------------------
 // renderIdentityBlock

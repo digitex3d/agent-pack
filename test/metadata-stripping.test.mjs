@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { strict as assert } from 'assert';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync, readFileSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { stripPrimitives } from '../dist/src/services/text.js';
 
 const tmp = mkdtempSync(join(tmpdir(), 'ap-metadata-strip-'));
@@ -190,13 +190,13 @@ try {
 
     writeFileSync(
       join(dir, 'ctx.policy.ap'),
-      [
+      `${[
         '# ctx',
         'EXPORT POLICY ctx:',
         '  ABOUT  block-scoped context rules',
         '  APPLIES #multi-agent, #orchestration, universal',
         '  ALWAYS engineer the environment',
-      ].join('\n') + '\n',
+      ].join('\n')}\n`,
       'utf-8',
     );
 

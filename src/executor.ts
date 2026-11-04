@@ -24,7 +24,7 @@ import { readsOf, constantOf } from './vars.js';
 import { checkedVars } from './check.js';
 import { addressName, shortId } from './apdoc/ids.js';
 import { namesMatching } from './services/fs.js';
-import { resolve } from 'path';
+import { resolve } from 'node:path';
 import { DISTILLED_DIR } from './apx/paths.js';
 import { isDelegationVerb, FORK_VERB } from './delegation.js';
 

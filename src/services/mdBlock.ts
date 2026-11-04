@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { escapeRegex } from './text.js';
 
 export type MdBlockAction = 'created' | 'updated' | 'unchanged';
@@ -38,6 +38,6 @@ export function ensureMdBlock(opts: MdBlockOptions): MdBlockResult {
   }
 
   const separator = current.endsWith('\n') ? '\n' : '\n\n';
-  writeFileSync(filePath, current + separator + block + '\n', 'utf-8');
+  writeFileSync(filePath, `${current + separator + block}\n`, 'utf-8');
   return { action: 'updated', path: filePath };
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { AgentInfo, readTeamMembers, readTeamPurpose, teamRootForAgentFile, agentNameOf } from './teamMetadata.js';
-import { basename } from 'path';
+import { type AgentInfo, readTeamMembers, readTeamPurpose, teamRootForAgentFile, agentNameOf } from './teamMetadata.js';
+import { basename } from 'node:path';
 import { FORMULAS, fill } from '../formulas.js';
 
 /**

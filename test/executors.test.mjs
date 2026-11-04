@@ -7,10 +7,10 @@
  * to; DELEGATE and COMPUTE take INTO like DO. A star with a `!` is an error (a
  * condition has one judge), and a starred condition reads at least one variable.
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { teamSource } from './helpers/team.mjs';
 
 const { lexRaw } = await import('../dist/src/lexer.js');
@@ -53,7 +53,7 @@ assert.equal(renderTree('WHEN asked:\n    IF** {{a}} is odd:\n        DO  stop\n
 ].join('\n'));
 
 const tmp = mkdtempSync(join(tmpdir(), 'ap-executors-'));
-const write = (file, lines) => { mkdirSync(join(file, '..'), { recursive: true }); writeFileSync(file, lines.join('\n') + '\n'); return file; };
+const write = (file, lines) => { mkdirSync(join(file, '..'), { recursive: true }); writeFileSync(file, `${lines.join('\n')}\n`); return file; };
 try {
   const lib = join(tmp, 'library');
   mkdirSync(lib, { recursive: true });
@@ -80,7 +80,7 @@ try {
 
   // --- the lint: the forms are accepted where DO is; a star with a `!`, a COMPUTE with BY, a BY before INTO are errors ---
   {
-    const lint = lines => lintFile(join(dir, 'clerk.ap'), agent(...lines).join('\n') + '\n').map(e => e.message);
+    const lint = lines => lintFile(join(dir, 'clerk.ap'), `${agent(...lines).join('\n')}\n`).map(e => e.message);
     assert.deepEqual(lint([
       'DELEGATE read the invoice lines from {{pdf_text}} INTO lines',
       'DELEGATE check the clauses of {{contract}} INTO risks BY legal-reviewer',
@@ -206,7 +206,7 @@ try {
       '    ENSURE:', '        MUST  ml be rounded half up to 2 decimals',
     ];
     const doseFile = write(join(lib, 'procedures', 'dose.ap'), DOSE);
-    const lintDose = lines => lintFile(doseFile, lines.join('\n') + '\n').map(e => e.message);
+    const lintDose = lines => lintFile(doseFile, `${lines.join('\n')}\n`).map(e => e.message);
     assert.deepEqual(lintDose(DOSE), [], 'a COMPUTE block lints clean');
     assert.deepEqual(lintDose(DOSE.slice(0, 12)), ['COMPUTE `dose` needs its ENSURE section — REQUIRE:, RETURN AS <template>: and ENSURE:, in this order']);
     assert.deepEqual(lintDose(DOSE.map(l => l.replace('RETURN AS dose-result:', 'RETURN:'))), ['RETURN in COMPUTE `dose` needs its result shape — write `RETURN AS <template>:`']);

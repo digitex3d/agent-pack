@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
 import type { ChecksConfig } from '../judge/types.js';
-import { LintError, LintOptions } from '../lint.js';
+import type { LintError, LintOptions } from '../lint.js';
 import type { Definition } from '../definition.js';
 import type { ExportedBlockBody } from '../services/text.js';
 import type { SourceRegistry } from '../sources.js';

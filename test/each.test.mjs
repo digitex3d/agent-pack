@@ -11,12 +11,12 @@
  * `~` is its own piece in the registry, and the WAIT collects their results.
  * PARALLEL is gone, with its rewrite.
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'fs';
-import { join, dirname } from 'path';
-import { tmpdir } from 'os';
-import { spawnSync } from 'child_process';
-import { fileURLToPath } from 'url';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { teamSource } from './helpers/team.mjs';
 
 const CLI = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'index.js');
@@ -27,7 +27,7 @@ const { ApDocument } = await import('../dist/src/apdoc/document.js');
 const { compileWorkflow } = await import('../dist/adapters/claude-code/workflow.js');
 
 const has = (out, ...needles) => { for (const n of needles) assert.ok(out.includes(n), `missing ${JSON.stringify(n)} in:\n${out}`); };
-const write = (file, lines) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, lines.join('\n') + '\n'); return file; };
+const write = (file, lines) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, `${lines.join('\n')}\n`); return file; };
 
 // --- the head: `<item> IN {{<list>}} MAX <n>`, every malformed form; a DIMENSION's EACH line is no head ---
 assert.deepEqual(parseEachHead('part IN {{parts}} MAX 5:'), { item: 'part', list: 'parts', max: 5 });
@@ -71,7 +71,7 @@ const flowsAp = (...each) => teamSource('crew', ['builder'], [
   '        DELEGATE merge every report BY builder',
 ]);
 const file = join(team, 'crew.ap');
-const lint = (...each) => lintFile(file, flowsAp(...each).join('\n') + '\n').map(e => [e.line, e.message]);
+const lint = (...each) => lintFile(file, `${flowsAp(...each).join('\n')}\n`).map(e => [e.line, e.message]);
 const compile = async (...each) => {
   write(file, flowsAp(...each));
   return bundleAgentObject({ agentName: 'builder', agentFile, agentDir: team, libraryRoot: lib, libraryRoots: [lib],
@@ -95,13 +95,13 @@ try {
   assert.ok(lint('        EACH part IN {{parts}} MAX 3:', '            MARK one zone per {{part}} INTO zones AS spec').some(([, m]) => m.includes('EACH block requires at least one of: DELEGATE, FORK')));
   assert.ok(lint('        MARK one zone per part INTO zones AS spec', '        EACH zone IN {{zones}} MAX 3:', '            DELEGATE build {{zone}} BY builder')
     .some(([l, m]) => l === 17 && m.includes('`zones` holds the contracts a MARK made — a list of contracts is delegated as it is: `DELEGATE zones BY <agent>`')));
-  const outside = lintFile(agentFile, ['EXPORT AGENT builder AS builder-role:', '    ABOUT    builds things', '    MANDATE  ship working code',
-    '    WHEN asked:', '        EACH part IN {{parts}} MAX 3:', '            DELEGATE work on {{part}} BY builder', '', 'ROLE builder-role:', '    ABOUT   a careful builder'].join('\n') + '\n');
+  const outside = lintFile(agentFile, `${['EXPORT AGENT builder AS builder-role:', '    ABOUT    builds things', '    MANDATE  ship working code',
+    '    WHEN asked:', '        EACH part IN {{parts}} MAX 3:', '            DELEGATE work on {{part}} BY builder', '', 'ROLE builder-role:', '    ABOUT   a careful builder'].join('\n')}\n`);
   assert.ok(outside.some(e => e.message.includes('EACH hands work out once per element of a list, for a flow — it stands in a flow STEP')), JSON.stringify(outside));
 
   // --- the compiler: the list is a declared variable, typed, with one LIST slot; an INTO inside collects a list ---
   const fails = async (re, ...each) => assert.rejects(() => compile(...each), re);
-  await fails(/crew\.ap:16  EACH part IN \{\{nope\}\}: no variable `nope` — IMPORT the module that exports it/, '        EACH part IN {{nope}} MAX 3:', '            DELEGATE work on {{part}} BY builder');
+  await fails(/crew\.ap:16 {2}EACH part IN \{\{nope\}\}: no variable `nope` — IMPORT the module that exports it/, '        EACH part IN {{nope}} MAX 3:', '            DELEGATE work on {{part}} BY builder');
   await fails(/EACH part IN \{\{loose\}\}: `loose` has no type — declare it `AS <template>`, a template with one LIST slot/,
     '        EACH part IN {{loose}} MAX 3:', '            DELEGATE work on {{part}} BY builder');
   await fails(/EACH part IN \{\{notes\}\}: `note` has 0 LIST slots — the list to run over is its one LIST slot/,

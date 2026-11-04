@@ -5,10 +5,10 @@
  * template's EXAMPLE in, through the document the agent compiles to (the
  * renderTemplate path has its own tests in shapeCompiler.test.mjs).
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const { bundleAgentObject } = await import('../dist/src/compiler/index.js');
 

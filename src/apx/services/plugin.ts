@@ -12,9 +12,9 @@
  * `state` is the block's memory in this session, written only when the
  * function returns without throwing.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
-import { dirname, join } from 'path';
-import { pathToFileURL } from 'url';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type { PluginBlock } from '../../apdoc/blocks.js';
 import { STATE_DIR } from '../paths.js';
 import { inputUsage, recordIssues, recordOfArgs, type PluginSpec } from '../../plugins.js';

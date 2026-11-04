@@ -18,10 +18,10 @@
  *   3. NEW CASE — `EXPORT POLICY foo:` resolves `IMPORT foo`; a private block in
  *      the same file does NOT resolve and yields a not-exported diagnostic.
  */
-import { strict as assert } from 'assert';
-import { mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync, statSync, existsSync } from 'fs';
-import { resolve, join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { strict as assert } from 'node:assert';
+import { mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
+import { resolve, join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const { resolveTargetWith, resolveImports } = await import('../dist/src/dispatch/imports.js');
 const { parseNamespace } = await import('../dist/src/namespace.js');
@@ -62,7 +62,7 @@ function legacyResolve(modulePath, name) {
   const p = parseNamespace(modulePath);
   const root = p.alias ? LIBRARIES[p.alias] : null;
   if (!root) return null;
-  const scopePath = p.scope.length === 0 ? '' : p.scope.join('/') + '/';
+  const scopePath = p.scope.length === 0 ? '' : `${p.scope.join('/')}/`;
   if (!FILE_KINDS.has(p.kind)) return null;
   // Stage 1: EXPORT-unit scan of the namespace folder.
   const dir = resolve(root, `${p.kind}/${scopePath}`);

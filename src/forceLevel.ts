@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
 import { renderKeywordBlock } from './services/text.js';
-import { FORCE_LEVEL_PRIMITIVES, BulletGroupPrimitive } from './primitives.js';
-import { lex, Token } from './lexer.js';
+import { FORCE_LEVEL_PRIMITIVES, type BulletGroupPrimitive } from './primitives.js';
+import { lex, type Token } from './lexer.js';
 import { desugar } from './desugar.js';
 import { getIntroByKeyword } from './forceLevelConfig.js';
 import type { BundleContext } from './dispatch/types.js';

@@ -1,0 +1,13 @@
+# gitleaks reads this file from the scanned folder. `gitleaks dir` also scans
+# git-ignored folders: skip the generated and the worktree ones.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "generated or ignored folders"
+paths = [
+  '''(^|/)\.agent-pack/''',
+  '''(^|/)\.worktrees/''',
+  '''(^|/)node_modules/''',
+  '''(^|/)dist/''',
+]

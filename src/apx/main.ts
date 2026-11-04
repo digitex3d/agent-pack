@@ -8,8 +8,8 @@
  * The file reads itself: its last line is the data — `//apx:json:<payload>`
  * or `//apx:gzip:<base64 of the gzipped payload>`.
  */
-import { readFileSync } from 'fs';
-import { relative } from 'path';
+import { readFileSync } from 'node:fs';
+import { relative } from 'node:path';
 import { ApDocument } from '../apdoc/document.js';
 import { ApxEngine } from './engine.js';
 import { parsePayload, MIN_NODE_MAJOR } from './payload.js';

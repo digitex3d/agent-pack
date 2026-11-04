@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { readFileSync, existsSync } from 'fs';
-import { basename, dirname, relative, resolve, sep } from 'path';
+import { readFileSync, existsSync } from 'node:fs';
+import { basename, dirname, relative, resolve, sep } from 'node:path';
 import { extractAbout, partitionMetadata, exportedBlocksOf, type ExportedBlockBody } from './services/text.js';
 import { parseBlocks } from './parseBlocks.js';
 import { AGENT_METADATA_KEYWORDS } from './primitives.js';

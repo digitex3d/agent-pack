@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { strict as assert } from 'assert';
-import { execFileSync } from 'child_process';
-import { mkdtempSync, writeFileSync, rmSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 /**
  * The opencode adapter — out, its agents in `.opencode/agents/<name>.md`; in,
@@ -90,11 +90,11 @@ assert.ok(inv.command.endsWith('> {answer}'), inv.command);
     const line = fill(inv.command, { agent: 'hunter', project: tmp, prompt: events, answer, model: `--model ${FREE}` })
       .replace(/^opencode run .*? < (\S+)/, 'cat $1');
     execFileSync('sh', ['-c', line]);
-    const { readFileSync } = await import('fs');
+    const { readFileSync } = await import('node:fs');
     assert.equal(readFileSync(answer, 'utf-8'),
       'Found two unhandled paths.\n\nPermissions opencode refused on its own, for the harness that launched it to decide on:\n- external_directory (/etc/*)\n');
 
-    writeFileSync(events, JSON.stringify({ type: 'text', part: { text: 'All clear.' } }) + '\n');
+    writeFileSync(events, `${JSON.stringify({ type: 'text', part: { text: 'All clear.' } })}\n`);
     execFileSync('sh', ['-c', line]);
     assert.equal(readFileSync(answer, 'utf-8'), 'All clear.', 'no permission refused: the answer alone');
   } finally {

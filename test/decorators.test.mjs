@@ -4,10 +4,10 @@
  * (union), one that narrows (intersection), one held to some blocks (`on`).
  * The real ones, @WITH and @WITHIN, have their own tests (skills, perimeter).
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
-import { join, dirname } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const { lex } = await import('../dist/src/lexer.js');
 const { parseBlocks } = await import('../dist/src/parseBlocks.js');
@@ -121,7 +121,7 @@ const messages = (file, body) => checkVocabulary(file, body).map(e => `${e.line}
   const root = mkdtempSync(join(tmpdir(), 'ap-decorators-'));
   try {
     const lib = join(root, 'library');
-    const write = (file, lines) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, lines.join('\n') + '\n'); return file; };
+    const write = (file, lines) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, `${lines.join('\n')}\n`); return file; };
     for (const name of ['shape-a', 'shape-b']) write(join(lib, 'templates', `${name}.ap`), [`EXPORT TEMPLATE ${name}:`, '    ABOUT  a shape of text', '    SLOTS:', '        text: TEXT  "the text"']);
     const compileAbove = (above, body, imports = 'shape-a, shape-b') => {
       const file = write(join(root, 'a.ap'), [
@@ -164,7 +164,7 @@ const messages = (file, body) => checkVocabulary(file, body).map(e => `${e.line}
     assert.ok(!agentBody.some(n => n.keyword === '@SHAPE'), "the procedure's decorator is not the agent's");
     assert.equal(inline.structure.byKind('procedure').find(b => b.name === 'p').body[0].keyword, '@SHAPE', "it is the procedure's");
     write(join(lib, 'templates', 'shape-c.ap'), ['@SHAPE shape-a', 'EXPORT TEMPLATE shape-c:', '    ABOUT  a shape of text', '    SLOTS:', '        text: TEXT  "the text"']);
-    await assert.rejects(compileAbove([], [], 'shape-a, shape-c'), /shape-c\.ap:1  `@SHAPE` stands above TEMPLATE, which holds no work to decorate/);
+    await assert.rejects(compileAbove([], [], 'shape-a, shape-c'), /shape-c\.ap:1 {2}`@SHAPE` stands above TEMPLATE, which holds no work to decorate/);
     console.log('decorators: definitions passed.');
   } finally {
     rmSync(root, { recursive: true, force: true });

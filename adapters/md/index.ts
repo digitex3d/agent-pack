@@ -14,8 +14,8 @@
  */
 import type { AgentBlock, VarBlock } from '../../src/apdoc/blocks.js';
 import type { ApBlock } from '../../src/apdoc/block.js';
-import { ApDocument } from '../../src/apdoc/document.js';
-import { renderNodes, MdEnv } from './toolkit.js';
+import type { ApDocument } from '../../src/apdoc/document.js';
+import { renderNodes, type MdEnv } from './toolkit.js';
 import { renderPerimeter } from '../../src/primitives.js';
 import type { ApMdMeta } from '../../src/apdoc/types.js';
 import { FORMULAS, fill, refSuffix, headingLine } from '../../src/formulas.js';
@@ -149,5 +149,5 @@ export function renderMd(doc: ApDocument, refForm: RefForm = refSuffix): string 
     }
   }
 
-  return out.trimEnd() + '\n';
+  return `${out.trimEnd()}\n`;
 }

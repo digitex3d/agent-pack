@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { BundleContext } from '../dispatch/index.js';
+import type { BundleContext } from '../dispatch/index.js';
 import { FORMULAS, fill, headingLine } from '../formulas.js';
 import type { Definition } from '../definition.js';
 import { buildHierarchy, type TagNode } from '../services/tags.js';
@@ -261,7 +261,7 @@ export function emitChapter<E>(ctx: BundleContext, spec: SectionSpec<E>): string
   if (spec.entries.length === 0) return '';
   let out = openSection(ctx, spec.title, spec.intro);
   if (spec.renderFlat) {
-    return out + spec.renderFlat(spec.entries) + '\n';
+    return `${out + spec.renderFlat(spec.entries)}\n`;
   }
   if (!spec.renderEntry) return out;
 

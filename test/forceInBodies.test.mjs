@@ -11,10 +11,10 @@
  * with their force, `lines()` with positions), the md of AGENTS.md, `apx flow`,
  * `apx get`, the Workflow script.
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { teamSource } from './helpers/team.mjs';
 
 const { lintFile, lintFlow } = await import('../dist/src/lint.js');
@@ -57,7 +57,7 @@ const lib = join(tmp, 'library');
 const team = join(tmp, 'teams', 'crew');
 mkdirSync(lib, { recursive: true });
 mkdirSync(team, { recursive: true });
-const write = (file, lines) => { writeFileSync(file, lines.join('\n') + '\n'); return file; };
+const write = (file, lines) => { writeFileSync(file, `${lines.join('\n')}\n`); return file; };
 const flowsBody = teamSource('crew', ['builder'], ['ABOUT  a crew', '', 'WHEN asked to ship:', '    RUN ship', '', ...FLOW]);
 const flowsFile = write(join(team, 'crew.ap'), flowsBody);
 const agentBody = [
@@ -81,7 +81,7 @@ try {
   const procBody = ['# release', '', `EXPORT ${PROCEDURE[0]}`, ...PROCEDURE.slice(1),
     '    ELSE', '        MUST!!  tag it', '        MAY  announce it', ''].join('\n');
   assert.deepEqual(lintFile(procFile, procBody), [], 'a procedure file lints clean with force lines');
-  assert.deepEqual(lintFile(agentFile, agentBody.join('\n') + '\n'), [], 'an inline procedure lints clean');
+  assert.deepEqual(lintFile(agentFile, `${agentBody.join('\n')}\n`), [], 'an inline procedure lints clean');
   // DISTILL (D22) was removed: each of its levels is an error that names what replaces it.
   for (const level of ['DISTILL', 'DISTILL!!', '!DISTILL']) {
     assert.deepEqual(lintFile(procFile, ['# release', '', 'EXPORT PROCEDURE release:', '    ABOUT  cut a release', '    DO  bump the version',
@@ -93,7 +93,7 @@ try {
     ['`ALWAYS!` is not a level of ALWAYS — use !ALWAYS, ALWAYS', 'unexpected line in a procedure: "ALWAYS!  push a tag by hand"']);
 
   // --- lint: a step and its branches take force lines; a rule line is no action ---
-  assert.deepEqual(lintFile(flowsFile, flowsBody.join('\n') + '\n'), [], 'a team file lints clean');
+  assert.deepEqual(lintFile(flowsFile, `${flowsBody.join('\n')}\n`), [], 'a team file lints clean');
   const flowFile = join(tmp, 'flows', 'ship.ap');
   const lintShip = (...lines) => lintFlow(flowFile, ['# ship', '', 'ABOUT  ship it', '', 'FLOW ship', ...lines, ''].join('\n'));
   assert.deepEqual(lintShip(...FLOW.slice(1)), [], 'a flow file lints clean');

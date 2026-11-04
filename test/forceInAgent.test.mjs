@@ -8,10 +8,10 @@
  * an error; the other agent rules (no identity keywords, no body `AS`) hold.
  * The lines reach the document, the md and the apx in source order.
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const { lintFile } = await import('../dist/src/lint.js');
 const { bundleAgentObject } = await import('../dist/src/compiler/index.js');

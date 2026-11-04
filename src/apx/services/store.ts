@@ -6,7 +6,7 @@
  * operation to the table, after checking a write against the store's slots;
  * `a` with the KEY already present updates that record instead of duplicating it.
  */
-import { basename, join } from 'path';
+import { basename, join } from 'node:path';
 import type { StoreBlock } from '../../apdoc/blocks.js';
 import { projectStoreDir } from '../paths.js';
 import { openTable, runTable, upsertBy } from '../tabeli.js';

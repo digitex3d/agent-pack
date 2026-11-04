@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
-import { dirname, resolve } from 'path';
-import { createInterface } from 'readline/promises';
+import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { createInterface } from 'node:readline/promises';
 import { EXAMPLES_DIR } from '../config.js';
 
 const CONFIG_FILE = 'agent-pack.config.mjs';

@@ -3,16 +3,16 @@
  * agents share; each role an agent binds adds its identity line, its rules and
  * its imports. One role is a list of one, compiled as it always was.
  */
-import { strict as assert } from 'assert';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
-import { join, dirname } from 'path';
-import { tmpdir } from 'os';
+import { strict as assert } from 'node:assert';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const { bundleAgentToString } = await import('../dist/src/compiler/index.js');
 const { buildOrchestrationContent } = await import('../dist/src/orchestrationSection.js');
 
 const root = mkdtempSync(join(tmpdir(), 'ap-roles-'));
-const write = (file, lines) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, lines.join('\n') + '\n'); return file; };
+const write = (file, lines) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, `${lines.join('\n')}\n`); return file; };
 const has = (out, ...needles) => { for (const n of needles) assert.ok(out.includes(n), `missing ${JSON.stringify(n)} in:\n${out}`); };
 const lib = join(root, 'library');
 const compile = (name, lines) => {
