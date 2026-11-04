@@ -15,7 +15,7 @@ import { tmpdir } from 'os';
 const { bundleAgentObject } = await import('../dist/src/compiler/index.js');
 const { renderTree } = await import('../dist/src/bundlers/renderTree.js');
 const { default: claudeCodeAdapter } = await import('../dist/adapters/claude-code/index.js');
-const { buildAgentFrontmatter } = await import('../dist/adapters/claude-code/emitters/agent-md.js');
+const { buildAgentFrontmatter, CLAUDE_BUDGET_MODELS } = await import('../dist/adapters/claude-code/emitters/agent-md.js');
 const { AgentBundle } = await import('../dist/adapters/types.js');
 
 const tmp = mkdtempSync(join(tmpdir(), 'ap-mem-'));
@@ -31,7 +31,7 @@ async function compile(name, file, adapter) {
   return bundleAgentObject({ agentName: name, agentFile: file, agentDir: tmp, libraryRoot: lib, libraryRoots: [lib], bundleConfig: { runtime: false }, adapter });
 }
 function frontmatter(name, compiled) {
-  return buildAgentFrontmatter(Object.assign(new AgentBundle(), { name, metadata: compiled.metadata, structure: compiled.structure }), '*');
+  return buildAgentFrontmatter(Object.assign(new AgentBundle(), { name, metadata: compiled.metadata, structure: compiled.structure }), '*', CLAUDE_BUDGET_MODELS);
 }
 
 try {

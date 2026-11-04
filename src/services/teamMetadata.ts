@@ -181,6 +181,8 @@ export interface AgentInfo {
    * override in the TEAM block is layered on top by the orchestration reader and wins.
    */
   lensIn?: string;
+  /** Its `BUDGET` tier — what another harness picks its model by (D66); absent when it declares none. */
+  budget?: string;
   /** The roles this agent binds via the `AS <role>, …` header signature, in order — empty when none. */
   roles: string[];
   /** True when the block is a `SKILL` — an agent the adapter writes as a skill. */
@@ -285,6 +287,7 @@ export function readAgentFile(path: string, sources: SourceRegistry = new Source
     about: extractPrimitive(agent.body, 'ABOUT') ?? '',
     roles: parseAgentSignature(agent.rest).roles,
     lensIn: extractPrimitive(agent.body, 'LENS-IN') ?? undefined,
+    budget: extractPrimitive(agent.body, 'BUDGET') ?? undefined,
     skill: agent.key === 'SKILL',
     applies: parseApplies(extractPrimitives(agent.body, 'APPLIES')),
   };

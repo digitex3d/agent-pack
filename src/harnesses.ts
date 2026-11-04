@@ -21,6 +21,7 @@ import { delimiter, join } from 'path';
 import type { AdapterPlugin } from '../adapters/types.js';
 import { builtinAdapters } from './adapter-registry.js';
 import { parseTemplate } from './shapeCompiler.js';
+import { modelOfTier } from '../adapters/budget.js';
 import type { HarnessInvocation } from './delegation.js';
 
 export { HARNESS_SEP, splitHarness, type HarnessInvocation } from './delegation.js';
@@ -34,6 +35,8 @@ export interface HarnessRow {
   problem: string | null;
   /** Whether its CLI is an executable on the PATH — null when it has no recipe. */
   onPath: boolean | null;
+  /** The model of each `BUDGET` tier on this harness (adapters/budget.ts) — empty when it maps none. */
+  models: Record<string, string>;
 }
 
 /** Whether `cli` is an executable file in one of the PATH's folders — looked up, never run. */
@@ -58,6 +61,7 @@ export function readInvocation(adapter: AdapterPlugin): { invocation: HarnessInv
       rules: parsed.slots.flatMap(s => s.rules),
       carry: inv.carry ?? [],
       ...(inv.shape ? { shape: inv.shape } : {}),
+      ...(inv.model ? { model: inv.model } : {}),
       ...(inv.intro ? { intro: inv.intro } : {}),
     },
   };
@@ -72,8 +76,28 @@ export function harnessesOf(enabled: readonly AdapterPlugin[], path?: string): H
   return [...byName.values()].map(a => {
     const read = readInvocation(a);
     const invocation = 'invocation' in read ? read.invocation : null;
-    return { name: a.name, enabled: on.has(a.name), invocation, problem: 'problem' in read ? read.problem : null, onPath: invocation ? onPath(invocation.cli, path) : null };
+    return {
+      name: a.name, enabled: on.has(a.name), invocation, problem: 'problem' in read ? read.problem : null, onPath: invocation ? onPath(invocation.cli, path) : null,
+      models: Object.fromEntries(Object.entries(a.models ?? {}).filter((e): e is [string, string] => typeof e[1] === 'string')),
+    };
   });
+}
+
+/**
+ * The model of each agent on a harness: the one its `BUDGET` tier maps to there
+ * — what the apx fills a recipe's `{model}` with. An agent with no tier, or a
+ * tier the harness maps to none, is left out: it runs on the harness's default.
+ */
+export function agentModels(row: HarnessRow, agents: readonly { name: string; budget?: string | null }[]): Record<string, string> {
+  return Object.fromEntries(agents.flatMap(a => { const model = modelOfTier(row.models, a.budget); return model ? [[a.name, model]] : []; }));
+}
+
+/** Why the model of `agent` on `harness` falls back to the harness's own default although the agent declares a tier — or null (D66). */
+export function modelProblem(harness: string, agent: { name: string; budget?: string | null } | undefined, rows: readonly HarnessRow[]): string | null {
+  const row = rows.find(r => r.name === harness);
+  if (!agent?.budget || !row || modelOfTier(row.models, agent.budget)) return null;
+  return `BY ${harness}:${agent.name}: \`${agent.name}\` declares BUDGET ${agent.budget}, and ${harness} maps no model to it — it runs on ${harness}'s own default model; `
+    + `map the tier in agent-pack.config.mjs: adapters: [{ name: '${harness}', models: { ${agent.budget}: '<model>' } }]`;
 }
 
 /** Why a delegation cannot go to `harness` — the dependency it does not satisfy — or null. */

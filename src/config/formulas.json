@@ -50,6 +50,8 @@
                    "contracts": "Hand every contract `{list}` holds to `{agent}`, one each, all at once{background}",
                    "contractsRun": " — `{apx} contract start {mark} --by {agent}` opens a copy for each and names it; hand each one to `{agent}` with its id: it reads its spec with `{apx} contract get <ctr-id>`, works in its copy and ends with `{apx} delegate deliver <ctr-id>` or `{apx} delegate block <ctr-id> \"<why>\"`",
                    "contractsWait": "; then `{apx} wait {mark}`: every delivery is merged and lands in the working folder",
+                   "contractsHarness": "Hand every contract `{list}` holds to `{agent}` on {harness}, another harness, one each, all at once{background}",
+                   "contractsHarnessRun": " — `{apx} contract start {mark} --by {harness}:{agent}` opens a copy for each, writes its prompt — its spec and its zones — and prints the command that launches `{agent}` on {harness} in it, on the model its BUDGET tier maps to there, with the rules to run it by; run every command with your shell, then for each contract `{apx} delegate deliver <ctr-id> --answer` (its answer, and what its copy changed within its zones) or `{apx} delegate block <ctr-id> \"<why>\"`",
                    "harness": "{text} — to `{agent}` on {harness}, another harness{context}{background}",
                    "harnessContext": ", handing over the task and the variables it reads",
                    "harnessBackground": " — in the background: run its command in the background and go on; its WAIT takes it back",

@@ -260,7 +260,9 @@ STEP write:
 - **It is launched from outside, never by agent-pack.** `apx delegate start <dlg-id>` opens the piece's own copy of the project, carries in the agent's definition, writes the prompt — the task and the variables it reads, or the form of its `AS` — and prints the harness's command, filled, with the rules to run it by. The lead runs it with its shell.
 - **It ends in its copy.** `apx delegate deliver <dlg-id> --answer` takes the answer the command wrote and, of what changed in the copy, only what stays within the perimeter — the rest is left out and said. A `WAIT` merges it into the working folder.
 - **No conversation crosses.** A `FORK` to another harness is an error.
+- **A list of contracts crosses too.** `DELEGATE <list> BY opencode:fixer` hands every contract a `MARK` filled the list with to `fixer` on opencode: `apx contract start <mrk-id> --by opencode:fixer` prints one command per contract, each in its copy; `apx delegate deliver <ctr-id> --answer` delivers each one — its answer, and its zones.
+- **The model is the agent's tier, on that harness.** The delegated agent runs on the model its `BUDGET` tier maps to in that adapter's `models` (`adapters: [{ name: 'opencode', models: { cheap: '…' } }]`) — see [Adapters — Models](/guide/adapters#models). A tier the harness maps to none is a build warning, and runs on the harness's default.
 
-Each adapter brings its recipe, `invoke.ap`: `claude-code` runs `claude -p --agent <agent>`, `codex` runs `codex exec` in the copy, its answer written with `-o` and bound with `--output-schema` when the line has an `AS`.
+Each adapter brings its recipe, `invoke.ap`: `claude-code` runs `claude -p --agent <agent>`, `codex` runs `codex exec` in the copy, its answer written with `-o` and bound with `--output-schema` when the line has an `AS`, its model with `-m`; `opencode` runs `opencode run --model <id> --agent <agent>`.
 
 Today a flow made only of `DELEGATE` lines can also run as a Claude Code Workflow script — see [The apx — Flows](/guide/apx#flows).

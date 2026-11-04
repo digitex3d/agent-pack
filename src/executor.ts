@@ -79,6 +79,8 @@ export function verbRank(keyword: string): number | null {
 export interface AgentIndexEntry {
   name: string;
   team: string | null;
+  /** Its `BUDGET` tier — absent when it declares none. */
+  budget?: string;
 }
 
 /**
@@ -86,7 +88,12 @@ export interface AgentIndexEntry {
  * agent is none the line may name: unknown, or a member of another team than
  * the delegating agent's.
  */
-export function delegateTargetErrors(doc: ApDocument, index: readonly AgentIndexEntry[], ownTeam: string | null, harnessProblem: (harness: string) => string | null = h => `no harness is called \`${h}\``): LintError[] {
+export function delegateTargetErrors(
+  doc: ApDocument, index: readonly AgentIndexEntry[], ownTeam: string | null,
+  harnessProblem: (harness: string) => string | null = h => `no harness is called \`${h}\``,
+  /** A warning on the model the agent runs on there — its tier mapped to none. */
+  modelProblem: (harness: string, agent: AgentIndexEntry | undefined) => string | null = () => null,
+): LintError[] {
   const teams = new Set(index.map(a => a.team).filter((t): t is string => t !== null));
   const errors: LintError[] = [];
   for (const { node, block } of doc.nodes()) {
@@ -101,6 +108,8 @@ export function delegateTargetErrors(doc: ApDocument, index: readonly AgentIndex
         : harnessProblem(node.harness) ?? (index.some(a => a.name === name) ? null
           : `BY ${node.harness}:${name}: unknown agent \`${name}\` — another harness runs an agent of this project, compiled for it`);
       if (message) errors.push({ ...at, message });
+      const warning = message ? null : modelProblem(node.harness, index.find(a => a.name === name));
+      if (warning) errors.push({ ...at, message: warning, severity: 'warning' });
       continue;
     }
     // A fork is an agent on the conversation itself: a team has no conversation to take.

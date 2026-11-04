@@ -18,7 +18,7 @@
 
 /** What a copy shows: what its assignee reads and writes. */
 export interface Perimeter {
-  /** The globs the copy shows — null: every tracked file, and nothing git ignores. */
+  /** The globs the copy shows — null: every tracked file, and of what git ignores the dependency folders alone (node_modules…). */
   reads: string[] | null;
   /** The globs the assignee writes; the copy shows them too. */
   writes: string[];
@@ -36,6 +36,8 @@ export interface Allowed {
   marks?: { open: string; close: string; files: string[]; only: boolean };
   /** A file the base does not hold — one the copy created — is kept too, wherever it is. */
   created?: boolean;
+  /** Paths the delivery neither keeps nor leaves out, as if the copy never changed them — what was carried into it. */
+  exclude?: string[];
 }
 
 /** What a delivery kept, what it left out, and what changed in the working folder instead of the copy. */

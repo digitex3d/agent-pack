@@ -13,7 +13,8 @@ export default {
 
 | Key | Default | |
 |---|---|---|
-| `adapters` | `[]` | the harnesses to write for — built-in names (`'claude-code'`, `'claude-code-apx'`, `'codex'`, `'cursor'`) or adapter objects. See [Adapters](/guide/adapters) |
+| `adapters` | `[]` | the harnesses to write for — built-in names (`'claude-code'`, `'claude-code-apx'`, `'codex'`, `'cursor'`, `'opencode'`), a built-in with its options (`{ name: 'opencode', models: { cheap: '…' } }`), or adapter objects. See [Adapters](/guide/adapters) |
+| `adapters[].models` | per adapter | the model of each `BUDGET` tier on that harness — `{ cheap, moderate, costly }`, any of them; `claude-code` maps haiku, sonnet, opus unless set; the others map none. See [Models](/guide/adapters#models) |
 | `agentsDir` | `agents` | where agents are discovered — every `.ap` file holding an `EXPORT AGENT` block |
 | `teamsDir` | `agents/teams` | where teams live — one folder per team |
 | `libraryRoot` | `library` | the project library, reached as `@main` |
@@ -78,7 +79,7 @@ export default {
 };
 ```
 
-`default` is an agent of the project, or `quick`, the builtin delegate (the default). `models` maps an agent's name to a model of its harness; with Claude Code it becomes the agent's `model:` — `quick` runs on `haiku` unless set here, every other agent on `inherit`. An agent that declares a [`BUDGET`](/reference/language#agent) tier runs on that tier's model instead.
+`default` is an agent of the project, or `quick`, the builtin delegate (the default). `models` maps an agent's name to a model of its harness; with Claude Code it becomes the agent's `model:` — `quick` runs on `haiku` unless set here, every other agent on `inherit`. An agent that declares a [`BUDGET`](/reference/language#agent) tier runs on that tier's model instead — the one its adapter maps the tier to (`adapters: [{ name, models }]`, see [Models](/guide/adapters#models)). Delegated to another harness (`BY opencode:<agent>`), an agent runs on the model its tier maps to on that harness; `delegate.models` names models of one harness, and is not carried over.
 
 ## Libraries
 

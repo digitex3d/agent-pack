@@ -7,23 +7,32 @@ import claudeCodeApxAdapter from '../adapters/claude-code-apx/index.js';
 import codexAdapter from '../adapters/codex/index.js';
 import cursorAdapter from '../adapters/cursor/index.js';
 import opencodeAdapter from '../adapters/opencode/index.js';
+import { checkBudgetModels } from '../adapters/budget.js';
 import { fromBuiltins } from './judge/builtins.js';
 
 /**
  * The adapters shipped with agent-pack, by name: a config names them
  * (`adapters: ['claude-code']`) instead of importing them, so it loads with a
- * global install and in projects that are not Node packages.
+ * global install and in projects that are not Node packages — with its
+ * options, `{ name: 'opencode', models: { … } }`.
  */
-const BUILTIN_ADAPTERS: Record<string, () => AdapterPlugin> = {
-  'claude-code': () => claudeCodeAdapter(),
-  'claude-code-apx': () => claudeCodeApxAdapter(),
-  codex: () => codexAdapter(),
-  cursor: () => cursorAdapter(),
-  opencode: () => opencodeAdapter(),
+// The options are each factory's own: it takes what its adapter declares.
+const BUILTIN_ADAPTERS: Record<string, (opts?: any) => AdapterPlugin> = {
+  'claude-code': opts => claudeCodeAdapter(opts),
+  'claude-code-apx': opts => claudeCodeApxAdapter(opts),
+  codex: opts => codexAdapter(opts),
+  cursor: opts => cursorAdapter(opts),
+  opencode: opts => opencodeAdapter(opts),
 };
 
-/** A config entry as an adapter: a built-in by name, or an adapter object as is. */
-export const resolveAdapter = fromBuiltins('adapter', BUILTIN_ADAPTERS);
+/**
+ * A config entry as an adapter: a built-in by name, a built-in with its
+ * options (`{ name, …options }` — `models` the model of each `BUDGET` tier,
+ * checked), or an adapter object (`type: 'adapter'`) as is.
+ */
+export const resolveAdapter = fromBuiltins('adapter', BUILTIN_ADAPTERS, (name, opts) => {
+  if (opts.models !== undefined) checkBudgetModels(name, opts.models);
+});
 
 /** Every adapter shipped with agent-pack, by name — the harnesses installed before any config names one (D66). */
 export function builtinAdapters(): AdapterPlugin[] {

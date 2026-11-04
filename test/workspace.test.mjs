@@ -54,7 +54,7 @@ assert.throws(() => resolveWorkspace('svn'), /Unknown workspace "svn" — built-
   const head = git(root, 'rev-parse', 'HEAD');
   const ws = engine.session(root, 's1');
 
-  // --- open: a sparse copy of the reads and writes, ignored paths linked only when the reads cover them ---
+  // --- open: a sparse copy of the reads and writes, ignored paths linked when the reads cover them — with no reads, the dependency folders ---
   ws.open('ctr-aaaaaaaa', { reads: ['src/db/**', 'node_modules/**'], writes: ['src/api/**'] });
   ws.open('ctr-bbbbbbbb', { reads: null, writes: ['src/db/**'] });
   const a = join(root, ws.path('ctr-aaaaaaaa'));
@@ -70,7 +70,9 @@ assert.throws(() => resolveWorkspace('svn'), /Unknown workspace "svn" — built-
   assert.ok(!existsSync(join(a, '.agent-pack/work')), 'a copy never holds the copies');
   assert.ok(existsSync(join(b, 'data/imp.ts')), 'no reads: every tracked file');
   assert.equal(read(b, 'README.md'), '# doom\nmy note\n', 'the base keeps the uncommitted changes');
-  assert.ok(!existsSync(join(b, 'node_modules')), 'no reads: nothing git ignores');
+  assert.ok(lstatSync(join(b, 'node_modules')).isSymbolicLink(), 'no reads: the ignored dependency folders are linked, so the project\'s tools run in the copy');
+  assert.equal(read(b, 'node_modules/lib/index.js'), 'module.exports = 1;\n');
+  assert.ok(!existsSync(join(b, 'dist')), 'no reads: nothing else git ignores');
   assert.throws(() => ws.open('ctr-aaaaaaaa', { reads: null, writes: [] }), /has a copy already/);
   assert.throws(() => ws.open('../escape', { reads: null, writes: [] }), /no instance id/);
 
@@ -152,6 +154,14 @@ assert.throws(() => resolveWorkspace('svn'), /Unknown workspace "svn" — built-
   put(f, 'src/db/schema.ts', 'export const schema = { a: 1 };\n');
   put(f, 'data/imp.ts', 'export const imp = { hp: 60 };\n');
   assert.deepEqual(ws.deliver('ctr-ffffffff', { globs: ['src/{api,db}/**'] }), { committed: ['src/api/users.ts', 'src/db/schema.ts'], leftOut: ['data/imp.ts'], strayed: [], lostZones: [] });
+
+  // --- what is excluded — a file carried into the copy — is neither kept nor left out, created or not ---
+  ws.open('ctr-12121212', { reads: null, writes: ['src/api/**'] });
+  const x = join(root, ws.path('ctr-12121212'));
+  put(x, 'src/api/users.ts', 'export const users = [2];\n');
+  put(x, '.opencode/agents/fixer.md', '---\ndescription: "fixer"\n---\n');
+  assert.deepEqual(ws.deliver('ctr-12121212', { globs: ['src/api/**'], created: true, exclude: ['.opencode/agents/fixer.md'] }, { dryRun: true }),
+    { committed: ['src/api/users.ts'], leftOut: [], strayed: [], lostZones: [] });
   rmSync(root, { recursive: true, force: true });
 }
 

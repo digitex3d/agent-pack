@@ -90,6 +90,11 @@ export const CONTRACT_ID_RE = /^ctr-[0-9a-f]{8}$/;
 /** The id of a MARK — what a contract list is started and waited for by. */
 export const MARK_ID_RE = /^mrk-[0-9a-f]{8}$/;
 
+/** Why a piece that ran on another harness needs `--answer` to be delivered (D66). */
+export function answerFlag(r: { dlg: string; harness: string }, cmd: string): string {
+  return `${r.dlg} ran on ${r.harness}: its answer is the file its command wrote — ${cmd} delegate deliver ${r.dlg} --answer`;
+}
+
 /** A fresh record: every field empty but those given. */
 export function pieceRecord(fields: Partial<DelegationRecord> & Pick<DelegationRecord, 'dlg' | 'state'>): DelegationRecord {
   const out = Object.fromEntries(FIELDS.map(f => [f, ''])) as unknown as DelegationRecord;

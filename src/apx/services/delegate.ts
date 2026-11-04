@@ -22,7 +22,7 @@ import { refName } from '../../../adapters/md/phrases.js';
 import { jsonExample } from '../../shapeSchema.js';
 import { sha256Hex } from '../../apdoc/ids.js';
 import { parseDuration, DURATION_FORM } from '../../delegation.js';
-import { DelegationTable, DELEGATION_ID_RE, CONTRACT_ID_RE, MARK_ID_RE, SETTLED_STATES, pieceRecord, pieceOf, runsOf, type DelegationRecord, type DelegationState } from '../delegations.js';
+import { DelegationTable, DELEGATION_ID_RE, CONTRACT_ID_RE, MARK_ID_RE, SETTLED_STATES, pieceRecord, pieceOf, runsOf, answerFlag, type DelegationRecord, type DelegationState } from '../delegations.js';
 import { countOf, type ApxHost, type ApxService } from '../service.js';
 
 /** The service's old name: what it says to whoever still calls it. */
@@ -38,7 +38,7 @@ export const delegateService: ApxService = {
     { op: 'input', args: '<exe-id>', about: 'what the delegate receives: the JSON of the variables and constants it reads, then the shape of its answer' },
     { op: 'answer', args: '<exe-id> - [--into <var>]', about: "store the delegate's answer (on stdin): checked against its contract, kept in its INTO variable" },
     { op: 'start', args: '<dlg-id>', about: 'record a background piece as running, before you hand it over' },
-    { op: 'deliver', args: '<dlg-id> - | <dlg-id> --answer | <ctr-id> [--why "<reason>"]', about: 'deliver a background piece (its result on stdin, kept in its INTO variable), one run on another harness (its answer file and its copy), or a contract (from its copy)' },
+    { op: 'deliver', args: '<dlg-id> - | <dlg-id> --answer | <ctr-id> [--answer] [--why "<reason>"]', about: 'deliver a background piece (its result on stdin, kept in its INTO variable), one run on another harness (its answer file and its copy), or a contract (from its copy — with --answer, one run on another harness)' },
     { op: 'block', args: '<dlg-id | ctr-id> "<why>"', about: 'a piece that cannot be done as asked: blocked, with why' },
     { op: 'ended', args: '<dlg-id | ctr-id>', about: 'the agent of a piece stopped without delivering: the lead decides what next' },
     { op: 'take', args: '<dlg-id | ctr-id>', about: 'the lead carries a running or ended piece out itself' },
@@ -194,7 +194,7 @@ const REGISTRY_OPS: Record<string, RegistryOp> = {
     if (CONTRACT_ID_RE.test(r.dlg)) return host.contracts.deliver(table, r, [from, ...rest].filter((a): a is string => a !== undefined));
     // Another harness: its answer is the file its command wrote, its changes are in its copy (D66).
     if (r.harness) {
-      if (from !== '--answer') return host.fail(2, `${id} ran on ${r.harness}: its answer is the file its command wrote — ${host.cmd} delegate deliver ${id} --answer`);
+      if (from !== '--answer') return host.fail(2, answerFlag(r, host.cmd));
       return host.contracts.deliverElsewhere(table, r);
     }
     if (r.state !== 'running') return host.fail(1, `${id} is ${r.state} — only a running piece is delivered`);

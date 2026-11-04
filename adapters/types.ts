@@ -3,6 +3,7 @@
 import { resolve } from 'path';
 import type { ApDocument } from '../src/apdoc/document.js';
 import type { ApBlock } from '../src/apdoc/block.js';
+import type { BudgetModels } from './budget.js';
 
 export interface AdapterCtx {
   projectRoot: string;
@@ -136,9 +137,20 @@ export interface AdapterPlugin {
    * its definition, generated and often untracked (`{agent}` its name) — taken
    * from the working folder into the copy, never delivered back; `intro` the
    * line the prompt opens with when the CLI picks the agent by its prompt.
-   * Example: codex declares `{ recipe: '<dir>/invoke.ap', cli: 'codex', shape: '--output-schema {schema}' }`.
+   * `model` the flag that picks the model the CLI runs on (`{model}` its id),
+   * when the CLI has one — filled with the model the delegated agent's `BUDGET`
+   * tier maps to (`models`), left out when it maps to none.
+   * Example: codex declares `{ recipe: '<dir>/invoke.ap', cli: 'codex', shape: '--output-schema {schema}', model: '-m {model}' }`.
    */
-  invocation?: { recipe: string; cli: string; shape?: string; carry?: string[]; intro?: string };
+  invocation?: { recipe: string; cli: string; shape?: string; model?: string; carry?: string[]; intro?: string };
+  /**
+   * Optional: the model of its harness each `BUDGET` tier maps to — its own
+   * defaults, or what the project config gives it
+   * (`adapters: [{ name: 'opencode', models: { cheap: '…' } }]`, adapters/budget.ts).
+   * A tier left out runs on the harness's own default model.
+   * Example: claude-code maps `{ cheap: 'haiku', moderate: 'sonnet', costly: 'opus' }`.
+   */
+  models?: BudgetModels;
 }
 
 /**

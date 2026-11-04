@@ -4,6 +4,7 @@ import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { AdapterPlugin, AgentBundle, Emitter } from '../types.js';
 import { descriptionOf } from '../skill-frontmatter.js';
+import type { BudgetModels } from '../budget.js';
 import { makeClaudeSkillEmitter } from '../claude-code/emitters/claude-skill.js';
 
 /**
@@ -18,8 +19,10 @@ import { makeClaudeSkillEmitter } from '../claude-code/emitters/claude-skill.js'
  *
  * In, `invoke.ap`: how an agent on another harness hands Codex a task —
  * `codex exec` in the delegation's copy, the answer written with `-o`, its
- * form bound with `--output-schema` when the delegation has an AS. Codex picks
- * a custom agent by the name its prompt gives: the prompt opens with it.
+ * form bound with `--output-schema` when the delegation has an AS, its model
+ * with `-m` when the agent's `BUDGET` tier maps to one (the config's `models`;
+ * none by default: codex's own). Codex picks a custom agent by the name its
+ * prompt gives: the prompt opens with it.
  *
  * Not carried over from claude-code, Codex having no equivalent the docs
  * describe: a session id its commands can read (session variables and the
@@ -30,6 +33,8 @@ import { makeClaudeSkillEmitter } from '../claude-code/emitters/claude-skill.js'
 export interface CodexOptions {
   agentsDir?: string;   // default: '.codex/agents'
   skillsDir?: string;   // default: '.agents/skills'
+  /** The model of each `BUDGET` tier, as `codex -m` takes it — none by default. */
+  models?: BudgetModels;
 }
 
 /** A TOML string: a multi-line literal string, or — when the text holds `'''` — a basic one, escaped. */
@@ -59,10 +64,12 @@ export default function codexAdapter(opts: CodexOptions = {}): AdapterPlugin {
     apiVersion: 2,
     name: 'codex',
     emitters: { agent: agentEmitter, skill: makeClaudeSkillEmitter(opts.skillsDir ?? '.agents/skills') },
+    ...(opts.models ? { models: opts.models } : {}),
     invocation: {
       recipe: resolve(dirname(fileURLToPath(import.meta.url)), 'invoke.ap'),
       cli: 'codex',
       shape: '--output-schema {schema}',
+      model: '-m {model}',
       // A copy of the project holds what git tracks; the generated definitions often are not.
       carry: [`${agentsDir}/{agent}.toml`, 'AGENTS.md'],
       intro: 'Have the custom agent `{agent}` carry out the task below, and answer with its result.',

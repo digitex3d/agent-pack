@@ -37,7 +37,7 @@ export interface Formulas {
     STEP: { head: Text; list: Text };
     RUN: { line: Text; flow: Text; unresolved: Text; bare: Text; sequence: Text; name: Text };
     DO: { intro: Text };
-    DELEGATE: { intro: Text; to: Text; full: Text; shaped: Text; background: Text; started: Text; element: Text; elements: Text; contracts: Text; contractsRun: Text; contractsWait: Text; harness: Text; harnessContext: Text; harnessBackground: Text; harnessRun: Text; harnessWait: Text };
+    DELEGATE: { intro: Text; to: Text; full: Text; shaped: Text; background: Text; started: Text; element: Text; elements: Text; contracts: Text; contractsRun: Text; contractsWait: Text; contractsHarness: Text; contractsHarnessRun: Text; harness: Text; harnessContext: Text; harnessBackground: Text; harnessRun: Text; harnessWait: Text };
     MARK: { intro: Text; text: Text; within: Text; none: Text };
     FORK: { intro: Text; self: Text; agent: Text; shaped: Text };
     WAIT: { intro: Text; named: Text; all: Text; run: Text; max: Text };

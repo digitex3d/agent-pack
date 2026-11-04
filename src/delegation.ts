@@ -8,7 +8,7 @@
  *   FORK     <task> [INTO <var>] [BY <agent>] [AS <template>]
  *   WAIT     <var>, …   |   WAIT ALL
  *   MARK     <criterion> INTO <var> AS <spec> [MAX <n>] [WITHIN <domain>]
- *   DELEGATE <var> BY <agent>              — the contracts a MARK filled <var> with
+ *   DELEGATE <var> BY <agent | harness:agent> — the contracts a MARK filled <var> with
  *   EACH     <item> IN {{<list>}} MAX <n>:  — its DELEGATE / FORK lines once per element
  *
  * The form says how much context is passed: `DELEGATE … BY x` all of it,
@@ -125,13 +125,17 @@ export function splitHarness(by: string): { harness: string; agent: string } | n
 
 /** A recipe as the compiler keeps it in the document (`meta.harnesses`): what the apx fills at `delegate start`. */
 export interface HarnessInvocation {
-  /** The command line, its slots `{project}`, `{agent}`, `{prompt}`, `{answer}`, `{shape}`. */
+  /** The command line, its slots `{project}`, `{agent}`, `{prompt}`, `{answer}`, `{shape}`, `{model}`. */
   command: string;
   /** How to run it: the rules of its slots, in order. */
   rules: string[];
   cli: string;
   /** The flag that binds the answer to a JSON Schema, `{schema}` its file — absent when the CLI has none. */
   shape?: string;
+  /** The flag that picks the model, `{model}` its id — absent when the CLI has none. */
+  model?: string;
+  /** The model of each agent of the project on this harness — the one its `BUDGET` tier maps to; an agent left out runs on the harness's default. */
+  models?: Record<string, string>;
   /** Files the copy is given from the working folder (`{agent}` its name) — never delivered back. */
   carry: string[];
   /** The prompt's first line, `{agent}` its name — absent when the CLI picks the agent itself. */
@@ -189,10 +193,14 @@ export function delegationText(n: {
     });
   }
   if (n.keyword === DELEGATE_VERB && n.list && n.agent) {
-    const run = n.apx && n.mark ? fill(K.DELEGATE.contractsRun, { apx: n.apx, mark: n.mark, agent: n.agent }) : '';
+    // On another harness (D66): each contract launched from outside, in its copy, by the harness's recipe.
+    const [head, runs, background] = n.harness
+      ? [K.DELEGATE.contractsHarness, K.DELEGATE.contractsHarnessRun, K.DELEGATE.harnessBackground]
+      : [K.DELEGATE.contracts, K.DELEGATE.contractsRun, K.DELEGATE.background];
+    const run = n.apx && n.mark ? fill(runs, { apx: n.apx, mark: n.mark, agent: n.agent, harness: n.harness ?? '' }) : '';
     // Not in the background: it waits for them where it stands.
     const wait = !n.async && n.apx && n.mark ? fill(K.DELEGATE.contractsWait, { apx: n.apx, mark: n.mark }) : '';
-    return fill(K.DELEGATE.contracts, { list: n.list, agent: n.agent, background: n.async ? K.DELEGATE.background : '' }) + run + wait;
+    return fill(head, { list: n.list, agent: n.agent, harness: n.harness ?? '', background: n.async ? background : '' }) + run + wait;
   }
   const id = n.work && n.element ? fill(K.DELEGATE.element, { work: n.work }) : n.work;
   // Another harness, launched from outside in a copy of its own (D66): the task and the variables it reads, or the AS's form.

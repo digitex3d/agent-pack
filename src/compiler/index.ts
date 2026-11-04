@@ -15,7 +15,7 @@ import { readDecorator } from '../decoratorUse.js';
 import { resolveBundleDefaults, resolveTeamShared } from '../bundleDefaults.js';
 import { resolveTeamMembership } from '../services/teamMembership.js';
 import { findAgentFiles, readAgentFile, standaloneDir, agentNameOf, teamRootForAgentFile, readTeamFile, teamRosterIssues, legacyTeamIssue, teamNamesUnder } from '../services/teamMetadata.js';
-import { harnessesOf, harnessProblem, type HarnessRow } from '../harnesses.js';
+import { harnessesOf, harnessProblem, agentModels, modelProblem, type HarnessRow } from '../harnesses.js';
 import { delegateTargetErrors, executorErrors, usesPrograms, WRITE_PROGRAM, type AgentIndexEntry } from '../executor.js';
 import { BUILTIN_AGENTS_DIR, resolveDelegateConfig, type DelegateConfig } from '../config.js';
 import { LintError, checkVocabulary, lineOfName, checkedHeadIssues, dimensionBlockErrors, domainBlockErrors, pluginBlockErrors, teamFileErrors } from '../lint.js';
@@ -90,11 +90,17 @@ function agentFiles(config: Config): string[] {
   return [...projectAgentFiles(config), ...builtinAgentFiles()];
 }
 
-/** Every agent of the project (the global ones after it) and the team it belongs to. */
+/** Every agent of the project (the global ones after it), the team it belongs to and its `BUDGET` tier. */
 function agentIndexOf(config: Config): AgentIndexEntry[] {
   return agentFiles(config).map(file => {
     const teamRoot = teamRootForAgentFile(file);
-    return { name: agentNameOf(file), team: teamRoot ? basename(teamRoot) : null };
+    const team = teamRoot ? basename(teamRoot) : null;
+    try {
+      const { info } = readAgentFile(file);
+      return { name: info.name, team, ...(info.budget ? { budget: info.budget } : {}) };
+    } catch {
+      return { name: agentNameOf(file), team };
+    }
   });
 }
 
@@ -835,11 +841,14 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
   const delegate = opts.delegate ?? resolveDelegateConfig(undefined);
   if (Object.values(structure.meta.executors ?? {}).some(e => e.executor === 1 && !e.by)) structure.meta.delegate = delegate.default;
   if (delegate.models[agentName]) structure.meta.model = delegate.models[agentName];
-  // The recipe of each harness a delegation goes to, for the apx to fill when the piece starts (D66).
-  const used = new Set(Object.values(structure.meta.background ?? {}).map(w => w.harness).filter((h): h is string => !!h));
+  // The recipe of each harness a delegation goes to — a piece or a list of contracts — for the apx to fill when it starts (D66),
+  // with the model each agent of the project runs on there: its BUDGET tier's.
+  const used = new Set([...structure.nodes()].flatMap(({ node }) => (node.type === 'directive' && node.harness ? [node.harness] : [])));
   const recipes = Object.fromEntries([...used].flatMap(h => {
     const row = (opts.harnesses ?? []).find(r => r.name === h);
-    return row?.invocation ? [[h, row.invocation]] : [];
+    if (!row?.invocation) return [];
+    const models = agentModels(row, opts.agentIndex ?? []);
+    return [[h, { ...row.invocation, ...(Object.keys(models).length ? { models } : {}) }]];
   }));
   if (Object.keys(recipes).length > 0) structure.meta.harnesses = recipes;
   const declared = new Set(structure.byKind('var').map(b => b.name));
@@ -862,7 +871,8 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     ...pluginFileErrors(ctx),
     ...builder.varErrors.map(located),
     ...builder.checkIssues.map(located),
-    ...(opts.agentIndex ? delegateTargetErrors(structure, opts.agentIndex, teamRoot ? basename(teamRoot) : null, h => harnessProblem(h, opts.harnesses ?? [])) : []),
+    ...(opts.agentIndex ? delegateTargetErrors(structure, opts.agentIndex, teamRoot ? basename(teamRoot) : null,
+      h => harnessProblem(h, opts.harnesses ?? []), (h, a) => modelProblem(h, a, opts.harnesses ?? [])) : []),
     ...executorErrors(structure),
     ...variableUseErrors(ctx, agentFilePath, file => visibleIn(file, ctx.variables, everywhere), libraryReadRule(ctx, agentFilePath)),
     ...templateNameErrors(ctx, [...declared, ...Object.keys(variables.constants)]),

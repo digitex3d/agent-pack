@@ -14,6 +14,7 @@ import { resolve } from 'path';
 import { AdapterPlugin, AgentBundle, Emitter } from '../types.js';
 import { makeClaudeSkillEmitter } from '../claude-code/emitters/claude-skill.js';
 import claudeCodeAdapter, { ClaudeCodeOptions } from '../claude-code/index.js';
+import type { BudgetModels } from '../budget.js';
 import { buildAgentFrontmatter } from '../claude-code/emitters/agent-md.js';
 import { apxPath, apxCommand } from '../../src/apx/paths.js';
 import { ApxEngine } from '../../src/apx/engine.js';
@@ -28,16 +29,16 @@ export default function claudeCodeApxAdapter(opts: ClaudeCodeOptions = {}): Adap
     name: 'claude-code-apx',
     emitters: {
       ...base.emitters,
-      agent: makeApxAgentEmitter(opts.agentsDir ?? '.claude/agents', opts.tools ?? DEFAULT_TOOLS),
+      agent: makeApxAgentEmitter(opts.agentsDir ?? '.claude/agents', opts.tools ?? DEFAULT_TOOLS, base.models ?? {}),
       // A skill is an agent: its SKILL.md, like an agent's file, names its apx.
       skill: makeClaudeSkillEmitter(opts.skillsDir ?? '.claude/skills', b => usageBody(b.name, b.structure)),
     },
   };
 }
 
-function makeApxAgentEmitter(agentsDir: string, tools: string): Emitter<AgentBundle> {
+function makeApxAgentEmitter(agentsDir: string, tools: string, models: BudgetModels): Emitter<AgentBundle> {
   return (b, ctx) => [
-    { path: resolve(ctx.projectRoot, agentsDir, `${b.name}.md`), content: buildAgentFrontmatter(b, tools) + usageBody(b.name, b.structure) },
+    { path: resolve(ctx.projectRoot, agentsDir, `${b.name}.md`), content: buildAgentFrontmatter(b, tools, models) + usageBody(b.name, b.structure) },
   ];
 }
 

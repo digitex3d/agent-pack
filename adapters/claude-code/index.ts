@@ -3,7 +3,8 @@
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { AdapterPlugin } from '../types.js';
-import { makeAgentMdEmitter } from './emitters/agent-md.js';
+import { makeAgentMdEmitter, CLAUDE_BUDGET_MODELS } from './emitters/agent-md.js';
+import type { BudgetModels } from '../budget.js';
 import { makeClaudeSkillEmitter } from './emitters/claude-skill.js';
 import { compileWorkflow } from './workflow.js';
 import { installGuardHook } from './emitters/guard-hook.js';
@@ -13,9 +14,12 @@ export interface ClaudeCodeOptions {
   skillsDir?: string;
   /** Tools field rendered into each agent's YAML frontmatter. Defaults to "*". */
   tools?: string;
+  /** The model of each `BUDGET` tier, over Claude Code's own (haiku, sonnet, opus) — the config's `models`. */
+  models?: BudgetModels;
 }
 
 export default function claudeCodeAdapter(opts: ClaudeCodeOptions = {}): AdapterPlugin {
+  const models = { ...CLAUDE_BUDGET_MODELS, ...opts.models };
   return {
     type: 'adapter',
     apiVersion: 2,
@@ -24,12 +28,14 @@ export default function claudeCodeAdapter(opts: ClaudeCodeOptions = {}): Adapter
       agent: makeAgentMdEmitter({
         agentsDir: opts.agentsDir ?? '.claude/agents',
         tools: opts.tools,
+        models,
       }),
       skill: makeClaudeSkillEmitter(opts.skillsDir ?? '.claude/skills'),
     },
     // Claude Code reads CLAUDE.md; `@AGENTS.md` imports the project context and
     // the orchestration agent-pack writes there.
     projectPointer: { file: 'CLAUDE.md', content: '@AGENTS.md' },
+    models,
     // The perimeter is kept by one hook of the project, which runs inside subagents too (D65).
     projectSettings: (projectRoot, { guarded }) => installGuardHook(projectRoot, guarded),
     // Claude Code exports its session id to every command it runs: the apx keeps

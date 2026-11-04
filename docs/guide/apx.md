@@ -239,6 +239,7 @@ dlg-1d06e0a6  check  running  → checker-b  — still running after 10m
 ```
 
 - `delegate start <dlg-id>` records the piece as `running`. A piece still running cannot start again; one that is settled starts afresh — a loop starts the same piece on every round.
+- A piece that goes to another harness (`BY opencode:fixer`, see [Adapters](/guide/adapters#delegating-to-another-harness)): `delegate start` opens its copy, carries the agent's definition in, writes its prompt beside the copy and prints the harness's command, filled — with `# model: <id>`, the model the agent's `BUDGET` tier maps to on that harness, or the harness's own default when it maps to none. The lead runs the command with its shell, then `delegate deliver <dlg-id> --answer`: the answer the command wrote, and what its copy changed within its perimeter.
 - `delegate deliver <dlg-id> -` takes its result on stdin and stores it in its `INTO` variable — checked against the variable's type: a value that breaks it is refused (exit `6`), nothing is stored. `delegate block <dlg-id> "<why>"` says it cannot be done as asked.
 - `wait <dlg-id | mrk-id | var> … [--max <duration>] [--now]`, `wait all` returns when every piece it names is delivered, blocked or ended without delivery — or when the limit is reached: `--max`, written by the WAIT's `MAX`, else the `wait.max` config key (`30m` by default). Then each one's state: exit `0` when all were delivered, `1` otherwise.
 - `--now` does not wait: each one's state at once, its limit counted from when it started — what a harness that is told when work ends uses (Claude Code: the lead waits for the notifications, then `wait … --now`).
@@ -263,6 +264,18 @@ node .agent-pack/apx/lead.apx wait mrk-5b0e2a71                           # merg
 
 - `contract mark <mrk-id> -` checks the spec against the `MARK`'s `AS` (exit `6` when it breaks it), refuses past its `MAX` or the `mark.max` config key (exit `3`), and adds the contract's id to the list's variable — what `{{<list>}}` reads.
 - `contract start <mrk-id> --by <agent>` finds each waiting contract's zones by their marks, lands what was merged since the last round, and opens a copy for each. A contract with no zone is refused, unless its `MARK` has a `WITHIN`. None waiting: nothing to start, exit `0`.
+- A copy shows every tracked file, and links the project's ignored dependency folders (`node_modules`, `vendor`, `.venv`) from the working folder, so the project's own checks run there — `npx tsc`, `npx vitest`. A link is never delivered.
+- `contract start <mrk-id> --by <harness>:<agent>` — what a `DELEGATE <list> BY opencode:fixer` compiles to — launches each contract on another harness: for each one it opens the copy, carries the agent's definition in, writes its prompt beside the copy (`<copy>.prompt.md`: its spec, its zones and their marks, what else it may write) and prints the harness's command, filled — the model the agent's `BUDGET` tier maps to there included. The lead runs every command with its shell; when one ends, `delegate deliver <ctr-id> --answer [--why "<reason>"]` takes the answer the command wrote (`<copy>.answer.txt`) and keeps what the copy changed within the contract, as for any contract — never the files carried in. The harness's recipe must have been compiled into the lead: a `--by` naming a harness no line of its flows delegates to is refused (exit `2`).
+
+```bash
+node .agent-pack/apx/lead.apx contract start mrk-5b0e2a71 --by opencode:fixer
+ctr-4a1f0c92  → fixer on opencode  src/login.ts:2-4  copy: .agent-pack/work/ctr-4a1f0c92
+opencode run --model opencode/deepseek-v4.1-flash-free --agent fixer --dir /…/.agent-pack/work/ctr-4a1f0c92 --format json < /…/ctr-4a1f0c92.prompt.md 2>&1 | node -e "…" > /…/ctr-4a1f0c92.answer.txt
+# model: opencode/deepseek-v4.1-flash-free — the one fixer's BUDGET tier maps to on opencode
+# … the recipe's rules
+node .agent-pack/apx/lead.apx delegate deliver ctr-4a1f0c92 --answer      # when its command ended
+node .agent-pack/apx/lead.apx wait mrk-5b0e2a71
+```
 - A contract writes its zones, the files it creates and its `MARK`'s `WITHIN` domain. `delegate deliver <ctr-id>` keeps that from its copy; anything else is left out, and only with a reason: `--why "<reason>"`. With Claude Code, the project's hook warns the agent as soon as it writes outside (see [The perimeter](#the-perimeter)), and stops it when it writes in the project folder instead of its copy.
 - `delegate block`, `ended`, `take`, `reassign` and `list` work on a contract as on any piece; `take` names the copy to finish it in.
 - `wait <mrk-id>` takes back the contracts the latest `start` of that `MARK` opened: each delivered one is merged and what was merged lands in the working folder, uncommitted. A merge that conflicts is left delivered, for `contract merge <ctr-id> --prefer ours|theirs`, then `contract land`. `contract list [mrk-id]` shows the contracts.

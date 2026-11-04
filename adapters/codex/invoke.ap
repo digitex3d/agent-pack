@@ -11,7 +11,8 @@ EXPORT TEMPLATE invoke-codex:
         answer:   TEXT  "the file codex writes its last message to (`-o`) — the apx reads it back at deliver"
           MUST  give the process a generous timeout of your own: a run of several minutes is no error
         shape?:   TEXT  "`--output-schema <file>` when the delegation has an AS: the answer then keeps the template's form"
+        model?:   TEXT  "`-m <model>` when the agent's BUDGET tier maps to a model of codex (the config's `models`) — left out, codex's own default"
     BODY:
-        codex exec -C {project} -s workspace-write --skip-git-repo-check --ephemeral --color never -o {answer} {shape} - < {prompt}
+        codex exec {model} -C {project} -s workspace-write --skip-git-repo-check --ephemeral --color never -o {answer} {shape} - < {prompt}
     EXAMPLE:
-        codex exec -C .agent-pack/work/s-1/dlg-1d06e0a6 -s workspace-write --skip-git-repo-check --ephemeral --color never -o .agent-pack/work/s-1/dlg-1d06e0a6.answer.txt --output-schema .agent-pack/work/s-1/dlg-1d06e0a6.schema.json - < .agent-pack/work/s-1/dlg-1d06e0a6.prompt.md
+        codex exec -m gpt-5-codex -C .agent-pack/work/s-1/dlg-1d06e0a6 -s workspace-write --skip-git-repo-check --ephemeral --color never -o .agent-pack/work/s-1/dlg-1d06e0a6.answer.txt --output-schema .agent-pack/work/s-1/dlg-1d06e0a6.schema.json - < .agent-pack/work/s-1/dlg-1d06e0a6.prompt.md

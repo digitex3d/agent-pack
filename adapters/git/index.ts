@@ -15,7 +15,9 @@
  *
  * A copy is a detached worktree at `.agent-pack/work/<ctr>`, with a sparse
  * checkout of its reads. What git ignores (node_modules…) never reaches a copy
- * through git: a path its reads cover is linked from the project root. The
+ * through git: a path its reads cover is linked from the project root — and,
+ * in a copy that reads every tracked file, the dependency folders, so the
+ * project's own checks run there (`npx tsc`, `vitest`…). The
  * runtime folder (`.agent-pack`, the apx and the session state) is linked in
  * every copy, so an assignee runs its apx from there.
  *
@@ -40,6 +42,9 @@ const IDENTITY = {
   GIT_AUTHOR_NAME: 'agent-pack', GIT_AUTHOR_EMAIL: 'agent-pack@localhost',
   GIT_COMMITTER_NAME: 'agent-pack', GIT_COMMITTER_EMAIL: 'agent-pack@localhost',
 };
+
+/** The folders git ignores that a copy reading every tracked file still links: what the project's tools need to run. */
+const DEPENDENCY_FOLDERS = new Set(['node_modules', 'vendor', '.venv']);
 
 /** A name that becomes part of a ref and of a folder: a session id, an instance id. */
 const SAFE_NAME = /^[A-Za-z0-9][\w.-]*$/;
@@ -184,7 +189,7 @@ class GitSession implements WorkspaceSession {
     const { base, links } = this.readState(dir);
     const globs = allowed.globs.map(clean);
     // What the copy changed since its base — whatever wrote it — split by agent-pack's own globs, then handed to git path by path.
-    const skip = links.map(l => `:(top,exclude,literal)${l}`);
+    const skip = [...links, ...(allowed.exclude ?? []).map(clean)].map(l => `:(top,exclude,literal)${l}`);
     const changed = [...new Set([
       ...lines(git(dir, ['diff', '--name-only', '--no-renames', 'HEAD', '--', '.', ...skip])),
       ...lines(git(dir, ['ls-files', '--others', '--exclude-standard', '--', '.', ...skip])),
@@ -347,7 +352,8 @@ class GitSession implements WorkspaceSession {
 
   /**
    * Link into a copy what git cannot bring: the runtime folder always (but its
-   * copies), and each ignored path the reads cover. Returns the linked paths.
+   * copies), and each ignored path the reads cover — with no reads, each
+   * ignored dependency folder. Returns the linked paths.
    */
   private link(dir: string, reads: string[] | null): string[] {
     const links: string[] = [];
@@ -361,12 +367,15 @@ class GitSession implements WorkspaceSession {
         links.push(rel);
       }
     }
-    if (!reads) return links;
     const ignored = lines(git(this.root, ['ls-files', '--others', '--ignored', '--exclude-standard', '--directory']))
       .map(p => p.replace(/\/$/, ''))
       .filter(p => p !== RUNTIME_DIR && !p.startsWith(`${RUNTIME_DIR}/`));
     const targets = new Set<string>();
     for (const entry of ignored) {
+      if (!reads) {
+        if (DEPENDENCY_FOLDERS.has(entry.split('/').pop() ?? '')) targets.add(entry);
+        continue;
+      }
       for (const glob of reads) {
         const prefix = literalPrefix(glob);
         if (prefix === entry || prefix.startsWith(`${entry}/`)) targets.add(prefix);

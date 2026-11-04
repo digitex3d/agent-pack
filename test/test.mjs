@@ -306,6 +306,7 @@ await import('./delegations.test.mjs');
 await import('./marks.test.mjs');
 await import('./guard.test.mjs');
 await import('./harness.test.mjs');
+await import('./harnessContracts.test.mjs');
 
 // --- User-level config cascade (default → user → project), reserved @user alias ---
 await import('./userConfigCascade.test.mjs');
