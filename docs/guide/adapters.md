@@ -38,6 +38,7 @@ export default {
 | `claude-code-apx` | `.claude/agents/<name>.md` — the agent's own definition (team, identity, mandate, shapes, its own rules) in the same words as `claude-code`, then a pointer to the agent's apx for the rest | `.claude/skills/<name>/SKILL.md` — the same, under the skill's frontmatter | as `claude-code` |
 | `cursor` | `.cursor/rules/<name>.mdc` | `.cursor/rules/<name>.mdc` | — |
 | `codex` | `.codex/agents/<name>.toml` — `name`, `description`, `developer_instructions` | `.agents/skills/<name>/SKILL.md` | — (Codex reads `AGENTS.md` itself) |
+| `opencode` | `.opencode/agents/<name>.md` — `description` frontmatter, the instructions as body; no `mode`, so `opencode run --agent` launches it | `.agents/skills/<name>/SKILL.md` | — (opencode reads `AGENTS.md` itself) |
 
 Options:
 
@@ -46,6 +47,7 @@ claudeCodeAdapter({ agentsDir: '.claude/agents', skillsDir: '.claude/skills', to
 claudeCodeApxAdapter({ agentsDir: '.claude/agents', skillsDir: '.claude/skills', tools: '*' });
 cursorAdapter({ rulesDir: '.cursor/rules', agentsAlwaysActive: false });
 codexAdapter({ agentsDir: '.codex/agents', skillsDir: '.agents/skills' });
+opencodeAdapter({ agentsDir: '.opencode/agents', skillsDir: '.agents/skills' });
 ```
 
 A skill is an agent: `bundle all` builds every `EXPORT SKILL` of the project library, with its apx, and the adapter writes it as a skill instead of a subagent. The frontmatter carries its name and its `ABOUT` as `description`.
@@ -77,7 +79,9 @@ The apx fills it when the piece starts (`delegate start`): `{project}` the piece
 invocation: { recipe: '<dir>/invoke.ap', cli: 'codex', shape: '--output-schema {schema}', carry: ['.codex/agents/{agent}.toml', 'AGENTS.md'], intro: 'Have the custom agent `{agent}` carry out the task below, and answer with its result.' }
 ```
 
-`agent-pack harness list` shows every harness: installed (shipped, or an adapter object of the config), enabled (in `adapters:`), delegable (enabled, with a recipe), and whether its CLI is on the PATH — looked up, never run. `claude-code` and `codex` ship a recipe; `cursor` has none, and cannot be delegated to.
+`agent-pack harness list` shows every harness: installed (shipped, or an adapter object of the config), enabled (in `adapters:`), delegable (enabled, with a recipe), and whether its CLI is on the PATH — looked up, never run. `claude-code`, `codex` and `opencode` ship a recipe; `cursor` has none, and cannot be delegated to.
+
+opencode has no flag that writes its last message to a file, nor one that binds the answer's form: its recipe runs `opencode run --agent {agent} --dir {project} --format json`, the prompt on stdin, and a `node` filter on the same line keeps only the answer text of the JSON events for `{answer}` — the form of an `AS` is asked for in the prompt only. It runs without `--auto`: opencode then refuses on its own every permission it would ask for (a path outside the copy, for one), and the filter lists those refusals after the answer, for the harness that launched it to decide on.
 
 ## Writing an adapter
 

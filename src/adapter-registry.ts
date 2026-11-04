@@ -6,6 +6,7 @@ import claudeCodeAdapter from '../adapters/claude-code/index.js';
 import claudeCodeApxAdapter from '../adapters/claude-code-apx/index.js';
 import codexAdapter from '../adapters/codex/index.js';
 import cursorAdapter from '../adapters/cursor/index.js';
+import opencodeAdapter from '../adapters/opencode/index.js';
 import { fromBuiltins } from './judge/builtins.js';
 
 /**
@@ -18,6 +19,7 @@ const BUILTIN_ADAPTERS: Record<string, () => AdapterPlugin> = {
   'claude-code-apx': () => claudeCodeApxAdapter(),
   codex: () => codexAdapter(),
   cursor: () => cursorAdapter(),
+  opencode: () => opencodeAdapter(),
 };
 
 /** A config entry as an adapter: a built-in by name, or an adapter object as is. */

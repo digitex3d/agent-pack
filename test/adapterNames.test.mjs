@@ -28,7 +28,7 @@ try {
 
   const badFile = join(tmp, 'bad.config.mjs'); // a new path: ESM caches the first import
   writeFileSync(badFile, "export default { adapters: ['nope'] };\n");
-  await assert.rejects(loadConfig(['--config', badFile]), /Unknown adapter "nope" — built-in adapters: claude-code, claude-code-apx, codex, cursor/);
+  await assert.rejects(loadConfig(['--config', badFile]), /Unknown adapter "nope" — built-in adapters: claude-code, claude-code-apx, codex, cursor, opencode/);
 
   console.log('adapter names in config: passed.');
 } finally {

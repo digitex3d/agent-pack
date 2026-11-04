@@ -376,6 +376,7 @@ await import('./libraryUnits.test.mjs');
 
 // --- skills: agents the adapter writes as skills ---
 await import('./skills.test.mjs');
+await import('./opencode.test.mjs');
 
 // --- block decorators: one structure for every decorator — lexer, parser, lint, resolution, scope, rendering ---
 await import('./decorators.test.mjs');

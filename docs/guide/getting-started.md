@@ -46,7 +46,7 @@ agent-pack init
 ```javascript
 // agent-pack.config.mjs
 export default {
-  // built-in adapters, by name: claude-code, claude-code-apx, codex, cursor
+  // built-in adapters, by name: claude-code, claude-code-apx, codex, cursor, opencode
   adapters: ['claude-code'],
 };
 ```
