@@ -1,0 +1,95 @@
+{
+  "tools": [
+    {
+      "name": "gitleaks",
+      "version": "8.30.1",
+      "command": [
+        "gitleaks",
+        "dir",
+        "{dir}",
+        "--report-format",
+        "sarif",
+        "--report-path",
+        "{sarif}",
+        "--exit-code",
+        "0",
+        "--redact",
+        "--no-banner"
+      ],
+      "versionCommand": [
+        "gitleaks",
+        "version"
+      ]
+    },
+    {
+      "name": "biome",
+      "version": "2.6.4",
+      "command": [
+        "/home/giuseppe/PhpstormProjects/common/orfeo/node_modules/.bin/biome",
+        "lint",
+        "--reporter=sarif",
+        "--reporter-file={sarif}",
+        "--colors=off",
+        "src",
+        "adapters",
+        "scripts",
+        "test",
+        "index.ts"
+      ],
+      "versionCommand": [
+        "/home/giuseppe/PhpstormProjects/common/orfeo/node_modules/.bin/biome",
+        "--version"
+      ],
+      "exitCodes": [
+        0,
+        1
+      ],
+      "runInDir": true
+    },
+    {
+      "name": "eslint",
+      "version": "10.14.0",
+      "command": [
+        "/home/giuseppe/PhpstormProjects/common/orfeo/node_modules/.bin/eslint",
+        "--config",
+        "/home/giuseppe/PhpstormProjects/common/orfeo/eslint.config.js",
+        "--format",
+        "/home/giuseppe/PhpstormProjects/common/orfeo/node_modules/@microsoft/eslint-formatter-sarif/sarif.js",
+        "--output-file",
+        "{sarif}",
+        "src",
+        "test"
+      ],
+      "versionCommand": [
+        "/home/giuseppe/PhpstormProjects/common/orfeo/node_modules/.bin/eslint",
+        "--version"
+      ],
+      "exitCodes": [
+        0,
+        1
+      ],
+      "runInDir": true
+    },
+    {
+      "name": "knip",
+      "version": "6.44.1",
+      "command": [
+        "/home/giuseppe/PhpstormProjects/common/orfeo/node_modules/.bin/knip",
+        "--reporter",
+        "sarif",
+        "--output-file",
+        "sarif={sarif}",
+        "--no-progress"
+      ],
+      "versionCommand": [
+        "/home/giuseppe/PhpstormProjects/common/orfeo/node_modules/.bin/knip",
+        "--version"
+      ],
+      "exitCodes": [
+        0,
+        1
+      ],
+      "runInDir": true
+    }
+  ]
+}
