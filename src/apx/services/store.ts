@@ -1,120 +1,159 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
 /**
- * The `store` service — a STORE block's records, through the table behind it
- * (its TYPE's plugin: tabeli). `<apx> store <op> <sto-id> …` forwards the
- * operation to the table, after checking a write against the store's slots;
- * `a` with the KEY already present updates that record instead of duplicating it.
+ * The `store` service — a STORE block's records, through the store API
+ * (src/apx/stores.ts). `<apx> store <op> <sto-id> …`: the verbs are the same
+ * whatever driver keeps the store; a write is checked against the store's
+ * slots before it reaches the driver.
  */
-import { basename, join } from 'node:path';
-import type { StoreBlock } from '../../apdoc/blocks.js';
-import { projectStoreDir } from '../paths.js';
-import { openTable, runTable, upsertBy } from '../tabeli.js';
-import { validateRecord, slotSpecsOf, formatIssues } from '../../shapeSchema.js';
+import {
+  STORE_EXIT, StoreRefusal, checkWrite, countLine, fieldsOf, filtersOf, open, optionalOp, recordLine, requireCapability, storesOf, type OpenStore,
+} from '../stores.js';
 import type { ApxHost, ApxService } from '../service.js';
 
-interface Store {
-  block: StoreBlock;
-  name: string;
-  key: string | null;
-  location: string;
-  path: string;
+const OPERATIONS = [
+  { op: 'put', args: '<sto-id> <field>=<value> …', about: 'add a record — with the KEY already present, update it instead' },
+  { op: 'get', args: '<sto-id> <key>', about: 'one record, by its KEY (or its id when the store has no KEY)' },
+  { op: 'find', args: '<sto-id> [<field><op><value> …] [limit=<n>] [count] [json]', about: 'the records every filter holds for, or how many' },
+  { op: 'set', args: '<sto-id> <key> <field>=<value> … [if <field><op><value> …]', about: 'set fields of a record — `if` refuses a stale belief' },
+  { op: 'remove', args: '<sto-id> <key>', about: 'remove a record' },
+  { op: 'take', args: '<sto-id> [<field><op><value> …] set <field>=<value> …', about: 'take the next record atomically — two agents never get the same one' },
+  { op: 'mark', args: '<sto-id>', about: 'a mark of now, for since' },
+  { op: 'since', args: '<sto-id> <mark>', about: 'the records added or changed after a mark' },
+];
+
+type Op = (host: ApxHost, store: OpenStore, args: string[]) => Promise<number>;
+
+/** Split `args` at the first `word`: what comes before, what comes after (null when absent). */
+function splitAt(args: string[], word: string): [string[], string[] | null] {
+  const at = args.indexOf(word);
+  return at < 0 ? [args, null] : [args.slice(0, at), args.slice(at + 1)];
 }
 
-/** The operations of a tabeli table the service names; any other is forwarded as well. */
-const OPERATIONS = [
-  { op: 'a', args: '<sto-id> <field>=<value> …', about: 'add a record — with the KEY already present, update it instead' },
-  { op: 'q', args: '<sto-id> [<field>=<value> …] [count]', about: 'query records, or count them' },
-  { op: 's', args: '<sto-id> <id> <field>=<value> … [if <field>=<value>]', about: 'set fields of a record — `if` refuses a stale belief' },
-  { op: 'next', args: '<sto-id> <field>=<value> set <field>=<value>', about: 'take the next record atomically — two agents never get the same one' },
-  { op: 'manual', args: '<sto-id>', about: "the table's own manual" },
-];
+/** The one key an operation names, or a refusal saying how to write it. */
+function keyArg(store: OpenStore, args: string[], op: string): string {
+  if (!args[0]) throw new StoreRefusal(STORE_EXIT.usage, `${op} takes the record's ${store.block.storeKey ?? 'id'}: store ${op} ${store.block.id} <${store.block.storeKey ?? 'id'}>`);
+  return args[0];
+}
+
+const put: Op = async (host, store, args) => {
+  const doc = fieldsOf(store, args);
+  checkWrite(store, doc, true);
+  const r = await (await open(store)).put(doc);
+  const key = store.block.storeKey;
+  if (r.updated && key) host.out(`# ${key}=${String(doc[key])} exists as id=${r.id} — updated, not duplicated`);
+  host.out(recordLine({ id: r.id, ...doc }));
+  return 0;
+};
+
+const get: Op = async (host, store, args) => {
+  const key = keyArg(store, args, 'get');
+  const doc = await (await open(store)).get(key);
+  if (!doc) return host.fail(STORE_EXIT.missing, `${store.block.name}: no record ${key}`);
+  host.out(args.includes('json') ? JSON.stringify(doc) : recordLine(doc));
+  return 0;
+};
+
+const find: Op = async (host, store, args) => {
+  const flags = new Set<string>(args.filter(a => a === 'count' || a === 'json'));
+  const limitArg = args.find(a => a.startsWith('limit='));
+  const limit = limitArg ? Number(limitArg.slice('limit='.length)) : undefined;
+  if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) throw new StoreRefusal(STORE_EXIT.usage, `${store.block.name}: limit takes a whole number above 0`);
+  const filters = filtersOf(store, args.filter(a => !flags.has(a) && a !== limitArg));
+  const docs = await (await open(store)).find(filters, limit);
+  if (flags.has('count')) host.out(countLine(docs.length));
+  else if (flags.has('json')) host.out(JSON.stringify(docs));
+  else {
+    for (const d of docs) host.out(recordLine(d));
+    host.out(countLine(docs.length));
+  }
+  return 0;
+};
+
+const set: Op = async (host, store, args) => {
+  const key = keyArg(store, args, 'set');
+  const [fieldArgs, guardArgs] = splitAt(args.slice(1), 'if');
+  if (guardArgs) requireCapability(store, 'guard', 'set … if');
+  const fields = fieldsOf(store, fieldArgs);
+  checkWrite(store, fields, false);
+  const r = await (await open(store)).set(key, fields, guardArgs ? filtersOf(store, guardArgs) : []);
+  if (r === 'missing') return host.fail(STORE_EXIT.missing, `${store.block.name}: no record ${key} — nothing was written`);
+  if (r === 'stale') return host.fail(STORE_EXIT.stale, `${store.block.name}: the condition no longer holds for ${key} — your view of it is stale: get it again`);
+  host.out(`# ${key} set`);
+  return 0;
+};
+
+const remove: Op = async (host, store, args) => {
+  const key = keyArg(store, args, 'remove');
+  if (!await (await open(store)).remove(key)) return host.fail(STORE_EXIT.missing, `${store.block.name}: no record ${key}`);
+  host.out(`# ${key} removed`);
+  return 0;
+};
+
+const take: Op = async (host, store, args) => {
+  const [filterArgs, setArgs] = splitAt(args, 'set');
+  if (!setArgs || setArgs.length === 0) throw new StoreRefusal(STORE_EXIT.usage, `take marks what it takes: store take ${store.block.id} <filters> set <field>=<value> …`);
+  const fields = fieldsOf(store, setArgs);
+  checkWrite(store, fields, false);
+  const doc = await (await optionalOp(store, 'take', 'take'))(filtersOf(store, filterArgs), fields);
+  if (!doc) return host.fail(STORE_EXIT.missing, `${store.block.name}: no record matches — the queue is empty`);
+  host.out(recordLine(doc));
+  return 0;
+};
+
+const mark: Op = async (host, store) => {
+  const m = await (await optionalOp(store, 'mark', 'since'))();
+  host.out(`# mark=${m}`);
+  host.out(`# later: store since ${store.block.id} ${m}   -> only what changed since now`);
+  return 0;
+};
+
+const since: Op = async (host, store, args) => {
+  if (!args[0]) throw new StoreRefusal(STORE_EXIT.usage, `since takes a mark: store since ${store.block.id} <mark> (from store mark)`);
+  const docs = await (await optionalOp(store, 'since', 'since'))(args[0]);
+  if (!docs) return host.fail(STORE_EXIT.usage, `${store.block.name}: \`${args[0]}\` is no mark of this store — take one with store mark ${store.block.id}`);
+  for (const d of docs) host.out(recordLine(d));
+  host.out(`${countLine(docs.length)} added or changed since the mark`);
+  return 0;
+};
+
+const OPS: Record<string, Op> = { put, get, find, set, remove, take, mark, since };
+
+/** `store` alone: the agent's stores, each with its driver and where its data lives. */
+function list(host: ApxHost, stores: OpenStore[]): number {
+  if (stores.length === 0) host.out('# this agent has no stores');
+  for (const s of stores) host.out(`${s.block.id}  ${s.block.name}  ${s.driver.name}  ${s.driver.location(s.ref)}`);
+  return 0;
+}
+
+/** The store an operation names by its id — or a refusal listing the agent's stores. */
+function storeArg(host: ApxHost, stores: OpenStore[], id: string | undefined): OpenStore {
+  const store = id ? stores.find(s => s.block.id === id) : undefined;
+  if (store) return store;
+  const known = stores.map(s => `${s.block.id} (${s.block.name})`).join(', ') || 'none';
+  throw new StoreRefusal(STORE_EXIT.usage, `${id ? `no store \`${id}\` in this agent` : 'store takes an id (sto-…)'} — its stores: ${known}; e.g. ${host.cmd} store find <sto-id>`);
+}
+
+/** One call of the service, its refusals thrown. */
+async function serveOp(host: ApxHost, op: string | undefined, args: string[]): Promise<number> {
+  const stores = await storesOf(host);
+  if (!op) return list(host, stores);
+  const run = OPS[op];
+  if (!run) throw new StoreRefusal(STORE_EXIT.usage, `unknown store operation '${op}' — the operations: ${Object.keys(OPS).join(', ')}`);
+  const [id, ...rest] = args;
+  return await run(host, storeArg(host, stores, id), rest);
+}
 
 export const storeService: ApxService = {
   kind: 'store',
-  about: 'read or write a store, through its table',
+  about: 'read or write a store, through the store API',
   operations: OPERATIONS,
-  serve(host, op, args) {
-    const stores = storesOf(host);
-    if (!op) {
-      if (stores.length === 0) host.out('# this agent has no stores');
-      for (const s of stores) host.out(`${s.block.id}  ${s.name}  ${s.location}`);
-      return 0;
+  async serve(host, op, args) {
+    try {
+      return await serveOp(host, op, args);
+    } catch (e) {
+      if (e instanceof StoreRefusal) return host.fail(e.code, e.message);
+      return host.fail(STORE_EXIT.usage, e instanceof Error ? e.message : String(e));
     }
-    const [id, ...rest] = args;
-    const store = id ? stores.find(s => s.block.id === id) : undefined;
-    if (!store) {
-      const known = stores.map(s => `${s.block.id} (${s.name})`).join(', ') || 'none';
-      return host.fail(2, `${id ? `no store \`${id}\` in this agent` : 'store takes an id (sto-…)'} — its stores: ${known}; e.g. ${host.cmd} store q <sto-id>`);
-    }
-    return serveStore(host, store, op === 'manual' ? [] : [op, ...rest]);
   },
 };
-
-/** The stores, each with its table file — the location is from the project root. */
-function storesOf(host: ApxHost): Store[] {
-  const projections = host.doc.mdSource?.stores ?? {};
-  return (host.doc.byKind('store') as StoreBlock[]).map(block => {
-    const location = projections[block.address]?.location ?? `${projectStoreDir(host.root.name)}/${block.name}.tbl`;
-    return { block, name: block.name, key: block.storeKey, location, path: join(host.projectRoot, location) };
-  });
-}
-
-/** Forward `[op …]` to the store's tabeli table, creating it on first use. */
-function serveStore(host: ApxHost, store: Store, args: string[]): number {
-  const refused = writeIssues(store, args);
-  if (refused) return host.fail(2, `${store.name}: ${refused} — nothing was written`);
-  const unopened = openTable(store.path, host.build.tabeli);
-  if (unopened) return host.fail(2, unopened);
-  const i = args[0] === 'a' && store.key ? args.findIndex((kv, j) => j > 0 && kv.startsWith(`${store.key}=`)) : -1;
-  let run;
-  if (i > 0) {
-    let upsert;
-    try {
-      upsert = upsertBy(store.path, store.key!, args[i].slice(store.key!.length + 1), [...args.slice(1, i), ...args.slice(i + 1)]);
-    } catch (e) {
-      return host.fail(2, `${store.name}: ${e instanceof Error ? e.message : e} — nothing was written`);
-    }
-    if (upsert.updated !== null) host.out(`# ${args[i]} exists as id=${upsert.updated} — updated, not duplicated`);
-    run = upsert.run;
-  } else {
-    run = runTable(store.path, args);
-  }
-  // errors and manuals name the .tbl — say it in this executable's own words
-  const table = basename(store.path);
-  const mine = `${host.cmd} store <op> ${store.block.id}`;
-  const text = `${run.stdout ?? ''}${run.stderr ?? ''}`.split(`./${table}`).join(mine).split(table).join(mine).trimEnd();
-  if (text) host.out(text);
-  return run.status ?? 2;
-}
-
-/**
- * A write checked against the store's schema before it reaches the table: `a`
- * adds a whole record (every required slot, the KEY included), `s <id>` sets
- * some fields; either way no unknown field and no value outside its slot type.
- */
-function writeFields(args: string[]): { add: boolean; pairs: string[] } | null {
-  if (args[0] === 'a') return { add: true, pairs: args.slice(1) };
-  if (args[0] === 's') {
-    const end = args.indexOf('if');
-    return { add: false, pairs: args.slice(2, end === -1 ? undefined : end) };
-  }
-  return null;
-}
-
-/** What is wrong with a write against the store's slots — or null when it fits. */
-function writeIssues(store: Store, args: string[]): string | null {
-  const write = writeFields(args);
-  if (!write) return null;
-  const record: Record<string, unknown> = {};
-  for (const pair of write.pairs) {
-    const eq = pair.indexOf('=');
-    if (eq <= 0) return `\`${pair}\` is not a field=value pair`;
-    const field = pair.slice(0, eq);
-    const value = pair.slice(eq + 1);
-    const slot = store.block.slots.find(sl => sl.name === field);
-    record[field] = slot?.type.kind === 'number' && value.trim() !== '' && !Number.isNaN(Number(value)) ? Number(value) : value;
-  }
-  const issues = validateRecord(record, slotSpecsOf(store.block.slots, !write.add));
-  return issues.length > 0 ? formatIssues(issues).replace(/\n/g, '; ') : null;
-}

@@ -76,12 +76,12 @@ try {
     await assert.rejects(compile(dimension({ as: '    AS     nope' })), /unknown template `nope`/);
     await assert.rejects(compile(dimension({ as: '    AS     prose' })), /DIMENSION pseudocode: AS `prose` is a template without SLOTS/);
     await assert.rejects(compile(dimension({ as: '    AS!    steps' })), /DIMENSION pseudocode: AS takes no level/);
-    await assert.rejects(compile(dimension({ rest: ['    TYPE   tabeli'] })), /TYPE is not allowed inside DIMENSION \(expected one of: ABOUT, FOR, EACH/);
+    await assert.rejects(compile(dimension({ rest: ['    DRIVER tabeli'] })), /DRIVER is not allowed inside DIMENSION \(expected one of: ABOUT, FOR, EACH/);
     await assert.rejects(compile(dimension({ rest: ['    MEM    the steps'] })), /MEM is not allowed inside DIMENSION — a dimension's rules say how its value is produced/);
     await assert.rejects(compile(dimension({ rest: ['    FOR    lib/*.py'] })), /DIMENSION block has 2 occurrences of FOR/);
     // a dimension is reached by its id, after the verb `dimension`: its name may be a verb's, or a store's
     await compile(dimension({ name: 'get' }));
-    await compile(dimension({ name: 'notes' }), ['STORE notes:', '    ABOUT  notes', '    TYPE   tabeli', '    SLOTS:', '        topic: TEXT "t"', '']);
+    await compile(dimension({ name: 'notes' }), ['STORE notes:', '    ABOUT  notes', '    SLOTS:', '        topic: TEXT "t"', '']);
     // EACH naming a template renders as a reference to it; any other text, verbatim
     const each = await compile(dimension({ each: '    EACH   steps' }));
     const eachDim = each.structure.byKind('dimension')[0];

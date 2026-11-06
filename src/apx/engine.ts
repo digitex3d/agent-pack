@@ -40,6 +40,7 @@ import { perimeterFiles, scanZones, zoneMarks, zonesText, parseZones } from './c
 import { DelegationTable, CONTRACT_ID_RE, MARK_ID_RE, pieceRecord, pieceOf, answerFlag, type DelegationRecord } from './delegations.js';
 import { splitHarness, type ApMark, type HarnessInvocation } from '../delegation.js';
 import { parsePayload } from './payload.js';
+import type { DriverEntry } from '../storeDrivers/registry.js';
 import { resolveWorkspace } from '../workspace/registry.js';
 import type { Allowed, WorkspaceSession } from '../workspace/types.js';
 import { constantOf, readsOf } from '../vars.js';
@@ -68,6 +69,8 @@ export interface ApxBuild {
   waitMax?: string;
   /** How many zones a MARK binds at most when its line names no MAX — the `mark.max` config key; absent: the default. */
   markMax?: number;
+  /** The store drivers of the config, to import again — absent: only the shipped ones (src/storeDrivers/registry.ts). */
+  drivers?: DriverEntry[];
 }
 
 /**

@@ -391,4 +391,7 @@ await import('./plugins.test.mjs');
 // --- lint: one switch over the block kinds ---
 await import('./lintKindSwitch.test.mjs');
 
+// --- store drivers: the contract, shipped drivers and a module's ---
+await import('./storeDrivers.test.mjs');
+
 console.log('All tests passed.');

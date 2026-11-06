@@ -44,6 +44,7 @@ import type { ChecksConfig } from '../judge/types.js';
 import { importedVariables, visibleIn } from '../exportedVars.js';
 import { readsOf, constantOf, parseVarLine, splitInto, takesInto } from '../vars.js';
 import { refName } from '../../adapters/md/phrases.js';
+import { STORE_FIELD_RE } from '../storeDrivers/filters.js';
 
 
 // --- Public interfaces ---
@@ -436,18 +437,30 @@ function libraryReadRule(ctx: BundleContext, agentFilePath: string): (file: stri
     : null;
 }
 
-/** A store its type cannot hold — an unknown TYPE, a slot the backing refuses — fails the compilation. */
+/** Why the store API itself cannot keep a slot, whatever the driver — or null. */
+function storeSlotIssue(slot: string): string | null {
+  if (!STORE_FIELD_RE.test(slot)) return `slot "${slot}": a store field name uses letters, digits and _ only — write ${slot.replace(/[^A-Za-z0-9_]/g, '_')}`;
+  if (slot === 'id') return 'slot "id": id is the record\'s own identifier, given by the driver — name the slot otherwise';
+  return null;
+}
+
+/** A store its driver cannot keep — an unknown DRIVER, a store or a slot the driver refuses — fails the compilation. */
 function storeErrors(doc: ApDocument, ctx: BundleContext, agentFilePath: string): LintError[] {
   return (doc.byKind('store') as StoreBlock[]).flatMap(store => {
     const file = ctx.stores.find(s => s.name === store.name)?.path ?? agentFilePath;
     const p = store.projection();
-    if (p.unknownType) {
-      return [{ file, line: lineOfName(file, store.storeType), message: `STORE ${store.name}: unknown TYPE \`${store.storeType}\` (available: ${p.unknownType.available.join(', ')})` }];
+    if (p.unknownDriver) {
+      return [{ file, line: lineOfName(file, store.storeDriver), message: `STORE ${store.name}: unknown DRIVER \`${store.storeDriver}\` (installed: ${p.unknownDriver.available.join(', ')})` }];
     }
+    const refused = p.refused ? [{ file, line: lineOfName(file, store.storeDriver), message: `STORE ${store.name}: ${p.refused}` }] : [];
     const key = store.storeKey && !store.slots.some(sl => sl.name === store.storeKey)
       ? [{ file, line: lineOfName(file, store.storeKey), message: `STORE ${store.name}: KEY \`${store.storeKey}\` is none of its slots (${store.slots.map(sl => sl.name).join(', ')})` }]
       : [];
-    return [...key, ...Object.entries(p.rejects).map(([slot, why]) => ({ file, line: lineOfName(file, slot), message: `STORE ${store.name}: ${why}` }))];
+    const names = store.slots.flatMap(sl => {
+      const why = storeSlotIssue(sl.name);
+      return why ? [{ file, line: lineOfName(file, sl.name), message: `STORE ${store.name}: ${why}` }] : [];
+    });
+    return [...refused, ...key, ...names, ...Object.entries(p.rejects).map(([slot, why]) => ({ file, line: lineOfName(file, slot), message: `STORE ${store.name}: ${why}` }))];
   });
 }
 

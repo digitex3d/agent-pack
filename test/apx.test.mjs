@@ -46,8 +46,15 @@ function drive({ document = doc, exe = EXE, budget } = {}, ...args) {
   const code = new ApxEngine(document, BUILD, exe, l => lines.push(l), budget).run(args);
   return { out: lines.join('\n'), code };
 }
+/** drive, awaited: a served kind (store) may answer asynchronously — its lines are all in once the code is. */
+async function driveAsync({ document = doc, exe = EXE, budget } = {}, ...args) {
+  const lines = [];
+  const code = await new ApxEngine(document, BUILD, exe, l => lines.push(l), budget).run(args);
+  return { out: lines.join('\n'), code };
+}
 // budget 0: every block is read on demand — the quiz, scope and get paths under test
 const apx = (exe, ...args) => drive({ exe, budget: { whole: 0, block: 0 } }, ...args);
+const apxAsync = (exe, ...args) => driveAsync({ exe, budget: { whole: 0, block: 0 } }, ...args);
 const EXE = 'apx/pm.apx';
 const CMD = `node ${EXE}`;
 const run = (...args) => apx(EXE, ...args);
@@ -113,11 +120,11 @@ const answers = quiz.map((q, i) => `${i + 1}=${q.right}`);
 // --- a store write outside its schema is refused before it reaches the table ---
 {
   const STORE = idOf('store', 'notes');
-  const refused = ([op, ...args], why) => { const r = run('store', op, STORE, ...args); assert.equal(r.code, 2, r.out); has(r.out, why, 'nothing was written'); };
-  refused(['a', 'note=no topic'], 'topic: required field missing');
-  refused(['a', 'topic=two words', 'note=x'], 'topic: expected ≤1 words, got 2');
-  refused(['a', 'topic=iban', 'note=x', 'iban=IT60X0542811101000000123456'], 'iban: unknown field');
-  refused(['s', '1', 'colour=red'], 'colour: unknown field');
+  const refused = async ([op, ...args], why) => { const r = await apxAsync(EXE, 'store', op, STORE, ...args); assert.equal(r.code, 2, r.out); has(r.out, why, 'nothing was written'); };
+  await refused(['put', 'note=no topic'], 'topic: required field missing');
+  await refused(['put', 'topic=two words', 'note=x'], 'topic: expected ≤1 words, got 2');
+  await refused(['put', 'topic=iban', 'note=x', 'iban=IT60X0542811101000000123456'], 'iban: unknown field');
+  await refused(['set', 'tabeli', 'colour=red'], 'colour: unknown field');
 }
 
 // --- the reading budget: small definitions print whole, larger ones open what is always needed ---
@@ -197,7 +204,7 @@ assert.equal(renderMd(doc), compiled.body, 'the round-tripped document renders t
 
 // --- version and help ---
 has(run('version').out, `# pm  ${idOf('agent', 'pm')}`, 'built 2026-09-24T10:00:00Z by agent-pack 0.26.0  hash c0ffee');
-has(run('help').out, `${CMD} start`, `${CMD} get <id> [json]`, `${CMD} store a <sto-id> <field>=<value> …`, `${CMD} delegate input <exe-id>`, `${CMD} wait <dlg-id | mrk-id | var>`);
+has(run('help').out, `${CMD} start`, `${CMD} get <id> [json]`, `${CMD} store put <sto-id> <field>=<value> …`, `${CMD} delegate input <exe-id>`, `${CMD} wait <dlg-id | mrk-id | var>`);
 
 // --- errors: one line, the command that fixes it, exit 1 (missing) or 2 (usage) ---
 {
@@ -213,22 +220,34 @@ has(run('help').out, `${CMD} start`, `${CMD} get <id> [json]`, `${CMD} store a <
   assert.equal(run('find').code, 2);
 }
 
-// --- stores: served through the engine, backed by the tabeli agent-pack builds ---
+// --- stores: served through the store API, kept by the default driver (files) ---
 {
   const tmp = mkdtempSync(join(tmpdir(), 'apx-store-'));
   try {
     const exe = join(tmp, '.agent-pack', 'apx', 'pm.apx');   // where bundle all puts it: the project root is two levels up
     const cmd = `node ${exe}`;
     const STORE = idOf('store', 'notes');
-    has(apx(exe, 'get', STORE).out, `${cmd} store a ${STORE} topic='…' note='…'`);
-    has(apx(exe, 'store', 'a', STORE, 'topic=tabeli', 'note=engine ships with agent-pack').out, 'id=1 topic=tabeli');
-    has(apx(exe, 'store', 'a', STORE, 'topic=tabeli', 'note=a C binary').out,
+    has(apx(exe, 'get', STORE).out, `${cmd} store put ${STORE} topic='…' note='…'`, `${cmd} store take ${STORE}`);
+    has((await apxAsync(exe, 'store', 'put', STORE, 'topic=tabeli', 'note=engine ships with agent-pack')).out, "id=1 topic=tabeli note='engine ships with agent-pack'");
+    has((await apxAsync(exe, 'store', 'put', STORE, 'topic=tabeli', 'note=a C binary')).out,
       '# topic=tabeli exists as id=1 — updated, not duplicated', "note='a C binary'");
-    assert.equal(apx(exe, 'store', 'q', STORE, 'count').out.trim(), '# 1 record');
-    const bad = apx(exe, 'store', 'nope', STORE);
+    assert.equal((await apxAsync(exe, 'store', 'find', STORE, 'count')).out.trim(), '# 1 record');
+    has((await apxAsync(exe, 'store', 'find', STORE, 'topic~tab')).out, "id=1 topic=tabeli note='a C binary'", '# 1 record');
+    has((await apxAsync(exe, 'store', 'get', STORE, 'tabeli')).out, "id=1 topic=tabeli note='a C binary'");
+    assert.equal((await apxAsync(exe, 'store', 'get', STORE, 'nope')).code, 1);
+    has((await apxAsync(exe, 'store', 'set', STORE, 'tabeli', 'note=v2', 'if', 'note=a C binary')).out, '# tabeli set');
+    const stale = await apxAsync(exe, 'store', 'set', STORE, 'tabeli', 'note=v3', 'if', 'note=a C binary');
+    assert.equal(stale.code, 4, stale.out);
+    has(stale.out, 'your view of it is stale');
+    const mark = /# mark=(\S+)/.exec((await apxAsync(exe, 'store', 'mark', STORE)).out)[1];
+    await apxAsync(exe, 'store', 'put', STORE, 'topic=files', 'note=the default driver');
+    has((await apxAsync(exe, 'store', 'since', STORE, mark)).out, 'id=2 topic=files', '# 1 record added or changed since the mark');
+    has((await apxAsync(exe, 'store', 'remove', STORE, 'files')).out, '# files removed');
+    has((await apxAsync(exe, 'store', 'find', STORE, 'colour=red')).out, '`colour` is none of its fields (topic, note)');
+    const bad = await apxAsync(exe, 'store', 'nope', STORE);
     assert.equal(bad.code, 2);
-    has(bad.out, "unknown command 'nope'");
-    assert.ok(!bad.out.includes('notes.tbl'), 'the table file is never named — the engine speaks for it');
+    has(bad.out, "unknown store operation 'nope'");
+    assert.ok(!bad.out.includes('notes.json'), 'the store file is never named — the store API speaks for it');
     console.log('apx store tests passed.');
   } finally {
     rmSync(tmp, { recursive: true });

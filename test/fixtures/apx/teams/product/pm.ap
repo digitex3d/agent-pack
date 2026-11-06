@@ -15,7 +15,6 @@ EXPORT PROCEDURE open-card:
 
 EXPORT STORE notes:
     ABOUT  working notes kept between sessions
-    TYPE   tabeli
     LASTS  project
     KEY    topic
     SLOTS:

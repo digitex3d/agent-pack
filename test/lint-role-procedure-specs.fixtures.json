@@ -4984,6 +4984,12 @@
   "expected": [
    [
     6,
+    "TYPE became DRIVER — write `DRIVER <driver>` (tabeli, files, or a driver of the config); a store with no DRIVER is kept by files: \"TYPE something\"",
+    null,
+    "agents/library/roles/r.ap"
+   ],
+   [
+    6,
     "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"TYPE something\"",
     null,
     "agents/library/roles/r.ap"
@@ -5003,6 +5009,12 @@
    "  TYPE something"
   ],
   "expected": [
+   [
+    6,
+    "TYPE became DRIVER — write `DRIVER <driver>` (tabeli, files, or a driver of the config); a store with no DRIVER is kept by files: \"TYPE something\"",
+    null,
+    "agents/library/procedures/p.ap"
+   ],
    [
     6,
     "unexpected line in a procedure: \"TYPE something\"",

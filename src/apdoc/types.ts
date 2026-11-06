@@ -392,14 +392,16 @@ export type ApOutlineItem =
  * A store as its backing type makes it: the file it lives in, the exact
  * commands (with this store's own fields), and the slots it cannot hold and
  * why. Computed by the store type plugin, once.
- * `unknownType` is set instead when TYPE names no registered backing.
+ * `unknownDriver` is set instead when DRIVER names no installed driver;
+ * `refused` when the driver cannot keep the store at all.
  */
 export interface ApStoreProjection {
-  type: string;
+  driver: string;
   location: string;
   usage: string[];
   rejects: Record<string, string>;
-  unknownType?: { available: string[] };
+  refused?: string;
+  unknownDriver?: { available: string[] };
 }
 
 export interface ApDocumentMeta {

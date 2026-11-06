@@ -24,10 +24,11 @@ import { type MdEnv, slotTypePhrase, forceIntro, renderNodes, shapeLine, executo
 import {
   templateScaffoldIntro, scalarTemplateLine, FIELDS_LABEL, OPTIONAL_MARK,
   EXAMPLE_OPEN, EXAMPLE_CLOSE, lensInLine, lensBridgeLine, refName,
-  storeHomeLine, storeUsageLabel, storeRejectLine, storeUnknownTypeLine, varCommand,
+  storeHomeLine, storeUsageLabel, storeRejectLine, storeUnknownDriverLine, varCommand,
 } from '../../adapters/md/phrases.js';
-import { storeTypeOf, storeTypeNames } from '../storeTypes/registry.js';
-import { phraseOf, STORE_LIFETIMES, type StoreDecl, type StoreLifetime } from '../storeTypes/types.js';
+import { storeDriverOf, storeDriverNames } from '../storeDrivers/registry.js';
+import { DEFAULT_DRIVER, phraseOf, STORE_LIFETIMES, type StoreDecl, type StoreLifetime } from '../storeDrivers/types.js';
+import { storeUsage } from '../storeDrivers/usage.js';
 import { parseTemplate, templateLayout, composeExample, SLOT_NAME } from '../shapeCompiler.js';
 import type { VarScope } from '../vars.js';
 import { extractPrimitive, stripPrimitives, unwrapExportFile } from '../services/text.js';
@@ -216,8 +217,8 @@ export class StoreBlock extends ApBlock {
   static readonly PREFIX = 'sto';
   readonly kind = 'store';
   protected readonly idPrefix = StoreBlock.PREFIX;
-  /** The `TYPE` value — resolved against the store-type registry at render. */
-  storeType = '';
+  /** The `DRIVER` value — resolved against the driver registry at render; `files` when the store names none. */
+  storeDriver = DEFAULT_DRIVER;
   lasts: StoreLifetime = 'session';
   /** The `KEY` slot name, or null when the store declares none. */
   storeKey: string | null = null;
@@ -225,7 +226,7 @@ export class StoreBlock extends ApBlock {
 
   static fromData(data: ApBlockData): StoreBlock {
     const block = restore(new StoreBlock(initOf(data)), data);
-    block.storeType = (data.args.storeType as string | undefined) ?? '';
+    block.storeDriver = (data.args.driver as string | undefined) ?? DEFAULT_DRIVER;
     block.lasts = (data.args.lasts as StoreLifetime | undefined) ?? 'session';
     block.storeKey = (data.args.key as string | undefined) ?? null;
     block.slots = (data.args.slots as ApSlot[] | undefined) ?? [];
@@ -234,7 +235,7 @@ export class StoreBlock extends ApBlock {
 
   static fromDefinition(def: Definition, cx: BlockCx): StoreBlock {
     const block = new StoreBlock(cx.defInit(def));
-    block.storeType = extractPrimitive(def.body, 'TYPE') ?? '';
+    block.storeDriver = extractPrimitive(def.body, 'DRIVER') ?? DEFAULT_DRIVER;
     const lasts = extractPrimitive(def.body, 'LASTS');
     block.lasts = (STORE_LIFETIMES as readonly string[]).includes(lasts ?? '') ? lasts as StoreLifetime : 'session';
     block.storeKey = extractPrimitive(def.body, 'KEY');
@@ -251,14 +252,15 @@ export class StoreBlock extends ApBlock {
 
   protected override argsJson(): Record<string, unknown> {
     return {
-      storeType: this.storeType,
+      driver: this.storeDriver,
       lasts: this.lasts,
       ...(this.storeKey ? { key: this.storeKey } : {}),
       slots: this.slots,
     };
   }
 
-  private decl(agent: string): StoreDecl {
+  /** The store as a driver is handed it, for the agent it belongs to. */
+  decl(agent: string): StoreDecl {
     return {
       name: this.name,
       agent,
@@ -270,35 +272,36 @@ export class StoreBlock extends ApBlock {
   }
 
   /**
-   * What this store's backing type makes of it — file, exact commands, the
-   * slots it cannot hold — for the agent it belongs to and the command that
-   * serves it (its apx). The plugin is asked once, here; the md body renders
-   * this and the document records it (meta.md.stores), so a reader never
-   * needs the plugin.
+   * What this store's driver makes of it — file, exact commands, what it
+   * cannot keep — for the agent it belongs to and the command that serves it
+   * (its apx). The driver is asked once, here; the md body renders this and
+   * the document records it (meta.md.stores), so a reader never needs the driver.
    */
   projection(agent = '', command = ''): ApStoreProjection {
-    const type = storeTypeOf(this.storeType);
-    if (!type) {
-      return { type: this.storeType, location: '', usage: [], rejects: {}, unknownType: { available: storeTypeNames() } };
+    const driver = storeDriverOf(this.storeDriver);
+    if (!driver) {
+      return { driver: this.storeDriver, location: '', usage: [], rejects: {}, unknownDriver: { available: storeDriverNames() } };
     }
     const decl = this.decl(agent);
     const rejects: Record<string, string> = {};
     for (const slot of this.slots) {
-      const reason = type.rejects?.(slot);
+      const reason = driver.rejects?.(slot);
       if (reason) rejects[slot.name] = reason;
     }
+    const refused = driver.rejectsStore?.(decl);
     return {
-      type: type.name,
-      location: type.location(decl),
-      usage: type.usage(decl, op => serviceCommand(command, 'store', op, this.id)),
+      driver: driver.name,
+      location: driver.location(decl),
+      usage: storeUsage(decl, driver, op => serviceCommand(command, 'store', op, this.id)),
       rejects,
+      ...(refused ? { refused } : {}),
     };
   }
 
   override asMdBody(env: MdEnv): string {
     const p = this.projection(env.agent, env.apxOf(null));
-    if (p.unknownType) {
-      return storeUnknownTypeLine(this.name, this.storeType, p.unknownType.available);
+    if (p.unknownDriver) {
+      return storeUnknownDriverLine(this.name, this.storeDriver, p.unknownDriver.available);
     }
     const out: string[] = [storeHomeLine(p.location, this.lasts), '', FIELDS_LABEL];
     const S = FORMULAS.blocks.store;
@@ -311,9 +314,9 @@ export class StoreBlock extends ApBlock {
         description: slot.description ? fill(FORMULAS.blocks.template.description, { description: slot.description }) : '',
         key: this.storeKey === slot.name ? S.key : '',
       }));
-      if (p.rejects[slot.name]) out.push(storeRejectLine(p.type, p.rejects[slot.name]));
+      if (p.rejects[slot.name]) out.push(storeRejectLine(p.driver, p.rejects[slot.name]));
     }
-    out.push('', storeUsageLabel(p.type), '```', ...p.usage, '```');
+    out.push('', storeUsageLabel(), '```', ...p.usage, '```');
     const body = super.asMdBody(env);
     if (body.trim()) out.push('', body);
     return out.join('\n');

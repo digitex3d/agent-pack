@@ -144,7 +144,7 @@ EXPORT ROLE ap-author:
       NEVER name a model in the source — the delegate and its model live in the project config
 
     WHEN an agent keeps data between sessions:
-      DO   declare a STORE with TYPE tabeli, LASTS project or session, KEY <slot>, and SLOTS
+      DO   declare a STORE with LASTS project or session, KEY <slot>, SLOTS — DRIVER <driver> unless files, e.g. tabeli
       DO   work on it inside `IN <store>:` under a WHEN
 
     WHEN something is worth remembering to act on it faster next time:

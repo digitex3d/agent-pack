@@ -76,11 +76,12 @@ const STATIC_KEYWORDS = [
   // still lexed, so the lint names the rewrite.
   'MEMBER', 'STRATEGY', 'LEAD', 'DOMAINS', 'DOMAIN',
   'WITHIN',
-  // STORE body: TYPE names the backing plugin, LASTS its lifetime, KEY the
-  // field that identifies a record (so re-ingesting the same thing updates it
-  // instead of duplicating). The record shape itself reuses the template
-  // SLOTS grammar — no second type language.
-  'STORE', 'TYPE', 'LASTS', 'KEY',
+  // STORE body: DRIVER names what keeps it (src/storeDrivers/), LASTS its
+  // lifetime, KEY the field that identifies a record (so re-ingesting the same
+  // thing updates it instead of duplicating). The record shape itself reuses
+  // the template SLOTS grammar — no second type language. TYPE became DRIVER:
+  // still lexed, so the lint names the rewrite.
+  'STORE', 'DRIVER', 'TYPE', 'LASTS', 'KEY',
   // DIMENSION body: FOR the files it covers (globs from the project root), EACH
   // what to translate inside a file; its value's shape is its AS template.
   'DIMENSION', ...DIMENSION_LINES,

@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Giuseppe Federico
 import { loadPlugins } from './pluginLoader.js';
 import type { PluginSpec } from './plugins.js';
+import { loadDrivers, type DriverEntry } from './storeDrivers/registry.js';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync } from 'node:fs';
@@ -287,6 +288,8 @@ export interface Config {
   delegate?: DelegateConfig;
   /** The plugins the project activates (`plugins: ['./plugins/checklist']`), installed — src/plugins.ts. */
   plugins?: PluginSpec[];
+  /** The store drivers the project adds to files and tabeli (`drivers: ['agent-pack-driver-sqlite']`), installed — src/storeDrivers/. */
+  drivers?: DriverEntry[];
 }
 
 /**
@@ -537,5 +540,7 @@ export async function loadConfig(args: string[]): Promise<Config> {
     delegate: resolveDelegateConfig(userConfig.delegate),
     // Each plugin folder, from the project root — loaded and installed before any agent compiles.
     plugins: await loadPlugins(((userConfig.plugins ?? []) as string[]).map(dir => resolve(projectRoot, expandHome(dir)))),
+    // Each driver module, from the project root — installed before any store compiles, recorded for the apx.
+    drivers: await loadDrivers((userConfig.drivers ?? []) as unknown[], projectRoot),
   };
 }

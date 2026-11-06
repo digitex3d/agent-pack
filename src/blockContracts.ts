@@ -148,17 +148,15 @@ export const BLOCK_CONTRACTS: Record<string, BlockContract> = {
     allows: [DELEGATE_VERB, FORK_VERB] as const,
     requiresAnyOf: [DELEGATE_VERB, FORK_VERB] as const,
   },
-  // A store is a named working table an agent reads and writes. TYPE names the
-  // backing plugin — required even while one type exists, so a second one is an
-  // addition rather than a migration. LASTS is its lifetime, KEY the field that
-  // identifies a record so re-ingesting the same thing updates instead of
-  // duplicating. The record shape is declared in a SLOTS region, which is a
-  // region and not a keyword — the same grammar TEMPLATE uses, so there is no
-  // second type language to learn or maintain.
+  // A store is a named working table an agent reads and writes. DRIVER names
+  // what keeps it — `files` when the line is absent. LASTS is its lifetime, KEY
+  // the field that identifies a record so re-ingesting the same thing updates
+  // instead of duplicating. The record shape is declared in a SLOTS region,
+  // which is a region and not a keyword — the same grammar TEMPLATE uses, so
+  // there is no second type language to learn or maintain.
   STORE: {
-    allows: ['ABOUT', 'APPLIES', 'TYPE', 'LASTS', 'KEY'] as const,
-    requiresAll: ['TYPE'] as const,
-    unique: ['ABOUT', 'TYPE', 'LASTS', 'KEY'] as const,
+    allows: ['ABOUT', 'APPLIES', 'DRIVER', 'LASTS', 'KEY'] as const,
+    unique: ['ABOUT', 'DRIVER', 'LASTS', 'KEY'] as const,
     regions: VERBATIM_REGIONS,
   },
   // A dimension is an answer about the code an agent works out once and the apx

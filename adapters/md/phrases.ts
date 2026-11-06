@@ -108,15 +108,15 @@ export const varBlockHead = (name: string): string => fill(K.VAR.block, { name }
 export const storeHomeLine = (file: string, lasts: string): string =>
   fill(S.home, { file, lasts: lasts === 'project' ? S.lasts.project : S.lasts.session });
 
-/** Label above the concrete commands a store's type renders. */
-export const storeUsageLabel = (typeName: string): string => fill(S.usage, { type: typeName });
+/** Label above the concrete commands of a store. */
+export const storeUsageLabel = (): string => S.usage;
 
-/** A slot this store's backing cannot represent — a nested bullet under the field. */
-export const storeRejectLine = (typeName: string, reason: string): string =>
-  fill(S.reject, { type: typeName, reason });
+/** A slot this store's driver cannot keep — a nested bullet under the field. */
+export const storeRejectLine = (driverName: string, reason: string): string =>
+  fill(S.reject, { type: driverName, reason });
 
-/** A store whose TYPE resolves to nothing registered. */
-export const storeUnknownTypeLine = (name: string, declared: string, available: string[]): string =>
+/** A store whose DRIVER resolves to nothing installed. */
+export const storeUnknownDriverLine = (name: string, declared: string, available: string[]): string =>
   fill(S.unknownType, { name, declared: declared || S.noType, available: available.join(', ') });
 
 export const OPTIONAL_MARK = T.optional;

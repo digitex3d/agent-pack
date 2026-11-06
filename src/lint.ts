@@ -21,7 +21,7 @@ import { BLOCK_TYPES, blockTypeOf, EXPORT_MODIFIER, AGENT_KEYS, PLUGIN_KEY, OPER
 import { COMPUTE_SECTIONS, executorMark, returnShape, splitExecutorMark } from './executor.js';
 import { parseTypeSpec } from './shapeSchema.js';
 import { SLOT_LINE_RE, VERBATIM_REGIONS } from './shapeCompiler.js';
-import { STORE_LIFETIMES } from './storeTypes/types.js';
+import { STORE_LIFETIMES } from './storeDrivers/types.js';
 import { stripTrailingColon, buildTree, type Node as TreeNode } from './bundlers/renderTree.js';
 import { condCheckOf, checkedKeyword, sugaredHead, splitMax, maxIssue, type CheckKind, type CheckSite } from './check.js';
 import { parseVarLine, parseEachHead, isVarKeyword, splitBy, splitInto, takesInto, readsOf } from './vars.js';
@@ -1374,6 +1374,7 @@ const REMOVED_KEYWORDS: Record<string, string> = {
   CONTRACT: `CONTRACT blocks were removed — a contract is what a MARK makes: ${CONTRACTS_REWRITE}`,
   WITHIN: 'a WITHIN line was a CONTRACT\'s — a contract may write beyond its zones by its MARK: `MARK … AS <spec> WITHIN <domain>`; work is put within a domain by `@WITHIN <domain>`',
   PARALLEL: 'PARALLEL was removed — in one STEP, start each piece with `DELEGATE~ <task> INTO <name> BY <agent>`, then `WAIT ALL`; one run per element of a list: `EACH <item> IN {{<list>}} MAX <n>:` with its DELEGATE or FORK lines beneath',
+  TYPE: 'TYPE became DRIVER — write `DRIVER <driver>` (tabeli, files, or a driver of the config); a store with no DRIVER is kept by files',
   CONTEXT: 'CONTEXT was removed — the form of a DELEGATE says the context: `DELEGATE … BY <agent>` hands over all of it, `DELEGATE … BY <agent> AS <template>` only what the template holds, `FORK …` the conversation itself',
 };
 

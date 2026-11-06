@@ -13,6 +13,7 @@
 import { gzipSync, gunzipSync } from 'node:zlib';
 import type { ApxBuild, ApxChecks } from './engine.js';
 import { sha256Hex } from '../apdoc/ids.js';
+import type { DriverEntry } from '../storeDrivers/registry.js';
 
 /** The oldest Node an apx runs on. */
 export const MIN_NODE_MAJOR = 20;
@@ -25,10 +26,11 @@ export interface ApxPayload {
   document: string;
 }
 
-/** The project's limits an apx carries: `wait.max`, `mark.max` from the config. */
+/** What else of the config an apx carries: `wait.max`, `mark.max`, and the store drivers it must import again. */
 export interface ApxLimits {
   waitMax?: string | null;
   markMax?: number | null;
+  drivers?: DriverEntry[] | null;
 }
 
 /**
@@ -45,6 +47,7 @@ export function apxFile(engine: string, document: string, agentPackVersion: stri
     ...(checks ? { checks } : {}),
     ...(limits.waitMax ? { waitMax: limits.waitMax } : {}),
     ...(limits.markMax ? { markMax: limits.markMax } : {}),
+    ...(limits.drivers?.length ? { drivers: limits.drivers } : {}),
   };
   const payload = `{"build":${JSON.stringify(build)},"document":${compact}}`;
   const data = compress
