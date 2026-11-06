@@ -314,7 +314,7 @@ export class ApDocument {
   }
 
   /**
-   * Explicit tags (declared minus the breadcrumb's automatic ones) shared by
+   * Explicit tags shared by
    * at least two definition entries, alphabetical — each with its
    * entries in COLLECTION order (the legacy walked the strategy collections,
    * not the emission order).
@@ -322,14 +322,11 @@ export class ApDocument {
   private crossReferenceRows(items: ApOutlineItem[]): { tag: string; entries: { id: string; name: string }[] }[] {
     const listed = new Set<string>();
     for (const item of items) if (item.type === 'entry' && item.part === 'definition') listed.add(item.address);
-    const breadcrumbs = this.mdSource?.breadcrumbs ?? {};
     const byTag = new Map<string, { id: string; name: string }[]>();
     for (const block of this.byProvenance('definition')) {
       if (!listed.has(block.address)) continue;
-      const auto = new Set(breadcrumbs[block.address] ?? []);
       for (const t of block.tags) {
         const tag = `#${t}`;
-        if (auto.has(tag)) continue;
         const bucket = byTag.get(tag) ?? [];
         bucket.push({ id: block.id, name: block.name });
         byTag.set(tag, bucket);

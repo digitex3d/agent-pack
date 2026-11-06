@@ -26,7 +26,7 @@ function captured(fn) {
 
 const tmp = mkdtempSync(join(tmpdir(), 'ap-reporter-'));
 try {
-  const file = join(tmp, 'flows.ap');
+  const file = join(tmp, 'crew.ap');
   writeFileSync(file, ['FLOW f:', '    STEP review:', '        BY bob', '        CONTEXT summery', '        DO check it', ''].join('\n'));
   const diag = { file, line: 4, message: 'CONTEXT: unknown value `summery` — did you mean `summary`?' };
 
@@ -47,7 +47,7 @@ try {
   });
   assert.equal(shown, [
     'error: CONTEXT: unknown value `summery`',
-    '  --> flows.ap:4',
+    '  --> crew.ap:4',
     '  |',
     '3 |         BY bob',
     '4 |         CONTEXT summery',

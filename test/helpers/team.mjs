@@ -3,10 +3,10 @@
 /**
  * The team file as the tests write it: `EXPORT TEAM <name>:` with its MEMBER
  * line, the body lines indented one step beneath it; IMPORT lines stay in the
- * prologue, before the block. The counterpart of the old `flows.ap` lines.
+ * prologue, before the block.
  */
 
-/** The lines of `<name>.ap` for a team of `members`, from the lines a `flows.ap` used to hold. */
+/** The lines of `<name>.ap` for a team of `members`, from the lines of its body. */
 export function teamSource(name, members, lines) {
   const imports = lines.filter(l => /^IMPORT\s/.test(l));
   const body = lines.filter(l => !/^IMPORT\s/.test(l));

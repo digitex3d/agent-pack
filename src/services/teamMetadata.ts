@@ -30,9 +30,6 @@ import { splitList } from '../lists.js';
  * filename is convention only.
  */
 
-/** The retired team file: a `flows.ap` is an error naming its replacement. */
-export const TEAM_LEGACY_FILE = 'flows.ap';
-
 /** A team's file, read and parsed once: its block, roster and the source its flows are compiled from. */
 export interface TeamFile {
   /** The team folder. */
@@ -54,7 +51,7 @@ export interface TeamFile {
   /**
    * The team as the pipeline reads it: the file with the TEAM opener and its
    * MEMBER lines blanked and the block's lines de-indented to column 0 — so a routing WHEN, a FLOW, a LENS-IN
-   * stand at the top as they did in `flows.ap`, the prologue IMPORTs stay where
+   * stand at the top of the unit, the prologue IMPORTs stay where
    * they are, and every line keeps its number.
    */
   unit: string;
@@ -157,13 +154,6 @@ export function teamRosterIssues(team: TeamFile): TeamIssue[] {
     }
   }
   return issues;
-}
-
-/** A `flows.ap` still in a team folder: the error that names its replacement, or null. */
-export function legacyTeamIssue(dir: string): TeamIssue | null {
-  const legacy = resolve(dir, TEAM_LEGACY_FILE);
-  if (!existsSync(legacy)) return null;
-  return { file: legacy, line: 1, message: `flows.ap was replaced by \`EXPORT TEAM ${basename(dir)}:\` in \`${basename(dir)}.ap\` — move its ABOUT, routing and FLOW blocks inside that block, list the members with MEMBER, and delete this file` };
 }
 
 /** The standalone agents folder under the agents root: `<agentsDir>/standalone`. */

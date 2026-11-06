@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
 import { readFileSync, existsSync } from 'node:fs';
-import { basename, dirname, relative, resolve, sep } from 'node:path';
-import { extractAbout, partitionMetadata, exportedBlocksOf, type ExportedBlockBody } from './services/text.js';
+import { basename, resolve, sep } from 'node:path';
+import { partitionMetadata, exportedBlocksOf, type ExportedBlockBody } from './services/text.js';
 import { parseBlocks } from './parseBlocks.js';
 import { AGENT_METADATA_KEYWORDS } from './primitives.js';
 import { buildNamespace } from './namespace.js';
@@ -22,17 +22,6 @@ export type IngestKind =
   | 'domain'
   | 'generic';
 
-/**
- * One segment of the breadcrumb chain. `slug` is the value declared by the
- * `SCOPE` keyword in that folder's `index.ap`; `about` is the ABOUT of the
- * same index.ap (null when absent). Empty when no index.ap on the walked
- * path declares a SCOPE.
- */
-export interface BreadcrumbSegment {
-  slug: string;
-  about: string | null;
-}
-
 export interface IngestedFile {
   path: string;
   kind: IngestKind;
@@ -45,26 +34,6 @@ export interface IngestedFile {
    * Empty string when the file does not belong to any known library root.
    */
   namespace: string;
-  /**
-   * Hierarchical breadcrumb (one segment per index.ap walked from the library
-   * root down to the leaf folder). Each segment is the `SCOPE` value declared
-   * in that folder's `index.ap`. Empty when no index.ap declares a SCOPE on
-   * the path.
-   */
-  breadcrumb: string[];
-  /**
-   * `ABOUT` of the deepest `index.ap` encountered when walking from the
-   * library root to the leaf folder. Used to compose a human-readable chapter
-   * title alongside `breadcrumb`.
-   */
-  breadcrumbAbout: string | null;
-  /**
-   * Per-segment scope metadata — same order and length as `breadcrumb`. Each
-   * entry carries the segment's slug plus the ABOUT of the index.ap that
-   * declared its SCOPE (null when that index.ap has no ABOUT). Drives the
-   * nested chapter rendering in the bundle output.
-   */
-  breadcrumbSegments: BreadcrumbSegment[];
   body: string;
   /** The tags of the source file's APPLIES line (empty when none). */
   tags: string[];
@@ -157,42 +126,6 @@ export function registerIngestKind(kind: string, folder: string, key: string): v
 }
 
 const H1_RE = /^#\s+(.+)$/m;
-const SCOPE_RE = /^SCOPE\s+(.+)$/m;
-
-/**
- * Walk from the matching library root down to the leaf folder, reading each
- * `index.ap` along the way. For every index.ap that declares `SCOPE`, append
- * a segment carrying that SCOPE's slug and the index.ap's ABOUT. Returns empty
- * when no library root contains the file.
- */
-function findBreadcrumb(
-  filePath: string,
-  libraryRoot: string | string[],
-  libraries?: Record<string, string>,
-): BreadcrumbSegment[] {
-  const leafDir = dirname(resolve(filePath));
-  const roots = Array.isArray(libraryRoot) ? libraryRoot : [libraryRoot];
-  const allRoots = [...roots, ...Object.values(libraries ?? {})].map(r => resolve(r));
-  const root = allRoots.find(r => !relative(r, leafDir).startsWith('..'));
-  if (!root) return [];
-
-  const rel = relative(root, leafDir);
-  const segments = rel === '' ? [] : rel.split(sep);
-  const out: BreadcrumbSegment[] = [];
-  let cursor = root;
-  for (let i = 0; i <= segments.length; i++) {
-    const idx = resolve(cursor, 'index.ap');
-    if (existsSync(idx)) {
-      const body = readFileSync(idx, 'utf-8');
-      const m = body.match(SCOPE_RE);
-      if (m) {
-        out.push({ slug: m[1].trim(), about: extractAbout(body) });
-      }
-    }
-    if (i < segments.length) cursor = resolve(cursor, segments[i]);
-  }
-  return out;
-}
 
 /**
  * Resolve a file's kind from its directory alone: the kind-folder closest to the
@@ -295,30 +228,19 @@ export function deriveNamespace(
 
 interface FileFacets {
   namespace: string;
-  breadcrumb: string[];
-  breadcrumbAbout: string | null;
-  breadcrumbSegments: BreadcrumbSegment[];
 }
 
 /**
- * Path-derived facets shared by every unit a module exports: namespace and the
- * breadcrumb chain depend on the file's location, not on which block is read.
- * The single source for these so the whole-file and per-block ingest paths agree.
+ * Path-derived facets shared by every unit a module exports: the namespace
+ * depends on the file's location, not on which block is read. The single
+ * source for it so the whole-file and per-block ingest paths agree.
  */
 function fileFacets(
   path: string,
   libraryRoot: string | string[],
   libraries?: Record<string, string>,
 ): FileFacets {
-  const namespace = deriveNamespace(path, libraryRoot, libraries);
-  const breadcrumbSegments = findBreadcrumb(path, libraryRoot, libraries);
-  const breadcrumb = breadcrumbSegments.map(s => s.slug);
-  // breadcrumbAbout = deepest non-null ABOUT walked (legacy contract preserved).
-  const breadcrumbAbout = breadcrumbSegments.reduce<string | null>(
-    (acc, s) => s.about ?? acc,
-    null,
-  );
-  return { namespace, breadcrumb, breadcrumbAbout, breadcrumbSegments };
+  return { namespace: deriveNamespace(path, libraryRoot, libraries) };
 }
 
 /**
@@ -362,7 +284,7 @@ export function ingestRaw(
 /**
  * Ingest ONE exported block of a multi-export module as its own unit. The unit's
  * kind, name, ABOUT, APPLIES and body come from the block itself (its de-indented
- * children), while the namespace/breadcrumb facets are the module's — so sibling
+ * children), while the namespace facet is the module's — so sibling
  * `EXPORT <KIND> <name>:` blocks never bleed into each other. The single seam the
  * import resolver uses to register each exported block under its own name.
  */

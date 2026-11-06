@@ -9,7 +9,7 @@ import { parseApplies } from '../services/tags.js';
 import { extractPrimitives, stripPrimitives, unwrapExportFile, liftRoleIdentity, exportedBlocksOf } from '../services/text.js';
 import { parseBlocks } from '../parseBlocks.js';
 import { deslugifyRole } from '../services/role.js';
-import { ingestRaw, unitNameFromPath } from '../ingest.js';
+import { unitNameFromPath } from '../ingest.js';
 
 const EXTENDS_RE = /^EXTENDS\s+(.+)$/m;
 const ABOUT_RE = /^ABOUT\s+(.+)$/m;
@@ -134,15 +134,6 @@ export async function resolveRole(imp: LoadRequest, ctx: BundleContext): Promise
 
   const resolved = resolveRoleFile(r.path, ctx, new Set());
 
-  // Breadcrumb is taken from the leaf file (the role that was imported).
-  // ingestRaw is the single source of truth for breadcrumb walking and shares
-  // the same library-root + alias resolution as every other importer.
-  const raw = ctx.sources.read(r.path);
-  const ingested = ingestRaw(raw, r.path, allLibraryRoots(ctx), ctx.libraries);
-
-  const breadcrumbTags = ingested.breadcrumb.map(s => `#${s}`);
-  const mergedTags = [...new Set([...breadcrumbTags, ...resolved.tags])];
-
   // Lift EXPERTISE out of the resolved rules: it is part of the role's identity,
   // rendered in the binding agent's `# Identity` block, never in the Roles
   // chapter. The role display name is the de-slugified block name. `rules` keeps
@@ -158,10 +149,8 @@ export async function resolveRole(imp: LoadRequest, ctx: BundleContext): Promise
     about: resolved.about,
     body: identity.rules,
     path: imp.path,
-    tags: mergedTags,
+    tags: resolved.tags,
     scopes: [],
-    breadcrumb: ingested.breadcrumb,
-    breadcrumbSegments: ingested.breadcrumbSegments,
     role: deslugifyRole(resolved.name),
     expertise: identity.expertise ?? undefined,
   };

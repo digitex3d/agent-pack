@@ -123,7 +123,7 @@ function nextSubstantive(tokens: Token[], from: number): number {
 // ---------------------------------------------------------------------------
 
 /** Metadata keywords that, in an EXPORT file, must live inside a block, not at file-top. */
-const METADATA_KEYWORDS = new Set<Keyword>(['ABOUT', 'APPLIES', 'SCOPE']);
+const METADATA_KEYWORDS = new Set<Keyword>(['ABOUT', 'APPLIES']);
 
 interface ExportModel {
   /** True when any top-level block carries the EXPORT modifier. */
@@ -487,10 +487,9 @@ const roleIdentityEntries = ROLE_IDENTITY_KEYWORDS.map(
  */
 const FLOW_ONLY_KEYWORDS: Keyword[] = ['FLOW', 'STEP'];
 
-/** The metadata every unit's file opens with — its ABOUT, its SCOPE, its APPLIES line. */
+/** The metadata every unit's file opens with — its ABOUT and its APPLIES line. */
 const unitMetadataEntries: [Keyword, KeywordHandler][] = [
   ['ABOUT',   aboutHandler],
-  ['SCOPE',   passthrough],
   ['APPLIES', appliesHandler],
 ];
 
@@ -1137,34 +1136,23 @@ export const lintTemplate   = (file: string, body: string, options: LintOptions 
 const LEGACY_AGENT_DIR_RE = /(^|[/\\])definitions[/\\][^/\\]+[/\\]agent\.ap$/;
 
 /**
- * Structural files that are never single-kind units: a team's routing
- * (an `EXPORT TEAM` block) and shared context (`team.ap`), a folder-per-agent body (`agent.ap`), an
- * import list (`imports.ap`), and a scope index (`index.ap`). Validated by
- * `lintAgentBlocks` like the original suffix dispatch did for any non-kind name.
+ * Structural files that are never single-kind units: a team's shared context
+ * (`team.ap`) and an import list (`imports.ap`). Validated by `lintAgentBlocks`
+ * like the original suffix dispatch did for any non-kind name.
  */
-const ORCHESTRATION_BASENAMES = new Set(['team.ap', 'imports.ap', 'index.ap']);
-
-/**
- * Runtime/scaffold files that carry their own non-kind suffix and are NEVER
- * single-kind units: `.phase.ap` (agent phase steps). Like the original suffix dispatch, they are validated by
- * `lintAgentBlocks`, not by a kind linter — important because they live under
- * the build-output `templates/` root that the dir switch would misread.
- */
-const NON_KIND_SUFFIXES = ['.phase.ap'];
+const ORCHESTRATION_BASENAMES = new Set(['team.ap', 'imports.ap']);
 
 /**
  * An agent / orchestration / runtime file — validated by `lintAgentBlocks`,
  * never by a single-kind linter. Recognised by content or its non-kind suffix,
  * not by directory: a file-top `AS <role>` binding or an `AGENT` block marks an
- * agent; a TEAM block or `team.ap` marks a team's orchestration; `.phase.ap`
- * are scaffold files. These must escape the dir-folder switch because a
+ * agent; a TEAM block or `team.ap` marks a team's orchestration. These must escape the dir-folder switch because a
  * built-in scaffold lives at `templates/agents/<name>/agent.ap`, whose ancestor build-output `templates/`
  * directory would otherwise be read as a kind-folder.
  */
 function isAgentOrOrchestration(file: string, body: string): boolean {
   const base = file.split(/[/\\]/).pop() ?? '';
   if (ORCHESTRATION_BASENAMES.has(base)) return true;
-  if (NON_KIND_SUFFIXES.some(s => base.endsWith(s))) return true;
   if (/^AS\s+\S/m.test(body)) return true;
   return parseBlocks(body).blocks.some(b => AGENT_KEYS.has(b.key.toUpperCase()) || b.key.toUpperCase() === TEAM_KEY);
 }

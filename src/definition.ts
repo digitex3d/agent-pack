@@ -2,7 +2,6 @@
 // Copyright (c) 2026 Giuseppe Federico
 import type { Keyword } from './lexer.js';
 import type { BundleContext } from './dispatch/types.js';
-import type { BreadcrumbSegment } from './ingest.js';
 import { renderTemplate } from './shapeCompiler.js';
 
 /**
@@ -25,10 +24,6 @@ export interface Definition {
   scopes: string[];
   /** The executor mark of a `PROCEDURE*` / `PROCEDURE**` head (src/executor.ts); absent = the agent. */
   executor?: number;
-  /** Breadcrumb slug chain (e.g., ["coding", "code-quality"]). Empty when the file is at the library root. */
-  breadcrumb: string[];
-  /** Per-segment scope metadata (slug + optional ABOUT from each index.ap). Same length and order as `breadcrumb`. */
-  breadcrumbSegments: BreadcrumbSegment[];
   /** Block id stamped during bundle render — the target of every reference to it. */
   refId?: string;
   /** The namespace, when no file gives it — a skill of the harness (`@harness.skills`). */

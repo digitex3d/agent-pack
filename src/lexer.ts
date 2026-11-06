@@ -57,7 +57,7 @@ export type DimensionLine = typeof DIMENSION_LINES[number];
 const STATIC_KEYWORDS = [
   'PROCEDURE', 'TEMPLATE', 'EXTENDS', 'APPLIES',
   'IMPORT',
-  'UNTIL', 'ABOUT', 'SCOPE',
+  'UNTIL', 'ABOUT',
   // OWNS is gone (WRITES/READS name DOMAINs), and WITH became the decorator `@WITH`
   // (src/decorators.ts): still lexed, so the lint names the rewrite.
   'ELSE', 'WHEN', 'OWNS', 'WITH',

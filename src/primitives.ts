@@ -20,7 +20,7 @@ import { splitList } from './lists.js';
  * not know each primitive's semantics.
  *
  * The `V` parameter is the shape of an already-parsed value. Simple primitives
- * carry a raw string (V = string); structured ones (future WHEN/SCOPE)
+ * carry a raw string (V = string); structured ones (future WHEN)
  * provide a `parse` to lift a raw line into a richer record.
  */
 /** A frontmatter field. `value` is `string` for scalars, `string[]` for YAML literal-block lists. */

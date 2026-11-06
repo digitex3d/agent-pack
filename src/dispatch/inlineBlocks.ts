@@ -171,8 +171,6 @@ function collectInlineDefinition(
     path: sourcePath,
     tags: lifted.tags,
     scopes: lifted.scopes,
-    breadcrumb: [],
-    breadcrumbSegments: [],
     ...(executor ? { executor } : {}),
   };
   // An inline `ROLE <role>:` carries its identity (EXPERTISE) in-body, and its

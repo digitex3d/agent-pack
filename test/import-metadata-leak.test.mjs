@@ -63,7 +63,7 @@ try {
   // those are compiler directives, not rendered content. The tag *tokens*
   // (`#test-tag`, `#leak-check`) MAY appear inside an inline `Tags:` summary
   // for the entry that declared them — this is intentional surfacing of
-  // explicit (non-breadcrumb-derived) tags for cross-reference.
+  // explicit tags for cross-reference.
   assert.ok(!output.match(/^APPLIES\b/m),   'APPLIES line must not appear in rendered bundle');
 
   // (b) the module's real rule text IS present

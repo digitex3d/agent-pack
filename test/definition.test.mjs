@@ -128,7 +128,7 @@ function makeEntry(kind, name) {
   return {
     kind, name, about: null, body: '',
     path: `/lib/${kind}/${name}.${kind}.ap`,
-    tags: [], breadcrumb: [], breadcrumbSegments: [],
+    tags: [],
   };
 }
 

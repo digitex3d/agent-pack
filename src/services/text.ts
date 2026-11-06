@@ -15,7 +15,7 @@ export { escapeRegex };
 //
 // The metadata chain (extractPrimitive(s), stripPrimitives, partitionMetadata,
 // extractAbout) reads ONLY indent-0 lines: in a legacy file the unit's
-// ABOUT/APPLIES/SCOPE sit at file-top (indent 0) and its body follows at
+// ABOUT/APPLIES sit at file-top (indent 0) and its body follows at
 // indent 0. After the codemod wraps a module as `EXPORT <KIND> <name>:`, those
 // same lines become children of the block at indent ≥ 1, so the indent-0
 // readers stop seeing them.

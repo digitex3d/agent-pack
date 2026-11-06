@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
 /**
- * The team block — `EXPORT TEAM <name>:` in `<team>.ap`, replacing `flows.ap`.
+ * The team block — `EXPORT TEAM <name>:` in `<team>.ap`.
  *
  *   - a member's document carries the team: its ABOUT, its MEMBER roster (lines
  *     add up), its routing and its flows, each with its position in the file
  *   - the roster is authoritative: a MEMBER with no agent file, an agent file
  *     not listed, a MEMBER listed twice, a block named unlike its folder
- *   - a `flows.ap` left in the folder is an error naming its replacement; a
- *     TEAM that is not exported, or a second one, is an error too
+ *   - a TEAM that is not exported, or a second one, is an error
  *   - the orchestration reads the same file: purpose, members, routing, flows
  */
 
@@ -130,22 +129,6 @@ try {
   assert.ok(lintFile(teamFile, ['EXPORT TEAM crew:', '    ABOUT   a', '    MEMBER  builder', 'EXPORT TEAM crew:', '    ABOUT   b', '    MEMBER  checker', ''].join('\n'))
     .some(e => e.line === 4 && /a file declares one team — found 2 TEAM blocks/.test(e.message)));
   assert.ok(lintFile(join(tmp, 'x.ap'), 'EXPORT AGENT x AS r:\n    ABOUT  x\n    MANDATE  y\n    MEMBER  z\n').some(e => /MEMBER is a line of a TEAM block — found inside AGENT/.test(e.message)));
-
-  // --- a flows.ap left behind is the error that names its replacement ---
-  writeTeam(TEAM_BODY);
-  write(join(team, 'flows.ap'), ['ABOUT  the old way']);
-  await assert.rejects(compile(), /flows\.ap:1 {2}flows\.ap was replaced by `EXPORT TEAM crew:` in `crew\.ap`/);
-  await assert.rejects(orchestration(), /flows\.ap:1 {2}flows\.ap was replaced by `EXPORT TEAM crew:`/);
-  rmSync(join(team, 'flows.ap'));
-  // a folder with only a flows.ap is no team any more: its agents compile standalone, and the error still names the file
-  const old = join(teams, 'old');
-  mkdirSync(old);
-  write(join(old, 'flows.ap'), ['ABOUT  the old way']);
-  write(join(old, 'lone.ap'), ['EXPORT AGENT lone AS lone-role:', '    ABOUT  alone', '    MANDATE  work', '', 'ROLE lone-role:', '    ABOUT  a', '    ALWAYS  b']);
-  assert.equal(teamRootForAgentFile(join(old, 'lone.ap')), null);
-  await assert.rejects(bundleAgentObject({ agentName: 'lone', agentFile: join(old, 'lone.ap'), agentDir: old, libraryRoot: lib, libraryRoots: [lib], libraries: { '@main': lib }, bundleConfig: { runtime: false } }),
-    /flows\.ap:1 {2}flows\.ap was replaced by `EXPORT TEAM old:` in `old\.ap`/);
-  rmSync(old, { recursive: true });
 
   // --- the orchestration reads the same file ---
   writeTeam(TEAM_BODY);

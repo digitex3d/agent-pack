@@ -6,7 +6,7 @@ import { numberSteps } from '../refactor.js';
 import { applyVars } from '../vars.js';
 import { headingLine } from '../formulas.js';
 import { loadImport, resolveImportPath, readAndLint, allLibraryRoots, alreadyRegistered, processImportsOf, type LoadRequest } from './shared.js';
-import { ingestExportBlock, type IngestedFile, type BreadcrumbSegment } from '../ingest.js';
+import { ingestExportBlock, type IngestedFile } from '../ingest.js';
 import { exportedBlockBodies, nonExportedSource, type ExportedBlockBody } from '../services/text.js';
 
 const WHEN_RE = /^WHEN\s+(.+)$/m;
@@ -14,19 +14,6 @@ const WHEN_RE = /^WHEN\s+(.+)$/m;
 function extractWhen(body: string): string | null {
   const m = body.match(WHEN_RE);
   return m ? m[1].trim() : null;
-}
-
-/**
- * Merge tags auto-derived from the breadcrumb chain with tags explicitly
- * declared via the APPLIES keyword. Duplicates are collapsed; breadcrumb slugs
- * are converted to `#slug` tags (the same convention used by the wider tag
- * system).
- */
-function mergeBreadcrumbTags(breadcrumb: string[], explicit: string[]): string[] {
-  const merged = new Set<string>();
-  for (const slug of breadcrumb) merged.add(`#${slug}`);
-  for (const tag of explicit) merged.add(tag);
-  return [...merged];
 }
 
 /**
@@ -41,8 +28,6 @@ type Collected = {
   path: string;
   tags: string[];
   scopes: string[];
-  breadcrumb: string[];
-  breadcrumbSegments: BreadcrumbSegment[];
   executor?: number;
 };
 
@@ -120,17 +105,14 @@ async function collectUnit(
   if (Object.keys(props).length > 0) body = applyVars(body, props);
   body = await processImportsOf(body, ctx, unit.path);
 
-  const mergedTags = mergeBreadcrumbTags(unit.breadcrumb, unit.tags);
   const collect = (kind: string, collection: Collected[]): string => {
     // Same block re-collected (e.g. a redundant same-file IMPORT) is a no-op;
     // a same name from a DIFFERENT file is a genuine collision.
     if (alreadyRegistered(collection, unit.name, unit.path, kind, 1, ctx)) return '';
     collection.push({
       kind, name: unit.name, about: unit.about, body: body.trimEnd(), path: unit.path,
-      tags: mergedTags,
+      tags: unit.tags,
       scopes: unit.scopes,
-      breadcrumb: unit.breadcrumb,
-      breadcrumbSegments: unit.breadcrumbSegments,
       ...(unit.executor ? { executor: unit.executor } : {}),
     });
     return '';
@@ -148,8 +130,7 @@ async function collectUnit(
   if (plugin) return collect(plugin.name, ((ctx as unknown as Record<string, Collected[]>)[plugin.folder] ??= []));
 
   // Non-collected kinds (rare): emit a single
-  // chapter heading derived from the unit name; breadcrumb-driven nested
-  // rendering is reserved for collected kinds that share a SectionSpec.
+  // chapter heading derived from the unit name.
   const lines: string[] = [];
   const titleWithWhen = when ? `${unit.name} - when ${when}` : unit.name;
   lines.push('', headingLine(1, titleWithWhen), '');

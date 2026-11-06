@@ -153,7 +153,6 @@ export class DocumentBuilder implements BlockCx {
   /** Every name that resolved to no block: a compile error, reported by the caller. */
   readonly unresolved: { path: string; name: string; kind: string }[] = [];
   /** address → auto tags ('#segment') — md-projection data gathered from Definitions. */
-  private breadcrumbs = new Map<string, string[]>();
   /** The variables declared in the bodies walked, in walk order. */
   private varSites: VarSite[] = [];
   /** Every assignment of a variable — a `VAR x:` block, a `DO … INTO x` — in walk order. */
@@ -803,10 +802,6 @@ export class DocumentBuilder implements BlockCx {
 
   /** The universal init of a block born from a collected Definition. */
   defInit(def: Definition): ApBlockInit {
-    this.breadcrumbs.set(
-      `${this.nsOf(def)}/${def.name}`,
-      def.breadcrumb.map(seg => `#${seg}`),
-    );
     return {
       name: def.name,
       namespace: this.nsOf(def),
@@ -1073,7 +1068,7 @@ export class DocumentBuilder implements BlockCx {
    * decompiler needs beyond the blocks: bootstrap prose (RAW-clean), the
    * chapter intros (pre-rendered, and ONLY for chapters this document
    * actually has — anything else is wasted bytes), substitution vars,
-   * breadcrumbs, presentation positions.
+   * presentation positions.
    */
   private buildMdMeta(
     doc: ApDocument,
@@ -1093,11 +1088,6 @@ export class DocumentBuilder implements BlockCx {
       if (text) intros[kind] = text;
     }
 
-    const breadcrumbs: Record<string, string[]> = {};
-    for (const [address, tags] of this.breadcrumbs) {
-      if (tags.length > 0) breadcrumbs[address] = tags;
-    }
-
     const shapePos: Record<string, number> = {};
     for (const prov of ['definition', 'team', 'agent'] as const) {
       for (const block of doc.byProvenance(prov)) {
@@ -1110,7 +1100,6 @@ export class DocumentBuilder implements BlockCx {
       bootstrap: opts.bootstrap.split('\n').filter(l => !/^\s*(RAW:|:RAW)\s*$/.test(l)).join('\n'),
       intros,
       vars: opts.vars,
-      breadcrumbs,
       agentBodyLead: (/^\n*/.exec(opts.agentBody)?.[0].length ?? 0) || 1,
       provenance,
       shapePos,

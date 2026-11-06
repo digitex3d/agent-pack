@@ -28,8 +28,6 @@ function makePolicy(name, tags = []) {
     body: `body of ${name}`,
     path: `/lib/${name}.policy.ap`,
     tags,
-    breadcrumb: [],
-    breadcrumbSegments: [],
   };
 }
 

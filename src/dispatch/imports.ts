@@ -404,7 +404,7 @@ function collectSkill(skill: { name: string; about: string | null; path: string;
   const line = fill(ctx.renderings?.SKILL?.[how] ?? FORMULAS.blocks.skill[how], { name: skill.name, command: apxCommand(skill.name, 'start') });
   ctx.skills.push({
     kind: 'skill', name: skill.name, about: skill.about, body: line, path: skill.path,
-    tags: skill.tags ?? [], scopes: skill.scopes ?? [], breadcrumb: [], breadcrumbSegments: [],
+    tags: skill.tags ?? [], scopes: skill.scopes ?? [],
     ...(skill.native ? { namespace: `${HARNESS_ALIAS}.${SKILLS}` } : {}),
   });
 }

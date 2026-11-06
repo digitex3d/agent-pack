@@ -28,7 +28,7 @@ const D = FORMULAS.document;
 
 /** An empty md-meta — a document compiled without prose metadata renders bare. */
 const EMPTY_MD: ApMdMeta = {
-  bootstrap: '', intros: {}, vars: {}, breadcrumbs: {},
+  bootstrap: '', intros: {}, vars: {},
   agentBodyLead: 1, provenance: {}, shapePos: {},
 };
 

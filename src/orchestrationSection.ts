@@ -31,7 +31,6 @@ import {
   readTeamMembers,
   readTeamFile,
   teamRosterIssues,
-  legacyTeamIssue,
   type TeamIssue,
   type TeamFile,
   readAgentInfos,
@@ -152,9 +151,8 @@ interface TeamSource {
 /**
  * Walk `teamsRoot` once, reading and parsing each team's file a single time.
  * The parsed blocks feed the role→agent RoleIndex; the unit source feeds
- * routing collection. One walk, one read, one parse per file. A folder with a
- * retired `flows.ap`, or a roster that does not match its agent files, is an
- * issue handed to `fail`.
+ * routing collection. One walk, one read, one parse per file. A roster that
+ * does not match its agent files is an issue handed to `fail`.
  */
 function readTeamFiles(teamsRoot: string, fail: (issue: TeamIssue) => void): TeamSource[] {
   if (!existsSync(teamsRoot)) return [];
@@ -162,8 +160,6 @@ function readTeamFiles(teamsRoot: string, fail: (issue: TeamIssue) => void): Tea
   for (const teamName of readdirSync(teamsRoot).sort()) {
     const teamDir = resolve(teamsRoot, teamName);
     if (!statSync(teamDir).isDirectory()) continue;
-    const legacy = legacyTeamIssue(teamDir);
-    if (legacy) fail(legacy);
     const team = readTeamFile(teamDir);
     if (!team) continue;
     for (const issue of [...teamFileErrors(team.path, team.source), ...teamRosterIssues(team)]) fail(issue);

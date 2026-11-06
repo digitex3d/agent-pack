@@ -361,8 +361,6 @@ export interface ApMdMeta {
   intros: Record<string, string>;
   /** Body substitution vars ({{name}} …). */
   vars: Record<string, string>;
-  /** address → auto tags ('#segment') from the source breadcrumb. */
-  breadcrumbs: Record<string, string[]>;
   /** Leading blank lines of the agent body (metadata-strip artifact). */
   agentBodyLead: number;
   /** address → provenance — which part of the md each block belongs to. */

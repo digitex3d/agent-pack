@@ -268,7 +268,7 @@ await import('./tagHierarchy.test.mjs');
 
 // --- Cross-references chapter rendering ---
 
-// --- Nested breadcrumb rendering inside emitChapter ---
+// --- Nested tag rendering inside emitChapter ---
 await import('./tagHierarchyChapter.test.mjs');
 
 // --- parseBlocks: universal <KEY> <name>: <block> grammar ---
@@ -298,7 +298,7 @@ await import('./teamShared.test.mjs');
 // --- Per-member team-membership section (# Your team): resolution, injection ---
 await import('./teamMembership.test.mjs');
 
-// --- The team block: EXPORT TEAM <name> in <team>.ap — roster, routing, flows, the retired flows.ap ---
+// --- The team block: EXPORT TEAM <name> in <team>.ap — roster, routing, flows ---
 await import('./team.test.mjs');
 
 // --- Background work and contracts: DELEGATE~ / WAIT on the registry; MARK, a DELEGATE of a list, copies, merge and land ---

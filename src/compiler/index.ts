@@ -14,7 +14,7 @@ import { unappliedBlocks, unappliedIssue, withScopeLine } from '../withUse.js';
 import { readDecorator } from '../decoratorUse.js';
 import { resolveBundleDefaults, resolveTeamShared } from '../bundleDefaults.js';
 import { resolveTeamMembership } from '../services/teamMembership.js';
-import { findAgentFiles, readAgentFile, standaloneDir, agentNameOf, teamRootForAgentFile, readTeamFile, teamRosterIssues, legacyTeamIssue, teamNamesUnder } from '../services/teamMetadata.js';
+import { findAgentFiles, readAgentFile, standaloneDir, agentNameOf, teamRootForAgentFile, readTeamFile, teamRosterIssues, teamNamesUnder } from '../services/teamMetadata.js';
 import { harnessesOf, harnessProblem, agentModels, modelProblem, type HarnessRow } from '../harnesses.js';
 import { delegateTargetErrors, executorErrors, usesPrograms, WRITE_PROGRAM, type AgentIndexEntry } from '../executor.js';
 import { BUILTIN_AGENTS_DIR, resolveDelegateConfig, type DelegateConfig } from '../config.js';
@@ -778,10 +778,8 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
   // strip in a single lex pass; the adapter later obtains frontmatter via
   // collectFrontmatter(metadata, …).
   // The words of the agent's own file and of its team's file are checked
-  // like every import's. A `flows.ap` beside the agent is the retired team file.
+  // like every import's.
   lintSource(agentFilePath, ctx);
-  const legacy = legacyTeamIssue(dirname(agentFilePath));
-  if (legacy) ctx.lintErrors.push(legacy);
   const teamRoot = teamRootForAgentFile(agentFilePath);
   const teamFile = teamRoot ? readTeamFile(teamRoot, ctx.sources) : null;
   if (teamFile) {

@@ -17,7 +17,7 @@ export interface SectionEntry {
 /**
  * Declarative description of a collected section. Two emission modes:
  *  - `renderFlat`  : single block under the chapter header
- *  - `renderEntry` : numbered H2 (or deeper, when entries carry a breadcrumb)
+ *  - `renderEntry` : numbered H2 (or deeper, when nested under a tag heading)
  *                    per entry with prelude + body (Roles, Templates,
  *                    Procedures, Tools, Policies, Flows)
  *
@@ -46,11 +46,8 @@ export function openSection(ctx: BundleContext, title: string, intro: string | n
 }
 
 /**
- * Pretty-print a breadcrumb slug as a chapter heading.
- *
- * The slug is converted from kebab/snake to Title Case so the bundle output
- * reads naturally. We intentionally keep the rule trivial — the slug itself is
- * authored by the library maintainer; no extra disambiguation logic is needed.
+ * Pretty-print a slug as a chapter heading: kebab/snake to Title Case, so the
+ * bundle output reads naturally.
  */
 function scopeHeadingTitle(slug: string): string {
   return slug
@@ -139,7 +136,7 @@ function buildTagIndex<E extends Definition>(entries: E[]): {
   return { byTag, byKey };
 }
 
-/** Pretty-print a tag as a chapter heading — same convention as a breadcrumb slug. */
+/** Pretty-print a tag as a chapter heading. */
 function tagHeadingTitle(tag: string): string {
   return scopeHeadingTitle(tag.replace(/^#/, ''));
 }
@@ -197,8 +194,7 @@ export interface TagRenderNode {
  * corridors along the way: a node with no entries of its own and exactly one
  * child fuses with that child into one compound heading ("a > b > c") instead
  * of a chain of otherwise-empty headings. Recurses bottom-up so chains of
- * arbitrary length collapse in one pass — mirrors the folder-breadcrumb
- * corridor compression this replaces.
+ * arbitrary length collapse in one pass.
  */
 export function buildTagRenderTree(node: TagNode, assignment: ReadonlyMap<string, TagNode>): TagRenderNode {
   const ownMembers = node.members
