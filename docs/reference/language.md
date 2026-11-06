@@ -173,16 +173,19 @@ A section out of order, repeated, empty or missing fails the compilation; `REQUI
 
 ```
 EXPORT STORE notes:
-    ABOUT  working notes kept between sessions
-    TYPE   tabeli
-    LASTS  project
-    KEY    topic
+    ABOUT   working notes kept between sessions
+    LASTS   project
+    KEY     topic
     SLOTS:
         topic:  TEXT MAX_WORDS 1   "the one word the note is filed under"
         note:   TEXT MAX_WORDS 30  "what is known about the topic"
 ```
 
-The data an agent keeps, declared like a schema. `TYPE` names the backing (`tabeli`); `LASTS project` survives between sessions, `LASTS session` lasts one; `KEY` names the slot that identifies a record — adding a record with an existing key updates it. `LASTS` takes `project` or `session`, and `KEY` must name one of the slots. A tabeli record is flat: its slot names use letters, digits and `_` (`vat_number`), and hold no nested template — the compiler refuses anything else, and the apx refuses a write outside the schema (an unknown field, a missing required one, a value outside its type). The agent works in a store inside an `IN` block:
+The data an agent keeps, declared like a schema. `LASTS project` survives between sessions, `LASTS session` lasts one; `KEY` names the slot that identifies a record — putting a record with an existing key updates it. `LASTS` takes `project` or `session`, and `KEY` must name one of the slots.
+
+`DRIVER` names what keeps the records — `files` when the line is absent: one JSON file per store, nothing to install. `DRIVER tabeli` keeps them in a tabeli table; any other driver is one the config adds ([Store drivers](/guide/drivers)). The driver is the store's own business: the agent reads and writes it with the same commands whatever keeps it. An old `TYPE` line fails the build with the rewrite to `DRIVER`.
+
+A record is flat: its slot names use letters, digits and `_` (`vat_number`), and `id` is no slot's name — it is the record's own identifier, given by the driver. A driver may refuse more: a slot holding another template or a list of them (`files` and `tabeli` refuse both), or the store itself (a session store in a shared database). The compiler refuses all of it, and the apx refuses a write outside the schema (an unknown field, a missing required one, a value outside its type). The agent works in a store inside an `IN` block:
 
 ```
     WHEN asked to remember something:

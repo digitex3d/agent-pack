@@ -8,6 +8,14 @@ export default defineConfig({
   // Static assets served from docs/public are not pages, so the link checker
   // cannot resolve them. Listed one by one rather than disabled wholesale.
   ignoreDeadLinks: [/^\/structured-format\.example\.json$/],
+  // The language writes variables as {{name}}: inside inline code Vue would read
+  // them as expressions and fail the build, so inline code is never compiled.
+  markdown: {
+    config: md => {
+      const inline = md.renderer.rules.code_inline!;
+      md.renderer.rules.code_inline = (...args) => inline(...args).replace(/^<code/, '<code v-pre');
+    },
+  },
   themeConfig: {
     nav: [
       { text: 'Guide', link: '/guide/getting-started' },
@@ -20,6 +28,7 @@ export default defineConfig({
           { text: 'What is agent-pack', link: '/guide/introduction' },
           { text: 'Getting Started', link: '/guide/getting-started' },
           { text: 'The apx', link: '/guide/apx' },
+          { text: 'Store drivers', link: '/guide/drivers' },
           { text: 'Teams and flows', link: '/guide/teams-and-flows' },
           { text: 'Adapters', link: '/guide/adapters' },
         ],

@@ -73,16 +73,30 @@ Exit code `0` is success, `1` means something does not exist (an unknown id), `2
 
 ## Stores
 
-An agent that declares a `STORE` reads and writes it through its apx:
+An agent that declares a `STORE` reads and writes it through its apx, with the same commands whatever driver keeps it:
 
 ```bash
-node .agent-pack/apx/note-keeper.apx store a sto-7c1e40b2 topic=tabeli note='engine ships with agent-pack'
-node .agent-pack/apx/note-keeper.apx store q sto-7c1e40b2
+node .agent-pack/apx/note-keeper.apx store put sto-7c1e40b2 topic=drivers note='files is the default'
+node .agent-pack/apx/note-keeper.apx store find sto-7c1e40b2 topic~driv
 ```
 
-A store is reached by its id, like every block, after the operation; `store` alone lists the agent's stores with their ids. The operations are tabeli's (`a`dd, `q`uery, `s`et, `next`, …; `manual` for the table's own manual). The table is created on first use and is never touched directly: a `LASTS project` store lives in `stores/<agent>/<store>.tbl`, at the project root — yours to version or not — and a `LASTS session` store beside the apx, in `.agent-pack/apx/<agent>.state/`. A write outside the store's slots is refused before it reaches the table. When the store declares a `KEY`, adding a record whose key already exists updates it instead of duplicating it.
+A store is reached by its id, like every block, after the operation; `store` alone lists the agent's stores, each with its driver and where its data lives. Every answer writes a record on one line, its `id` first — `id=1 topic=drivers note='files is the default'` — and `find` ends with how many there are.
 
-Stores are backed by tabeli, which ships with agent-pack (`tabeli/`, MIT) and works on Linux. `npm run build` compiles its engine with tabeli's own Makefile, so building agent-pack needs `make` and a C compiler (gcc or clang); `bundle all` records the engine's path in every `.apx`, which is how the apx finds it — an apx written before is rewritten by `agent-pack bundle all`. The apx creates tables only with a tabeli v2 engine, and a table made earlier keeps working with the engine it carries.
+| Operation | |
+|---|---|
+| `put <sto-id> <field>=<value> …` | add a record — when the store has a `KEY` and a record has that key, update it instead, never duplicate it |
+| `get <sto-id> <key>` | one record, by its `KEY` — by its `id` when the store has none; exit `1` when there is none |
+| `find <sto-id> [<filter> …] [limit=<n>] [count] [json]` | the records every filter holds for, in the order they were added |
+| `set <sto-id> <key> <field>=<value> … [if <filter> …]` | set some fields of a record; with `if`, only while every filter still holds — else exit `4`: your view of it is stale |
+| `remove <sto-id> <key>` | remove a record |
+| `take <sto-id> [<filter> …] set <field>=<value> …` | the first record the filters hold for, its fields set in the same step: two agents never take the same one — exit `1` when none is left |
+| `mark <sto-id>`, then `since <sto-id> <mark>` | a mark of now, then the records added or changed after it |
+
+A filter is `<field><op><value>`: `=`, `!=`, `>`, `<`, `>=`, `<=`, and `~` for "contains". Values compare as numbers when both sides are numbers, as text otherwise; a field that is none of the store's is refused. A write outside the store's slots — an unknown field, a required one missing, a value outside its type — is refused before it reaches the driver, and nothing is written.
+
+`take`, `set … if` and `mark`/`since` are what a driver may add to the base operations; both shipped drivers have all three. With a driver that lacks one the operation is refused (exit `2`), and the compiled definition never shows its command.
+
+The data is never touched directly. Where it lives is the driver's: with `files`, the default, a `LASTS project` store is `stores/<agent>/<store>.json` at the project root — yours to version or not — and a `LASTS session` store sits beside the apx, in `.agent-pack/apx/<agent>.state/`; with `tabeli`, the same places with `.tbl`. The tabeli driver uses the engine agent-pack builds (`tabeli/`, MIT, Linux): building agent-pack needs `make` and a C compiler, and `bundle all` records the engine's path in every `.apx`. Other drivers come from the config: [Store drivers](./drivers.md).
 
 ## Dimensions
 
