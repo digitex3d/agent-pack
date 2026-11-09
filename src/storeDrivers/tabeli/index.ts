@@ -16,7 +16,7 @@
  */
 import type { ApSlot } from '../../apdoc/types.js';
 import { projectStoreDir, storeStateDir } from '../../apx/paths.js';
-import { openTable, queryTable, runTable } from '../../apx/tabeli.js';
+import { fieldArgs, openTable, queryTable, runTable } from '../../apx/tabeli.js';
 import { filterText } from '../filters.js';
 import { DRIVER_API, type Collection, type Doc, type Filter, type StoreDecl, type StoreDriver, type StoreRef } from '../types.js';
 
@@ -32,8 +32,6 @@ function recordOf(row: Record<string, unknown>): Doc {
   return doc;
 }
 
-/** `field=value` pairs for the engine's command line. */
-const pairs = (fields: Doc): string[] => Object.entries(fields).map(([f, v]) => `${f}=${String(v)}`);
 
 /** The engine's exit codes the driver reads as answers, not failures. */
 const EXIT = { ok: 0, none: 1, usage: 2, stale: 4 };
@@ -68,16 +66,16 @@ const byId = (t: Table, id: string): Doc | null => queryTable(t.path, [`id=${id}
 function put(t: Table, doc: Doc): { id: string; updated: boolean } {
   const existing = t.key && doc[t.key] !== undefined ? idOf(t, String(doc[t.key])) : null;
   if (existing) {
-    run(t.path, ['s', existing, ...pairs(doc)]);
+    run(t.path, ['s', existing, ...fieldArgs(doc)]);
     return { id: existing, updated: true };
   }
-  return { id: idIn(run(t.path, ['a', ...pairs(doc)]).out), updated: false };
+  return { id: idIn(run(t.path, ['a', ...fieldArgs(doc)]).out), updated: false };
 }
 
 function set(t: Table, k: string, fields: Doc, guard: Filter[] = []): 'set' | 'missing' | 'stale' {
   const id = idOf(t, k);
   if (!id) return 'missing';
-  const r = run(t.path, ['s', id, ...pairs(fields), ...(guard.length ? ['if', ...guard.map(filterText)] : [])], [EXIT.ok, EXIT.stale]);
+  const r = run(t.path, ['s', id, ...fieldArgs(fields), ...(guard.length ? ['if', ...guard.map(filterText)] : [])], [EXIT.ok, EXIT.stale]);
   return r.status === EXIT.stale ? 'stale' : 'set';
 }
 
@@ -89,7 +87,7 @@ function remove(t: Table, k: string): boolean {
 }
 
 function take(t: Table, filters: Filter[], fields: Doc): Doc | null {
-  const r = run(t.path, ['next', ...filters.map(filterText), 'set', ...pairs(fields)], [EXIT.ok, EXIT.none]);
+  const r = run(t.path, ['next', ...filters.map(filterText), 'set', ...fieldArgs(fields)], [EXIT.ok, EXIT.none]);
   return r.status === EXIT.none ? null : byId(t, idIn(r.out));
 }
 

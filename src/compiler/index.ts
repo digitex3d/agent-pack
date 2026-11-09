@@ -33,7 +33,7 @@ import { emitChapter } from '../bundlers/sections.js';
 import { STRATEGIES, type DefinitionStrategy, type Definition } from '../definition.js';
 import { DocumentBuilder } from '../apdoc/builder.js';
 import type { ApDocument } from '../apdoc/document.js';
-import type { StoreBlock, DimensionBlock, DomainBlock, TemplateBlock, } from '../apdoc/blocks.js';
+import type { StoreBlock, DimensionBlock, DomainBlock } from '../apdoc/blocks.js';
 import { hasProjectFile } from '../services/fs.js';
 import { matchesAnyGlob } from '../services/glob.js';
 import { DECORATOR_MARK, WITHIN_DECORATOR } from '../decorators.js';
@@ -45,6 +45,7 @@ import { importedVariables, visibleIn } from '../exportedVars.js';
 import { readsOf, constantOf, parseVarLine, splitInto, takesInto } from '../vars.js';
 import { refName } from '../../adapters/md/phrases.js';
 import { STORE_FIELD_RE } from '../storeDrivers/filters.js';
+import { storeDriverOf } from '../storeDrivers/registry.js';
 
 
 // --- Public interfaces ---
@@ -453,6 +454,9 @@ function storeErrors(doc: ApDocument, ctx: BundleContext, agentFilePath: string)
       return [{ file, line: lineOfName(file, store.storeDriver), message: `STORE ${store.name}: unknown DRIVER \`${store.storeDriver}\` (installed: ${p.unknownDriver.available.join(', ')})` }];
     }
     const refused = p.refused ? [{ file, line: lineOfName(file, store.storeDriver), message: `STORE ${store.name}: ${p.refused}` }] : [];
+    if (store.shape && store.ownSlots) {
+      refused.push({ file, line: lineOfName(file, refName(store.shape.ref)), message: `STORE ${store.name}: its fields come from AS \`${refName(store.shape.ref)}\` or from its SLOTS — not both` });
+    }
     const key = store.storeKey && !store.slots.some(sl => sl.name === store.storeKey)
       ? [{ file, line: lineOfName(file, store.storeKey), message: `STORE ${store.name}: KEY \`${store.storeKey}\` is none of its slots (${store.slots.map(sl => sl.name).join(', ')})` }]
       : [];
@@ -515,29 +519,37 @@ function delegationPerimeterErrors(doc: ApDocument, delegations: DocumentBuilder
 
 /**
  * A dimension keeps its contract wherever it is written — in a library file, in
- * the agent's own file, exported or not: ABOUT, FOR, EACH and AS once each, its
- * rules, nothing else; FOR globs from the project root (dimensionBlockErrors,
- * the lint's own check). Its AS names a template with SLOTS — its value is a
- * list of instances — at no level.
+ * the agent's own file, exported or not: ABOUT, FOR, EACH and STORE once each,
+ * its rules, nothing else; FOR globs from the project root (dimensionBlockErrors,
+ * the lint's own check). Its store gives its records' fields and its driver,
+ * and the cache gives the rest — so the store says no LASTS session and no KEY,
+ * and its driver takes and guards records.
  */
 function dimensionErrors(doc: ApDocument, ctx: BundleContext): LintError[] {
   const files = [...new Set(ctx.dimensions.map(d => d.path))].filter(file => existsSync(file));
   return [...files.flatMap(file => dimensionBlockErrors(file, ctx.sources.tree(file).blocks)), ...(doc.byKind('dimension') as DimensionBlock[]).flatMap(dim => {
     const file = ctx.dimensions.find(d => d.name === dim.name)?.path;
     if (!file || !existsSync(file)) return [];
-    const at = (name: string) => lineOfName(file, name);
-    const errors: LintError[] = [];
-    const shape = dim.shape;
-    if (shape && shape.force !== 0) {
-      errors.push({ file, line: at(refName(shape.ref)), message: `DIMENSION ${dim.name}: AS takes no level — its value is a list of \`${refName(shape.ref)}\`: write \`AS ${refName(shape.ref)}\`` });
-    }
-    const template = shape ? doc.resolve(shape.ref) as TemplateBlock | null : null;
-    if (template && !template.slots) {
-      errors.push({ file, line: at(template.name), message: `DIMENSION ${dim.name}: AS \`${template.name}\` is a template without SLOTS — a dimension's value is a list of its instances, so its template declares their fields` });
-    }
-    return errors;
+    const err = (name: string, message: string): LintError => ({ file, line: lineOfName(file, name), message: `DIMENSION ${dim.name}: ${message}` });
+    const store = dim.store ? doc.resolve(dim.store) as StoreBlock | null : null;
+    return store ? dimensionStoreErrors(store, err) : [];
   })];
 }
+
+/** What a dimension's store may not be: fieldless, a session's, keyed, or kept by a driver that cannot take and guard records. */
+function dimensionStoreErrors(store: StoreBlock, err: (name: string, message: string) => LintError): LintError[] {
+  const errors: LintError[] = [];
+  if (store.slots.length === 0) errors.push(err(store.name, `its store \`${store.name}\` has no fields — give it SLOTS, or AS <template>`));
+  if (store.declaredLasts === 'session') errors.push(err(store.name, `its store \`${store.name}\` says LASTS session — a dimension's answers are kept for the project: drop the line`));
+  if (store.storeKey) errors.push(err(store.name, `its store \`${store.name}\` says KEY ${store.storeKey} — a dimension keeps its records by file itself: drop the line`));
+  const driver = storeDriverOf(store.storeDriver);
+  const lacks = driver ? DIMENSION_CAPABILITIES.filter(c => !driver.capabilities.includes(c)) : [];
+  if (lacks.length > 0) errors.push(err(store.name, `its store's driver \`${store.storeDriver}\` has no ${lacks.join(' and ')} — a dimension takes and guards its records: keep it with files or tabeli`));
+  return errors;
+}
+
+/** What a dimension asks of its store's driver: `next` takes a file, a write is guarded. */
+const DIMENSION_CAPABILITIES = ['take', 'guard'] as const;
 
 /**
  * A dimension is an agent's — read and written through that agent's apx. One a

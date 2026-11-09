@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Giuseppe Federico
 import { loadConfig } from '../config.js';
 import { harnessesOf, type HarnessRow } from '../harnesses.js';
+import { printUsage } from './usage.js';
 
 /**
  * CLI command: `agent-pack harness list` — the harnesses a delegation can go
@@ -9,10 +10,7 @@ import { harnessesOf, type HarnessRow } from '../harnesses.js';
  * (the config's `adapters:`), delegable (enabled, with a launch recipe), and
  * whether the recipe's CLI is on the PATH — looked up, never run.
  */
-function usage(): void {
-  console.error('Usage:');
-  console.error('  agent-pack harness list [--json]');
-}
+const usage = (): void => printUsage('agent-pack harness list [--json]');
 
 const yes = (v: boolean | null) => (v === null ? '—' : v ? 'yes' : 'no');
 

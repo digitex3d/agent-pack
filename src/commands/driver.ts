@@ -5,6 +5,7 @@ import { TABELI_ENGINE } from '../config.js';
 import { runDriverContract } from '../storeDrivers/contract.js';
 import { loadDrivers, storeDriverOf, useTabeliEngine } from '../storeDrivers/registry.js';
 import type { StoreDriver } from '../storeDrivers/types.js';
+import { printUsage } from './usage.js';
 
 /**
  * CLI command: `agent-pack driver test <driver>` — runs the driver contract
@@ -12,10 +13,7 @@ import type { StoreDriver } from '../storeDrivers/types.js';
  * (files, tabeli), or a module — a package name or a path — called with the
  * options of `--options '<json>'`. Exits 1 when a case fails.
  */
-function usage(): void {
-  console.error('Usage:');
-  console.error("  agent-pack driver test <files | tabeli | module or path> [--options '<json>']");
-}
+const usage = (): void => printUsage("agent-pack driver test <files | tabeli | module or path> [--options '<json>']");
 
 /** The driver under test: a shipped one by name, else the module, installed with its options. */
 async function driverUnderTest(target: string, options: Record<string, unknown>): Promise<StoreDriver> {

@@ -43,6 +43,11 @@ export function openTable(path: string, engine: string | undefined): string | nu
   return init.status === 0 ? null : `creating ${path}: ${(init.stderr || init.stdout).trim()}`;
 }
 
+/** Fields as the engine's command line takes them: one `field=value` argument each. */
+export function fieldArgs(fields: Record<string, unknown>): string[] {
+  return Object.entries(fields).map(([f, v]) => `${f}=${String(v)}`);
+}
+
 /** Run a table with a verb and its arguments. */
 export function runTable(table: string, args: string[]): SpawnSyncReturns<string> {
   return spawnSync(table, args, { encoding: 'utf-8' });

@@ -888,7 +888,7 @@ try {
     }
   }
 
-  // --- a DIMENSION — a library's, or one in an agent's body: its rule lines are judged at their own file:line, its FOR/EACH/AS never ---
+  // --- a DIMENSION — a library's, or one in an agent's body: its rule lines are judged at their own file:line, its FOR/EACH/STORE never ---
   {
     const dproj = join(root, 'dim-proj');
     write(join(dproj, 'agent-pack.config.mjs'), [
@@ -904,16 +904,19 @@ try {
       'EXPORT TEMPLATE pseudo-steps:', '    ABOUT  the steps of one function', '    SLOTS:',
       '        name: TEXT "the function"', '        steps: TEXT "what it does, step by step"', '    BODY:', '        {name}: {steps}', '',
     ]);
+    write(join(dproj, 'library', 'stores', 'steps-store.ap'), [
+      'IMPORT pseudo-steps FROM @main.templates', '', 'EXPORT STORE steps-store:', '    ABOUT  the steps of each function', '    AS     pseudo-steps', '',
+    ]);
     write(join(dproj, 'library', 'templates', 'one-unit.ap'), [
       'EXPORT TEMPLATE one-unit:', '    ABOUT  what to translate', '    SLOTS:', '        what: TEXT "a function"', '',
     ]);
     const dimLines = (name, each, rule) => [
-      'IMPORT pseudo-steps FROM @main.templates', 'IMPORT one-unit FROM @main.templates', '',   // 1-3
+      'IMPORT steps-store FROM @main.stores', 'IMPORT one-unit FROM @main.templates', '',   // 1-3
       `EXPORT DIMENSION ${name}:`,                                                               // 4
       '    ABOUT  what each function does, step by step',                                        // 5
       '    FOR    src/**/*.py',                                                                   // 6
       `    EACH   ${each}`,                                                                       // 7
-      '    AS     pseudo-steps',                                                                  // 8
+      '    STORE  steps-store',                                                                   // 8
       `    MUST   ${rule}`,                                                                       // 9
       '',
     ];
@@ -921,13 +924,13 @@ try {
     const textDim = write(join(dproj, 'library', 'dimensions', 'pseudocode.ap'), dimLines('pseudocode', 'function', 'write one step per decision'));
     const refDim = write(join(dproj, 'library', 'dimensions', 'units.ap'), dimLines('units', 'one-unit', 'write one step per branch'));
     const coder = write(join(dproj, 'agents', 'standalone', 'coder.ap'), [
-      'IMPORT pseudocode FROM @main.dimensions', 'IMPORT units FROM @main.dimensions', 'IMPORT pseudo-steps FROM @main.templates', '',   // 1-4
+      'IMPORT pseudocode FROM @main.dimensions', 'IMPORT units FROM @main.dimensions', 'IMPORT steps-store FROM @main.stores', '',   // 1-4
       'EXPORT AGENT coder AS coder-role:', '    ABOUT    coder', '    MANDATE  understand the code', '',                                 // 5-8
       '    DIMENSION helpers:',                                                                                                         // 9
       '        ABOUT    the helpers each module offers',                                                                                // 10
       '        FOR      src/**/*.py',                                                                                                   // 11
       '        EACH     exported function',                                                                                             // 12
-      '        AS       pseudo-steps',                                                                                                  // 13
+      '        STORE    steps-store',                                                                                                   // 13
       '        MUST     write one entry per helper',                                                                                    // 14
       '',
       '    @WITH pseudocode, units, helpers:',                                                                                          // 16
@@ -948,7 +951,7 @@ try {
       const run = openJudgeRun(dconfig, dproj);
       await bundleAgentObject({
         agentName: 'coder', agentFile: join(dproj, 'agents', 'standalone', 'coder.ap'), agentDir: join(dproj, 'agents', 'standalone'),
-        libraryRoot: lib, libraryRoots: [lib], libraries: { '@main': lib }, bundleConfig: { runtime: false }, judge: run,
+        projectRoot: dproj, libraryRoot: lib, libraryRoots: [lib], libraries: { '@main': lib }, bundleConfig: { runtime: false }, judge: run,
       });
       assert.deepEqual(run.warnings.filter(w => w.code.startsWith('dim-rule.')).map(w => `${w.file}:${w.line}:${w.col} ${w.severity} [${w.code}]`).sort(), [
         `${textDim}:9:5 warning [dim-rule.rule.1]`,
@@ -958,11 +961,11 @@ try {
       const ruleStates = dimAsks.filter(a => a.ids.some(id => id.startsWith('dim-rule.'))).map(a => a.state).sort();
       assert.deepEqual(ruleStates, ['write one entry per helper', 'write one step per branch', 'write one step per decision'], 'the MUST rule asks only the dimensions\' rule lines');
       const asked = new Set(dimAsks.map(a => a.state));
-      for (const text of ['src/**/*.py', 'function', 'one-unit', 'pseudo-steps', 'what each function does, step by step']) {
+      for (const text of ['src/**/*.py', 'steps-store', 'function', 'one-unit', 'pseudo-steps', 'what each function does, step by step']) {
         assert.ok(!asked.has(text), `a dimension's ${text} line is never judged: ${[...asked].join(' | ')}`);
       }
       const atMeta = run.warnings.filter(w => ((w.file === textDim || w.file === refDim) && w.line !== 9) || (w.file === coder && w.line >= 9 && w.line <= 13));
-      assert.deepEqual(atMeta, [], 'no rule diagnostic lands on a FOR, EACH, AS or ABOUT line');
+      assert.deepEqual(atMeta, [], 'no rule diagnostic lands on a FOR, EACH, STORE or ABOUT line');
       finishJudgeRun(run, { prune: false });
       // A dimension declared in an agent's body is that agent's file: its verdicts land in the agent's unit.
       const coderUnit = JSON.parse(readFileSync(join(dproj, '.agent-pack', 'units', 'agents', 'standalone', 'coder.ap.json'), 'utf-8'));

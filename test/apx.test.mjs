@@ -243,7 +243,7 @@ has(run('help').out, `${CMD} start`, `${CMD} get <id> [json]`, `${CMD} store put
     await apxAsync(exe, 'store', 'put', STORE, 'topic=files', 'note=the default driver');
     has((await apxAsync(exe, 'store', 'since', STORE, mark)).out, 'id=2 topic=files', '# 1 record added or changed since the mark');
     has((await apxAsync(exe, 'store', 'remove', STORE, 'files')).out, '# files removed');
-    has((await apxAsync(exe, 'store', 'find', STORE, 'colour=red')).out, '`colour` is none of its fields (topic, note)');
+    has((await apxAsync(exe, 'store', 'find', STORE, 'colour=red')).out, '`colour` is none of its fields (topic, note, or id)');
     const bad = await apxAsync(exe, 'store', 'nope', STORE);
     assert.equal(bad.code, 2);
     has(bad.out, "unknown store operation 'nope'");

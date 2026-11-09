@@ -26,6 +26,22 @@ export function parseFilter(arg: string): Filter | null {
   return null;
 }
 
+/**
+ * `<field><op><value>` arguments as filters on a store's fields — and on
+ * `extra`, the one field of its own the caller reads by (`id`, `_file`) — or
+ * why one of them is not: the one check of filters every caller makes.
+ */
+export function filtersOn(args: readonly string[], fields: readonly string[], extra: string): Filter[] | string {
+  const filters: Filter[] = [];
+  for (const arg of args) {
+    const f = parseFilter(arg);
+    if (!f) return `\`${arg}\` is no filter — write <field><op><value>, op one of = != > < >= <= ~`;
+    if (f.field !== extra && !fields.includes(f.field)) return `\`${f.field}\` is none of its fields (${fields.join(', ')}, or ${extra})`;
+    filters.push(f);
+  }
+  return filters;
+}
+
 /** The value as a number, when it reads as one. */
 function numberOf(v: string | number | undefined): number | null {
   if (typeof v === 'number') return v;

@@ -185,7 +185,7 @@ The data an agent keeps, declared like a schema. `LASTS project` survives betwee
 
 `DRIVER` names what keeps the records — `files` when the line is absent: one JSON file per store, nothing to install. `DRIVER tabeli` keeps them in a tabeli table; any other driver is one the config adds ([Store drivers](/guide/drivers)). The driver is the store's own business: the agent reads and writes it with the same commands whatever keeps it. An old `TYPE` line fails the build with the rewrite to `DRIVER`.
 
-A record is flat: its slot names use letters, digits and `_` (`vat_number`), and `id` is no slot's name — it is the record's own identifier, given by the driver. A driver may refuse more: a slot holding another template or a list of them (`files` and `tabeli` refuse both), or the store itself (a session store in a shared database). The compiler refuses all of it, and the apx refuses a write outside the schema (an unknown field, a missing required one, a value outside its type). The agent works in a store inside an `IN` block:
+Its fields are its `SLOTS`, or the template's that `AS <template>` names — the same grammar, never written twice; a store with both fails the build. A record is flat: its slot names use letters, digits and `_` (`vat_number`), and `id` is no slot's name — it is the record's own identifier, given by the driver. A driver may refuse more: a slot holding another template or a list of them (`files` and `tabeli` refuse both), or the store itself (a session store in a shared database). The compiler refuses all of it, and the apx refuses a write outside the schema (an unknown field, a missing required one, a value outside its type). The agent works in a store inside an `IN` block:
 
 ```
     WHEN asked to remember something:
@@ -198,11 +198,15 @@ Stores are read and written through the agent's [apx](/guide/apx#stores).
 ### DIMENSION
 
 ```
+EXPORT STORE steps-table:
+    ABOUT  the steps of each function
+    AS     pseudo-steps
+
 EXPORT DIMENSION pseudocode:
     ABOUT   what each function does, step by step, in plain words
     FOR     src/**/*.py
     EACH    function
-    AS      pseudo-steps
+    STORE   steps-table
     MUST    write one step per decision the code takes
 ```
 
@@ -213,10 +217,12 @@ An answer implicit in a source file — its pseudocode, its design patterns, a d
 | `ABOUT <text>` | the question the dimension answers — shown to the agents that have it |
 | `FOR <glob> [<glob> …]` | the files it answers for: one or more globs relative to the project root (`**` any folders, `*`, `?`, `{a,b}`, `[ab]`); an absolute glob, one with `..`, or a bare `FOR` fails the build; the apx refuses any other file |
 | `EACH <text>` | what to translate inside a file — `function`, `class`, `file`, or prose. A single word naming a template in scope renders as a reference to it, and that template's content is part of the dimension's |
-| `AS <template>` | a template with `SLOTS`: the value for a file is a list of its instances — one per thing `EACH` targets — or the literal `none` when there is nothing to report. No level: the value is always checked |
+| `STORE <store>` | the [store](#store) whose fields its records have — its `SLOTS`, or the template its `AS` names — and the driver that keeps them. The value for a file is a list of such records, or the literal `none` when there is nothing to report. The store says no `LASTS session` and no `KEY` (the dimension keeps its records by file itself), and its driver takes and guards records (`files` and `tabeli` do) |
 | rule lines | `MUST`, `NEVER`, `SHOULD`, … — how the value is produced |
 
-`ABOUT`, `FOR`, `EACH` and `AS` are required, once each; beside them the body holds only rule lines. Any other line fails the build: a `WHEN` (as a line or a block), a nested block (`IF`, `ON-…:`, `UNTIL`, …), an action (`DO`, `DELEGATE`, `COMPUTE`, `RUN`), and `MEM` and `@WITH`, which are an agent's. A dimension is declared and imported like a store — `EXPORT DIMENSION` in the library's `dimensions/`, `IMPORT pseudocode FROM @main.dimensions` — or written in the agent's own file. A dimension belongs to an agent and is reached only through that agent's apx: importing it into `PROJECT.ap` or a team's `flows.ap` fails the build. The apx reaches it by its id, like every block — `dimension read <dim-id> <file>` — so its name may be any name.
+`ABOUT`, `FOR`, `EACH` and `STORE` are required, once each; beside them the body holds only rule lines. Any other line fails the build: a `WHEN` (as a line or a block), a nested block (`IF`, `ON-…:`, `UNTIL`, …), an action (`DO`, `DELEGATE`, `COMPUTE`, `RUN`), and `MEM` and `@WITH`, which are an agent's. The old `AS` line fails the build with the rewrite to `STORE`. A dimension is declared and imported like a store — `EXPORT DIMENSION` in the library's `dimensions/`, `IMPORT pseudocode FROM @main.dimensions`, its file importing its store — or written in the agent's own file. A dimension belongs to an agent and is reached only through that agent's apx: importing it into `PROJECT.ap` or a team's `flows.ap` fails the build. The apx reaches it by its id, like every block — `dimension read <dim-id> <file>` — so its name may be any name.
+
+The store gives the fields and the driver; the place is the cache's. A dimension's answers never live in its store's own file: they live in `.agent-pack/cache/`, in a store named after the dimension's definition — shared by every agent that has the dimension, outside git. So a store only a dimension names is never offered as one of the agent's stores — no Stores chapter entry, no `store` commands. An agent that also works in the store itself (`IN steps-table:`) has it as its own, and works in another table: its own store's file, never the dimension's cache.
 
 **When it is worth reading is the reader's to say — with [`@WITH`](#decorators-with), like a policy or a skill.** A dimension says what it holds, not when; the agent that has it names it above the lines it is for, and reads it there:
 
@@ -228,7 +234,7 @@ WHEN about to change a function:
 
 The work `@WITH` decorates is the work that reads the dimension. A dimension that no `@WITH` names applies nowhere: a warning, where a policy gets an error — the apx serves it all the same, but no line reads it; a dimension has no `APPLIES` line, so no perimeter can hold it everywhere. A moment the judge decides is a `WHEN!` decorated by the `@WITH` ([checked conditions](#checked-conditions)). Once it has read the answer, the agent decides whether it also needs the code.
 
-The agent finds its dimensions in its definition, each opening with where it applies, with the commands that read and write them; they are read and written through its [apx](/guide/apx#dimensions). Renaming a dimension or a template it names keeps what was kept; changing any of its lines, or the content of the template `AS` or `EACH` names, starts it over.
+The agent finds its dimensions in its definition, each opening with where it applies, with the commands that read, write and search them; they are read and written through its [apx](/guide/apx#dimensions). Renaming a dimension, its store or a template it names keeps what was kept; changing any of its lines, its store's fields or driver, or the content of the template `EACH` names, starts it over.
 
 ### DOMAIN
 

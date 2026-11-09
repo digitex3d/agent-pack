@@ -21,7 +21,7 @@ import type { ApDocumentMeta, ApMdMeta, ApOutlineItem, ApOutlinePart, ApRef, ApN
 import { walk, type LineHead } from './nodes.js';
 import { DISTILLED_DIR } from '../apx/paths.js';
 import type { ApBlock } from './block.js';
-import type { AgentBlock, DomainBlock, TemplateBlock } from './blocks.js';
+import type { AgentBlock, DimensionBlock, DomainBlock, TemplateBlock } from './blocks.js';
 import { DECORATOR_MARK, WITHIN_DECORATOR } from '../decorators.js';
 import type { PerimeterGlobs } from '../primitives.js';
 import { literalGlob } from '../services/glob.js';
@@ -127,6 +127,19 @@ export class ApDocument {
   nodes(): { node: ApNode; block: ApBlock; containers: ApNode[] }[] {
     // A COMPUTE block's REQUIRE and ENSURE sections are body nodes too: their lines are judged and listed.
     return this.all().flatMap(block => [...walk([...(block.require ?? []), ...block.body, ...(block.ensure ?? [])])].map(w => ({ ...w, block })));
+  }
+
+  /**
+   * The stores the agent itself works in: every store but those only a
+   * dimension's `STORE` names — their records live in the dimension's cache,
+   * so neither its chapter nor its commands may offer a second place for them.
+   * A store an `IN` names too is the agent's, and shows as ever.
+   */
+  agentStores(): ApBlock[] {
+    const ofDimensions = new Set((this.byKind('dimension') as DimensionBlock[]).flatMap(d => (d.store ? [d.store.target] : [])));
+    if (ofDimensions.size === 0) return this.byKind('store');
+    const inUse = new Set(this.nodes().flatMap(({ node }) => (node.type === 'in' ? [node.store.target] : [])));
+    return this.byKind('store').filter(s => !ofDimensions.has(s.address) || inUse.has(s.address));
   }
 
   /**
@@ -280,11 +293,13 @@ export class ApDocument {
     // Roles chapter excludes it — identity fused into the Identity block.
     const boundRoles = new Set(((this.root() as AgentBlock | null)?.roles ?? []).map(r => r.target));
 
+    // A store only a dimension names is the dimension's: its chapter shows the dimension, never the store.
+    const stores = new Set(this.agentStores().map(s => s.address));
     const partBlocks = this.byProvenance(provenance);
     for (const strategy of KIND_STRATEGIES) {
       if (!strategy.entries) continue; // chapter kinds only
       const entries = partBlocks.filter(
-        b => b.kind === strategy.kind && !boundRoles.has(b.address),
+        b => b.kind === strategy.kind && !boundRoles.has(b.address) && (b.kind !== 'store' || stores.has(b.address)),
       );
       if (entries.length === 0) continue;
       visitor.chapter?.(strategy.chapterTitle ?? strategy.kind, strategy.kind);

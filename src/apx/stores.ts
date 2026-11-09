@@ -12,7 +12,7 @@
 import { join } from 'node:path';
 import type { StoreBlock } from '../apdoc/blocks.js';
 import { formatIssues, slotSpecsOf, validateRecord } from '../shapeSchema.js';
-import { parseFilter } from '../storeDrivers/filters.js';
+import { filtersOn } from '../storeDrivers/filters.js';
 import { installDriver, storeDriverNames, storeDriverOf, useTabeliEngine, type DriverEntry } from '../storeDrivers/registry.js';
 import type { Collection, Doc, DriverCapability, Filter, StoreDriver, StoreRef } from '../storeDrivers/types.js';
 import type { ApxHost } from './service.js';
@@ -37,7 +37,7 @@ export class StoreRefusal extends Error {
 let driversReady: Promise<void> | null = null;
 
 /** Install, once per run, the drivers the apx's bundle recorded: the tabeli engine, then the config's own drivers. */
-function installRecorded(host: ApxHost): Promise<void> {
+export function installRecorded(host: ApxHost): Promise<void> {
   driversReady ??= (async () => {
     useTabeliEngine(host.build.tabeli);
     for (const d of (host.build.drivers ?? []) as DriverEntry[]) await installDriver(d.module, d.options);
@@ -48,7 +48,7 @@ function installRecorded(host: ApxHost): Promise<void> {
 /** The agent's stores, each with its driver and its data's place. */
 export async function storesOf(host: ApxHost): Promise<OpenStore[]> {
   await installRecorded(host);
-  return (host.doc.byKind('store') as StoreBlock[]).map(block => {
+  return (host.doc.agentStores() as StoreBlock[]).map(block => {
     const driver = storeDriverOf(block.storeDriver);
     if (!driver) throw new StoreRefusal(STORE_EXIT.usage, `store ${block.name}: no driver "${block.storeDriver}" (installed: ${storeDriverNames().join(', ')}) — run agent-pack bundle all`);
     const decl = block.decl(host.root.name);
@@ -95,14 +95,9 @@ export function checkWrite(store: OpenStore, doc: Doc, whole: boolean): void {
 
 /** `<field><op><value>` arguments as filters, every field one of the store's (or `id`). */
 export function filtersOf(store: OpenStore, args: readonly string[]): Filter[] {
-  return args.map(arg => {
-    const f = parseFilter(arg);
-    if (!f) throw new StoreRefusal(STORE_EXIT.usage, `${store.block.name}: \`${arg}\` is no filter — write <field><op><value>, op one of = != > < >= <= ~`);
-    if (f.field !== 'id' && !store.block.slots.some(s => s.name === f.field)) {
-      throw new StoreRefusal(STORE_EXIT.usage, `${store.block.name}: \`${f.field}\` is none of its fields (${store.block.slots.map(s => s.name).join(', ')})`);
-    }
-    return f;
-  });
+  const filters = filtersOn(args, store.block.slots.map(s => s.name), 'id');
+  if (typeof filters === 'string') throw new StoreRefusal(STORE_EXIT.usage, `${store.block.name}: ${filters}`);
+  return filters;
 }
 
 /** The store's records, open. */
@@ -116,10 +111,15 @@ function word(value: string | number): string {
   return /^[^\s'"\\]+$/.test(s) ? s : `'${s.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/'/g, "\\'")}'`;
 }
 
+/** Fields as one line: `<field>=<value> …`, a value with spaces or quotes in single quotes. */
+export function fieldsText(fields: Record<string, unknown>): string {
+  return Object.entries(fields).map(([f, v]) => `${f}=${word(v as string | number)}`).join(' ');
+}
+
 /** A record as one line: `id=<id>` first, then its fields. */
 export function recordLine(doc: Doc): string {
   const { id, ...fields } = doc;
-  return [`id=${id}`, ...Object.entries(fields).map(([f, v]) => `${f}=${word(v)}`)].join(' ');
+  return [`id=${id}`, fieldsText(fields)].filter(Boolean).join(' ');
 }
 
 /** How many records, in the words every answer ends with. */

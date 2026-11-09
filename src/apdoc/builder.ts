@@ -79,6 +79,7 @@ import { ApDocument, type BlockProvenance } from './document.js';
 import { COMPUTE_SECTIONS, executorMark, executorSpecs, returnShape } from '../executor.js';
 import { DirectiveNode, RunNode, TextNode, IfNode, UntilNode, WhenNode, StepNode, EachNode, InNode, VarNode } from './nodes.js';
 import { splitList } from '../lists.js';
+import { parseTemplate, type Slot } from '../shapeCompiler.js';
 
 
 /** Bullet-group keywords (DO, BY, WHEN, LOG, …) that group like force levels. */
@@ -316,7 +317,7 @@ export class DocumentBuilder implements BlockCx {
       // rather than reading as prose.
       if (kw === 'IN') {
         const name = stripTrailingColon(t.rest).trim();
-        const node = this.at(new InNode(this.ref(this.stores.get(name), name, 'store'), t.indent), t);
+        const node = this.at(new InNode(this.storeRef(name), t.indent), t);
         sink.push(node);
         this.visit(n.children, node.body, host, steps);
         i++;
@@ -773,6 +774,17 @@ export class DocumentBuilder implements BlockCx {
   /** A template by name; `report` false leaves an unknown one unresolved without an error. */
   templateRef(name: string, report = true): ApRef {
     return this.ref(this.templates.get(name), name, 'template', report);
+  }
+
+  /** A store by name: `IN <store>`, a dimension's `STORE <store>`. */
+  storeRef(name: string): ApRef {
+    return this.ref(this.stores.get(name), name, 'store');
+  }
+
+  /** The SLOTS of a template the compilation holds, read with the template grammar — null when it holds no such template. */
+  templateSlots(name: string): Slot[] | null {
+    const def = this.ctx?.templates.find(t => t.name === name);
+    return def ? parseTemplate(def.body)?.slots ?? [] : null;
   }
 
   /** A flow delegation's BY: an agent, a role bound to one — or a team, which takes the work by its own routing. */

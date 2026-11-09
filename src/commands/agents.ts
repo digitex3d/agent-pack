@@ -7,6 +7,7 @@ import { resolve } from 'node:path';
 import type { Config } from '../config.js';
 import { standaloneDir } from '../services/teamMetadata.js';
 import { parseNamespace } from '../namespace.js';
+import { printUsage } from './usage.js';
 
 /**
  * CLI command: `agent-pack agents list` — enumerate every discoverable agent,
@@ -114,10 +115,7 @@ function renderTable(rows: AgentRow[]): string {
   return lines.join('\n');
 }
 
-function usage(): void {
-  console.error('Usage:');
-  console.error('  agent-pack agents list [--domain project|global|library] [--json]');
-}
+const usage = (): void => printUsage('agent-pack agents list [--domain project|global|library] [--json]');
 
 export async function agents(args: string[]): Promise<void> {
   const config = await loadConfig(args);

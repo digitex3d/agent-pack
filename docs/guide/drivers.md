@@ -62,7 +62,7 @@ The collection answers a handful of operations, each one synchronously or with a
 | `take(filters, fields)` — capability `take` | the first record the filters hold for, `fields` set on it in the same step; two callers never get the same one; `null` when none |
 | `mark()`, `since(mark)` — capability `since` | a mark of now; then the records added or changed after it, or `null` when the mark is none of this store's |
 
-A `guard` passed to `set` is the capability `guard`. A filter arrives parsed: `{ field, op, value }`, `op` one of `=`, `!=`, `>`, `<`, `>=`, `<=`, `~` ("contains"); values compare as numbers when both sides are numbers, as text otherwise.
+A `guard` passed to `set` is the capability `guard`. A [dimension](/reference/language#dimension) keeps its answers with its store's driver, and asks for both `take` and `guard`: a driver without them may keep agents' stores, never a dimension's. A filter arrives parsed: `{ field, op, value }`, `op` one of `=`, `!=`, `>`, `<`, `>=`, `<=`, `~` ("contains"); values compare as numbers when both sides are numbers, as text otherwise.
 
 What does not depend on the engine is the store API's, and a driver never repeats it: a write reaches the driver already checked against the store's slots, filters already parsed, field names already held to letters, digits and `_`; an operation the driver does not declare is refused before it is called. A driver only translates.
 

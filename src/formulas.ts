@@ -69,7 +69,7 @@ export interface Formulas {
       chapter: Text; home: Text; lasts: Record<'project' | 'session', Text>; field: Text; key: Text;
       reject: Text; create: Text; usage: Text; noType: Text; unknownType: Text;
     } & KindGuide;
-    dimension: { chapter: Text; covers: Text; eachShape: Text; read: Text; write: Text } & KindGuide;
+    dimension: { chapter: Text; covers: Text; eachShape: Text; read: Text; write: Text; query: Text } & KindGuide;
     domain: { chapter: Text; writes: Text; reads: Text; formula: Text } & KindGuide;
     plugin: { line: Text; commands: Text; command: Text };
     team: { heading: Text; member: Text; handles: Text; fellows: Text; fellow: Text; undescribed: Text; closing: Text } & KindGuide;

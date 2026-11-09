@@ -29,7 +29,7 @@ import {
 import { storeDriverOf, storeDriverNames } from '../storeDrivers/registry.js';
 import { DEFAULT_DRIVER, phraseOf, STORE_LIFETIMES, type StoreDecl, type StoreLifetime } from '../storeDrivers/types.js';
 import { storeUsage } from '../storeDrivers/usage.js';
-import { parseTemplate, templateLayout, composeExample, SLOT_NAME } from '../shapeCompiler.js';
+import { parseTemplate, templateLayout, composeExample, SLOT_NAME, type Slot } from '../shapeCompiler.js';
 import type { VarScope } from '../vars.js';
 import { extractPrimitive, stripPrimitives, unwrapExportFile } from '../services/text.js';
 import { renderIdentityBlock, renderGlobs, } from '../primitives.js';
@@ -61,6 +61,10 @@ export interface BlockCx {
   walkableBody(def: Definition): string;
   /** A template by name; `report` false leaves an unknown one unresolved without an error. */
   templateRef(name: string, report?: boolean): ApRef;
+  /** A store by name. */
+  storeRef(name: string): ApRef;
+  /** The SLOTS of a template the compilation holds — null when it holds none by that name. */
+  templateSlots(name: string): Slot[] | null;
   agentRef(name: string): ApRef;
   runnableRef(name: string): ApRef;
   refFromAddress(address: string, expectedKind?: string): ApRef;
@@ -222,24 +226,37 @@ export class StoreBlock extends ApBlock {
   lasts: StoreLifetime = 'session';
   /** The `KEY` slot name, or null when the store declares none. */
   storeKey: string | null = null;
+  /** The `LASTS` value as written — null when the store does not say (it then lasts a session). */
+  declaredLasts: string | null = null;
+  /** Its fields — from its SLOTS region, or from the template its `AS` names. */
   slots: ApSlot[] = [];
+  /** Whether its body has a SLOTS region of its own — beside an `AS`, the compiler refuses one of them. */
+  ownSlots = false;
 
   static fromData(data: ApBlockData): StoreBlock {
     const block = restore(new StoreBlock(initOf(data)), data);
     block.storeDriver = (data.args.driver as string | undefined) ?? DEFAULT_DRIVER;
     block.lasts = (data.args.lasts as StoreLifetime | undefined) ?? 'session';
+    block.declaredLasts = (data.args.declaredLasts as string | undefined) ?? null;
     block.storeKey = (data.args.key as string | undefined) ?? null;
     block.slots = (data.args.slots as ApSlot[] | undefined) ?? [];
+    block.shape = (data.args.shape as ApShape | undefined) ?? null;
     return block;
   }
 
   static fromDefinition(def: Definition, cx: BlockCx): StoreBlock {
     const block = new StoreBlock(cx.defInit(def));
     block.storeDriver = extractPrimitive(def.body, 'DRIVER') ?? DEFAULT_DRIVER;
-    const lasts = extractPrimitive(def.body, 'LASTS');
-    block.lasts = (STORE_LIFETIMES as readonly string[]).includes(lasts ?? '') ? lasts as StoreLifetime : 'session';
+    block.declaredLasts = extractPrimitive(def.body, 'LASTS');
+    block.lasts = (STORE_LIFETIMES as readonly string[]).includes(block.declaredLasts ?? '') ? block.declaredLasts as StoreLifetime : 'session';
     block.storeKey = extractPrimitive(def.body, 'KEY');
-    block.slots = (parseTemplate(def.body)?.slots ?? []).map((s): ApSlot => ({
+    const own = parseTemplate(def.body)?.slots ?? [];
+    block.ownSlots = own.length > 0;
+    // `AS <template>`: the fields are the template's, read with the same grammar — never a second copy of them.
+    const as = extractPrimitive(def.body, 'AS');
+    if (as) block.shape = { force: 0, ref: cx.templateRef(as) };
+    const raw: Slot[] = as && !block.ownSlots ? cx.templateSlots(as) ?? [] : own;
+    block.slots = raw.map((s): ApSlot => ({
       name: s.name,
       optional: s.optional,
       type: cx.slotType(s.rawType),
@@ -254,7 +271,9 @@ export class StoreBlock extends ApBlock {
     return {
       driver: this.storeDriver,
       lasts: this.lasts,
+      ...(this.declaredLasts ? { declaredLasts: this.declaredLasts } : {}),
       ...(this.storeKey ? { key: this.storeKey } : {}),
+      ...(this.shape ? { shape: this.shape } : {}),
       slots: this.slots,
     };
   }
@@ -339,6 +358,8 @@ export class DimensionBlock extends ApBlock {
   protected readonly idPrefix = DimensionBlock.PREFIX;
   /** The `FOR` globs — from the project root. */
   globs: string[] = [];
+  /** The store its `STORE` line names: the fields of its records, and the driver that keeps them. */
+  store: ApRef | null = null;
   /** The `EACH` text, verbatim — empty when it names a template (`eachRef`). */
   each = '';
   /** The template `EACH` names, when its text is exactly one template's name: the reference, never the name, is its content. */
@@ -347,49 +368,50 @@ export class DimensionBlock extends ApBlock {
   static fromData(data: ApBlockData): DimensionBlock {
     const block = restore(new DimensionBlock(initOf(data)), data);
     block.globs = (data.args.for as string[] | undefined) ?? [];
+    block.store = (data.args.store as ApRef | undefined) ?? null;
     block.each = (data.args.each as string | undefined) ?? '';
     block.eachRef = (data.args.eachRef as ApRef | undefined) ?? null;
-    block.shape = (data.args.shape as ApShape | undefined) ?? null;
     return block;
   }
 
   static fromDefinition(def: Definition, cx: BlockCx): DimensionBlock {
     const block = new DimensionBlock(cx.defInit(def));
     block.globs = splitList(extractPrimitive(def.body, 'FOR') ?? '');
+    const store = extractPrimitive(def.body, 'STORE')?.trim();
+    if (store) block.store = cx.storeRef(store);
     block.each = (extractPrimitive(def.body, 'EACH') ?? '').trim();
     if (new RegExp(`^${SLOT_NAME}$`).test(block.each)) {
       const ref = cx.templateRef(block.each, false);
       if (ref.resolved !== false) { block.eachRef = ref; block.each = ''; }
     }
-    // The walk captures the AS line into `shape`; what is left is the rules.
-    cx.walk(stripPrimitives(cx.walkableBody(def), 'FOR', 'EACH'), block.body, block);
+    cx.walk(stripPrimitives(cx.walkableBody(def), 'FOR', 'EACH', 'STORE'), block.body, block);
     return block;
   }
 
   protected override argsJson(): Record<string, unknown> {
     return {
       for: this.globs,
+      ...(this.store ? { store: this.store } : {}),
       ...(this.eachRef ? { eachRef: this.eachRef } : { each: this.each }),
-      ...(this.shape ? { shape: this.shape } : {}),
     };
   }
 
-  /** Where it applies (src/withUse.ts), what it covers and its shape, how to read it and write it, then its rules. */
+  /** Where it applies (src/withUse.ts), what it covers and its store, how to read, write and search it, then its rules. */
   override asMdBody(env: MdEnv): string {
     const D = FORMULAS.blocks.dimension;
     // A dimension is reached by its id, like every block: `<apx> dimension <op> <dim-id>`.
     const command = (op: string) => serviceCommand(env.apxOf(null), 'dimension', op, this.id);
-    const shape = this.shape?.ref;
     const each = this.eachRef ? fill(D.eachShape, { name: refName(this.eachRef), ref: env.refOf(this.eachRef.target) }) : this.each;
     return withScopeLine(this.kind, this.scopes, [
       fill(D.covers, {
         globs: renderGlobs(this.globs),
         each,
-        name: shape ? refName(shape) : '',
-        ref: shape ? env.refOf(shape.target) : '',
+        name: this.store ? refName(this.store) : '',
+        ref: this.store ? env.refOf(this.store.target) : '',
       }),
       fill(D.read, { read: command('read') }),
       fill(D.write, { write: command('write') }),
+      fill(D.query, { q: command('q'), next: command('next') }),
       ...renderNodes(env, this.body),
     ].join('\n'));
   }

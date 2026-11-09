@@ -47,6 +47,7 @@ const VAR_EXCLUDED: Partial<Record<Keyword, string>> = {
 /** What a DIMENSION's rules leave out: they say how its value is produced, not what the agent remembers or loads. */
 const DIMENSION_EXCLUDED: Partial<Record<Keyword, string>> = {
   MEM: "a dimension's rules say how its value is produced; MEM goes in an agent, a role or a procedure",
+  AS: "a dimension's records have the fields of its store — write `STORE <store>`, a STORE whose SLOTS (or AS template) are the old AS template's",
 };
 
 /** Every force-level family base, less those `excluded` names. */
@@ -151,28 +152,27 @@ export const BLOCK_CONTRACTS: Record<string, BlockContract> = {
   // A store is a named working table an agent reads and writes. DRIVER names
   // what keeps it — `files` when the line is absent. LASTS is its lifetime, KEY
   // the field that identifies a record so re-ingesting the same thing updates
-  // instead of duplicating. The record shape is declared in a SLOTS region,
-  // which is a region and not a keyword — the same grammar TEMPLATE uses, so
-  // there is no second type language to learn or maintain.
+  // instead of duplicating. The record shape is declared in a SLOTS region —
+  // the same grammar TEMPLATE uses, so there is no second type language — or
+  // taken from a template by `AS <template>`, never both.
   STORE: {
-    allows: ['ABOUT', 'APPLIES', 'DRIVER', 'LASTS', 'KEY'] as const,
-    unique: ['ABOUT', 'DRIVER', 'LASTS', 'KEY'] as const,
+    allows: ['ABOUT', 'APPLIES', 'DRIVER', 'LASTS', 'KEY', 'AS'] as const,
+    unique: ['ABOUT', 'DRIVER', 'LASTS', 'KEY', 'AS'] as const,
     regions: VERBATIM_REGIONS,
   },
   // A dimension is an answer about the code an agent works out once and the apx
   // keeps: ABOUT the question it answers, FOR the files it covers, EACH what to
-  // translate in a file, AS the template its value is a list of. When it is
-  // worth reading is the reader's to say — a WITH names it (src/withUse.ts).
-  // Its rules are the force-level families — AS among them as the value's
-  // shape, which takes no level (the compiler's check); MEM and WITH are an
-  // agent's, not a rule of how a value is produced. Nothing else: no WHEN, no
-  // action, no prose line, no nested block (IF, UNTIL…) — checked on the parsed
-  // block, at any depth.
+  // translate in a file, STORE the store whose fields its records have. When
+  // it is worth reading is the reader's to say — a WITH names it
+  // (src/withUse.ts). Its rules are the force-level families; MEM and WITH are
+  // an agent's, not a rule of how a value is produced. Nothing else: no WHEN,
+  // no action, no prose line, no nested block (IF, UNTIL…) — checked on the
+  // parsed block, at any depth.
   DIMENSION: {
     allows: ['ABOUT', ...DIMENSION_LINES, ...familiesWithout(DIMENSION_EXCLUDED)],
     excluded: DIMENSION_EXCLUDED,
-    requiresAll: ['ABOUT', ...DIMENSION_LINES, 'AS'] as const,
-    unique: ['ABOUT', ...DIMENSION_LINES, 'AS'] as const,
+    requiresAll: ['ABOUT', ...DIMENSION_LINES] as const,
+    unique: ['ABOUT', ...DIMENSION_LINES] as const,
   },
   // A domain is a region of the code: ABOUT what it is, WRITES the files work
   // within it may write, READS the ones it may only read — lines that add up

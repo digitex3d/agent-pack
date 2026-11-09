@@ -36,10 +36,11 @@ export const GLOBS_LINE = 'FOR';
 
 /**
  * A DIMENSION's own lines — FOR the files it covers, EACH what to translate
- * inside a file. The one spelling of them: the vocabulary, the block's contract
- * and the lint's placement check read it here.
+ * inside a file, STORE the store whose fields its records have. The one
+ * spelling of them: the vocabulary, the block's contract and the lint's
+ * placement check read it here.
  */
-export const DIMENSION_LINES = [GLOBS_LINE, 'EACH'] as const;
+export const DIMENSION_LINES = [GLOBS_LINE, 'EACH', 'STORE'] as const;
 
 /**
  * A DOMAIN's lines: `WRITES [<formula>] [IN <glob>, …]` the files work within
@@ -83,8 +84,8 @@ const STATIC_KEYWORDS = [
   // still lexed, so the lint names the rewrite.
   'STORE', 'DRIVER', 'TYPE', 'LASTS', 'KEY',
   // DIMENSION body: FOR the files it covers (globs from the project root), EACH
-  // what to translate inside a file; its value's shape is its AS template.
-  'DIMENSION', ...DIMENSION_LINES,
+  // what to translate inside a file, STORE (already above) the fields of its records.
+  'DIMENSION', GLOBS_LINE, 'EACH',
   ...DOMAIN_LINES,
   // `IN <store>:` — a block grouping the steps that work in one store. A
   // control-flow head, not a named declaration: it lives inside a runnable.

@@ -41,6 +41,7 @@ import { DelegationTable, CONTRACT_ID_RE, MARK_ID_RE, pieceRecord, pieceOf, answ
 import { splitHarness, type ApMark, type HarnessInvocation } from '../delegation.js';
 import { parsePayload } from './payload.js';
 import type { DriverEntry } from '../storeDrivers/registry.js';
+import { installRecorded } from './stores.js';
 import { resolveWorkspace } from '../workspace/registry.js';
 import type { Allowed, WorkspaceSession } from '../workspace/types.js';
 import { constantOf, readsOf } from '../vars.js';
@@ -244,8 +245,16 @@ export class ApxEngine {
     for (const block of doc.all()) this.byId.set(block.id, block);
   }
 
+  /** Whether the config's store drivers were installed in this run. */
+  private driversInstalled = false;
+
   /** Dispatch one invocation: a verb of the engine, or a served kind and its operation (`<kind> <op> [<id>] …`). No verb = start. `check` answers asynchronously. */
   run(argv: string[]): number | Promise<number> {
+    // The config's own store drivers are installed before anything renders: a store they keep reads as usable in `get` and `md` too.
+    if (this.build.drivers?.length && !this.driversInstalled) {
+      this.driversInstalled = true;
+      return installRecorded(this).then(() => this.run(argv));
+    }
     const [verb = 'start', ...args] = argv;
     if (verb === '-h' || verb === '--help') return this.help();
     if (Object.hasOwn(this.verbs, verb)) return this.verbs[verb as ApxVerb](args);
@@ -365,7 +374,7 @@ export class ApxEngine {
       for (const m of memories) this.out(`  ${m.text}${m.shape ? `  — as ${this.refLabel(m.shape.ref)}` : ''}`);
     }
     this.out('write to:');
-    const stores = this.doc.byKind('store');
+    const stores = this.doc.agentStores();
     if (stores.length === 0) this.out('  (no stores declared)');
     for (const s of stores) this.out(`  ${this.label(s)}  — use: ${this.cmd} store <op> ${s.id} …`);
     const dimensions = this.doc.byKind('dimension') as DimensionBlock[];

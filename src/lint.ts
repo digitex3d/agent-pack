@@ -972,7 +972,7 @@ function leavesRoot(glob: string): boolean {
  * file, and the compiler's.
  */
 export function dimensionBlockErrors(file: string, blocks: readonly Block[]): LintError[] {
-  return coveringBlockErrors(file, blocks, 'DIMENSION');
+  return coveringBlockErrors(file, blocks, 'DIMENSION', [GLOBS_LINE]);
 }
 
 /**
@@ -995,7 +995,7 @@ export function domainBlockErrors(file: string, blocks: readonly Block[]): LintE
  * their contract, what is wrong with each of those lines, and globs that stay
  * in the project.
  */
-function coveringBlockErrors(file: string, blocks: readonly Block[], key: string, lines: readonly string[] = [GLOBS_LINE],
+function coveringBlockErrors(file: string, blocks: readonly Block[], key: string, lines: readonly string[],
   read: (c: Line) => { globs: string[]; issues: string[] } = c => ({ globs: splitList(c.rest), issues: [] })): LintError[] {
   const found = blocks.flatMap(b => (b.key === key ? [b] : agentNestedBlocks([b], key).map(n => n.block)));
   return found.flatMap(b => [
@@ -1107,7 +1107,7 @@ export function lintStore(file: string, body: string, options: LintOptions = {})
 
 /**
  * A dimension declares an answer about the code the apx keeps: ABOUT, FOR,
- * EACH and AS once each, its rules beside them — all from its block contract.
+ * EACH and STORE once each, its rules beside them — all from its block contract.
  */
 export function lintDimension(file: string, body: string, options: LintOptions = {}): LintError[] {
   return lintSingleBlockKind(file, body, 'DIMENSION', options, block => dimensionBlockErrors(file, [block]));
@@ -1197,6 +1197,7 @@ export function registerLineOwner(key: string, owner: string): void {
 const BARE_NEEDS: Record<string, string> = {
   FOR: 'at least one glob',
   EACH: 'what to translate in a file — a text, or a template\'s name',
+  STORE: 'the store whose fields its records have',
   AS: 'the template it names',
 } satisfies Record<DimensionLine | 'AS', string>;
 

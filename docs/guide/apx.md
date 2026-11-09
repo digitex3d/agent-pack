@@ -108,7 +108,7 @@ node .agent-pack/apx/coder.apx dimension read dim-3f2a9c1e src/billing/invoice.p
 
 | Answer | Exit | |
 |---|---|---|
-| `hit pseudocode <file> — by <agent>, <date>` | `0` | the file and every file the answer depends on are as they were: the answer follows, each instance through its template's `BODY` (`none` when there was nothing to report); `read <file> json` prints the raw value instead |
+| `hit pseudocode <file> — by <agent>, <date>` | `0` | the file and every file the answer depends on are as they were: the answer follows, each record through the `BODY` of its store's template — on a line of `field=value` when the store has its own `SLOTS` — (`none` when there was nothing to report); `read <file> json` prints the raw value instead |
 | `miss pseudocode <file> — never written` | `1` | no answer yet |
 | `miss pseudocode <file> — changed: <path>` | `1` | the file, or a file the answer depends on, was edited — the old answer is never printed |
 | `miss pseudocode <file> — ref gone: <path>` | `1` | a file the answer depends on was deleted |
@@ -116,7 +116,7 @@ node .agent-pack/apx/coder.apx dimension read dim-3f2a9c1e src/billing/invoice.p
 
 A file outside the dimension's `FOR` is a usage error (exit `2`) naming the globs it covers. A file moved or renamed without an edit keeps its answer: on a `miss`, the apx first looks for the entry of a file that no longer exists, written against this same content, and moves it.
 
-On a `miss`, the agent works the answer out and keeps it — a JSON list of instances of the dimension's template on stdin, or the literal `none`:
+On a `miss`, the agent works the answer out and keeps it — a JSON list of records with the fields of the dimension's store on stdin, or the literal `none`:
 
 ```bash
 node .agent-pack/apx/coder.apx dimension write dim-3f2a9c1e src/billing/invoice.py refs=src/billing/tax.py - < value.json
@@ -128,13 +128,16 @@ node .agent-pack/apx/coder.apx dimension write dim-3f2a9c1e src/billing/empty.py
 | Command | |
 |---|---|
 | `dimension find <dim-id> <text>` | every instance kept, across the dimension's files, whose text holds `<text>` (case aside) — fresh entries only; exit `1` when none does |
+| `dimension q <dim-id> [<field><op><value> …] [json]` | the instances every filter holds for, each with its file — filters as a [store's](#stores), on the store's fields or `_file`; fresh answers only, and the files left out for having none |
+| `dimension next <dim-id>` | the next file it covers with no fresh answer, taken for you: no other agent gets it meanwhile (for thirty minutes, or until it is written) — exit `1` when every file is answered or taken |
+| `dimension mark <dim-id>`, then `dimension since <dim-id> <mark>` | a mark of now, then the files answered after it — with tabeli, a file written in the same second as the mark may come back too |
 | `dimension ls <dim-id> [glob]` | the entries kept — `fresh`, `stale` or `gone`, and why — then the counts, hits, misses and hit rate |
 | `dimension why <dim-id> <file>` | the state of one entry, file by file: the fingerprint kept and the current one |
 | `dimension clear <dim-id> [glob] [--by <agent>]` | delete entries: all, those matching a glob, those an agent wrote |
 | `dimension gc <dim-id>` | delete the entries of files that no longer exist |
-| `dimension` | every dimension of the agent, by its id: what it covers, its cache folder and its counts |
+| `dimension` | every dimension of the agent, by its id: what it covers, its defhash and its counts |
 
-The cache lives at the project root, outside git, and is never touched directly: `.agent-pack/cache/<defhash>/<file>.json`, one entry per file, with the counters apart in `.agent-pack/cache/stats/<defhash>.json`. The defhash is the dimension's content without its name — `ABOUT`, `FOR`, `EACH`, its rules, and the content of the templates `AS` and `EACH` name: renaming the dimension or a template keeps the cache, any other edit starts a new folder, and `agent-pack bundle all` deletes the folders no dimension produces any more. A file's fingerprint ignores line endings, trailing whitespace and blank lines; indentation and comments count.
+The cache lives at the project root, outside git, and is never touched directly: each dimension's answers are a store of their own, `.agent-pack/cache/<defhash>.<ext>` — the fields and the driver of its `STORE`, the extension the driver's (`.json` for files, `.tbl` for tabeli) — with one record per file answered (its fingerprint, its refs, who wrote it) and one per instance; the counters apart in `.agent-pack/cache/stats/<defhash>.json`. Every agent that has the dimension reads and writes the same store. A write is guarded: the file's record is claimed while its instances change, so two agents answering one file never mix their records — the one that loses exits `4`. The defhash is the dimension's content, its store's and the template `EACH` names, without their names: renaming any of them keeps the cache, any other edit starts a new store, and `agent-pack bundle all` deletes the stores no dimension produces any more. A file's fingerprint ignores line endings, trailing whitespace and blank lines; indentation and comments count.
 
 ## Variables
 

@@ -10,7 +10,7 @@
  */
 import { join } from 'node:path';
 import { STATE_DIR } from './paths.js';
-import { openTable, queryTable, runTable, tabeliVersionError } from './tabeli.js';
+import { fieldArgs, openTable, queryTable, runTable, tabeliVersionError } from './tabeli.js';
 
 export class RecordTable<R extends { state: string }> {
   protected constructor(
@@ -46,7 +46,7 @@ export class RecordTable<R extends { state: string }> {
 
   /** Set fields on a record, unconditionally. */
   set(id: string, fields: Partial<R>): void {
-    this.ok(runTable(this.path, ['s', this.rowOf(id), ...this.pairs(fields)]));
+    this.ok(runTable(this.path, ['s', this.rowOf(id), ...fieldArgs(fields)]));
   }
 
   /**
@@ -55,7 +55,7 @@ export class RecordTable<R extends { state: string }> {
    * exit 4), so the caller rereads instead of overwriting.
    */
   transition(id: string, from: R['state'], to: R['state'], fields: Partial<R> = {}): boolean {
-    const run = runTable(this.path, ['s', this.rowOf(id), `state=${to}`, ...this.pairs(fields), 'if', `state=${from}`]);
+    const run = runTable(this.path, ['s', this.rowOf(id), `state=${to}`, ...fieldArgs(fields), 'if', `state=${from}`]);
     if (run.status === 4) return false;
     this.ok(run);
     return true;
@@ -67,9 +67,6 @@ export class RecordTable<R extends { state: string }> {
     return String(r.id);
   }
 
-  private pairs(fields: Partial<R>): string[] {
-    return Object.entries(fields).map(([k, v]) => `${k}=${v}`);
-  }
 
   private asRecord(r: Record<string, string>): R {
     const out = {} as Record<string, string>;
