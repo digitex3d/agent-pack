@@ -2,6 +2,8 @@
 
 `bundle all` writes one `.apx` per agent, in `.agent-pack/apx/`: the agent's compiled definition and the engine that serves it, in a single file run by Node alone.
 
+The file is a *pack*: the engine, then its data as sections, one JavaScript comment line each — `//apx:<type>:<name>:<encoding>:<data>` — between a header line and an end line. The header locates every section (offset, size, sha256) and carries the hash of the data, the identity of the program, which the engine does not change; the end line repeats it and says where the header is, so the engine opens a pack of any size by reading its tail, its header and the one section it needs, and refuses a truncated or altered file before running anything. An agent's apx holds one section, `image`; a reader ignores the types it does not know.
+
 ```bash
 node .agent-pack/apx/<agent>.apx <verb>
 ```

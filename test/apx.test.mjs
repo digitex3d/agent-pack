@@ -265,7 +265,8 @@ for (const compress of [false, true]) {
       writeFileSync(f.path, f.content);
     }
     const text = readFileSync(join(project, apxPath('pm')), 'utf-8');
-    assert.ok(text.trimEnd().split('\n').pop().startsWith(compress ? '//apx:gzip:' : '//apx:json:'), 'the data line closes the file');
+    assert.ok(text.trimEnd().split('\n').pop().startsWith('//apx:end::json:'), 'the end line closes the file');
+    assert.ok(text.includes(compress ? '\n//apx:image::gzip:' : '\n//apx:image::json:'), 'the image section is written as asked');
     const node = (...args) => spawnSync('node', [apxPath('pm'), ...args], { cwd: project, encoding: 'utf-8' });
     const scope = node('scope');
     assert.equal(scope.status, 0, scope.stderr);

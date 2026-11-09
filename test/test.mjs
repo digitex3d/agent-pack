@@ -394,4 +394,7 @@ await import('./lintKindSwitch.test.mjs');
 // --- store drivers: the contract, shipped drivers and a module's ---
 await import('./storeDrivers.test.mjs');
 
+// the pack: the container of every apx — sections, offsets, seal
+await import('./pack.test.mjs');
+
 console.log('All tests passed.');

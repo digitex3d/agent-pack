@@ -25,7 +25,7 @@ let engine: string | null = null;
 export function apxFiles(agent: string, document: string, projectRoot: string, compress: boolean, checks: ApxChecks | null = null, limits: ApxLimits = {}): EmittedFile[] {
   engine ??= readFileSync(resolve(PACKAGE_ROOT, 'dist/apx-engine.js'), 'utf-8');
   return [
-    { path: resolve(projectRoot, apxPath(agent)), content: apxFile(engine, document, packageVersion(), TABELI_ENGINE, compress, checks, limits) },
+    { path: resolve(projectRoot, apxPath(agent)), content: apxFile(engine, document, packageVersion(), TABELI_ENGINE, compress, checks, limits, agent) },
     { path: resolve(projectRoot, APX_DIR, 'package.json'), content: '{ "type": "commonjs" }\n' },
   ];
 }
