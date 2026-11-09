@@ -24,7 +24,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
-import { extname, join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { nameFreeContent, sha256Hex } from '../apdoc/ids.js';
 import type { ApBlock } from '../apdoc/block.js';
 import type { DimensionBlock, StoreBlock } from '../apdoc/blocks.js';
@@ -32,7 +32,8 @@ import type { ApDocument } from '../apdoc/document.js';
 import type { ApSlot } from '../apdoc/types.js';
 import { matchesAnyGlob } from '../services/glob.js';
 import { readJsonFile, relativeWithin, namesMatching, writeFileAtomic } from '../services/fs.js';
-import type { Collection, Doc, Filter, StoreDriver, StoreRef } from '../storeDrivers/types.js';
+import type { Collection, Doc, Filter } from '../storeDrivers/types.js';
+import { open as openStore, type OpenStore } from './stores.js';
 import { CACHE_DIR } from './paths.js';
 
 /** The engine's own share of every defhash: raised when what an entry means changes, so every cache starts over. */
@@ -189,24 +190,24 @@ export interface Claimed {
 export class DimensionCache {
   /** The store, from the project root. */
   readonly location: string;
-  private readonly ref: StoreRef;
+  readonly root: string;
   private collection: Collection | null = null;
 
-  constructor(readonly root: string, readonly defhash: string, private readonly driver: StoreDriver, private readonly store: StoreBlock) {
-    const decl = { ...store.decl('dimension'), key: '_key', lasts: 'project' as const };
-    this.location = `${CACHE_DIR}/${defhash}${extname(driver.location(decl)) || '.store'}`;
-    this.ref = { ...decl, root, path: join(root, this.location), collection: `dimension_${defhash}` };
+  /** `store` is the dimension's STORE resolved into the cache (src/apx/stores.ts); its records are reached by `_key`. */
+  constructor(private readonly store: OpenStore, readonly defhash: string) {
+    this.root = store.ref.root;
+    this.location = relative(store.ref.root, store.ref.path);
   }
 
   private async open(): Promise<Collection> {
-    this.collection ??= await this.driver.open(this.ref);
+    this.collection ??= await openStore(this.store);
     return this.collection;
   }
 
   /** A unit record's own fields: the store's slots, numbers read back as numbers. */
   private fieldsOf(doc: Doc): Record<string, unknown> {
     const out: Record<string, unknown> = {};
-    for (const slot of this.store.slots) {
+    for (const slot of this.store.spec.slots) {
       if (doc[slot.name] === undefined) continue;
       out[slot.name] = numeric(slot) && doc[slot.name] !== '' ? Number(doc[slot.name]) : doc[slot.name];
     }

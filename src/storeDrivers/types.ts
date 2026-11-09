@@ -69,7 +69,7 @@ export interface Filter {
 /** A record, flat: field to value. `id` is the driver's own identifier of it. */
 export type Doc = Record<string, string | number>;
 
-type MaybePromise<T> = T | Promise<T>;
+export type MaybePromise<T> = T | Promise<T>;
 
 /** The operations a driver may add to the base ones, and declares in `capabilities`. */
 export type DriverCapability = 'take' | 'guard' | 'since';

@@ -397,4 +397,7 @@ await import('./storeDrivers.test.mjs');
 // the pack: the container of every apx — sections, offsets, seal
 await import('./pack.test.mjs');
 
+// the engine's own tables as stores, through the one store API
+await import('./engineStores.test.mjs');
+
 console.log('All tests passed.');

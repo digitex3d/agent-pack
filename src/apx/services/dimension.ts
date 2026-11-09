@@ -12,12 +12,11 @@ import type { DimensionBlock, TemplateBlock } from '../../apdoc/blocks.js';
 import { formatIssues, slotSpecsOf, validateRecord } from '../../shapeSchema.js';
 import { relativeWithin } from '../../services/fs.js';
 import { matchesAnyGlob } from '../../services/glob.js';
-import { storeDriverOf } from '../../storeDrivers/registry.js';
 import {
   DimensionCache, StaleWrite, dimensionDefHash, dimensionParts, filesNamedIn, CACHE_FORMAT, NONE,
   type CacheEntry, type EntryState,
 } from '../dimensions.js';
-import { STORE_EXIT, fieldsText, installRecorded } from '../stores.js';
+import { STORE_EXIT, StoreRefusal, fieldsText, installRecorded, resolveStore, type OpenStore } from '../stores.js';
 import { mark, next, q, since, writeUsage, type Dimension, type Op } from './dimensionQuery.js';
 import { countOf, serviceCommand, type ApxHost, type ApxService } from '../service.js';
 
@@ -32,13 +31,19 @@ async function dimensionsOf(host: ApxHost): Promise<Dimension[]> {
   await installRecorded(host);
   return (host.doc.byKind('dimension') as DimensionBlock[]).flatMap(block => {
     const parts = dimensionParts(host.doc, block);
-    const driver = parts.store ? storeDriverOf(parts.store.storeDriver) : null;
-    if (!parts.store || !driver) return [];
+    if (!parts.store) return [];
+    let store: OpenStore;
+    try {
+      store = resolveStore(parts.store, host.projectRoot, 'dimension', { kind: 'cache', defhash: dimensionDefHash(block, parts) });
+    } catch (e) {
+      if (e instanceof StoreRefusal) return [];
+      throw e;
+    }
     const template = parts.store.shape ? host.doc.resolve(parts.store.shape.ref) as TemplateBlock | null : null;
     return [{
       block, name: block.name, store: parts.store, template,
       cmd: (op: string) => serviceCommand(host.cmd, 'dimension', op, block.id),
-      cache: new DimensionCache(host.projectRoot, dimensionDefHash(block, parts), driver, parts.store),
+      cache: new DimensionCache(store, dimensionDefHash(block, parts)),
     }];
   });
 }

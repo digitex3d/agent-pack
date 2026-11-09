@@ -4,53 +4,55 @@
  * A table of records with a state, one per session — what the apx keeps of
  * the work it hands out: the instances of a team's contracts (contracts.ts),
  * the delegations a flow started in the background (delegations.ts). One
- * implementation for both: open, read, add, set, and move a record from one
- * state to another as a guarded set, so two agents never move the same
- * record twice. A collection of the `files` driver keeps it; every field is
- * text.
+ * implementation for both: read, add, set, and move a record from one state
+ * to another as a guarded set, so two agents never move the same record
+ * twice. The table is an engine store (engineStores.ts), reached through the
+ * store API like every other: its writes are checked against its slots.
  */
-import { join } from 'node:path';
-import { STATE_DIR } from './paths.js';
-import { fileCollection } from '../storeDrivers/files/index.js';
+import { dirname } from 'node:path';
 import type { Collection, Doc } from '../storeDrivers/types.js';
+import { checkWrite, open, type OpenStore } from './stores.js';
 
 export class RecordTable<R extends { state: string }> {
-  private readonly collection: Collection;
+  /** Where the table's file lives, and its folder — the session's. */
+  readonly path: string;
+  readonly dir: string;
+  private collection: Collection | null = null;
 
   protected constructor(
-    readonly path: string,
-    readonly dir: string,
+    protected readonly store: OpenStore,
     private readonly fields: readonly (keyof R & string)[],
-    /** The field that identifies a record — its id. */
-    key: keyof R & string,
   ) {
-    this.collection = fileCollection(path, key);
+    this.path = store.ref.path;
+    this.dir = dirname(store.ref.path);
   }
 
-  /** Where `file` of `sessionId` lives under `projectRoot` — created when first written. */
-  protected static place(projectRoot: string, sessionId: string, file: string): { path: string; dir: string } {
-    const dir = join(projectRoot, STATE_DIR, sessionId);
-    return { path: join(dir, file), dir };
+  private open(): Collection {
+    return this.collection ??= this.sync(open(this.store));
   }
 
   /** Every record, in the order written. */
   all(): R[] {
-    return this.sync(this.collection.find([])).map(r => this.asRecord(r));
+    return this.sync(this.open().find([])).map(r => this.asRecord(r));
   }
 
   get(id: string): R | null {
-    const r = this.sync(this.collection.get(id));
+    const r = this.sync(this.open().get(id));
     return r ? this.asRecord(r) : null;
   }
 
-  /** Add a record. Throws on a failure. */
+  /** Add a record, checked against the table's slots. Throws on a failure. */
   add(record: R): void {
-    this.sync(this.collection.put(this.asDoc(record)));
+    const doc = this.asDoc(record);
+    checkWrite(this.store, doc, true);
+    this.sync(this.open().put(doc));
   }
 
   /** Set fields on a record, unconditionally. */
   set(id: string, fields: Partial<R>): void {
-    if (this.sync(this.collection.set(id, this.asDoc(fields))) === 'missing') throw new Error(`no record ${id}`);
+    const doc = this.asDoc(fields);
+    checkWrite(this.store, doc, false);
+    if (this.sync(this.open().set(id, doc)) === 'missing') throw new Error(`no record ${id}`);
   }
 
   /**
@@ -59,18 +61,22 @@ export class RecordTable<R extends { state: string }> {
    * caller rereads instead of overwriting.
    */
   transition(id: string, from: R['state'], to: R['state'], fields: Partial<R> = {}): boolean {
-    const outcome = this.sync(this.collection.set(id, this.asDoc({ ...fields, state: to }), [{ field: 'state', op: '=', value: from }]));
+    const doc = this.asDoc({ ...fields, state: to });
+    checkWrite(this.store, doc, false);
+    const outcome = this.sync(this.open().set(id, doc, [{ field: 'state', op: '=', value: from }]));
     if (outcome === 'missing') throw new Error(`no record ${id}`);
     return outcome === 'set';
   }
 
+  /** The engine's driver answers at once; a promise here would be a driver mix-up. */
   private sync<T>(v: T | Promise<T>): T {
-    if (v instanceof Promise) throw new Error('the files driver answers synchronously');
+    if (v instanceof Promise) throw new Error(`${this.store.driver.name}: the engine's tables need a driver that answers synchronously`);
     return v;
   }
 
+  /** Fields as a record: text, an empty or absent field left out. */
   private asDoc(fields: Partial<R>): Doc {
-    return Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]));
+    return Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => [k, String(v)]));
   }
 
   private asRecord(r: Doc): R {

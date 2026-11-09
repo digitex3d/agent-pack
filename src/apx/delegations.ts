@@ -21,6 +21,7 @@
  * still running as it is, and says so (D52).
  */
 import { RecordTable } from './recordTable.js';
+import { delegationsStore, engineStore } from './engineStores.js';
 
 export const DELEGATION_STATES = ['marked', 'running', 'delivered', 'merged', 'blocked', 'ended'] as const;
 export type DelegationState = typeof DELEGATION_STATES[number];
@@ -104,8 +105,7 @@ export function pieceRecord(fields: Partial<DelegationRecord> & Pick<DelegationR
 export class DelegationTable extends RecordTable<DelegationRecord> {
   /** Open the registry of `sessionId` under `projectRoot` — created when first written. */
   static open(projectRoot: string, sessionId: string): DelegationTable {
-    const at = RecordTable.place(projectRoot, sessionId, 'delegations.json');
-    return new DelegationTable(at.path, at.dir, FIELDS, 'dlg');
+    return new DelegationTable(engineStore(projectRoot, sessionId, 'engine', delegationsStore(FIELDS, DELEGATION_STATES)), FIELDS);
   }
 
   /** The contracts of a MARK the latest DELEGATE of it started — or, before any started, none. */

@@ -255,7 +255,7 @@ try {
       assert.equal(recorded[1].cnd, id);
       assert.equal(recorded[1].model, 'fake-1.0');
       assert.equal(recorded[1].p, '0.9');
-      assert.equal(recorded[1].threshold, '0.7');
+      assert.equal(recorded[1].threshold, 0.7, 'a number slot keeps a number');
       assert.match(recorded[1].fingerprint, /^[0-9a-f]{64}$/);
       assert.ok(!JSON.stringify(recorded).includes('42 tests'), 'the state itself is not recorded');
 
@@ -283,7 +283,7 @@ try {
       assert.equal(r.lines[1], 'the gate stayed closed — a variable it reads is empty');
       for (const out of [...rounds, r].map(x => x.out)) assert.ok(!/plain English|draft/.test(out), `a sealed answer never quotes its condition: ${out}`);
       // the rounds as recorded: three to the limit, then a new loop — its first closed, its open — then a loop closed twice
-      assert.deepEqual(records('u').map(x => [x.round, x.outcome, x.level]), [['1', 'closed', '2'], ['2', 'closed', '2'], ['3', 'closed', '2'], ['1', 'closed', '2'], ['2', 'open', '2'], ['1', 'closed', '2'], ['2', 'closed', '2']]);
+      assert.deepEqual(records('u').map(x => [x.round, x.outcome, x.level]), [[1, 'closed', 2], [2, 'closed', 2], [3, 'closed', 2], [1, 'closed', 2], [2, 'open', 2], [1, 'closed', 2], [2, 'closed', 2]]);
     } finally {
       if (prior === undefined) delete process.env[SESSION]; else process.env[SESSION] = prior;
     }

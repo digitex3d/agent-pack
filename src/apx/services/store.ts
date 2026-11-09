@@ -32,7 +32,7 @@ function splitAt(args: string[], word: string): [string[], string[] | null] {
 
 /** The one key an operation names, or a refusal saying how to write it. */
 function keyArg(store: OpenStore, args: string[], op: string): string {
-  if (!args[0]) throw new StoreRefusal(STORE_EXIT.usage, `${op} takes the record's ${store.block.storeKey ?? 'id'}: store ${op} ${store.block.id} <${store.block.storeKey ?? 'id'}>`);
+  if (!args[0]) throw new StoreRefusal(STORE_EXIT.usage, `${op} takes the record's ${store.spec.storeKey ?? 'id'}: store ${op} ${store.spec.id} <${store.spec.storeKey ?? 'id'}>`);
   return args[0];
 }
 
@@ -40,7 +40,7 @@ const put: Op = async (host, store, args) => {
   const doc = fieldsOf(store, args);
   checkWrite(store, doc, true);
   const r = await (await open(store)).put(doc);
-  const key = store.block.storeKey;
+  const key = store.spec.storeKey;
   if (r.updated && key) host.out(`# ${key}=${String(doc[key])} exists as id=${r.id} — updated, not duplicated`);
   host.out(recordLine({ id: r.id, ...doc }));
   return 0;
@@ -49,7 +49,7 @@ const put: Op = async (host, store, args) => {
 const get: Op = async (host, store, args) => {
   const key = keyArg(store, args, 'get');
   const doc = await (await open(store)).get(key);
-  if (!doc) return host.fail(STORE_EXIT.missing, `${store.block.name}: no record ${key}`);
+  if (!doc) return host.fail(STORE_EXIT.missing, `${store.spec.name}: no record ${key}`);
   host.out(args.includes('json') ? JSON.stringify(doc) : recordLine(doc));
   return 0;
 };
@@ -58,7 +58,7 @@ const find: Op = async (host, store, args) => {
   const flags = new Set<string>(args.filter(a => a === 'count' || a === 'json'));
   const limitArg = args.find(a => a.startsWith('limit='));
   const limit = limitArg ? Number(limitArg.slice('limit='.length)) : undefined;
-  if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) throw new StoreRefusal(STORE_EXIT.usage, `${store.block.name}: limit takes a whole number above 0`);
+  if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) throw new StoreRefusal(STORE_EXIT.usage, `${store.spec.name}: limit takes a whole number above 0`);
   const filters = filtersOf(store, args.filter(a => !flags.has(a) && a !== limitArg));
   const docs = await (await open(store)).find(filters, limit);
   if (flags.has('count')) host.out(countLine(docs.length));
@@ -77,26 +77,26 @@ const set: Op = async (host, store, args) => {
   const fields = fieldsOf(store, fieldArgs);
   checkWrite(store, fields, false);
   const r = await (await open(store)).set(key, fields, guardArgs ? filtersOf(store, guardArgs) : []);
-  if (r === 'missing') return host.fail(STORE_EXIT.missing, `${store.block.name}: no record ${key} — nothing was written`);
-  if (r === 'stale') return host.fail(STORE_EXIT.stale, `${store.block.name}: the condition no longer holds for ${key} — your view of it is stale: get it again`);
+  if (r === 'missing') return host.fail(STORE_EXIT.missing, `${store.spec.name}: no record ${key} — nothing was written`);
+  if (r === 'stale') return host.fail(STORE_EXIT.stale, `${store.spec.name}: the condition no longer holds for ${key} — your view of it is stale: get it again`);
   host.out(`# ${key} set`);
   return 0;
 };
 
 const remove: Op = async (host, store, args) => {
   const key = keyArg(store, args, 'remove');
-  if (!await (await open(store)).remove(key)) return host.fail(STORE_EXIT.missing, `${store.block.name}: no record ${key}`);
+  if (!await (await open(store)).remove(key)) return host.fail(STORE_EXIT.missing, `${store.spec.name}: no record ${key}`);
   host.out(`# ${key} removed`);
   return 0;
 };
 
 const take: Op = async (host, store, args) => {
   const [filterArgs, setArgs] = splitAt(args, 'set');
-  if (!setArgs || setArgs.length === 0) throw new StoreRefusal(STORE_EXIT.usage, `take marks what it takes: store take ${store.block.id} <filters> set <field>=<value> …`);
+  if (!setArgs || setArgs.length === 0) throw new StoreRefusal(STORE_EXIT.usage, `take marks what it takes: store take ${store.spec.id} <filters> set <field>=<value> …`);
   const fields = fieldsOf(store, setArgs);
   checkWrite(store, fields, false);
   const doc = await (await optionalOp(store, 'take', 'take'))(filtersOf(store, filterArgs), fields);
-  if (!doc) return host.fail(STORE_EXIT.missing, `${store.block.name}: no record matches — the queue is empty`);
+  if (!doc) return host.fail(STORE_EXIT.missing, `${store.spec.name}: no record matches — the queue is empty`);
   host.out(recordLine(doc));
   return 0;
 };
@@ -104,14 +104,14 @@ const take: Op = async (host, store, args) => {
 const mark: Op = async (host, store) => {
   const m = await (await optionalOp(store, 'mark', 'since'))();
   host.out(`# mark=${m}`);
-  host.out(`# later: store since ${store.block.id} ${m}   -> only what changed since now`);
+  host.out(`# later: store since ${store.spec.id} ${m}   -> only what changed since now`);
   return 0;
 };
 
 const since: Op = async (host, store, args) => {
-  if (!args[0]) throw new StoreRefusal(STORE_EXIT.usage, `since takes a mark: store since ${store.block.id} <mark> (from store mark)`);
+  if (!args[0]) throw new StoreRefusal(STORE_EXIT.usage, `since takes a mark: store since ${store.spec.id} <mark> (from store mark)`);
   const docs = await (await optionalOp(store, 'since', 'since'))(args[0]);
-  if (!docs) return host.fail(STORE_EXIT.usage, `${store.block.name}: \`${args[0]}\` is no mark of this store — take one with store mark ${store.block.id}`);
+  if (!docs) return host.fail(STORE_EXIT.usage, `${store.spec.name}: \`${args[0]}\` is no mark of this store — take one with store mark ${store.spec.id}`);
   for (const d of docs) host.out(recordLine(d));
   host.out(`${countLine(docs.length)} added or changed since the mark`);
   return 0;
@@ -122,15 +122,15 @@ const OPS: Record<string, Op> = { put, get, find, set, remove, take, mark, since
 /** `store` alone: the agent's stores, each with its driver and where its data lives. */
 function list(host: ApxHost, stores: OpenStore[]): number {
   if (stores.length === 0) host.out('# this agent has no stores');
-  for (const s of stores) host.out(`${s.block.id}  ${s.block.name}  ${s.driver.name}  ${s.driver.location(s.ref)}`);
+  for (const s of stores) host.out(`${s.spec.id}  ${s.spec.name}  ${s.driver.name}  ${s.driver.location(s.ref)}`);
   return 0;
 }
 
 /** The store an operation names by its id — or a refusal listing the agent's stores. */
 function storeArg(host: ApxHost, stores: OpenStore[], id: string | undefined): OpenStore {
-  const store = id ? stores.find(s => s.block.id === id) : undefined;
+  const store = id ? stores.find(s => s.spec.id === id) : undefined;
   if (store) return store;
-  const known = stores.map(s => `${s.block.id} (${s.block.name})`).join(', ') || 'none';
+  const known = stores.map(s => `${s.spec.id} (${s.spec.name})`).join(', ') || 'none';
   throw new StoreRefusal(STORE_EXIT.usage, `${id ? `no store \`${id}\` in this agent` : 'store takes an id (sto-…)'} — its stores: ${known}; e.g. ${host.cmd} store find <sto-id>`);
 }
 

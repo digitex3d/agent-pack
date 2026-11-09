@@ -5,18 +5,18 @@
  * behind the record of every `apx check`.
  *
  * The apx is the only way to a variable; how its values are kept is this
- * module's business alone. Today, under the session's folder of the state
- * directory, as collections of the `files` driver: one of SESSION variables,
- * shared by every agent of the project, one of private variables per agent,
- * one of the checks the session's agents ran, one of the pieces they had
- * carried out. Nothing else knows these files — the grammar, the compiler and
- * the prompts only ever say `get`, `set` and `check`.
+ * module's business alone. Today, as engine stores (engineStores.ts) under
+ * the session's folder of the state directory, reached through the store
+ * API like every other store: one of SESSION variables, shared by every
+ * agent of the project, one of private variables per agent, one of the
+ * checks the session's agents ran, one of the pieces they had carried out.
+ * Nothing else knows these files — the grammar, the compiler and the prompts
+ * only ever say `get`, `set` and `check`.
  */
-import { join } from 'node:path';
-import { STATE_DIR } from './paths.js';
-import { fileCollection } from '../storeDrivers/files/index.js';
 import type { Collection, Doc, Filter } from '../storeDrivers/types.js';
 import type { VarScope } from '../vars.js';
+import { checksStore, engineStore, executorsStore, varsStore } from './engineStores.js';
+import { checkWrite, open, type OpenStore, type StoreSpec } from './stores.js';
 
 /** What a write records beside the value: its template (or '') and the agent that wrote it. */
 export interface VarWrite {
@@ -82,36 +82,48 @@ export interface SessionVars {
 
 const is = (field: string, value: string): Filter => ({ field, value, op: '=' });
 
-/** A record as the collection keeps it: every field text. */
-function textDoc(record: object): Doc {
-  return Object.fromEntries(Object.entries(record).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]));
+/** A record as the store keeps it: numbers as numbers, the rest text, an empty or absent field left out. */
+function docOf(record: object): Doc {
+  return Object.fromEntries(Object.entries(record)
+    .filter(([, v]) => v !== undefined && v !== '')
+    .map(([k, v]) => [k, typeof v === 'number' ? v : String(v)]));
 }
 
-/** The files driver answers at once; a promise here would be a driver mix-up. */
+/** The engine's driver answers at once; a promise here would be a driver mix-up. */
 function sync<T>(v: T | Promise<T>): T {
-  if (v instanceof Promise) throw new Error('the files driver answers synchronously');
+  if (v instanceof Promise) throw new Error("the engine's tables need a driver that answers synchronously");
   return v;
 }
 
-/** The variables `agent` sees in one session of a project; a collection is created when first written. */
-export function openSessionVars(projectRoot: string, sessionId: string, agent: string): SessionVars {
-  const dir = join(projectRoot, STATE_DIR, sessionId);
-  const vars: Record<VarScope, Collection> = {
-    session: fileCollection(join(dir, 'session.json'), 'name'),
-    private: fileCollection(join(dir, 'private', `${agent}.json`), 'name'),
-  };
-  const checks = fileCollection(join(dir, 'checks.json'), null);
-  const executors = fileCollection(join(dir, 'executors.json'), null);
+/** One engine store of the session: opened once, every write checked against its slots. */
+function table(store: OpenStore): { put(doc: Doc): void; get(key: string): Doc | null; find(filters: Filter[]): Doc[] } {
+  let opened: Collection | null = null;
+  const collection = (): Collection => opened ??= sync(open(store));
   return {
-    read: (name, scope) => { const doc = sync(vars[scope].get(name)); return doc ? String(doc.value ?? '') : null; },
-    write: (name, scope, record) => { sync(vars[scope].put(textDoc({ name, ...record }))); },
-    record: check => { sync(checks.put(textDoc({ agent, ...check }))); },
-    checks: cnd => sync(checks.find([is('cnd', cnd), is('agent', agent)])).map(r => ({
-      cnd: String(r.cnd), level: Number(r.level), round: Number(r.round), fingerprint: String(r.fingerprint ?? ''), model: String(r.model ?? ''),
-      p: String(r.p ?? ''), threshold: Number(r.threshold), outcome: r.outcome === 'open' ? 'open' : 'closed', at: String(r.at ?? ''),
+    put: doc => { checkWrite(store, doc, true); sync(collection().put(doc)); },
+    get: key => sync(collection().get(key)),
+    find: filters => sync(collection().find(filters)),
+  };
+}
+
+const str = (v: unknown): string => v === undefined ? '' : String(v);
+
+/** The variables `agent` sees in one session of a project; a store's file is created when first written. */
+export function openSessionVars(projectRoot: string, sessionId: string, agent: string): SessionVars {
+  const at = (spec: StoreSpec) => table(engineStore(projectRoot, sessionId, agent, spec));
+  const vars: Record<VarScope, ReturnType<typeof table>> = { session: at(varsStore('session')), private: at(varsStore(`private/${agent}`)) };
+  const checks = at(checksStore);
+  const executors = at(executorsStore);
+  return {
+    read: (name, scope) => { const doc = vars[scope].get(name); return doc ? str(doc.value) : null; },
+    write: (name, scope, record) => vars[scope].put(docOf({ name, ...record })),
+    record: check => checks.put(docOf({ agent, ...check })),
+    checks: cnd => checks.find([is('cnd', cnd), is('agent', agent)]).map(r => ({
+      cnd: str(r.cnd), level: Number(r.level), round: Number(r.round), fingerprint: str(r.fingerprint), model: str(r.model),
+      p: str(r.p), threshold: Number(r.threshold), outcome: r.outcome === 'open' ? 'open' : 'closed', at: str(r.at),
     })),
-    executed: record => { sync(executors.put(textDoc({ agent, ...record }))); },
-    answers: exe => sync(executors.find([is('exe', exe), is('agent', agent)]))
+    executed: record => executors.put(docOf({ agent, ...record, ...(record.holds === undefined ? {} : { holds: String(record.holds) }) })),
+    answers: exe => executors.find([is('exe', exe), is('agent', agent)])
       .filter(r => r.holds === 'true' || r.holds === 'false').map(r => r.holds === 'true'),
   };
 }
