@@ -19,7 +19,7 @@ const { checkVocabulary } = await import('../dist/src/lint.js');
 const { ApDocument } = await import('../dist/src/apdoc/document.js');
 const { ApxEngine } = await import('../dist/src/apx/engine.js');
 const { apxPath, STATE_DIR } = await import('../dist/src/apx/paths.js');
-const { queryTable } = await import('../dist/src/apx/tabeli.js');
+const { fileCollection } = await import('../dist/src/storeDrivers/files/index.js');
 const { TABELI_ENGINE } = await import('../dist/src/config.js');
 const { checkId } = await import('../dist/src/check.js');
 const { JudgeError } = await import('../dist/src/judge/types.js');
@@ -202,7 +202,7 @@ try {
     const until = await docOf(['    VAR draft', '    UNTIL!! {{draft}} reads as plain English MAX 3:', '        DO  rewrite the draft INTO draft'], { name: 'u' });
     const uid = idOf(until);
     const prior = process.env[SESSION];
-    const records = agent => queryTable(join(project, STATE_DIR, 'one', 'checks.tbl'), [`agent=${agent}`]);
+    const records = agent => fileCollection(join(project, STATE_DIR, 'one', 'checks.json'), null).find([{ field: 'agent', op: '=', value: agent }]);
     try {
       // no session id: closed, nothing asked
       delete process.env[SESSION];

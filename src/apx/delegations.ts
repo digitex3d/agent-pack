@@ -102,10 +102,10 @@ export function pieceRecord(fields: Partial<DelegationRecord> & Pick<DelegationR
 }
 
 export class DelegationTable extends RecordTable<DelegationRecord> {
-  /** Open (create on first use) the registry of `sessionId` under `projectRoot` — or the reason it cannot be. */
-  static open(projectRoot: string, sessionId: string, engine: string | undefined): DelegationTable | string {
-    const at = RecordTable.place(projectRoot, sessionId, engine, 'delegations.tbl', 'delegations');
-    return typeof at === 'string' ? at : new DelegationTable(at.path, at.dir, FIELDS, 'dlg');
+  /** Open the registry of `sessionId` under `projectRoot` — created when first written. */
+  static open(projectRoot: string, sessionId: string): DelegationTable {
+    const at = RecordTable.place(projectRoot, sessionId, 'delegations.json');
+    return new DelegationTable(at.path, at.dir, FIELDS, 'dlg');
   }
 
   /** The contracts of a MARK the latest DELEGATE of it started — or, before any started, none. */

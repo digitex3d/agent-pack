@@ -203,11 +203,10 @@ try {
   assert.ok(r.out.includes('answered outside its contract: not shaped as `dose-result`'), r.out);
 
   // --- the session records every run and answer ---
-  const table = join(root, '.agent-pack', 'state', 'test-session', 'executors.tbl');
-  const listed = spawnSync(table, ['q'], { encoding: 'utf-8' });
-  assert.equal(listed.status, 0, `the session's table stays readable: ${listed.stderr}`);
-  for (const outcome of ['ran', 'refused', 'timeout', 'answered', 'broken']) assert.ok(listed.stdout.includes(`outcome=${outcome}`), `recorded: ${outcome}`);
-  assert.ok(listed.stdout.includes('who=quick') && listed.stdout.includes('who=program'), 'who carried it out: the default delegate by name, or the program');
+  const { fileCollection } = await import('../dist/src/storeDrivers/files/index.js');
+  const recorded = fileCollection(join(root, '.agent-pack', 'state', 'test-session', 'executors.json'), null).find([]);
+  for (const outcome of ['ran', 'refused', 'timeout', 'answered', 'broken']) assert.ok(recorded.some(r => r.outcome === outcome), `recorded: ${outcome}`);
+  assert.ok(recorded.some(r => r.who === 'quick') && recorded.some(r => r.who === 'program'), 'who carried it out: the default delegate by name, or the program');
 
   // --- an edited block: a new folder, which starts from the previous version; the old one is reported ---
   write(join(root, 'agents', 'standalone', 'clerk.ap'), AGENT.map(l => l.replace('mg = {{weight_kg}} × 15', 'mg = {{weight_kg}} × 20')));

@@ -24,7 +24,7 @@ import { fileURLToPath } from 'node:url';
 const CLI = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'index.js');
 const { checkVocabulary, teamFileErrors } = await import('../dist/src/lint.js');
 const { STATE_DIR } = await import('../dist/src/apx/paths.js');
-const { queryTable } = await import('../dist/src/apx/tabeli.js');
+const { fileCollection } = await import('../dist/src/storeDrivers/files/index.js');
 
 const write = (file, lines) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, `${Array.isArray(lines) ? lines.join('\n') : lines}\n`); return file; };
 const has = (out, ...needles) => { for (const n of needles) assert.ok(out.includes(n), `missing ${JSON.stringify(n)} in:\n${out}`); };
@@ -132,7 +132,7 @@ try {
   assert.equal(r.code, 3, r.out);
   has(r.out, 'refused: ', 'no zone is marked', 'nothing was started');
   // The spare is blocked out of the way by whoever marked it: only a running piece moves — so mark it a zone instead.
-  const spare = queryTable(join(proj, STATE_DIR, SESSION, 'delegations.tbl'), ['state=marked']).map(x => x.dlg).find(id => id !== a && id !== b);
+  const spare = fileCollection(join(proj, STATE_DIR, SESSION, 'delegations.json'), 'dlg').find([{ field: 'state', op: '=', value: 'marked' }]).map(x => x.dlg).find(id => id !== a && id !== b);
   write(join(proj, 'src', 'spare.ts'), [`// agent-pack ${spare}`, 'export const spare = 0;', `// agent-pack end ${spare}`]);
   git('add', '-A'); git('commit', '-qm', 'spare');
   const started = ok(apx('lead', ['contract', 'start', mrk, '--by', 'web-dev']), 'start');
@@ -180,7 +180,7 @@ try {
   // One registry: the contracts sit beside any background piece, and `delegate list` shows them.
   const all = ok(apx('lead', ['delegate', 'list']), 'list');
   has(all, a, b, spare);
-  assert.ok(!all.includes('contracts.tbl'));
+  assert.ok(!all.includes('.json'));
   console.log('marks: mark, start, deliver, wait passed.');
 } finally {
   rmSync(proj, { recursive: true, force: true });

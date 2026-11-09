@@ -162,8 +162,13 @@ function since(s: Store, mark: string): Doc[] | null {
   return load(s.path).docs.filter(d => Number(d._seq) > Number(mark)).map(plain);
 }
 
-function collection(store: StoreRef): Collection {
-  const s: Store = { path: store.path, key: store.key };
+/**
+ * A collection over one file, outside any STORE block — what the apx keeps
+ * its own tables in (session variables, the registry of background work):
+ * the same format, the same lock, reached by `key` (else by id).
+ */
+export function fileCollection(path: string, key: string | null): Collection {
+  const s: Store = { path, key };
   return {
     put: doc => put(s, doc),
     get: k => get(s, k),
@@ -174,6 +179,10 @@ function collection(store: StoreRef): Collection {
     mark: () => String(load(s.path).seq),
     since: mark => since(s, mark),
   };
+}
+
+function collection(store: StoreRef): Collection {
+  return fileCollection(store.path, store.key);
 }
 
 const filesDriver: StoreDriver = {

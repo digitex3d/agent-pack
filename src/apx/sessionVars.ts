@@ -6,15 +6,16 @@
  *
  * The apx is the only way to a variable; how its values are kept is this
  * module's business alone. Today, under the session's folder of the state
- * directory: one tabeli table of SESSION variables, shared by every agent of
- * the project, one table of private variables per agent, and one table of the
- * checks the session's agents ran. Nothing else knows these files, nor
- * tabeli's verbs — the grammar, the compiler and the prompts only ever say
- * `get`, `set` and `check`.
+ * directory, as collections of the `files` driver: one of SESSION variables,
+ * shared by every agent of the project, one of private variables per agent,
+ * one of the checks the session's agents ran, one of the pieces they had
+ * carried out. Nothing else knows these files — the grammar, the compiler and
+ * the prompts only ever say `get`, `set` and `check`.
  */
 import { join } from 'node:path';
 import { STATE_DIR } from './paths.js';
-import { openTable, queryTable, runTable, tabeliVersionError, upsertBy } from './tabeli.js';
+import { fileCollection } from '../storeDrivers/files/index.js';
+import type { Collection, Doc, Filter } from '../storeDrivers/types.js';
 import type { VarScope } from '../vars.js';
 
 /** What a write records beside the value: its template (or '') and the agent that wrote it. */
@@ -52,7 +53,7 @@ export interface CheckRecord {
 export interface ExecutorRecord {
   exe: string;
   executor: number;
-  /** Who carried it out: the delegate's name, or `program`. Never `by`: tabeli keeps that word for a write's author. */
+  /** Who carried it out: the delegate's name, or `program`. */
   who: string;
   fingerprint: string;
   outcome: 'answered' | 'ran' | 'refused' | 'timeout' | 'broken';
@@ -79,35 +80,38 @@ export interface SessionVars {
   answers(exe: string): boolean[];
 }
 
-/**
- * The variables `agent` sees in one session of a project. A table is opened —
- * created on first use by `engine`, the apx's tabeli — when first used.
- */
-export function openSessionVars(projectRoot: string, sessionId: string, agent: string, engine: string | undefined): SessionVars {
+const is = (field: string, value: string): Filter => ({ field, value, op: '=' });
+
+/** A record as the collection keeps it: every field text. */
+function textDoc(record: object): Doc {
+  return Object.fromEntries(Object.entries(record).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]));
+}
+
+/** The files driver answers at once; a promise here would be a driver mix-up. */
+function sync<T>(v: T | Promise<T>): T {
+  if (v instanceof Promise) throw new Error('the files driver answers synchronously');
+  return v;
+}
+
+/** The variables `agent` sees in one session of a project; a collection is created when first written. */
+export function openSessionVars(projectRoot: string, sessionId: string, agent: string): SessionVars {
   const dir = join(projectRoot, STATE_DIR, sessionId);
-  const files: Record<VarScope | 'checks' | 'executors', string> = {
-    session: join(dir, 'session.tbl'), private: join(dir, 'private', `${agent}.tbl`), checks: join(dir, 'checks.tbl'),
-    executors: join(dir, 'executors.tbl'),
+  const vars: Record<VarScope, Collection> = {
+    session: fileCollection(join(dir, 'session.json'), 'name'),
+    private: fileCollection(join(dir, 'private', `${agent}.json`), 'name'),
   };
-  const table = (kind: VarScope | 'checks' | 'executors'): string => {
-    // A table runs its own engine: it too must keep a value's bytes.
-    const error = openTable(files[kind], engine) ?? tabeliVersionError(files[kind], ['help'], `upgrade it: ${engine ?? 'tabeli'} upgrade ${files[kind]}`);
-    if (error) throw new Error(`${kind === 'checks' || kind === 'executors' ? kind : 'variables'}: ${error}`);
-    return files[kind];
-  };
-  const added = (run: { status: number | null; error?: Error; stderr: string; stdout: string }): void => {
-    if (run.status !== 0) throw new Error(`${run.error?.message ?? `${run.stderr}${run.stdout}`}`.trim());
-  };
+  const checks = fileCollection(join(dir, 'checks.json'), null);
+  const executors = fileCollection(join(dir, 'executors.json'), null);
   return {
-    read: (name, scope) => queryTable(table(scope), [`name=${name}`])[0]?.value ?? null,
-    write: (name, scope, record) => added(upsertBy(table(scope), 'name', name, [`value=${record.value}`, `type=${record.type}`, `by=${record.by}`]).run),
-    record: check => added(runTable(table('checks'), ['a', `agent=${agent}`, ...Object.entries(check).map(([k, v]) => `${k}=${v}`)])),
-    checks: cnd => queryTable(table('checks'), [`cnd=${cnd}`, `agent=${agent}`]).map(r => ({
-      cnd: r.cnd, level: Number(r.level), round: Number(r.round), fingerprint: r.fingerprint ?? '', model: r.model ?? '',
-      p: r.p ?? '', threshold: Number(r.threshold), outcome: r.outcome === 'open' ? 'open' : 'closed', at: r.at ?? '',
+    read: (name, scope) => { const doc = sync(vars[scope].get(name)); return doc ? String(doc.value ?? '') : null; },
+    write: (name, scope, record) => { sync(vars[scope].put(textDoc({ name, ...record }))); },
+    record: check => { sync(checks.put(textDoc({ agent, ...check }))); },
+    checks: cnd => sync(checks.find([is('cnd', cnd), is('agent', agent)])).map(r => ({
+      cnd: String(r.cnd), level: Number(r.level), round: Number(r.round), fingerprint: String(r.fingerprint ?? ''), model: String(r.model ?? ''),
+      p: String(r.p ?? ''), threshold: Number(r.threshold), outcome: r.outcome === 'open' ? 'open' : 'closed', at: String(r.at ?? ''),
     })),
-    executed: record => added(runTable(table('executors'), ['a', `agent=${agent}`, ...Object.entries(record).map(([k, v]) => `${k}=${v}`)])),
-    answers: exe => queryTable(table('executors'), [`exe=${exe}`, `agent=${agent}`])
+    executed: record => { sync(executors.put(textDoc({ agent, ...record }))); },
+    answers: exe => sync(executors.find([is('exe', exe), is('agent', agent)]))
       .filter(r => r.holds === 'true' || r.holds === 'false').map(r => r.holds === 'true'),
   };
 }

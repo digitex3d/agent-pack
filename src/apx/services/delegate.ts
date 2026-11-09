@@ -99,8 +99,7 @@ function answer(host: ApxHost, argv: string[]): number {
 function withRegistry(host: ApxHost, needs: string, then: (table: DelegationTable) => number | Promise<number>): number | Promise<number> {
   const session = host.sessionIdOrReason(`${needs} needs`);
   if ('reason' in session) return host.fail(2, `${session.reason} — nothing was read or written`);
-  const table = DelegationTable.open(host.projectRoot, session.id, host.build.tabeli);
-  if (typeof table === 'string') return host.fail(2, `${table} — nothing was read or written`);
+  const table = DelegationTable.open(host.projectRoot, session.id);
   try {
     return then(table);
   } catch (e) {

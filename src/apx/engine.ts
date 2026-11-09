@@ -1095,7 +1095,7 @@ export class ApxEngine {
       ? 'variables need the harness session id, and this agent was compiled without an adapter that names where it is'
       : !id ? `variables need the harness session id, and ${env} is not set`
         : !SESSION_ID_RE.test(id) ? `${env} holds no usable session id (letters, digits, . _ - only)` : null;
-    return refused ?? openSessionVars(resolve(projectRootOf(this.exe)), id!, this.root.name, this.build.tabeli);
+    return refused ?? openSessionVars(resolve(projectRootOf(this.exe)), id!, this.root.name);
   }
 
   // -------------------------------------------------------------- contracts
@@ -1115,8 +1115,7 @@ export class ApxEngine {
     const session = this.sessionIdOrReason();
     if ('reason' in session) { this.lastCode = this.fail(2, `${session.reason} — nothing was read or written`); return null; }
     const root = resolve(projectRootOf(this.exe));
-    const table = DelegationTable.open(root, session.id, this.build.tabeli);
-    if (typeof table === 'string') { this.lastCode = this.fail(2, `${table} — nothing was read or written`); return null; }
+    const table = DelegationTable.open(root, session.id);
     let ws: WorkspaceSession | null = null;
     // The copies: opened on the first verb that needs them — a project outside git fails there, with the way out.
     return { table, root, session: session.id, ws: () => ws ??= resolveWorkspace(CONTRACT_WORKSPACE).session(root, session.id) };
@@ -1207,8 +1206,7 @@ export class ApxEngine {
     if (!subagent) return 0;
     const session = this.sessionIdOrReason('guard needs');
     if ('reason' in session) return 0;   // no session, no work recorded in it
-    const table = DelegationTable.open(this.projectRoot, session.id, this.build.tabeli);
-    if (typeof table === 'string') return this.fail(2, `${table} — the perimeter could not be checked`);
+    const table = DelegationTable.open(this.projectRoot, session.id);
     const running = table.all().filter(r => r.state === 'running');
     const mine = agent ? running.filter(r => r.assignee === agent) : [];
     // A write in a contract's copy is that contract's: its zones are checked once written (--after).

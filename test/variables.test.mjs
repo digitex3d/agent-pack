@@ -369,26 +369,6 @@ try {
       assert.equal(new ApxEngine(unnamed, BUILD, join(project, apxPath('a')), l => lines.push(l)).run(['get', 'answer']), 2);
       assert.match(lines.join('\n'), /compiled without an adapter that names where it is/);
 
-      // 14. a tabeli older than v2 is refused: it does not keep the bytes
-      const fake = write(join(tmp, 'fake-tabeli'), [
-        '#!/bin/sh',
-        'if [ -z "$1" ]; then echo "# tabeli v1 seed - fake"; exit 0; fi',
-        'if [ "$1" = init ]; then printf \'#!/bin/sh\\necho "# tabeli v1 - fake"\\n\' > "$2"; chmod +x "$2"; exit 0; fi',
-        'exit 1', '',
-      ]);
-      chmodSync(fake, 0o755);
-      process.env[SESSION] = 'session-old';
-      r = apxBuilt({ ...BUILD, tabeli: fake }, 'a', 'set', 'answer', 'x');
-      assert.equal(r.code, 2);
-      assert.match(r.out, /variables: tabeli v2 or newer is needed, and .*fake-tabeli is v1 — build agent-pack/, 'the engine that would create the table is checked');
-      // a table already there, made by a v1 engine, is checked too: it runs its own engine
-      const old = join(project, '.agent-pack', 'state', 'session-old', 'session.tbl');
-      write(old, ['#!/bin/sh', 'echo "# tabeli v1 - fake"', '']);
-      chmodSync(old, 0o755);
-      assert.match(apx('a', 'get', 'answer').out, /variables: tabeli v2 or newer is needed, and .*session\.tbl is v1 — upgrade it: .*tabeli upgrade /);
-      // an apx written before agent-pack shipped its engine records none
-      process.env[SESSION] = 'session-none';
-      assert.match(apxBuilt({ ...BUILD, tabeli: undefined }, 'a', 'set', 'answer', 'x').out, /variables: this apx records no tabeli engine — build agent-pack/);
     } finally {
       if (prior === undefined) delete process.env[SESSION]; else process.env[SESSION] = prior;
     }
