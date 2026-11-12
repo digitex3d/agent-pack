@@ -62,7 +62,9 @@ try {
   let varNames = [];
   const setVars = (lines, root = lib) => {
     varNames = lines.map(l => /^VAR\s+([^\s=]+)/.exec(l)[1]);
-    write(join(root, 'vars', 'clerk.ap'), lines.map(l => `EXPORT ${l}`));
+    // A module that types a variable imports its template: the variable carries its type wherever it is imported.
+    const types = [...new Set(lines.flatMap(l => / AS (\S+)$/.exec(l)?.[1] ?? []))];
+    write(join(root, 'vars', 'clerk.ap'), [...types.map(t => `IMPORT ${t} FROM @main.templates`), ...lines.map(l => `EXPORT ${l}`)]);
   };
   const agent = (...when) => [
     `IMPORT ${varNames.join(', ')} FROM @main.vars`,

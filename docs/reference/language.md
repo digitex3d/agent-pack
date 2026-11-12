@@ -16,6 +16,44 @@ EXPORT POLICY security:
 
 ## Blocks
 
+### MAIN
+
+```
+# orfeo
+
+IMPORT security FROM @main.policies
+
+PROCEDURE reasoning:
+    ABOUT  reason a decision out with the developer
+    DO     ask one question that helps the developer reason it out
+
+MAIN:
+    ABOUT    the agent-pack company — development, delivery, research
+    VERSION  0.1.0
+    TEAMS    dev, delivery
+    MEMBER   designer, describer
+
+    WHEN a decision is put to the developer:
+        RUN reasoning
+```
+
+The root of the project: what it is, what it holds, and how a request is routed. `MAIN:` has no name and no `EXPORT` — nothing imports it, and its name is its file's: `orfeo.ap` builds `.agent-pack/apx/orfeo.apx` and, with `--executable`, `.agent-pack/bin/orfeo`. The file sits at the project root; the compiler finds it by its block, whatever its name. `MAIN orfeo:` fails the build (a `MAIN` takes no name), and so do `EXPORT MAIN:` and a second file with a `MAIN` block.
+
+| Line | |
+|---|---|
+| `ABOUT` | what the project is — required, once |
+| `VERSION <semver>` | its version — optional, once, a semver (`0.1.0`, `1.2.3-beta.1`) |
+| `TEAMS <team>, …` | the teams it holds |
+| `MEMBER <agent>, …` | the standalone agents it holds |
+| `WHEN …:` with `RUN <procedure \| flow>` | its routing, as in a `TEAM` |
+| `FLOW <name>:` | a flow of the main — delegation between its teams and agents |
+
+`TEAMS` and `MEMBER` are comma separated, on one line or more, and a main has at least one of them. A team under `MEMBER`, or an agent under `TEAMS`, fails the build with the line to write; so does a member of a team under either — it is reached through its team's routing — and a name that is neither. A team or a standalone agent that no line lists is left out of the main, with a warning. A `MAIN` holds its own flows, as a `TEAM` does: `FLOW <name>:` blocks whose steps delegate to the teams and agents it holds (`DELEGATE … BY <team | agent>`), compiled into the main's own document and run through its apx — `orfeo flow <flw-id>`.
+
+The file around the block holds its imports and its definitions — policies, procedures, templates — as a team's file does. `bundle all` compiles the file into the project block of `AGENTS.md`, and the orchestration holds only what the main lists.
+
+`PROJECT.ap` is gone: a project that still has one fails the build, with the rewrite — the same file, its `ABOUT` and its root `WHEN` blocks under `MAIN:`, renamed after the executable. A project with no `MAIN` builds as before, with no main: the orchestration holds every team and standalone agent.
+
 ### AGENT
 
 ```
@@ -220,7 +258,7 @@ An answer implicit in a source file — its pseudocode, its design patterns, a d
 | `STORE <store>` | the [store](#store) whose fields its records have — its `SLOTS`, or the template its `AS` names — and the driver that keeps them. The value for a file is a list of such records, or the literal `none` when there is nothing to report. The store says no `LASTS session` and no `KEY` (the dimension keeps its records by file itself), and its driver takes and guards records (`files` and `tabeli` do) |
 | rule lines | `MUST`, `NEVER`, `SHOULD`, … — how the value is produced |
 
-`ABOUT`, `FOR`, `EACH` and `STORE` are required, once each; beside them the body holds only rule lines. Any other line fails the build: a `WHEN` (as a line or a block), a nested block (`IF`, `ON-…:`, `UNTIL`, …), an action (`DO`, `DELEGATE`, `COMPUTE`, `RUN`), and `MEM` and `@WITH`, which are an agent's. The old `AS` line fails the build with the rewrite to `STORE`. A dimension is declared and imported like a store — `EXPORT DIMENSION` in the library's `dimensions/`, `IMPORT pseudocode FROM @main.dimensions`, its file importing its store — or written in the agent's own file. A dimension belongs to an agent and is reached only through that agent's apx: importing it into `PROJECT.ap` or a team's `flows.ap` fails the build. The apx reaches it by its id, like every block — `dimension read <dim-id> <file>` — so its name may be any name.
+`ABOUT`, `FOR`, `EACH` and `STORE` are required, once each; beside them the body holds only rule lines. Any other line fails the build: a `WHEN` (as a line or a block), a nested block (`IF`, `ON-…:`, `UNTIL`, …), an action (`DO`, `DELEGATE`, `COMPUTE`, `RUN`), and `MEM` and `@WITH`, which are an agent's. The old `AS` line fails the build with the rewrite to `STORE`. A dimension is declared and imported like a store — `EXPORT DIMENSION` in the library's `dimensions/`, `IMPORT pseudocode FROM @main.dimensions`, its file importing its store — or written in the agent's own file. A dimension belongs to an agent and is reached only through that agent's apx: importing it into the [main](#main)'s file or a team's `flows.ap` fails the build. The apx reaches it by its id, like every block — `dimension read <dim-id> <file>` — so its name may be any name.
 
 The store gives the fields and the driver; the place is the cache's. A dimension's answers never live in its store's own file: they live in `.agent-pack/cache/`, in a store named after the dimension's definition — shared by every agent that has the dimension, outside git. So a store only a dimension names is never offered as one of the agent's stores — no Stores chapter entry, no `store` commands. An agent that also works in the store itself (`IN steps-table:`) has it as its own, and works in another table: its own store's file, never the dimension's cache.
 
@@ -758,7 +796,7 @@ EXPORT PROCEDURE reasoning:
 | `@WITH <name>, #policy:<tag>, #skill:<tag>` | the work is under these skills and policies, and reads these dimensions |
 | `@WITH <skill> AS <template>` | and the skill's answer is shaped as the template |
 
-`#policy:<tag>` selects every imported policy whose `APPLIES` line carries `#<tag>`, `#skill:<tag>` every such skill; the compiler writes their names, each with its id, in place of the tag. A [dimension](#dimension) has no `APPLIES` line: `@WITH` names it by name, and the compiled line carries its id — `get <id>` returns it with the commands that read and write it. A tag without its kind, and a name or a tag that selects nothing, fail the build. `AS` shapes the answer of one skill — named, never a policy, a dimension or a tag. It reads the same in `PROJECT.ap`, whose `AGENTS.md` lists the skills it imports in its own *Skills* chapter.
+`#policy:<tag>` selects every imported policy whose `APPLIES` line carries `#<tag>`, `#skill:<tag>` every such skill; the compiler writes their names, each with its id, in place of the tag. A [dimension](#dimension) has no `APPLIES` line: `@WITH` names it by name, and the compiled line carries its id — `get <id>` returns it with the commands that read and write it. A tag without its kind, and a name or a tag that selects nothing, fail the build. `AS` shapes the answer of one skill — named, never a policy, a dimension or a tag. It reads the same in the [main](#main)'s file, whose `AGENTS.md` lists the skills it imports in its own *Skills* chapter.
 
 There is no way to keep lines out of a policy: a policy says where it holds with its `APPLIES` line, and that is where it is narrowed. The old `WITH x:` and `!WITH` lines fail the build with the rewrite.
 

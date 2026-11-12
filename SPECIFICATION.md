@@ -110,7 +110,7 @@ items on the left more.
 ## 3. Primitives
 
 The shared vocabulary of the paradigm. Each primitive has a stable
-identifier (`D1`–`D49`) for external citation as `Agent Pack §D<n>`.
+identifier (`D1`–`D51`) for external citation as `Agent Pack §D<n>`.
 These terms have precise meaning and are not interchangeable.
 Wherever a primitive takes several items on one line — names, globs,
 tags, values — they are separated by commas, one form for the whole
@@ -382,10 +382,13 @@ language; a space-separated list is a compilation error.
   `SESSION` variables only, an agent's file and a `flows.ap` export no
   variable, a module exports each name once.)
 
-- **D33 — project context** — `PROJECT.ap`: the rules every agent of a
-  project follows, compiled with the orchestration of every standalone
-  agent and team into the project's `AGENTS.md`, the file every harness
-  reads.
+- **D33 — *withdrawn*.** Previously defined the *project context*
+  (`PROJECT.ap`): the rules every agent of a project follows, compiled
+  with the orchestration of every standalone agent and team into the
+  project's `AGENTS.md`. Withdrawn in 1.3 and replaced by the main
+  (D50). A project that still holds a `PROJECT.ap` fails the
+  compilation, with the rewrite. The ID is retained per the append-only
+  rule (§4) and not reused.
 
 - **D34 — tool** — a capability described to the agent, with the
   instructions to use it; imported like any other block.
@@ -690,6 +693,47 @@ language; a space-separated list is a compilation error.
   that fails does not stop the others. A list of contracts is no
   `EACH`'s: it is delegated as it is (D48). (New in 1.3: replaces
   `PARALLEL EACH`, which fails the compilation with the rewrite.)
+- **D50 — main** — `MAIN:`, the project's root: what the project is,
+  what it holds and how a request is routed. It stands in a `.ap` file
+  at the project root, found by its block whatever the file's name; it
+  has no name and no `EXPORT` — nothing imports it — and its name is its
+  file's: `orfeo.ap` builds `.agent-pack/apx/orfeo.apx` and, made one
+  executable (D51), `.agent-pack/bin/orfeo`. `ABOUT` is required, once;
+  `VERSION <semver>` is optional, once; `TEAMS <team>, …` lists the teams
+  it holds and `MEMBER <agent>, …` the standalone agents, at least one of
+  the two. A team under `MEMBER`, an agent under `TEAMS`, a member of a
+  team under either — it is reached through its team's routing — or a
+  name that is neither fails the compilation; a team or a standalone
+  agent that no line lists is left out of the main, with a warning. Its
+  routing is a team's (D7): `WHEN …:` with `RUN` a procedure or a flow;
+  its `FLOW <name>:` blocks delegate to what it holds (D24, D46). The file
+  around the block holds its imports and its definitions, as a team's
+  file does. `MAIN <name>:`, `EXPORT MAIN:` and a second file holding a
+  `MAIN` fail the compilation. With a main, the project's `AGENTS.md`
+  holds only what boots it: the main's `ABOUT`, the command `<main>.apx
+  start`, the instruction to run it again when its text has left the
+  context, and the universal policies (`APPLIES universal`, D23), which
+  hold before anything runs; the rest — the main's rules and its
+  orchestration — is what its apx prints. A project with no main builds
+  with none: the orchestration holds every team and standalone agent.
+  (New in 1.3: replaces the project context, D33.)
+- **D51 — flows belong to units** — an agent has procedures (D16); flows
+  (D24) are for delegation and belong to a unit — a team (D7) or the main
+  (D50) — never to an agent. The one compiler makes a unit's own
+  document (D9) from the unit's file, rooted at its `TEAM` or `MAIN`
+  block, holding its flows, their routing, every checked condition (D39)
+  in them and what the unit's file imports or defines for them. A
+  member's document holds its team only as the member knows it — its
+  `ABOUT` and the fellow members — with no flow, no routing and none of
+  the team's imports. Everything in a flow is reached by its id through
+  the unit that holds it: `<team> flow <id>`, `<team> get <id>`; a checked
+  condition inside a `DELEGATE … BY <agent>:` block is the unit's block,
+  `<team> check <cnd-id>`, not the `BY` agent's; a team variable is read
+  through the team. Through the main, `<main> <team> flow <id>`; an agent
+  is reached through the unit that serves it, `<unit> <agent> scope`.
+  Agent, team and main are compiled alike and served by the same engine
+  (D20), and each can be made one executable with `bundle <name>
+  --executable`. (New in 1.3.)
 
 ## 4. Citation
 

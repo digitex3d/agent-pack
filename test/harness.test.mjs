@@ -36,7 +36,8 @@ const run = (args, opts = {}) => {
   return { code: r.status, out: `${r.stdout}${r.stderr}`.trimEnd() };
 };
 const ok = (r, what) => { assert.equal(r.code, 0, `${what}:\n${r.out}`); return r.out; };
-const apx = (args, input) => run([join(proj, '.agent-pack', 'apx', 'lead.apx'), ...args], { input });
+// The team's own apx: it holds the team's flow, its variables, and serves the pieces the flow starts.
+const apx = (args, input) => run([join(proj, '.agent-pack', 'apx', 'site.apx'), ...args], { input });
 const git = (...args) => { const r = spawnSync('git', args, { cwd: proj, encoding: 'utf-8' }); assert.equal(r.status, 0, `git ${args.join(' ')}: ${r.stderr}`); return r.stdout.trim(); };
 const team = join(proj, 'agents', 'teams', 'site');
 const agent = (name, within) => write(join(team, `${name}.ap`), [
@@ -98,7 +99,7 @@ try {
   console.log('harness: the dependency passed.');
 
   // --- the compiled line: start, the command, deliver --answer; a WAIT merges ---
-  // The flow as the lead reads it: from the apx, where the ids of its pieces are.
+  // The flow as whoever runs it reads it: from the team's apx, where the ids of its pieces are.
   const flowId = readFileSync(join(proj, 'AGENTS.md'), 'utf-8').match(/flow `build` \((flw-[0-9a-f]{8})\)/)[1];
   const md = ok(apx(['flow', flowId]), 'apx flow');
   has(md, 'to `hunter` on codex, another harness, handing over only what `diff-only`',

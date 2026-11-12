@@ -5,8 +5,8 @@
  * zones of the code to a spec and leaves each contract waiting; a
  * `DELEGATE <list> BY <agent>` starts every one of them in a copy of its own;
  * a WAIT takes them back, merges what was delivered and lands it. A real
- * project, the real `bundle all`, the agents' apx run as processes in one
- * session.
+ * project, the real `bundle all`, the team's apx — which holds its flow — and
+ * its agents' apx run as processes in one session.
  *
  *   - the language: MARK's form and place, the list a declared variable, a
  *     DELEGATE of a list, WITHIN inside the work's perimeter, the retired
@@ -98,10 +98,10 @@ try {
   write(teamFile, flow(''));
   ok(run([CLI, 'bundle', 'all']), 'bundle all');
 
-  // The compiled flow names the commands, with the MARK's id.
-  const flowOut = ok(apx('lead', ['ls', 'kind=flow']), 'ls');
+  // The compiled flow is the team's: its apx names the commands, with the MARK's id.
+  const flowOut = ok(apx('web', ['ls', 'kind=flow']), 'ls');
   const flwId = flowOut.match(/(flw-[0-9a-f]{8})/)[1];
-  const text = ok(apx('lead', ['get', flwId]), 'get flow');
+  const text = ok(apx('web', ['get', flwId]), 'get flow');
   const mrk = text.match(/contract mark (mrk-[0-9a-f]{8})/)[1];
   has(text, `contract start ${mrk} --by web-dev`, `wait ${mrk}`, "At most the project's `mark.max` zones");
   // The perimeter is the project's hook (D65): in its settings, before and after every write — no agent carries one.
@@ -109,18 +109,18 @@ try {
   assert.ok(!readFileSync(join(proj, '.claude', 'agents', 'web-dev.md'), 'utf-8').includes('hooks:'), 'no hook in the frontmatter');
 
   // Nothing marked yet: starting has nothing to start.
-  has(ok(apx('lead', ['contract', 'start', mrk, '--by', 'web-dev']), 'start empty'), 'no zone was marked — nothing to start');
+  has(ok(apx('web', ['contract', 'start', mrk, '--by', 'web-dev']), 'start empty'), 'no zone was marked — nothing to start');
 
   // mark: the spec is checked against the MARK's AS; the list's variable holds the ids.
-  r = apx('lead', ['contract', 'mark', mrk, '-'], '{"colour":"red"}');
+  r = apx('web', ['contract', 'mark', mrk, '-'], '{"colour":"red"}');
   assert.equal(r.code, 6, r.out);
   has(r.out, 'the spec breaks the form of screen-spec');
-  const a = ok(apx('lead', ['contract', 'mark', mrk, '-'], '{"goal":"the login form"}'), 'mark a').match(/^(ctr-[0-9a-f]{8})/m)[1];
-  const b = ok(apx('lead', ['contract', 'mark', mrk, '-'], '{"goal":"the sign-up form"}'), 'mark b').match(/^(ctr-[0-9a-f]{8})/m)[1];
-  has(ok(apx('lead', ['get', 'screens']), 'get screens'), a, b);
+  const a = ok(apx('web', ['contract', 'mark', mrk, '-'], '{"goal":"the login form"}'), 'mark a').match(/^(ctr-[0-9a-f]{8})/m)[1];
+  const b = ok(apx('web', ['contract', 'mark', mrk, '-'], '{"goal":"the sign-up form"}'), 'mark b').match(/^(ctr-[0-9a-f]{8})/m)[1];
+  has(ok(apx('web', ['get', 'screens']), 'get screens'), a, b);
   // A third marks within the limit, a fourth does not: MAX from the config.
-  ok(apx('lead', ['contract', 'mark', mrk, '-'], '{"goal":"a spare"}'), 'mark c');
-  r = apx('lead', ['contract', 'mark', mrk, '-'], '{"goal":"one too many"}');
+  ok(apx('web', ['contract', 'mark', mrk, '-'], '{"goal":"a spare"}'), 'mark c');
+  r = apx('web', ['contract', 'mark', mrk, '-'], '{"goal":"one too many"}');
   assert.equal(r.code, 3, r.out);
   has(r.out, 'holds 3 zones already');
 
@@ -128,14 +128,14 @@ try {
   write(join(proj, 'src', 'login.ts'), ['export function login() {', `  // agent-pack ${a}`, '  return null;', `  // agent-pack end ${a}`, '}']);
   write(join(proj, 'src', 'signup.ts'), ['export function signup() {', `  // agent-pack ${b}`, '  return null;', `  // agent-pack end ${b}`, '}']);
   git('add', '-A'); git('commit', '-qm', 'marks');
-  r = apx('lead', ['contract', 'start', mrk, '--by', 'web-dev']);
+  r = apx('web', ['contract', 'start', mrk, '--by', 'web-dev']);
   assert.equal(r.code, 3, r.out);
   has(r.out, 'refused: ', 'no zone is marked', 'nothing was started');
   // The spare is blocked out of the way by whoever marked it: only a running piece moves — so mark it a zone instead.
   const spare = fileCollection(join(proj, STATE_DIR, SESSION, 'delegations.json'), 'dlg').find([{ field: 'state', op: '=', value: 'marked' }]).map(x => x.dlg).find(id => id !== a && id !== b);
   write(join(proj, 'src', 'spare.ts'), [`// agent-pack ${spare}`, 'export const spare = 0;', `// agent-pack end ${spare}`]);
   git('add', '-A'); git('commit', '-qm', 'spare');
-  const started = ok(apx('lead', ['contract', 'start', mrk, '--by', 'web-dev']), 'start');
+  const started = ok(apx('web', ['contract', 'start', mrk, '--by', 'web-dev']), 'start');
   has(started, `${a}  → web-dev`, `${b}  → web-dev`, '3 contracts started');
 
   // get: the worker reads its spec and its copy.
@@ -167,18 +167,18 @@ try {
 
   // b is blocked, the spare ends without delivery: a WAIT returns when each one is settled, and lands what was delivered.
   ok(apx('web-dev', ['delegate', 'block', b, 'the sign-up spec is ambiguous']), 'block b');
-  ok(apx('lead', ['delegate', 'ended', spare]), 'ended spare');
-  r = apx('lead', ['wait', mrk, '--max', '5s']);
+  ok(apx('web', ['delegate', 'ended', spare]), 'ended spare');
+  r = apx('web', ['wait', mrk, '--max', '5s']);
   assert.equal(r.code, 1, r.out);
   has(r.out, `${a}  screens  merged`, `${b}  screens  blocked`, 'ended without delivery', 'landed in the working folder: src/login.css.ts, src/login.ts', 'you decide');
   has(readFileSync(join(proj, 'src', 'login.ts'), 'utf-8'), 'return { ok: true };');
   assert.ok(!readFileSync(join(proj, 'src', 'signup.ts'), 'utf-8').includes('ok: true'));
   // After its WAIT, `{{screens}}` reads each contract's state (D50) — what an `IF {{screens}} has a blocked screen` judges.
-  const states = ok(apx('lead', ['get', 'screens']), 'get screens after the wait');
+  const states = ok(apx('web', ['get', 'screens']), 'get screens after the wait');
   has(states, `{"id":"${a}","state":"merged"}`, `{"id":"${b}","state":"blocked","reason":"the sign-up spec is ambiguous"}`, `{"id":"${spare}","state":"ended without delivery"}`);
 
   // One registry: the contracts sit beside any background piece, and `delegate list` shows them.
-  const all = ok(apx('lead', ['delegate', 'list']), 'list');
+  const all = ok(apx('web', ['delegate', 'list']), 'list');
   has(all, a, b, spare);
   assert.ok(!all.includes('.json'));
   console.log('marks: mark, start, deliver, wait passed.');

@@ -73,6 +73,8 @@ export interface Formulas {
     domain: { chapter: Text; writes: Text; reads: Text; formula: Text } & KindGuide;
     plugin: { line: Text; commands: Text; command: Text };
     team: { heading: Text; member: Text; handles: Text; fellows: Text; fellow: Text; undescribed: Text; closing: Text } & KindGuide;
+    /** What AGENTS.md says of the main: its name, the command that prints it, and to run it again. */
+    main: { heading: Text; boot: Text; again: Text };
     runtime: { heading: Text };
     tool: { chapter: Text; heading: Text } & KindGuide;
   };

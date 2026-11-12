@@ -526,16 +526,16 @@ try {
     bundle();
   }
 
-  // --- B6: a dimension is an agent's — PROJECT.ap or a team's file that imports one fails the build ---
+  // --- B6: a dimension is an agent's — a standalone file or a team's file that imports one fails the build ---
   {
     const { bundleStandaloneToString } = await import('../dist/src/compiler/index.js');
     const { buildOrchestrationContent } = await import('../dist/src/orchestrationSection.js');
     const library = join(proj, 'library');
     const config = { libraryRoot: library, sharedLibraries: [] };
-    const project = write(join(proj, 'PROJECT.ap'), ['ABOUT  the project', '', 'IMPORT pseudocode FROM @main.dimensions', '', 'WHEN you start:', '    DO  read the code']);
-    await assert.rejects(bundleStandaloneToString(project, config), /PROJECT\.ap:3 {2}DIMENSION pseudocode: a dimension belongs to an agent — it is read and written through that agent's apx/);
+    const project = write(join(proj, 'standalone.ap'), ['ABOUT  the project', '', 'IMPORT pseudocode FROM @main.dimensions', '', 'WHEN you start:', '    DO  read the code']);
+    await assert.rejects(bundleStandaloneToString(project, config), /standalone\.ap:3 {2}DIMENSION pseudocode: a dimension belongs to an agent — it is read and written through that agent's apx/);
     write(project, ['ABOUT  the project', '', ...dimension({ name: 'inline' }), '', 'WHEN you start:', '    DO  read the code']);
-    await assert.rejects(bundleStandaloneToString(project, config), /PROJECT\.ap:\d+ {2}DIMENSION inline: a dimension belongs to an agent/);
+    await assert.rejects(bundleStandaloneToString(project, config), /standalone\.ap:\d+ {2}DIMENSION inline: a dimension belongs to an agent/);
     rmSync(project);
     const team = join(proj, 'agents', 'teams', 'crew');
     write(join(team, 'builder.ap'), ['EXPORT AGENT builder AS builder-role:', '    ABOUT    builds', '    MANDATE  ship', '', 'ROLE builder-role:', '    ABOUT   a builder', '    ALWAYS  test first']);

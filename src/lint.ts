@@ -17,7 +17,7 @@ import { agentAsText } from './definitionArgs.js';
 import { isDelegationVerb, delegationLineErrors, waitLineErrors, markLineErrors, concurrencyErrors, parseDelegation, WAIT_VERB, MARK_VERB } from './delegation.js';
 import { kindFromDir, unitNameFromPath } from './ingest.js';
 import { plugins, pluginOf, pluginOfKey, recordOfLines, lineIssues } from './plugins.js';
-import { BLOCK_TYPES, blockTypeOf, EXPORT_MODIFIER, AGENT_KEYS, PLUGIN_KEY, OPERATION_KEY } from './blockTypes.js';
+import { BLOCK_TYPES, blockTypeOf, EXPORT_MODIFIER, AGENT_KEYS, PLUGIN_KEY, OPERATION_KEY, MAIN_KEY } from './blockTypes.js';
 import { COMPUTE_SECTIONS, executorMark, returnShape, splitExecutorMark } from './executor.js';
 import { parseTypeSpec } from './shapeSchema.js';
 import { SLOT_LINE_RE, VERBATIM_REGIONS } from './shapeCompiler.js';
@@ -761,8 +761,8 @@ function isBranch(contract: BlockContract, keyword: Keyword): boolean {
   return contract.branches?.keywords.includes(keyword) ?? false;
 }
 
-/** The contracts checked line by line — a DIMENSION, a DOMAIN and a TEAM are checked on their parsed block (coveringBlockErrors, teamBlockErrors). */
-const { DIMENSION: _parsed, DOMAIN: _domain, TEAM: _team, [PLUGIN_KEY]: _plugin, [OPERATION_KEY]: _operation, ...TOKEN_CONTRACTS } = BLOCK_CONTRACTS;
+/** The contracts checked line by line — a DIMENSION, a DOMAIN, a TEAM and the MAIN are checked on their parsed block (coveringBlockErrors, teamBlockErrors, mainBlockErrors). */
+const { DIMENSION: _parsed, DOMAIN: _domain, TEAM: _team, [MAIN_KEY]: _main, [PLUGIN_KEY]: _plugin, [OPERATION_KEY]: _operation, ...TOKEN_CONTRACTS } = BLOCK_CONTRACTS;
 /** The blocks checked on their parsed block: their contract names every line they do not hold, so no other check repeats it. */
 const PARSED_CONTRACTS = new Set(Object.keys(BLOCK_CONTRACTS).filter(key => !(key in TOKEN_CONTRACTS)));
 
@@ -1053,6 +1053,33 @@ export function teamFileErrors(file: string, source: string): LintError[] {
   return [...teamBlockErrors(file, parseBlocks(source).blocks), ...validateBlockContracts(desugar(lex(source)), file)];
 }
 
+/**
+ * The MAIN block of the main's file: no name — the file's is the executable's —
+ * no EXPORT — nothing imports it — its contract, a VERSION that is a semver, and
+ * at least one TEAMS or MEMBER line. What its lines name is the orchestration's
+ * to check, against the project's teams and agents (mainRosterIssues).
+ */
+export function mainBlockErrors(file: string, block: Block): LintError[] {
+  const errors: LintError[] = [];
+  const at = (line: number, message: string) => errors.push({ file, line, message });
+  // `EXPORT MAIN:` parses as an EXPORT block named MAIN.
+  if (block.exported || block.key === EXPORT_MODIFIER) return [{ file, line: block.startLine, message: 'MAIN is exported by no one — nothing imports it: write `MAIN:`' }];
+  if (block.name) at(block.startLine, `MAIN takes no name — its name is its file's, \`${unitNameFromPath(file)}\`: write \`MAIN:\`, and name the file after the executable`);
+  errors.push(...checkBlockContract(file, block, MAIN_KEY));
+  for (const child of block.children) {
+    if (child.type === 'line' && child.keyword === 'VERSION' && !SEMVER_RE.test(child.rest.trim())) {
+      at(child.line, `VERSION is a semver — \`0.1.0\`, \`1.2.3-beta.1\` — found \`${child.rest.trim()}\``);
+    }
+  }
+  if (!block.children.some(c => c.type === 'line' && (c.keyword === 'TEAMS' || c.keyword === 'MEMBER'))) {
+    at(block.startLine, 'MAIN holds the teams and agents of the project: write at least one TEAMS or MEMBER line');
+  }
+  return errors;
+}
+
+/** A semver: major.minor.patch, an optional pre-release and build. */
+const SEMVER_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+
 /** A team names its members: at least one MEMBER line. */
 function memberErrors(file: string, team: Block): LintError[] {
   return team.children.some(c => c.type === 'line' && c.keyword === 'MEMBER') ? [] : [{ file, line: team.startLine, message: 'TEAM block requires at least one MEMBER' }];
@@ -1177,7 +1204,9 @@ const LINE_OWNERS = new Map<string, LineOwner>([
   [GLOBS_LINE, { owners: ['DIMENSION'], what: 'a line' }],
   ...DOMAIN_LINES.map((l): [string, LineOwner] => [l, { owners: ['DOMAIN'], what: 'a line', hints: { AGENT: WITHIN_HINT } }]),
   ['EACH', { owners: ['DIMENSION'], what: 'a line' }],
-  ['MEMBER', { owners: [TEAM_KEY], what: 'a line' }],
+  ['MEMBER', { owners: [TEAM_KEY, MAIN_KEY], what: 'a line' }],
+  ['TEAMS', { owners: [MAIN_KEY], what: 'a line' }],
+  ['VERSION', { owners: [MAIN_KEY], what: 'a line' }],
 ]);
 
 /** A plugin's manifest against its contracts: the PLUGIN block, and each OPERATION block in it. */

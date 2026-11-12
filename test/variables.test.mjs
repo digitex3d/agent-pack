@@ -35,13 +35,15 @@ const adapter = { ...claudeCode(), sessionEnv: SESSION };
 
 const TAIL = [
   'ROLE a-role:', '    ABOUT   a worker', '    ALWAYS  do the work', '',
-  'TEMPLATE verdict:', '    ABOUT  a verdict', '    SLOTS:', '        decision: ENUM[accept, reject]  "the decision"',
-  '        reason: TEXT  "why"', '    BODY:', '        {decision}: {reason}', '',
+  // `verdict` is the library's: the vars modules that type a variable with it import it, and so does the agent.
+  'IMPORT verdict FROM @main.templates', '', '', '', '', '', '', '',
   'TEMPLATE note:', '    ABOUT  a note', '    SLOTS:', '        text: TEXT "the note"', '',
   'PROCEDURE judge:', '    ABOUT  judge the claim', '    DO weigh it', '    AS verdict', '',
   'PROCEDURE jot:', '    ABOUT  jot it down', '    DO write it', '    AS note', '',
   'PROCEDURE plain:', '    ABOUT  no result shape', '    DO something', '',
 ];
+write(join(lib, 'templates', 'verdict.ap'), ['EXPORT TEMPLATE verdict:', '    ABOUT  a verdict', '    SLOTS:', '        decision: ENUM[accept, reject]  "the decision"',
+  '        reason: TEXT  "why"', '    BODY:', '        {decision}: {reason}', '']);
 /** Compile agent `name` from its body lines (indented under its EXPORT AGENT block). */
 const compile = (lines, { vars = {}, name = 'a', extra = [], libraries } = {}) => {
   const file = write(join(tmp, `${name}.ap`), [
@@ -77,7 +79,7 @@ try {
   // --- 3. EXPORT VAR: a module's declarations, found by IMPORT like every export ---
   const mod = (path, lines) => write(`${join(lib, ...path.split('/'))}.ap`, lines);
   {
-    mod('vars/crew', ['# crew', 'EXPORT VAR lang = English', 'EXPORT VAR board = Main', 'EXPORT VAR g = Hello:',
+    mod('vars/crew', ['# crew', 'IMPORT verdict FROM @main.templates', 'EXPORT VAR lang = English', 'EXPORT VAR board = Main', 'EXPORT VAR g = Hello:',
       'EXPORT SESSION VAR shared-note', 'EXPORT SESSION VAR crew-note AS verdict', 'EXPORT VAR own-note']);
     const imp = ['IMPORT lang, board, g, shared-note, crew-note, own-note FROM @main.vars'];
     const { body, structure } = await compile(['    ALWAYS  write in {{lang}} on {{board}}, {{g}}', '    VAR draft'], { extra: imp });
@@ -144,7 +146,7 @@ try {
     await fails(['    GLOBAL VAR x'], /a\.ap:4 {2}GLOBAL variables are not available yet/);
     await fails(['    SESSION  keep it short'], /a\.ap:4 {2}SESSION is a variable's scope — it stands only right before VAR/);
     // a body's `VAR x:` assigns the SESSION variable a module exports — RUN and type inference included
-    mod('vars/scope', ['EXPORT SESSION VAR plan', 'EXPORT SESSION VAR the-verdict AS verdict']);
+    mod('vars/scope', ['IMPORT verdict FROM @main.templates', 'EXPORT SESSION VAR plan', 'EXPORT SESSION VAR the-verdict AS verdict']);
     const shared = { extra: ['IMPORT plan, the-verdict FROM @main.vars'] };
     const { body, structure } = await compile(['    VAR plan:', '        RUN  judge', '    VAR the-verdict:', '        RUN  judge'], shared);
     assert.deepEqual(structure.byKind('var').map(v => [v.name, v.scope, v.type?.target]), [
@@ -273,7 +275,7 @@ try {
   // --- 10–14. the apx keeps variables per session: SESSION ones shared by the project's agents, private ones each agent's own ---
   {
     const project = join(tmp, 'apx-project');
-    mod('vars/apx-team', ['EXPORT SESSION VAR answer', 'EXPORT SESSION VAR the-verdict AS verdict', 'EXPORT VAR board = Product']);
+    mod('vars/apx-team', ['IMPORT verdict FROM @main.templates', 'EXPORT SESSION VAR answer', 'EXPORT SESSION VAR the-verdict AS verdict', 'EXPORT VAR board = Product']);
     const extra = ['IMPORT answer, the-verdict, board FROM @main.vars'];
     const docOf = async name => ApDocument.fromJson((await compile(['    VAR mine', '    DO  read {{answer}} on {{board}}, with {{mine}}', '    DO  decide INTO the-verdict'], { name, extra })).structure.asJson());
     const docs = { a: await docOf('a'), b: await docOf('b') };

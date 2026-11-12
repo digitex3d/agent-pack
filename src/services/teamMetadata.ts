@@ -95,11 +95,21 @@ export function readTeamFile(root: string, sources: SourceRegistry = new SourceR
     }
   }
   const childIndent = block.children[0]?.indent ?? 0;
-  return { root, path, source, block, name: block.name ?? basename(root), about, members: listed, childIndent, unit: teamUnit(lines, block, childIndent) };
+  return { root, path, source, block, name: block.name ?? basename(root), about, members: listed, childIndent, unit: blockUnit(lines, block, TEAM_HEAD_LINES) };
 }
 
-/** See {@link TeamFile.unit}: the opener and the head lines blanked, the block's lines de-indented, numbers kept. */
-function teamUnit(lines: string[], block: Block, childIndent: number): string {
+/** A file with one of its blocks blanked — what is written around it: imports and definitions, every line number kept. */
+export function outsideBlock(lines: string[], block: Block): string {
+  const end = blockEnd(block, lines.length);
+  return lines.map((line, i) => (i >= block.startLine - 1 && i < end ? '' : line)).join('\n');
+}
+
+/**
+ * A file as the pipeline reads a TEAM or a MAIN block of it ({@link TeamFile.unit}):
+ * the opener and the `head` lines blanked, the block's lines de-indented, numbers kept.
+ */
+export function blockUnit(lines: string[], block: Block, head: ReadonlySet<string>): string {
+  const childIndent = block.children[0]?.indent ?? 0;
   const end = blockEnd(block, lines.length);
   const out = lines.slice();
   out[block.startLine - 1] = '';
@@ -107,7 +117,7 @@ function teamUnit(lines: string[], block: Block, childIndent: number): string {
     out[i] = out[i].slice(Math.min(childIndent, out[i].length - out[i].trimStart().length));
   }
   for (const child of block.children) {
-    if (child.type === 'line' && TEAM_HEAD_LINES.has(child.keyword)) out[child.line - 1] = '';
+    if (child.type === 'line' && head.has(child.keyword)) out[child.line - 1] = '';
   }
   return out.join('\n');
 }

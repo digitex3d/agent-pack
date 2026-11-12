@@ -72,6 +72,8 @@ export interface BundleContext {
   checks?: ChecksConfig | null;
   /** The command that says how to run a flow, by its id — set while a team's routing renders. */
   flowCommand?: (id: string) => string;
+  /** The unit whose flow a step's agent works in — set while a team's flows render: a checked condition there is the unit's. */
+  unitOf?: (agent: string) => string | undefined;
   importedPaths: Set<string>;
   /** The compilation's source registry — every `.ap` file it reads, read once. */
   sources: SourceRegistry;

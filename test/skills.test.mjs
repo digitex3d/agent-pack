@@ -262,10 +262,10 @@ try {
   }
   console.log('skills: @WITH tests passed.');
 
-  // --- a standalone file (PROJECT.ap) reads @WITH the same way: a Skills chapter, its scope lines, errors where they were written ---
+  // --- a standalone file reads @WITH the same way: a Skills chapter, its scope lines, errors where they were written ---
   {
     const { bundleStandaloneToString } = await import('../dist/src/compiler/index.js');
-    const project = lines => write(join(tmp, 'PROJECT.ap'), lines);
+    const project = lines => write(join(tmp, 'standalone.ap'), lines);
     project([
       'ABOUT  project rules', '',
       'IMPORT pdf FROM @harness.skills',
@@ -277,23 +277,23 @@ try {
       'WHEN a decision is due:',
       '  RUN decide',
     ]);
-    const md = await bundleStandaloneToString(join(tmp, 'PROJECT.ap'), config);
+    const md = await bundleStandaloneToString(join(tmp, 'standalone.ap'), config);
     assert.ok(/^# Skills$/m.test(md), md);
     assert.ok(md.includes('Applies only to the work nested under a line that names it.'), md);
     assert.ok(/For the work below, use the policy `reasons-first` \(pol-[0-9a-f]{8}\) and the skill `pdf` \(skl-[0-9a-f]{8}\):/.test(md), md);
     assert.ok(md.includes('When a decision is due:'), 'a WHEN with lines beneath is the file\'s trigger');
     // a WHEN with nothing beneath stays header metadata
     project(['ABOUT  project rules', 'WHEN working in this repo:', '', 'IMPORT reasons-first FROM @main.policies', '', 'PROCEDURE decide:', '  ABOUT  d', '  @WITH reasons-first:', '    DO  weigh']);
-    assert.ok(!(await bundleStandaloneToString(join(tmp, 'PROJECT.ap'), config)).includes('working in this repo'));
+    assert.ok(!(await bundleStandaloneToString(join(tmp, 'standalone.ap'), config)).includes('working in this repo'));
     // an unknown item of an imported procedure is reported where it was written
     write(join(tmp, 'library', 'procedures', 'broken.ap'), ['EXPORT PROCEDURE broken:', '    ABOUT  broken', '    @WITH nosuch:', '        DO  work']);
     project(['ABOUT  project rules', 'IMPORT broken FROM @main.procedures', '', 'WHEN asked:', '  RUN broken']);
-    await assert.rejects(() => bundleStandaloneToString(join(tmp, 'PROJECT.ap'), config), /broken\.ap:3 {2}`@WITH nosuch`: no imported skill, policy or dimension is called `nosuch`/);
+    await assert.rejects(() => bundleStandaloneToString(join(tmp, 'standalone.ap'), config), /broken\.ap:3 {2}`@WITH nosuch`: no imported skill, policy or dimension is called `nosuch`/);
     rmSync(join(tmp, 'library', 'procedures', 'broken.ap'));
     // an AS naming no template fails here too
     project(['ABOUT  project rules', 'IMPORT pdf FROM @harness.skills', '', 'PROCEDURE p:', '  ABOUT  p', '  @WITH pdf AS nope:', '    DO  read']);
-    await assert.rejects(() => bundleStandaloneToString(join(tmp, 'PROJECT.ap'), config), /`AS nope`: no imported template is called `nope`/);
-    rmSync(join(tmp, 'PROJECT.ap'));
+    await assert.rejects(() => bundleStandaloneToString(join(tmp, 'standalone.ap'), config), /`AS nope`: no imported template is called `nope`/);
+    rmSync(join(tmp, 'standalone.ap'));
   }
   console.log('skills: standalone @WITH tests passed.');
 } finally {

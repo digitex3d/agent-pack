@@ -32,6 +32,8 @@ const run = (args, opts = {}) => {
   return { code: r.status, out: `${r.stdout}${r.stderr}`.trimEnd(), stdout: r.stdout };
 };
 const apx = (args, input) => run([join(proj, '.agent-pack', 'apx', 'lead.apx'), ...args], { input });
+/** The team's own apx: it holds the team's flow, and serves the pieces the flow starts. */
+const teamApx = (args, input) => run([join(proj, '.agent-pack', 'apx', 'site.apx'), ...args], { input });
 const ok = (r, what) => { assert.equal(r.code, 0, `${what}:\n${r.out}`); return r.out; };
 const bundle = () => ok(run([CLI, 'bundle', 'all']), 'bundle all');
 const guard = (path, ...flags) => apx(['guard', path, ...flags]);
@@ -87,8 +89,9 @@ try {
   console.log('guard: settings passed.');
 
   // --- the flow's ids, from the compiled flow ---
-  const flw = ok(apx(['ls', 'kind=flow']), 'ls').match(/(flw-[0-9a-f]{8})/)[1];
-  const text = ok(apx(['get', flw]), 'get flow');
+  assert.equal(ok(apx(['ls', 'kind=flow']), 'ls').match(/flw-[0-9a-f]{8}/), null, 'a member holds no flow');
+  const flw = ok(teamApx(['ls', 'kind=flow']), 'ls').match(/(flw-[0-9a-f]{8})/)[1];
+  const text = ok(teamApx(['get', flw]), 'get flow');
   const [builtId, readId, sketchId] = [...text.matchAll(/delegate start (dlg-[0-9a-f]{8})/g)].map(m => m[1]);
   assert.ok(builtId && readId && sketchId, text);
 
@@ -111,8 +114,8 @@ try {
   assert.equal(guard('anything.txt', '--agent', 'helper', '--subagent').code, 0, 'an agent with no @WITHIN has no perimeter');
 
   // --- two pieces in progress: each assignee is held to its own; a writer no piece names, to both ---
-  ok(apx(['delegate', 'start', builtId]), 'start built');
-  ok(apx(['delegate', 'start', readId]), 'start read');
+  ok(teamApx(['delegate', 'start', builtId]), 'start built');
+  ok(teamApx(['delegate', 'start', readId]), 'start read');
   assert.equal(guard('src/web/page.ts', '--agent', 'builder', '--subagent').code, 0, 'builder, within its piece');
   r = guard('src/web/page.ts', '--subagent');
   assert.equal(r.code, 3, 'a subagent it cannot tell apart: every piece in progress holds');
@@ -120,18 +123,18 @@ try {
   assert.equal(guard('src/api/x.ts').code, 0, 'the main conversation — whoever runs the flow — is held to none');
 
   // --- the fork works within its step's @WITHIN ---
-  ok(apx(['delegate', 'deliver', readId, '-'], 'read'), 'deliver read');
-  ok(apx(['delegate', 'deliver', builtId, '-'], 'built'), 'deliver built');
-  ok(apx(['delegate', 'start', sketchId]), 'start sketch');
+  ok(teamApx(['delegate', 'deliver', readId, '-'], 'read'), 'deliver read');
+  ok(teamApx(['delegate', 'deliver', builtId, '-'], 'built'), 'deliver built');
+  ok(teamApx(['delegate', 'start', sketchId]), 'start sketch');
   assert.equal(guard('src/web/next.ts', '--subagent').code, 0, 'the fork, within web');
   r = guard('docs/next.md', '--subagent');
   assert.equal(r.code, 3, r.out);
   has(r.out, `the work in progress ${sketchId} (sketch)`, 'src/web/**');
   // Handed to another agent, a piece takes that agent's perimeter as well.
-  ok(apx(['delegate', 'reassign', sketchId, 'reader']), 'reassign');
+  ok(teamApx(['delegate', 'reassign', sketchId, 'reader']), 'reassign');
   r = guard('src/web/next.ts', '--agent', 'reader', '--subagent');
   assert.equal(r.code, 3, 'reader carries it out now: its own domain writes nothing');
-  ok(apx(['delegate', 'deliver', sketchId, '-'], 'sketch'), 'deliver sketch');
+  ok(teamApx(['delegate', 'deliver', sketchId, '-'], 'sketch'), 'deliver sketch');
   console.log('guard: pieces and perimeters passed.');
 
   // --- the hook script, as Claude Code runs it ---

@@ -163,9 +163,9 @@ try {
   assert.deepEqual(lintFlow(flowFile, ['# ship', '', 'ABOUT  ship it', '', 'FLOW ship:', '    STEP s:', '        DO  x', ''].join('\n')), [],
     '`FLOW ship:` in ship.ap is no slug mismatch');
 
-  // --- the document: the step holds its DELEGATE, the DELEGATE an IF node, its DO lines sit under [step, directive, if] ---
+  // --- the team's document: the step holds its DELEGATE, the DELEGATE an IF node, its DO lines sit under [step, directive, if] ---
   const { structure } = await bundleAgentObject({
-    agentName: 'builder', agentFile, agentDir: team, libraryRoot: lib, libraryRoots: [lib],
+    agentName: 'crew', agentFile: flowsFile, agentDir: team, libraryRoot: lib, libraryRoots: [lib],
     libraries: { '@main': lib }, bundleConfig: { runtime: false },
   });
   const flow = structure.all().find(b => b.kind === 'flow' && b.name === 'ship');
@@ -213,7 +213,7 @@ try {
   assert.ok(content.includes(stepMd), `AGENTS.md renders the branch under its step:\n${content}`);
 
   const lines = [];
-  const code = new ApxEngine(doc, { builtAt: 'x', agentPackVersion: 'x', hash: 'x' }, 'apx/builder.apx', l => lines.push(l))
+  const code = new ApxEngine(doc, { builtAt: 'x', agentPackVersion: 'x', hash: 'x' }, 'apx/crew.apx', l => lines.push(l))
     .run(['flow', flow.id]);
   assert.equal(code, 0);
   assert.ok(lines.join('\n').includes(stepMd), `apx flow lists the branch:\n${lines.join('\n')}`);

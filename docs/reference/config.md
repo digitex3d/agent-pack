@@ -115,15 +115,20 @@ Two aliases are reserved: `@user`, the global library in `~/.agent-pack` (see be
 
 ## Project context
 
-A `PROJECT.ap` at the project root holds the rules every agent working on the project follows. `bundle all` compiles it into the `project` block of `AGENTS.md`:
+The project's main is the `.ap` file at the project root that holds a `MAIN:` block; the file's name is the executable's. It holds the rules every agent working on the project follows, and lists the teams and standalone agents the project holds. `bundle all` compiles it into its apx, `.agent-pack/apx/<main>.apx`, which prints it all on `start` — its rules and the orchestration of what it lists. `AGENTS.md` keeps only what boots it: its name, that command, and its universal policies. See [Language → MAIN](/reference/language#main):
 
 ```
-# Project Rules
-
-ABOUT  always-on rules for this project
+# orfeo
 
 IMPORT security FROM @main.policies
+
+MAIN:
+    ABOUT   always-on rules for this project
+    TEAMS   dev
+    MEMBER  designer
 ```
+
+`PROJECT.ap` is gone: a project that still has one fails the build, with the rewrite.
 
 ## Variables
 

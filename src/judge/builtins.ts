@@ -7,11 +7,13 @@
  * alone, so the apx engine bundles it without the harness adapters.
  */
 import jevJudge from '../../adapters/jev/index.js';
+import geminiJudge from '../../adapters/gemini/index.js';
 import type { JudgePlugin } from './types.js';
 
 /** The judges shipped with agent-pack, by name (`judge: { adapter: 'jev' }`). */
 const BUILTIN_JUDGES: Record<string, () => JudgePlugin> = {
   jev: () => jevJudge(),
+  gemini: () => geminiJudge(),
 };
 
 /** A built-in named with its options: `{ name: '<built-in>', …options }`. */

@@ -4077,7 +4077,7 @@
   "expected": [
    [
     6,
-    "MEMBER is a line of a TEAM block — found inside ROLE",
+    "MEMBER is a line of a TEAM or a MAIN block — found inside ROLE",
     null,
     "agents/library/roles/r.ap"
    ],
@@ -4104,7 +4104,7 @@
   "expected": [
    [
     6,
-    "MEMBER is a line of a TEAM block — found inside PROCEDURE",
+    "MEMBER is a line of a TEAM or a MAIN block — found inside PROCEDURE",
     null,
     "agents/library/procedures/p.ap"
    ],
@@ -8915,7 +8915,7 @@
   "expected": [
    [
     6,
-    "unknown keyword `TAGS` — did you mean `AS`?",
+    "unknown keyword `TAGS` — did you mean `TEAMS`?",
     null,
     "agents/library/roles/r.ap"
    ],
@@ -8942,7 +8942,7 @@
   "expected": [
    [
     6,
-    "unknown keyword `TAGS` — did you mean `AS`?",
+    "unknown keyword `TAGS` — did you mean `TEAMS`?",
     null,
     "agents/library/procedures/p.ap"
    ],

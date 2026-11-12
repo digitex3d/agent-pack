@@ -290,7 +290,7 @@ try {
   }
   console.log('checked conditions: apx check tests passed.');
 
-  // --- a checked condition in a flow's DELEGATE block: checked by the agent it goes to, through its own apx ---
+  // --- a checked condition in a flow's DELEGATE block: a block of the flow, in the document of the team that holds it — reached by its id through the team's apx ---
   {
     const team = join(tmp, 'teams', 'crew');
     write(join(lib, 'vars', 'crew.ap'), ['EXPORT SESSION VAR report']);
@@ -299,7 +299,7 @@ try {
       `EXPORT AGENT ${name} AS ${name}-role:`, '    ABOUT    a member', '    MANDATE  ship', '',
       `ROLE ${name}-role:`, '    ABOUT   a member', '    ALWAYS  test first',
     ]);
-    const files = { builder: member('builder'), lead: member('lead') };
+    const files = { builder: member('builder'), lead: member('lead'), crew: join(team, 'crew.ap') };
     const bundle = (name, checks = CHECKS) => bundleAgentObject({
       agentName: name, agentFile: files[name], agentDir: team, libraryRoot: lib, libraryRoots: [lib],
       libraries: { '@main': lib }, bundleConfig: { runtime: false }, adapter, checks,
@@ -321,43 +321,42 @@ try {
     // IF!: the BY agent's check line, in AGENTS.md, `apx flow` and the Workflow script
     flows(['    STEP judge it:', '        DELEGATE judge the report BY builder:', '            IF! {{report}} says clean:', '                DO  hand it on', '            ELSE', '                DO  send it back']);
     const id = checkId('builder', '{{report}} says clean');
-    const builderDoc = ApDocument.fromJson((await bundle('builder')).structure.asJson());
-    const leadDoc = ApDocument.fromJson((await bundle('lead')).structure.asJson());
-    assert.ok(builderDoc.meta.checks?.[id], 'the check is compiled into the BY agent\'s apx');
-    assert.equal(leadDoc.meta.checks, undefined, 'and only there');
-    const one = await views(leadDoc, 'lead');
-    const head = `says clean — run \`node .agent-pack/apx/builder.apx check ${id}\`: its answer decides, not your own judgement:`;
-    assert.ok(one.md.includes(`   If \`report\` (read its value: \`node .agent-pack/apx/builder.apx get report\`) ${head}`), `AGENTS.md:\n${one.md}`);
-    assert.ok(one.apxFlow.includes(`check ${id}\`: its answer decides`) && one.apxFlow.includes('builder.apx check'), one.apxFlow);
-    assert.ok(one.script.includes(`builder.apx check ${id}`), one.script);
+    const crewDoc = ApDocument.fromJson((await bundle('crew')).structure.asJson());
+    assert.ok(crewDoc.meta.checks?.[id], 'the check is compiled into the team\'s document, with its flow');
+    for (const name of ['builder', 'lead']) assert.equal(ApDocument.fromJson((await bundle(name)).structure.asJson()).meta.checks, undefined, 'a member holds no flow, and no condition of one');
+    const one = await views(crewDoc, 'crew');
+    const head = `says clean — run \`node .agent-pack/apx/crew.apx check ${id}\`: its answer decides, not your own judgement:`;
+    assert.ok(one.md.includes(`   If \`report\` (read its value: \`node .agent-pack/apx/crew.apx get report\`) ${head}`), `AGENTS.md:\n${one.md}`);
+    assert.ok(one.apxFlow.includes(`check ${id}\`: its answer decides`) && one.apxFlow.includes('crew.apx check'), one.apxFlow);
+    assert.ok(one.script.includes(`crew.apx check ${id}`), one.script);
 
     // IF!!: sealed in all three
     flows(['    STEP judge it:', '        DELEGATE judge the report BY builder:', '            IF!! {{report}} shows no regression:', '                DO  hand it on', '            ELSE', '                DO  send it back']);
     const sid = checkId('builder', '{{report}} shows no regression');
-    const sealed = await views(ApDocument.fromJson((await bundle('lead')).structure.asJson()), 'lead');
-    // `apx flow` names the sibling apx by its path beside this one; AGENTS.md and the script from the project root
-    const gate = `builder.apx check ${sid}\` answers open:`;
+    const sealed = await views(ApDocument.fromJson((await bundle('crew')).structure.asJson()), 'crew');
+    // the team's apx holds the gate: `apx flow`, AGENTS.md and the script name it from the project root
+    const gate = `crew.apx check ${sid}\` answers open:`;
     for (const [where, text] of Object.entries(sealed)) {
       assert.ok(!text.includes('regression'), `${where} shows no sealed condition:\n${text}`);
       assert.ok(text.includes(gate), `${where} names the gate:\n${text}`);
     }
-    assert.ok(sealed.md.includes(`   If \`node .agent-pack/apx/${gate}`) && sealed.script.includes(`If \`node .agent-pack/apx/${gate}`), 'the BY agent\'s apx, from the project root');
-    assert.equal(ApDocument.fromJson((await bundle('builder')).structure.asJson()).meta.checks[sid].question, 'In the state, report shows no regression?');
+    assert.ok(sealed.md.includes(`   If \`node .agent-pack/apx/${gate}`) && sealed.script.includes(`If \`node .agent-pack/apx/${gate}`), 'the team\'s apx, from the project root');
+    assert.equal(ApDocument.fromJson((await bundle('crew')).structure.asJson()).meta.checks[sid].question, 'In the state, report shows no regression?');
 
-    // a variable the BY agent does not see
+    // a variable the team does not see
     flows(['    STEP judge it:', '        DELEGATE judge the report BY builder:', '            IF! {{verdict}} says clean:', '                DO  hand it on']);
-    assert.match(await stepErrors('builder'), /crew\.ap:12 {2}IF!: `\{\{verdict\}\}` is no variable the agent it is delegated to sees/);
+    assert.match(await stepErrors('crew'), /crew\.ap:12 {2}IF!: `\{\{verdict\}\}` is no variable the team sees/);
 
     // BY names a team: no one agent to answer for the check
     flows(['    STEP judge it:', '        DELEGATE judge the report BY crew:', '            IF! {{report}} says clean:', '                DO  hand it on']);
-    assert.match(await stepErrors('lead'), /crew\.ap:12 {2}IF!: a checked condition needs the agent of its DELEGATE block: BY must name an agent/);
+    assert.match(await stepErrors('crew'), /crew\.ap:12 {2}IF!: a checked condition needs the agent of its DELEGATE block: BY must name an agent/);
 
     // a checked condition at the flow's own level: not supported yet
     flows(['    UNTIL!! {{report}} says clean MAX 3:', '        STEP fix it:', '            DELEGATE fix the next failure BY builder']);
-    assert.match(await stepErrors('lead'), /crew\.ap:10 {2}UNTIL!! in a flow is not supported yet outside a DELEGATE block — put it inside `DELEGATE … BY <agent>:`/);
+    assert.match(await stepErrors('crew'), /crew\.ap:10 {2}UNTIL!! in a flow is not supported yet outside a DELEGATE block — put it inside `DELEGATE … BY <agent>:`/);
     // and in a step, outside a DELEGATE block: whoever runs the flow checks none yet
     flows(['    STEP judge it:', '        IF! {{report}} says clean:', '            DELEGATE hand it on BY builder']);
-    assert.match(await stepErrors('lead'), /crew\.ap:11 {2}IF! in a flow is not supported yet outside a DELEGATE block/);    // the routing of the team: no executable — IF! warns and reads as IF, IF!! fails
+    assert.match(await stepErrors('crew'), /crew\.ap:11 {2}IF! in a flow is not supported yet outside a DELEGATE block/);    // the routing of the team: no executable — IF! warns and reads as IF, IF!! fails
     const routing = lines => write(join(team, 'crew.ap'), teamSource('crew', ['builder', 'lead'], ['IMPORT report FROM @main.vars', 'ABOUT  a crew', 'WHEN asked to ship:', ...lines, '',
       'FLOW ship:', '    STEP judge it:', '        DELEGATE hand it on BY builder']));
     routing(['    IF! the request is urgent:', '        RUN ship']);
@@ -370,15 +369,15 @@ try {
     routingWhen(['WHEN! {{report}} says the request is urgent:', '    RUN ship']);
     const sugared = await stderrOf(orchestration);
     assert.match(sugared.stderr, /crew\.ap:6 {2}WHEN!: no executable here — the condition is the agent's: it reads as WHEN/);
-    assert.ok(sugared.result.includes('When `report` (read its value: `node .agent-pack/apx/builder.apx get report`) says the request is urgent:\n    If `report`'), sugared.result);
+    assert.ok(sugared.result.includes('When `report` (read its value: `node .agent-pack/apx/crew.apx get report`) says the request is urgent:\n    If `report`'), sugared.result);
     routing(['    IF!! the request is urgent:', '        RUN ship']);
     await assert.rejects(orchestration, /crew\.ap:7 {2}IF!!: no executable here — a sealed condition can never be checked here/);
 
-    // BY written as the role its member takes: AGENTS.md and the member's apx resolve the same agent, the same id
+    // BY written as the role its member takes: AGENTS.md and the team's apx resolve the same agent, the same id
     flows(['    STEP judge it:', '        DELEGATE judge the report BY builder-role:', '            IF!! {{report}} shows no regression:', '                DO  hand it on']);
-    const byRole = ApDocument.fromJson((await bundle('builder')).structure.asJson());
+    const byRole = ApDocument.fromJson((await bundle('crew')).structure.asJson());
     assert.deepEqual(Object.keys(byRole.meta.checks), [sid], 'the role names its member: the id is the one BY builder makes');
-    assert.ok((await orchestration()).includes(`builder.apx check ${sid}\` answers open:`), 'AGENTS.md prints that same id');
+    assert.ok((await orchestration()).includes(`crew.apx check ${sid}\` answers open:`), 'AGENTS.md prints that same id');
   }
   console.log('checked conditions: flow step tests passed.');
 

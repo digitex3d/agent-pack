@@ -37,7 +37,9 @@ interface Call { step: string; line: ApDirectiveNode; key: string }
 type Op = { call: Call } | { wait: Call[] };
 
 export function compileWorkflow(flow: ApBlock, doc: ApDocument): string | null {
-  const teams = new Set(doc.byKind('team').map(t => t.name));
+  // A delegation says whom it goes to by its reference: a team — this one, or another — takes it by its own routing.
+  const toTeam = (line: ApDirectiveNode): boolean => doc.root()?.name === line.by && doc.root()?.kind === 'team'
+    || (line.uses ?? []).some(u => u.kind === 'team' && refName(u) === line.by);
   const ops: Op[] = [];
   let k = 0;
   for (const node of flow.body) {
@@ -47,7 +49,7 @@ export function compileWorkflow(flow: ApBlock, doc: ApDocument): string | null {
       if (line.type !== 'directive') return null;
       if (line.keyword === DELEGATE_VERB) {
         // A team, the default delegate, another harness (D66): carried out as written.
-        if (!line.by || teams.has(line.by) || line.harness) return null;
+        if (!line.by || toTeam(line) || line.harness) return null;
         const call = { step: node.title, line, key: `d${k++}` };
         ops.push({ call });
         if (line.async) running.push(call);

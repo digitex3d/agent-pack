@@ -7,6 +7,8 @@ import { detectAndBuild } from './detect.js';
 import type { BuildAgentOptions } from './agent.js';
 import { apxFiles, apxChecks } from '../apx/write.js';
 import { FLOWS_DIR, flowScriptFile } from '../apx/paths.js';
+import { bundleAgentObjectFromConfig } from '../compiler/index.js';
+import type { ApDocument } from '../apdoc/document.js';
 
 /**
  * Single pipeline: detect kind → build bundle → pick the adapter's emitter for
@@ -33,12 +35,32 @@ export async function bundleAndEmit(
     files.push({ path: resolve(config.outputDir, `${bundle.name}.ap.json`), content: document });
     // Every agent — and every skill, an agent too — gets its apx, whatever the adapter writes into its harness.
     files.push(...apxFiles(bundle.name, document, ctx.projectRoot, config.bundle.apxCompress === true, apxChecks(config, ctx.projectRoot), { waitMax: config.wait?.max ?? null, markMax: config.mark?.max ?? null, drivers: config.drivers ?? null }));
-    // The flows the agent's team runs, as the harness's own scripts.
-    const runner = adapter?.flowScript;
-    for (const flow of runner ? bundle.structure.byKind('flow') : []) {
-      const script = runner!.compile(flow, bundle.structure);
-      if (script) files.push({ path: resolve(ctx.projectRoot, FLOWS_DIR, flowScriptFile(flow.id, flow.contentHash, runner!.ext)), content: script });
-    }
+    files.push(...flowScriptFiles(bundle.structure, adapter, ctx.projectRoot));
   }
   return { bundle, files };
+}
+
+/** The flows a document holds, as the harness's own scripts — when its adapter runs flows so. */
+function flowScriptFiles(structure: ApDocument, adapter: AdapterPlugin | undefined, projectRoot: string): EmittedFile[] {
+  const runner = adapter?.flowScript;
+  if (!runner) return [];
+  return structure.byKind('flow').flatMap(flow => {
+    const script = runner.compile(flow, structure);
+    return script ? [{ path: resolve(projectRoot, FLOWS_DIR, flowScriptFile(flow.id, flow.contentHash, runner.ext)), content: script }] : [];
+  });
+}
+
+/**
+ * A unit's document — a team's: the same compiler, on the team's file, rooted
+ * at its TEAM block — with the files it brings: its compiled document beside
+ * every agent's, and its flows as the adapter's scripts.
+ */
+export async function unitDocument(name: string, config: Config, ctx: AdapterCtx, buildOpts: BuildAgentOptions = {}): Promise<{ structure: ApDocument; document: string; files: EmittedFile[] }> {
+  const { adapter } = buildOpts;
+  const { structure } = await bundleAgentObjectFromConfig(name, config, {
+    bundleConfig: config.bundle, lintConfig: config.lint, adapter, judge: buildOpts.judge, vars: { name },
+  });
+  if (!structure) throw new Error(`${name}: no document was compiled`);
+  const document = structure.asJson();
+  return { structure, document, files: [{ path: resolve(config.outputDir, `${name}.ap.json`), content: document }, ...flowScriptFiles(structure, adapter, ctx.projectRoot)] };
 }

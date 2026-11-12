@@ -77,7 +77,7 @@ export const TABELI_ENGINE = resolve(PACKAGE_ROOT, 'tabeli/tabeli');
 /** The project-level instructions file every harness reads: the open AGENTS.md standard. */
 export const AGENTS_MD = 'AGENTS.md';
 
-/** The project's always-on context, compiled into AGENTS.md — and where a CONTRACT hands a request to a team. */
+/** The file a project once had in place of its main (src/services/mainMetadata.ts): refused, with the rewrite. */
 export const PROJECT_SOURCE = 'PROJECT.ap';
 
 /**

@@ -85,7 +85,8 @@ export function mdEnv(
  */
 export function renderPreamble(doc: ApDocument, env: MdEnv): string {
   const src = doc.mdSource ?? EMPTY_MD;
-  const root = doc.root() as AgentBlock | null;
+  // A unit's document — a team's — has no agent: no identity, no body of its own beyond its blocks.
+  const root = doc.root()?.kind === 'agent' ? doc.root() as AgentBlock : null;
   let out = '';
 
   // The scope warning — before everything: what the agent writes and reads.

@@ -45,6 +45,8 @@ Options:
   --adapter <name>  Materialize for a target harness (bundle / bundle all)
   --out <dir>       Output directory override (bundle / bundle all)
   --watch           Rebuild on .ap changes (bundle all only)
+  --executable      Also compile the agent into one executable with Bun, .agent-pack/bin/<agent> (bundle <name>)
+  --target <t>      The platform of the executable, a Bun target: bun-linux-x64, bun-darwin-arm64, … (with --executable)
   --apx-compress    Store the apx data gzipped; --no-apx-compress stores it as JSON (bundle / bundle all)
   --no-judge        Skip the judge phase (bundle / bundle all)
   --judge-strict    A line the judge cannot check yet is an error, not a warning (bundle / bundle all)

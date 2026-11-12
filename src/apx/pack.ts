@@ -167,6 +167,32 @@ function bufferSource(buf: Buffer): Source {
 const TAIL = 4096;
 const HEADER_CHUNK = 64 * 1024;
 
+interface PackEnd { hash: string; header: number }
+
+/** The end line's record — the hash of the data and the byte the header starts at. */
+function endOf(source: Source, where: string): PackEnd {
+  const tailStart = Math.max(0, source.size - TAIL);
+  const tail = source.read(tailStart, source.size - tailStart).toString('utf-8');
+  const at = tail.lastIndexOf(`\n${END_LINE}`);
+  if (at < 0) { source.close(); throw new Error(`${where} carries no pack data — rebuild it: agent-pack bundle all`); }
+  try {
+    return JSON.parse(tail.slice(at + 1 + END_LINE.length).trimEnd()) as PackEnd;
+  } catch {
+    source.close();
+    throw new Error(`${where} is truncated — its end line is cut`);
+  }
+}
+
+/** A pack's text in two: the engine, and the data lines from the header on — `packFile` in reverse. */
+export function splitPack(text: string, where = 'this .apx'): { engine: string; data: string } {
+  const buf = Buffer.from(text, 'utf-8');
+  const end = endOf(bufferSource(buf), where);
+  const engine = buf.subarray(0, end.header).toString('utf-8');
+  const data = buf.subarray(end.header).toString('utf-8');
+  if (!data.startsWith(HEADER_LINE)) throw new Error(`${where} is damaged — no header where its end line says`);
+  return { engine, data };
+}
+
 /**
  * A pack opened for reading: its header, and each section on demand — read
  * from its offset, checked against its hash, decoded.
@@ -187,18 +213,20 @@ export class Pack {
     return text.lastIndexOf(`\n${END_LINE}`) >= 0;
   }
 
+  /**
+   * The data lines alone — header, sections, end — as the `pack` command
+   * carries them into a compiled binary. The end line still counts the
+   * engine's bytes before the header, so the data is read as if it followed
+   * an engine of that size.
+   */
+  static fromData(data: string, where = 'this pack'): Pack {
+    const buf = Buffer.from(data, 'utf-8');
+    const base = endOf(bufferSource(buf), where).header;
+    return Pack.open({ size: base + buf.length, read: (p, l) => buf.subarray(p - base, p - base + l), close: () => {} }, where);
+  }
+
   private static open(source: Source, where: string): Pack {
-    const tailStart = Math.max(0, source.size - TAIL);
-    const tail = source.read(tailStart, source.size - tailStart).toString('utf-8');
-    const at = tail.lastIndexOf(`\n${END_LINE}`);
-    if (at < 0) { source.close(); throw new Error(`${where} carries no pack data — rebuild it: agent-pack bundle all`); }
-    let end: { hash: string; header: number };
-    try {
-      end = JSON.parse(tail.slice(at + 1 + END_LINE.length).trimEnd()) as typeof end;
-    } catch {
-      source.close();
-      throw new Error(`${where} is truncated — its end line is cut`);
-    }
+    const end = endOf(source, where);
     let headerText = '';
     let position = end.header;
     for (;;) {
@@ -226,13 +254,19 @@ export class Pack {
     return this.header.sections.find(e => e.type === type && e.name === name) ?? null;
   }
 
-  /** The content of a section — null when the pack has none; an error when the bytes are not the header's. */
-  section(type: string, name = ''): Buffer | null {
+  /** A section as it is written — null when the pack has none; an error when the bytes are not the header's. */
+  raw(type: string, name = ''): Section | null {
     const e = this.entry(type, name);
     if (!e) return null;
     const data = this.source.read(this.dataStart + e.offset, e.bytes);
     if (data.length !== e.bytes || sha256(data) !== e.sha256) throw new Error(`section ${type}:${name} is damaged — its bytes are not the header's`);
-    return sectionContent({ encoding: e.encoding, data: data.toString('utf-8') });
+    return { type, name, encoding: e.encoding, data: data.toString('utf-8') };
+  }
+
+  /** The content of a section — null when the pack has none; an error when the bytes are not the header's. */
+  section(type: string, name = ''): Buffer | null {
+    const raw = this.raw(type, name);
+    return raw === null ? null : sectionContent(raw);
   }
 
   /** A `json` section parsed — null when the pack has none. */

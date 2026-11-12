@@ -1,21 +1,28 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { resolve, dirname, relative, sep } from 'node:path';
 import { loadConfig, type Config, libraryRoots as libraryRootsOf, librariesAliasMap, BUILTIN_LIBRARY_ROOT, packageInfo } from '../config.js';
 import { AdapterRegistry } from '../adapter-registry.js';
 import type { AdapterCtx, AdapterPlugin, EmittedFile } from '../../adapters/types.js';
-import { bundleAndEmit } from '../bundlers/run.js';
+import { bundleAndEmit, unitDocument } from '../bundlers/run.js';
 import { orphanPrograms } from '../executor.js';
-import { emitProjectContext, ensureProjectPointers, AGENTS_MD, PROJECT_SOURCE } from '../projectContext.js';
-import { ensureOrchestrationSection } from '../orchestrationSection.js';
+import { emitProjectContext, ensureProjectPointers, AGENTS_MD } from '../projectContext.js';
+import { readMainFile } from '../services/mainMetadata.js';
+import { ensureOrchestrationSection, buildOrchestrationContent, type OrchestrationSectionResult } from '../orchestrationSection.js';
+import { removeMdBlock } from '../services/mdBlock.js';
 import { discoverAgentsByWalk } from '../agentDiscovery.js';
-import { standaloneDir } from '../services/teamMetadata.js';
+import { standaloneDir, teamNamesUnder } from '../services/teamMetadata.js';
 import { openJudgeRun, finishJudgeRun, type JudgeRun } from '../judge/phase.js';
 import { documentDefHashes, removeStaleCaches } from '../apx/dimensions.js';
 import { reporter, useReporter, plainReporter } from '../report.js';
 import { prettyReporter } from '../../reporters/pretty/index.js';
 import { banner } from '../../reporters/pretty/logo.js';
+import { apxPath, binPath } from '../apx/paths.js';
+import { unitApxFiles, unitPayload, apxChecks } from '../apx/write.js';
+import { unitAgents } from '../apx/unit.js';
+import type { UnitSection } from '../apx/payload.js';
+import { buildExecutable, bunInstalled } from './executable.js';
 
 /**
  * CLI command: parse args, build a bundle (agent or skill), optionally
@@ -29,9 +36,13 @@ export async function bundle(args: string[]): Promise<void> {
   let adapterName: string | null = null;
   let outputDir: string | null = null;
   let watch = false;
+  let executable = false;
+  let target: string | null = null;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--adapter' && args[i + 1]) adapterName = args[++i];
+    else if (args[i] === '--executable') executable = true;
+    else if (args[i] === '--target' && args[i + 1]) target = args[++i];
     else if (args[i] === '--out' && args[i + 1]) outputDir = args[++i];
     else if (args[i] === '--watch') watch = true;
     else if (args[i] === '--apx-compress') config.bundle.apxCompress = true;
@@ -46,13 +57,27 @@ export async function bundle(args: string[]): Promise<void> {
 
   if (!source) {
     report.note('Usage:');
-    report.note('  agent-pack bundle <name|path> [--adapter <name>] [--out <dir>] [--apx-compress|--no-apx-compress] [--no-judge|--judge-strict] [--plain] [--verbose]');
+    report.note('  agent-pack bundle <name|path> [--adapter <name>] [--out <dir>] [--executable [--target <bun target>]] [--apx-compress|--no-apx-compress] [--no-judge|--judge-strict] [--plain] [--verbose]');
     report.note('  agent-pack bundle all       [--adapter <name>] [--out <dir>] [--watch] [--apx-compress|--no-apx-compress] [--no-judge|--judge-strict] [--plain] [--verbose]');
     process.exit(1);
   }
 
   if (watch && source !== 'all') {
     report.note('--watch is only supported with `bundle all`.');
+    process.exit(1);
+  }
+  // `bundle <unit>` — the main or a team — builds every agent, then the units' apx; with --executable, that unit's executable.
+  const unit = source === null || source === 'all' ? null : unitNamed(source, config);
+  if (executable && source === 'all') {
+    report.note('--executable makes one file of what it names — `bundle all --executable` would make one per agent; name the main, for all of them in one, or an agent.');
+    process.exit(1);
+  }
+  if (target && !executable) {
+    report.note('--target is the platform of an executable — use it with --executable.');
+    process.exit(1);
+  }
+  if (executable && !bunInstalled()) {
+    report.note('--executable needs Bun on the PATH (https://bun.sh) — install it, then run again.');
     process.exit(1);
   }
 
@@ -62,8 +87,8 @@ export async function bundle(args: string[]): Promise<void> {
     outputDir: outputDir ?? config.outputDir,
   };
 
-  if (source === 'all') {
-    await runBundleAll(config, adapterName, ctx, watch);
+  if (source === 'all' || unit) {
+    await runBundleAll(config, adapterName, ctx, watch, unit && executable ? { ...unit, target } : null);
     return;
   }
 
@@ -85,6 +110,10 @@ export async function bundle(args: string[]): Promise<void> {
     writeFiles(files);
     const suffix = adapterName ? ` (adapter: ${adapterName})` : '';
     report.info(`${built.name} bundled${suffix}`);
+    if (executable) {
+      buildExecutable(built.name, ctx.projectRoot, target);
+      report.info(`${built.name} → ${binPath(built.name, target)}`);
+    }
   } catch (err) {
     report.failed(err);
     failed = true;
@@ -99,6 +128,7 @@ async function runBundleAll(
   adapterName: string | null,
   ctx: AdapterCtx,
   watch = false,
+  executable: UnitExecutable | null = null,
 ): Promise<void> {
   let adapters: AdapterPlugin[];
   try {
@@ -112,7 +142,7 @@ async function runBundleAll(
     reporter().note('No adapters registered. Configure `adapters: [...]` in agent-pack.config.mjs or pass --adapter <name>.');
     process.exit(1);
   }
-  const ok = await bundleAllOnce(config, adapters, ctx);
+  const ok = await bundleAllOnce(config, adapters, ctx, executable);
   if (!watch) {
     if (!ok) process.exit(1);
     return;
@@ -121,10 +151,26 @@ async function runBundleAll(
   await runWatchLoop(config, adapters, ctx);
 }
 
+/** The unit — the main or a team — to compile into one executable after its apx, and for which platform. */
+interface UnitExecutable {
+  kind: UnitSection['kind'];
+  name: string;
+  target: string | null;
+}
+
+/** The unit a name names — the main, by its file's name, or a team — or null when it names neither. */
+function unitNamed(name: string, config: Config): Pick<UnitExecutable, 'kind' | 'name'> | null {
+  let main: string | null = null;
+  try { main = readMainFile(process.cwd())?.name ?? null; } catch { main = null; }
+  if (name === main) return { kind: 'main', name };
+  return teamNamesUnder(config.teamsDir).includes(name) ? { kind: 'team', name } : null;
+}
+
 export async function bundleAllOnce(
   config: Config,
   adapters: AdapterPlugin[],
   ctx: AdapterCtx,
+  executable: UnitExecutable | null = null,
 ): Promise<boolean> {
   const report = reporter();
   // Per S7/S8: agents come exclusively from a filesystem walk.
@@ -154,6 +200,8 @@ export async function bundleAllOnce(
   // claim is a configuration error.
   const shared = resolve(ctx.projectRoot, '.agent-pack') + sep;
 
+  /** The agents whose build failed: the main carries them as their last apx has them. */
+  const failed = new Set<string>();
   // The default delegate joins the build when some agent hands it work and the project has none of that name.
   const queue = [...agents];
   for (let k = 0; k < queue.length; k++) {
@@ -180,19 +228,39 @@ export async function bundleAllOnce(
         }
       } catch (err) {
         report.failed(err, `agent ${agent.name} on ${adapter.name}`);
+        failed.add(agent.name);
         totalErrors++;
       }
     }
   }
 
+  // Each unit's own document — every team's and the main's: its flows, by the one compiler.
+  // What they start in the background and what they MARK is the unit's, and keeps the perimeter too.
+  const unitDocuments = new Map<string, string>();
+  let mainName: string | null = null;
+  try { mainName = readMainFile(ctx.projectRoot)?.name ?? null; } catch { mainName = null; }
+  for (const name of [...teamNamesUnder(config.teamsDir), ...(mainName ? [mainName] : [])]) {
+    try {
+      const unit = await unitDocument(name, config, ctx, { adapter: adapters[0], judge });
+      writeFiles(unit.files);
+      unitDocuments.set(name, unit.document);
+      const meta = unit.structure.meta;
+      if (meta.background || meta.marks) guarded = true;
+    } catch (err) {
+      report.failed(err, name === mainName ? `the main ${name}` : `team ${name}`);
+      totalErrors++;
+    }
+  }
+
   // The project context and the orchestration go to AGENTS.md — the file every
   // harness reads; harnesses with their own instructions file get a pointer to it.
+  let project: Awaited<ReturnType<typeof emitProjectContext>> = null;
   try {
-    if (await emitProjectContext(ctx.projectRoot, config)) {
-      report.info(`${PROJECT_SOURCE} → ${AGENTS_MD}`);
-    }
+    // AGENTS.md boots the main by the form it is run in: its executable when this build makes one, else its apx.
+    project = await emitProjectContext(ctx.projectRoot, config, executable?.kind === 'main' ? `${binPath(executable.name, executable.target)} start` : null);
+    if (project) report.info(`${project.file} → ${AGENTS_MD}`);
   } catch (err) {
-    report.failed(err, `${PROJECT_SOURCE} → ${AGENTS_MD}`);
+    report.failed(err, `the main → ${AGENTS_MD}`);
     totalErrors++;
   }
   for (const file of ensureProjectPointers(ctx.projectRoot, adapters)) {
@@ -208,20 +276,70 @@ export async function bundleAllOnce(
     }
   }
 
+  let held: Pick<OrchestrationSectionResult, 'held' | 'content'> | null = null;
+  /** Every team of the project, listed in the main or not, with the text its own apx prints. */
+  const teamUnits: UnitSection[] = [];
   try {
-    const orchResult = await ensureOrchestrationSection({
+    const opts = {
       cwd: ctx.projectRoot,
       standaloneAgentsDir: standaloneDir(config.agentsDir),
       teamsDir: config.teamsDir,
       libraryRoots: libraryRootsOf(config),
       libraries: librariesAliasMap(config),
       config,
-    });
-    if (orchResult.action !== 'unchanged') {
-      report.info(`${AGENTS_MD} orchestration ${orchResult.action} (${orchResult.standalones.length} standalone, ${orchResult.teams.length} team(s))`);
+    };
+    for (const name of teamNamesUnder(config.teamsDir)) {
+      const team = await buildOrchestrationContent({ ...opts, team: name });
+      const t = team.held.teams[0];
+      if (t) teamUnits.push({ kind: 'team', name: t.name, about: t.about, version: '', teams: [t], members: [], text: `${team.content}\n` });
+    }
+    if (project) {
+      // With a main, the orchestration is the main's: its apx prints it, AGENTS.md no longer holds it.
+      held = await buildOrchestrationContent(opts);
+      if (removeMdBlock(resolve(ctx.projectRoot, AGENTS_MD), 'orchestration')) report.info(`${AGENTS_MD} orchestration → ${apxPath(project.main.name)}`);
+    } else {
+      const orchResult = await ensureOrchestrationSection(opts);
+      held = orchResult;
+      if (orchResult.action !== 'unchanged') {
+        report.info(`${AGENTS_MD} orchestration ${orchResult.action} (${orchResult.standalones.length} standalone, ${orchResult.teams.length} team(s))`);
+      }
     }
   } catch (err) {
     report.failed(err, `to update ${AGENTS_MD} orchestration`);
+    totalErrors++;
+  }
+
+  // The units' apx — the main's and each team's: the engine once, what the unit is, and the image of every agent it holds.
+  // The teams first: the main holds each team's apx image.
+  const units: UnitSection[] = [...teamUnits];
+  if (held && project) {
+    const { main } = project;
+    units.push({ kind: 'main', name: main.name, about: main.about, version: main.version, ...held.held, text: `${project.content.trim()}\n\n${held.content.trim()}\n` });
+  }
+  const agentNames = new Set(queue.map(a => a.name));
+  const limits = { waitMax: config.wait?.max ?? null, markMax: config.mark?.max ?? null, drivers: config.drivers ?? null };
+  for (const section of units) {
+    try {
+      if (agentNames.has(section.name)) throw new Error(`the ${section.kind} ${section.name} is called like an agent — both would be ${apxPath(section.name)}: rename one`);
+      for (const agent of unitAgents(section).filter(a => failed.has(a))) {
+        report.info(`${agent} failed to build: the ${section.kind} ${section.name} carries it as its last apx has it`);
+      }
+      // A team's own document — its flows, by the one compiler — is its apx's own image.
+      const document = unitDocuments.get(section.name);
+      if (document === undefined) throw new Error(`its document failed to build — fix it, then bundle again`);
+      const own = document === undefined ? null : unitPayload(document, apxChecks(config, ctx.projectRoot), limits);
+      writeFiles(unitApxFiles(section, ctx.projectRoot, own, config.bundle.apxCompress === true));
+      if (executable?.name === section.name) {
+        await unitExecutable(section, executable.target, ctx.projectRoot, config);
+        report.info(`${section.name} → ${binPath(section.name, executable.target)}`);
+      }
+    } catch (err) {
+      report.failed(err, `to write the apx of the ${section.kind} ${section.name}`);
+      totalErrors++;
+    }
+  }
+  if (executable && !units.some(u => u.name === executable.name)) {
+    report.info(`no ${executable.kind} ${executable.name} was built — its executable was not made`);
     totalErrors++;
   }
 
@@ -243,6 +361,16 @@ export async function bundleAllOnce(
   return totalErrors === 0;
 }
 
+/** Compile a unit's apx into its executable — when Bun fails on the main's, AGENTS.md goes back to the apx it can run; then it throws. */
+async function unitExecutable(unit: UnitSection, target: string | null, projectRoot: string, config: Config): Promise<void> {
+  try {
+    buildExecutable(unit.name, projectRoot, target);
+  } catch (err) {
+    if (unit.kind === 'main') await emitProjectContext(projectRoot, config, null);
+    throw err;
+  }
+}
+
 async function runWatchLoop(
   config: Config,
   adapters: AdapterPlugin[],
@@ -253,7 +381,8 @@ async function runWatchLoop(
     config.agentsDir,
     ...config.libraryRoot ? [config.libraryRoot] : [],
     ...(config.sharedLibraries ?? []).filter(l => l.watch).map(l => l.path),
-    resolve(ctx.projectRoot, PROJECT_SOURCE),
+    // The main's file sits at the project root, under a name of its own: every root .ap is watched.
+    ...readdirSync(ctx.projectRoot).filter(f => f.endsWith('.ap')).map(f => resolve(ctx.projectRoot, f)),
     BUILTIN_LIBRARY_ROOT,
   ];
   const watcher = chokidar.watch(watchPaths, {

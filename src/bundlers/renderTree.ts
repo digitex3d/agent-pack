@@ -52,7 +52,8 @@ function renderControlHead(kw: string, rawRest: string, level: number, by: strin
   if (executor) return executorHead(`${CONTROL_HEADS[kw]} ${condition}`, executor);
   if (kw === 'IF' || kw === 'UNTIL') {
     const { check } = condCheckOf(kw as CheckKind, level, condition, by ? { at: 'step', agent: by } : { at: 'none' }, ctx?.checks);
-    if (check) return checkHead(kw as CheckKind, check, check.level === 2 ? '' : condition, apxCommand(check.agent));
+    // In a flow, the condition is a block of the unit that holds the flow: reached through its apx.
+    if (check) return checkHead(kw as CheckKind, check, check.level === 2 ? '' : condition, apxCommand(ctx?.unitOf?.(check.agent) ?? check.agent));
   }
   const rest = condition ? ` ${condition}` : '';
   return `${CONTROL_HEADS[kw]}${rest}`;

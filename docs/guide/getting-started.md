@@ -88,7 +88,7 @@ TEMPLATE review-report:
 agent-pack bundle all
 ```
 
-For every agent, every configured adapter writes its file, and the agent's `.apx` is written to `.agent-pack/apx/`. The project gets `AGENTS.md` (orchestration and, when `PROJECT.ap` exists, the project context) and, for Claude Code, a `CLAUDE.md` pointing at it.
+For every agent, every configured adapter writes its file, and the agent's `.apx` is written to `.agent-pack/apx/`. The project gets `AGENTS.md` (the orchestration; or, when the project has a main — a root `.ap` file holding a `MAIN:` block — only the command that prints the main, and its universal policies) and, for Claude Code, a `CLAUDE.md` pointing at it.
 
 `agent-pack bundle all --watch` rebuilds on every change to a `.ap` file.
 

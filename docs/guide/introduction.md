@@ -20,7 +20,7 @@ For every agent, `agent-pack bundle all` writes:
 - **an `.apx`** — the agent's definition and the engine that serves it, in one file run by Node (`node .agent-pack/apx/<agent>.apx start`). The agent reads what the task needs, block by block, instead of carrying the whole definition in its context. See [The apx](./apx.md).
 - **the harness file** — for Claude Code, Codex or Cursor, either the whole definition or a pointer to the apx. See [Adapters](./adapters.md).
 
-For the project, it writes **`AGENTS.md`**: the project-wide context compiled from `PROJECT.ap`, and the orchestration — every standalone agent, every team, its members and how requests are routed to its flows. Harnesses that read their own file get a one-line pointer to it (`CLAUDE.md` contains `@AGENTS.md`).
+For the project, it writes **`AGENTS.md`**: the orchestration — every standalone agent and team, each team's members — or, when the project has a main (the root `.ap` file holding a `MAIN:` block), only the command that prints it all from the main's apx and the policies that hold everywhere and how requests are routed to its flows. Harnesses that read their own file get a one-line pointer to it (`CLAUDE.md` contains `@AGENTS.md`).
 
 ## No runtime
 

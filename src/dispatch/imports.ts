@@ -12,6 +12,7 @@ import { parseNamespace } from '../namespace.js';
 import { parseBlocks, isExportedVar, type Block } from '../parseBlocks.js';
 import { KIND_DIRS } from '../ingest.js';
 import { importVariable } from '../exportedVars.js';
+import type { VarDecl } from '../vars.js';
 import { apFilesUnder } from '../services/fs.js';
 import { readAgentFile } from '../services/teamMetadata.js';
 import { fill, FORMULAS } from '../formulas.js';
@@ -227,6 +228,32 @@ export interface ResolvedImport {
   from: string;
 }
 
+/** The names a source imports — every `IMPORT a, b FROM …` line at its top level. */
+function importedNames(raw: string): Set<string> {
+  return new Set(lex(raw).flatMap(t => {
+    const m = t.kind === 'keyword' && t.indent === 0 && t.keyword === 'IMPORT' ? t.rest.match(IMPORT_REST_RE) : null;
+    return m ? splitList(m[1]) : [];
+  }));
+}
+
+/**
+ * One id, one definition: an exported variable typed `AS <template>` is the
+ * same wherever it is imported only when its module brings the template with
+ * it. The error for a module that names a template it does not import — else null.
+ */
+function untypedExport(decl: VarDecl, moduleSource: string): string | null {
+  if (decl.form !== 'variable' || !decl.type || importedNames(moduleSource).has(decl.type)) return null;
+  // A module may define the template itself, beside the variable.
+  if (parseBlocks(moduleSource).blocks.some(b => b.key === 'TEMPLATE' && b.name === decl.type)) return null;
+  return `EXPORT VAR ${decl.name} AS ${decl.type}: the module does not import \`${decl.type}\` — add \`IMPORT ${decl.type} FROM @<lib>.templates\` to it: a variable carries its type wherever it is imported`;
+}
+
+/** Report, once per module, an exported variable whose template the module does not bring with it. */
+function reportUntypedExport(unit: Block & { variable: VarDecl }, file: string, ctx: BundleContext): void {
+  const message = untypedExport(unit.variable, ctx.sources.read(file));
+  if (message && !ctx.lintErrors.some(e => e.file === file && e.message === message)) ctx.lintErrors.push({ file, line: unit.startLine, message });
+}
+
 export function resolveImports(
   raw: string,
   libraryRoots: string[],
@@ -360,6 +387,7 @@ export async function processImports(body: string, ctx: BundleContext, sourcePat
       if (target.exportUnit && isExportedVar(target.exportUnit)) {
         await exportBlocksOf(target.absolutePath, ctx);
         importVariable(target.exportUnit, target.absolutePath, modulePath, sourcePath ?? '<body>', ctx);
+        reportUntypedExport(target.exportUnit, target.absolutePath, ctx);
         continue;
       }
 

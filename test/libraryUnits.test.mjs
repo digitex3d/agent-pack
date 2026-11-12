@@ -69,7 +69,7 @@ try {
     cwd: tmp, standaloneAgentsDir: join(tmp, 'standalone'), teamsDir: join(tmp, 'teams'), libraryRoots: [lib], libraries: { '@main': lib },
   });
   assert.ok(content.includes('download https://example.org/data'), "a constant's read is its value");
-  assert.ok(content.includes(`\`notes\` (read its value: \`node ${apxPath('m')} get notes\`)`), "a variable's read says how to read it");
+  assert.ok(content.includes(`\`notes\` (read its value: \`node ${apxPath('t')} get notes\`)`), "a variable's read says how to read it — through the team, whose document holds it");
   assert.ok(!content.includes('{{'), 'no read left as written');
 
   // --- Each team's imports are its own: two teams, one name, two modules — no collision ---
@@ -83,8 +83,8 @@ try {
   const both = (await buildOrchestrationContent({
     cwd: tmp, standaloneAgentsDir: join(tmp, 'standalone'), teamsDir: join(tmp, 'teams'), libraryRoots: [lib], libraries: { '@main': lib },
   })).content;
-  assert.ok(both.includes(`\`notes\` (read its value: \`node ${apxPath('m')} get notes\`)`) && both.includes(`\`notes\` (read its value: \`node ${apxPath('n')} get notes\`)`),
-    'each team reads its own `notes`, through its own member');
+  assert.ok(both.includes(`\`notes\` (read its value: \`node ${apxPath('t')} get notes\`)`) && both.includes(`\`notes\` (read its value: \`node ${apxPath('u')} get notes\`)`),
+    'each team reads its own `notes`, through its own apx');
 
   // --- A team shares constants and SESSION variables: a private one would be each member's own ---
   write(join(lib, 'more', 'own.ap'), ['EXPORT VAR mine']);

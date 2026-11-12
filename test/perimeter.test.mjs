@@ -202,7 +202,8 @@ try {
       ...aboveFlow.map(l => `    ${l}`), '    FLOW ship:', ...aboveStep.map(l => `        ${l}`),
       '        STEP build it:', '            DELEGATE compile the code BY builder',
       '        STEP check it:', '            DELEGATE run the checks BY checker']);
-    const build = () => bundleAgentObject({ agentName: 'builder', agentFile: join(team, 'builder.ap'), agentDir: team, projectRoot: root, libraryRoot: lib, libraryRoots: [lib], libraries: { '@main': lib }, bundleConfig: { runtime: false } });
+    // The flow is the team's own document's: the same compiler, on the team's file.
+    const build = () => bundleAgentObject({ agentName: 'crew', agentFile: join(team, 'crew.ap'), agentDir: team, projectRoot: root, libraryRoot: lib, libraryRoots: [lib], libraries: { '@main': lib }, bundleConfig: { runtime: false } });
     member('builder', ['@WITHIN api']); member('checker');
     crew(['@WITHIN api, db'], [], ['@WITHIN api']);
     const flow = Object.values(JSON.parse((await build()).structure.asJson()).blocks).find(b => b.kind === 'flow');

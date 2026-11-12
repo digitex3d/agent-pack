@@ -25,7 +25,7 @@
 import { readDecorator, decoratorPhrase, lookupIn } from '../decoratorUse.js';
 import { DecoratorScope, DECORATOR_MARK, escapeMessage, workless, type DecoratorLine } from '../decorators.js';
 import { plugins, pluginOf } from '../plugins.js';
-import { basename } from 'node:path';
+import { basename, dirname } from 'node:path';
 import type { BundleContext } from '../dispatch/types.js';
 import type { Definition } from '../definition.js';
 import { lex, type Token } from '../lexer.js';
@@ -39,16 +39,19 @@ import { strategyFor } from '../definition.js';
 import { stripHeaderKeyword } from '../primitives.js';
 import { buildNamespace } from '../namespace.js';
 import { buildRoleIndex, resolveRole, type RoleIndex } from '../roleIndex.js';
-import { align, positionOf, type SourceSpan } from '../sources.js';
+import { align, positionOf, type SourceSpan, type SourceRegistry } from '../sources.js';
+import { readMainFile } from '../services/mainMetadata.js';
 import { apxCommand } from '../apx/paths.js';
 import type { StoreBlock } from './blocks.js';
 import { renderTree } from '../bundlers/renderTree.js';
 import { ENUM_PRIMITIVES, FORCE_LEVEL_PRIMITIVES, enumPrimitiveFor } from '../primitives.js';
 import { validateEnumValue } from '../enumPrimitives.js';
 import {
-  readTeamMembers,
   readTeamFile,
   teamRootForAgentFile,
+  findAgentFiles,
+  agentNameOf,
+  readAgentFile,
 } from '../services/teamMetadata.js';
 import { type Block } from '../parseBlocks.js';
 import type { ApNode, ApRef, ApShape, ApSlotType, ApStepNode, ApIfNode, ApDocumentMeta, ApStoreProjection } from './types.js';
@@ -73,7 +76,7 @@ function stripColon(s: string): string {
 }
 import type { ApBlock, ApBlockInit } from './block.js';
 import {
-  type BlockCx, RuleBlock, TeamBlock, AgentBlock, VarBlock,type TeamScan, KIND_STRATEGIES, strategyOf, kindOfFolder, refId, namespaceOf, type RefClass,
+  type BlockCx, RuleBlock, TeamBlock, MainBlock, AgentBlock, VarBlock,type TeamScan, KIND_STRATEGIES, strategyOf, kindOfFolder, refId, namespaceOf, type RefClass,
 } from './blocks.js';
 import { ApDocument, type BlockProvenance } from './document.js';
 import { COMPUTE_SECTIONS, executorMark, executorSpecs, returnShape } from '../executor.js';
@@ -109,6 +112,13 @@ export interface RecorderFinishOpts {
   declaredVars: PlacedVariable[];
   /** The project's teams, by name — what a `BY <team>` resolves against. Absent: not known. */
   teams?: readonly string[];
+  /**
+   * What the compilation is the document of: an agent — the default — or a
+   * unit, whose root is its TEAM or MAIN block and which holds its flows, and no agent.
+   */
+  unit?: 'team' | 'main';
+  /** The main's: the files of the standalone agents it holds, in MEMBER order. */
+  memberFiles?: string[];
 }
 
 /** A variable's declaration: its name, scope, template, and where it was written. */
@@ -128,6 +138,8 @@ interface VarSite {
 
 export class DocumentBuilder implements BlockCx {
   private ctx: BundleContext | null = null;
+  /** The document is a unit's — a team's: its flows, and every checked condition in them, are its own. */
+  private ownsFlows = false;
 
   // --- reference index: name → identity, per reference class ---------------
   private runnables = new Map<string, IndexedBlock>();
@@ -466,7 +478,8 @@ export class DocumentBuilder implements BlockCx {
     if (issue) this.checkIssues.push({ ...at, ...issue });
     if (!check) return judged;
     node.check = check;
-    if (check.agent === this.ctx!.agentName) this.checkSites.push({ ...at, id: check.id, kind, level: check.level, head, condition: node.condition, inStep: !!step || !!by, ...(rounds ? { rounds } : {}) });
+    // An agent answers for its own body's conditions; a unit's document holds every condition of its flows.
+    if (this.ownsFlows || check.agent === this.ctx?.agentName) this.checkSites.push({ ...at, id: check.id, kind, level: check.level, head, condition: node.condition, inStep: !!step || !!by, ...(rounds ? { rounds } : {}) });
     if (check.level === 2) node.condition = '';
     return judged;
   }
@@ -496,7 +509,7 @@ export class DocumentBuilder implements BlockCx {
       const vars = checkedVars(site.condition, isConstant);
       const unseen = vars.filter(v => !visible.has(v));
       // A step's reads are checked here: a flow file's reads are no other check's.
-      if (site.inStep) for (const v of unseen) issue(`${head}: \`{{${v}}}\` is no variable the agent it is delegated to sees — export it as a SESSION VAR and IMPORT it in that agent`);
+      if (site.inStep) for (const v of unseen) issue(`${head}: \`{{${v}}}\` is no variable the team sees — export it as a SESSION VAR and IMPORT it in the team's file`);
       if (unseen.length === 0 && vars.length === 0) {
         issue(`${head}: a checked condition reads at least one variable — \`{{name}}\`: the judge decides on the state the variables hold, never on the agent's word`);
       }
@@ -865,40 +878,43 @@ export class DocumentBuilder implements BlockCx {
     }
   }
 
-  /** Read the agent's team ONCE: its file, the blocks of its TEAM block, its flow slices. */
-  private scanTeam(agentFilePath: string): TeamScan | null {
-    const root = teamRootForAgentFile(agentFilePath);
-    if (!root) return null;
-    const sources = this.ctx!.sources;
-    const file = readTeamFile(root, sources);
-    if (!file) return null;
-    const written = file.block.children.filter((c): c is Block => c.type === 'block');
-    // A FLOW's body runs from the line after its header to its next sibling in
-    // the TEAM block (a WHEN can sit between two FLOWs), de-indented by the
-    // block's indent — the text a flow file would hold.
-    const flows: TeamScan['flows'] = written
-      .filter(b => b.key === 'FLOW' && b.name !== null)
-      .map(b => ({ name: b.name!, block: b, body: sources.nestedSpan(file.path, file.block, b).lines.slice(1).map(l => l.text.slice(file.childIndent)).join('\n') }));
-    return { root, name: file.name, file, members: file.members.map(m => m.name), blocks: written, flows };
+  /** Read the agent's team — or, compiling the main, the main — ONCE: its file, the blocks of its block, its flow slices. */
+  private scanUnit(opts: RecorderFinishOpts): TeamScan | null {
+    const sources = this.ctx?.sources;
+    if (!sources) return null;
+    if (opts.unit === 'main') {
+      const main = readMainFile(dirname(opts.agentFilePath), sources);
+      return main ? unitScan(sources, { kind: 'main', root: dirname(main.path), file: main, members: main.members.map(m => m.name), teams: main.teams.map(t => t.name), memberFiles: opts.memberFiles ?? [] }) : null;
+    }
+    const root = teamRootForAgentFile(opts.agentFilePath);
+    const file = root ? readTeamFile(root, sources) : null;
+    if (!root || !file) return null;
+    const members = file.members.map(m => m.name);
+    const files = findAgentFiles(root);
+    const memberFiles = members.flatMap(name => files.filter(f => agentNameOf(f) === name));
+    return unitScan(sources, { kind: 'team', root, file, members, teams: [], memberFiles });
   }
 
   private buildRefIndex(ctx: BundleContext, opts: RecorderFinishOpts): void {
     for (const strategy of KIND_STRATEGIES) {
       for (const def of strategy.entries?.(ctx, opts) ?? []) this.indexDefinition(def);
     }
-    this.agents.set(ctx.agentName, { kind: 'agent', name: ctx.agentName, namespace: AgentBlock.NAMESPACE });
+    if (opts.unit !== 'team') this.agents.set(ctx.agentName, { kind: 'agent', name: ctx.agentName, namespace: AgentBlock.NAMESPACE });
 
     if (this.team) {
-      const members = readTeamMembers(this.team.root);
+      const members = this.team.memberFiles.map(f => readAgentFile(f, ctx.sources).info);
       for (const member of members) {
         this.agents.set(member.name, { kind: 'agent', name: member.name, namespace: AgentBlock.NAMESPACE });
       }
       // The same role index the orchestration resolves `BY <role>` with: the team's inline blocks and its members' bindings.
       this.roles = buildRoleIndex({ blocks: this.team.blocks, anchor: 'directory' },
         { bindings: members.filter(m => m.roles.length > 0).map(m => ({ name: m.name, roles: m.roles })), anchor: 'directory' });
-      this.indexImportLines(this.team.file.source);
-      for (const f of this.team.flows) {
-        this.runnables.set(f.name, { kind: 'flow', name: f.name, namespace: TeamBlock.flowsNamespace(this.team.name) });
+      // The flows, and what the unit's file imports for them, are the unit's own document's.
+      if (opts.unit) {
+        this.indexImportLines(this.team.file.source);
+        for (const f of this.team.flows) {
+          this.runnables.set(f.name, { kind: 'flow', name: f.name, namespace: TeamBlock.flowsNamespace(this.team.name) });
+        }
       }
     }
   }
@@ -926,9 +942,14 @@ export class DocumentBuilder implements BlockCx {
     return out;
   }
 
-  /** The team block (built by its class from the scan) + its flow blocks. */
-  private teamBlocks(): ApBlock[] {
-    if (!this.team) return [];
+  /**
+   * The unit's block (built by its class from the scan) + its flow blocks — in
+   * the unit's own document, and nowhere else: one id, one block, one
+   * definition. A member's document holds none of them; who its team is and
+   * its fellows is its bootstrap's to say (src/services/teamMembership.ts).
+   */
+  private teamBlocks(ownDocument: boolean): ApBlock[] {
+    if (!this.team || !ownDocument) return [];
     const team = this.team;
     const sources = this.ctx!.sources;
     const path = team.file.path;
@@ -941,15 +962,17 @@ export class DocumentBuilder implements BlockCx {
         const span = f.block ? sources.nestedSpan(path, team.file.block, f.block) : null;
         return this.fromSource(span, () => RuleBlock.fromBody('flow', { name: f.name, namespace: flowsNs }, f.body, this), [...around, ...(span?.decorators ?? [])]);
       }),
-      // The team is its EXPORT TEAM block.
-      this.fromSource(sources.blockSpan(path, team.file.block), () => TeamBlock.fromScan(team, this), []),
+      // The unit is its block: EXPORT TEAM, or MAIN.
+      this.fromSource(sources.blockSpan(path, team.file.block), () => (team.kind === 'main' ? MainBlock.fromScan(team, this) : TeamBlock.fromScan(team, this)), []),
     ];
   }
 
   /** The agent root block — built by its class from the pipeline's state. */
   private agentBlock(ctx: BundleContext, opts: RecorderFinishOpts): ApBlock {
     this.sourcePath = opts.agentFilePath;
-    return this.fromSource(opts.agentSpan, () => AgentBlock.fromContext({ agentName: ctx.agentName, ...opts }, this));
+    const team = this.team?.name;
+    // A member refers to its team: the team's block is the team's own document's.
+    return this.fromSource(opts.agentSpan, () => Object.assign(AgentBlock.fromContext({ agentName: ctx.agentName, ...opts }, this), team ? { team: AgentBlock.teamRef(team) } : {}));
   }
 
   // -------------------------------------------------------------- variables
@@ -1051,7 +1074,7 @@ export class DocumentBuilder implements BlockCx {
 
   // -------------------------------------------------------------------- meta
 
-  private buildMeta(ctx: BundleContext): ApDocumentMeta {
+  private buildMeta(ctx: BundleContext, root: string | null): ApDocumentMeta {
     // Each family's phrases, with the active adapter's renderings over them.
     const forceLevels: Record<string, Record<string, string>> = {};
     for (const f of forceLevelFamilies()) forceLevels[f.name] = { ...f.levels, ...ctx.renderings?.[f.name] };
@@ -1066,7 +1089,7 @@ export class DocumentBuilder implements BlockCx {
     const flowRun = ctx.renderings?.FLOW?.run;
     const phrases = delegationPhrases(ctx.renderings);
     return {
-      root: `${AgentBlock.NAMESPACE}/${ctx.agentName}`,
+      root: root ?? `${AgentBlock.NAMESPACE}/${ctx.agentName}`,
       forceLevels,
       enums,
       ...(flowRun ? { flowRun } : {}),
@@ -1128,14 +1151,17 @@ export class DocumentBuilder implements BlockCx {
   finish(ctx: BundleContext, opts: RecorderFinishOpts): ApDocument {
     this.ctx = ctx;
     this.projectTeams = opts.teams ?? [];
-    this.team = this.scanTeam(opts.agentFilePath);
+    this.team = this.scanUnit(opts);
     this.buildRefIndex(ctx, opts);
 
-    const doc = new ApDocument(this.buildMeta(ctx));
+    const unit = opts.unit && this.team ? this.team : null;
+    this.ownsFlows = unit !== null;
+    const doc = new ApDocument(this.buildMeta(ctx, unit ? `${unit.kind === 'main' ? MainBlock.NAMESPACE : TeamBlock.NAMESPACE}/${unit.name}` : null));
     const producers: [BlockProvenance, () => ApBlock[]][] = [
       ['definition', () => this.definitionBlocks(ctx, opts)],
-      ['team',       () => this.teamBlocks()],
-      ['agent',      () => [this.agentBlock(ctx, opts)]],
+      ['team',       () => this.teamBlocks(unit !== null)],
+      // A unit's document has no agent: its root is the TEAM block.
+      ['agent',      () => (unit ? [] : [this.agentBlock(ctx, opts)])],
       // Last: a variable's type may come from any procedure the others hold.
       ['definition', () => this.variableBlocks(doc, opts)],
     ];
@@ -1178,6 +1204,21 @@ export class DocumentBuilder implements BlockCx {
     if (Object.keys(stores).length > 0) md.stores = stores;
     return doc;
   }
+}
+
+/**
+ * A unit's scan, from its file: the blocks of its TEAM or MAIN block and its
+ * flows — a FLOW's body runs from the line after its header to its next
+ * sibling in the block (a WHEN can sit between two FLOWs), de-indented by the
+ * block's indent: the text a flow file would hold.
+ */
+function unitScan(sources: SourceRegistry, unit: Omit<TeamScan, 'name' | 'blocks' | 'flows'>): TeamScan {
+  const { file } = unit;
+  const written = file.block.children.filter((c): c is Block => c.type === 'block');
+  const flows: TeamScan['flows'] = written
+    .filter((b): b is Block & { name: string } => b.key === 'FLOW' && b.name !== null)
+    .map(b => ({ name: b.name, block: b, body: sources.nestedSpan(file.path, file.block, b).lines.slice(1).map(l => l.text.slice(file.childIndent)).join('\n') }));
+  return { ...unit, name: file.name, blocks: written, flows };
 }
 
 /** A definition's body nested in the decorators above it, outermost first — each opening the block the next one, then the body, stands in. */

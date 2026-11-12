@@ -106,11 +106,15 @@ try {
     ['DISTILL is not allowed inside STEP (expected one of: DO, DELEGATE, COMPUTE, FORK, WAIT, MARK, EACH, RUN, MUST, ALWAYS, SHOULD, MAY, IF, ELSE)']);
 
   // --- the document: force lines are directive nodes with their force, in source order ---
-  const { structure } = await bundleAgentObject({
-    agentName: 'builder', agentFile, agentDir: team, libraryRoot: lib, libraryRoots: [lib],
+  // The agent's document holds its procedure; the team's own document holds the team's flow.
+  const compile = (agentName, file) => bundleAgentObject({
+    agentName, agentFile: file, agentDir: team, libraryRoot: lib, libraryRoots: [lib],
     libraries: { '@main': lib }, bundleConfig: { runtime: false },
   });
-  const flow = structure.all().find(b => b.kind === 'flow' && b.name === 'ship');
+  const { structure } = await compile('builder', agentFile);
+  const { structure: teamStructure } = await compile('crew', flowsFile);
+  assert.deepEqual(structure.byKind('flow'), [], 'a member holds no flow');
+  const flow = teamStructure.all().find(b => b.kind === 'flow' && b.name === 'ship');
   const proc = structure.all().find(b => b.kind === 'procedure' && b.name === 'release');
   const head = n => n.type === 'directive' ? `${n.keyword}/${n.force}` : n.type;
   const [judge] = flow.body[0].body;
@@ -122,7 +126,7 @@ try {
   assert.deepEqual(proc.body[3].body.map(head), ['DO/null', 'SHOULD/0']);
 
   const pos = l => [l.line, l.col, l.primitive, l.force, l.text, l.containers.map(c => c.type).join('>')];
-  const mine = p => structure.lines(p).filter(l => l.file === flowsFile || (l.file === agentFile && l.line > 10)).map(pos);
+  const mine = p => [...structure.lines(p).filter(l => l.file === agentFile && l.line > 10), ...teamStructure.lines(p).filter(l => l.file === flowsFile)].map(pos);
   assert.deepEqual(mine('ALWAYS'), [[14, 5, 'ALWAYS', -1, 'push a tag by hand', ''], [11, 17, 'ALWAYS', -1, 'skip a finding', 'step>directive']]);
   assert.deepEqual(mine('MUST'), [[16, 9, 'MUST', -1, 'release', 'if'], [13, 17, 'MUST', 1, 'cite the line', 'step>directive']]);
   assert.deepEqual(mine('SHOULD'), [[20, 9, 'SHOULD', 0, 'rerun the full suite', 'until'], [15, 21, 'SHOULD', 0, 'say why', 'step>directive>if']]);
@@ -130,6 +134,7 @@ try {
 
   // --- the md, `apx flow`, `apx get` and the Workflow script keep the order ---
   const doc = ApDocument.fromJson(structure.asJson());
+  const teamDoc = ApDocument.fromJson(teamStructure.asJson());
   const { content } = await buildOrchestrationContent({
     cwd: tmp, standaloneAgentsDir: join(tmp, 'standalone'), teamsDir: join(tmp, 'teams'),
     libraryRoots: [lib], libraries: { '@main': lib },
@@ -150,13 +155,13 @@ try {
   ].join('\n');
   assert.ok(content.includes(stepMd), `AGENTS.md renders the rule lines in the step:\n${content}`);
 
-  const apx = args => {
+  const apx = (args, of = doc, exe = 'apx/builder.apx') => {
     const lines = [];
-    const code = new ApxEngine(doc, { builtAt: 'x', agentPackVersion: 'x', hash: 'x' }, 'apx/builder.apx', l => lines.push(l)).run(args);
+    const code = new ApxEngine(of, { builtAt: 'x', agentPackVersion: 'x', hash: 'x' }, exe, l => lines.push(l)).run(args);
     assert.equal(code, 0);
     return lines.join('\n');
   };
-  assert.ok(apx(['flow', flow.id]).includes(stepMd), 'apx flow lists the rule lines');
+  assert.ok(apx(['flow', flow.id], teamDoc, 'apx/crew.apx').includes(stepMd), 'the team\'s apx flow lists the rule lines');
   const procMd = [
     '# `release` — cut a release',
     'Do bump the version',
@@ -171,7 +176,7 @@ try {
   const got = apx(['get', proc.id]);
   assert.ok(got.includes(procMd), `apx get renders the procedure's rule lines:\n${got}`);
 
-  const script = compileWorkflow(doc.block(flow.address), doc);
+  const script = compileWorkflow(teamDoc.block(flow.address), teamDoc);
   const told = `\n\nStep "judge it" of flow \`ship\`: judge the report\nYou must never skip a finding\nDo read the report\n${HARD} cite the line\n`
     + 'If the report says replan:\n    You should say why\n    Do end the flow\nElse:\n    Do hand the report on\n    You may add a note';
   assert.ok(script.includes(JSON.stringify(told).slice(1, -1)), `the agent delegated to is told the rule lines:\n${script}`);

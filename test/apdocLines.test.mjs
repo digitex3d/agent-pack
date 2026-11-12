@@ -160,6 +160,11 @@ try {
     agentName: 'builder', agentFile, agentDir: team, libraryRoot: lib, libraryRoots: [lib],
     libraries: { '@main': lib }, bundleConfig: { runtime: false }, sources,
   });
+  // The team's flows are the team's own document: the same compiler on its file, the same registry.
+  const { structure: teamDoc } = await bundleAgentObject({
+    agentName: 'crew', agentFile: flowsFile, agentDir: team, libraryRoot: lib, libraryRoots: [lib],
+    libraries: { '@main': lib }, bundleConfig: { runtime: false }, sources,
+  });
 
   // --- each file read once, through the registry ---
   for (const file of [agentFile, flowsFile, checksFile, outFile]) {
@@ -175,8 +180,10 @@ try {
   assert.deepEqual(byName('verify').source, { file: checksFile, line: 3, col: 1 });
   assert.deepEqual(byName('tidy').source, { file: checksFile, line: 12, col: 1 });
   assert.deepEqual(byName('tally-out').source, { file: outFile, line: 1, col: 1 });
-  assert.deepEqual(byName('ship').source, { file: flowsFile, line: 8, col: 5 });
-  assert.deepEqual(byName('crew').source, { file: flowsFile, line: 1, col: 1 }, 'the team is its EXPORT TEAM block');
+  assert.equal(byName('ship'), undefined, 'a member holds no flow of its team');
+  const inTeam = name => teamDoc.all().find(b => b.name === name);
+  assert.deepEqual(inTeam('ship').source, { file: flowsFile, line: 8, col: 5 });
+  assert.deepEqual(inTeam('crew').source, { file: flowsFile, line: 1, col: 1 }, 'the team is its EXPORT TEAM block');
 
   // --- lines('DO'): every DO, at every depth, with its exact position ---
   const at = l => `${basename(l.file)}:${l.line}:${l.col}-${l.endCol} ${l.text}`;
@@ -190,10 +197,12 @@ try {
     'checks.ap:9:13-29 fix the code',
     'checks.ap:10:5-26 report the result',
     'checks.ap:14:5-33 remove the scratch files',
+  ].sort());
+  assert.deepEqual(teamDoc.lines('DO').map(at).sort(), [
     'crew.ap:11:13-33 compile the code',
     'crew.ap:14:13-31 run the checks',
     'crew.ap:15:13-25 sign off',
-  ].sort());
+  ].sort(), "the team's flow lines are in the team's document");
   assert.ok(doc.lines('DO').every(l => l.primitive === 'DO' && l.force === null));
 
   // --- containers: the ancestors, outermost first ---
@@ -201,7 +210,8 @@ try {
   assert.equal(fix.block.name, 'verify');
   assert.deepEqual(fix.containers.map(c => c.type), ['if', 'until']);
   assert.equal(fix.containers[0].condition, 'the tests fail');
-  const compile = doc.lineAt(flowsFile, 11);
+  assert.equal(doc.lineAt(flowsFile, 11), null, "a member holds no line of its team's flows");
+  const compile = teamDoc.lineAt(flowsFile, 11);
   assert.deepEqual(compile.containers.map(c => c.type), ['step']);
   assert.equal(compile.containers[0].title, 'build it');
   const reproduce = doc.lineAt(agentFile, 10);
@@ -210,7 +220,7 @@ try {
   assert.deepEqual(reproduce.containers.map(c => c.type), ['when', 'if']);
 
   // --- the other primitives answer with their own head ---
-  const step = doc.lineAt(flowsFile, 12);
+  const step = teamDoc.lineAt(flowsFile, 12);
   assert.deepEqual([step.primitive, step.text, step.col], ['STEP', 'check it', 9]);
   const cond = doc.lineAt(checksFile, 8);
   assert.deepEqual([cond.primitive, cond.text], ['UNTIL', 'they pass']);
@@ -236,7 +246,7 @@ try {
     assert.equal(twin.contentHash, block.contentHash, `${block.address}: contentHash is position-free`);
     assert.equal(twin.chars, block.chars, `${block.address}: chars is position-free`);
   }
-  assert.equal(revived.lines('DO').length, 12, 'a revived document still lists its lines…');
+  assert.equal(revived.lines('DO').length, 9, 'a revived document still lists its lines…');
   assert.ok(revived.lines('DO').every(l => l.file === null && l.line === null && l.col === null && l.endCol === null), '…without positions');
   assert.equal(revived.all().every(b => b.source === null), true);
 

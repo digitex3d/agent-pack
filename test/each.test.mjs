@@ -72,9 +72,10 @@ const flowsAp = (...each) => teamSource('crew', ['builder'], [
 ]);
 const file = join(team, 'crew.ap');
 const lint = (...each) => lintFile(file, `${flowsAp(...each).join('\n')}\n`).map(e => [e.line, e.message]);
+// The flow is the team's: the same compiler, on the team's file, makes its document.
 const compile = async (...each) => {
   write(file, flowsAp(...each));
-  return bundleAgentObject({ agentName: 'builder', agentFile, agentDir: team, libraryRoot: lib, libraryRoots: [lib],
+  return bundleAgentObject({ agentName: 'crew', agentFile: file, agentDir: team, libraryRoot: lib, libraryRoots: [lib],
     libraries: { '@main': lib }, bundleConfig: { runtime: false } });
 };
 const RUNS = ['        EACH part IN {{parts}} MAX 3:', '            DELEGATE~ work only on {{part}} INTO reports BY builder', '        WAIT reports'];
@@ -159,7 +160,7 @@ try {
   const agents = readFileSync(join(proj, 'AGENTS.md'), 'utf-8');
   const flw = agents.match(/flow (flw-[0-9a-f]{8})/)[1];
   const apx = (args, stdin) => {
-    const x = spawnSync(process.execPath, [join(proj, '.agent-pack', 'apx', 'lead.apx'), ...args],
+    const x = spawnSync(process.execPath, [join(proj, '.agent-pack', 'apx', 'crew.apx'), ...args],
       { cwd: proj, encoding: 'utf-8', input: stdin, env: { ...process.env, CLAUDE_CODE_SESSION_ID: SESSION } });
     return { code: x.status, out: `${x.stdout}${x.stderr}`.trimEnd() };
   };
@@ -173,7 +174,7 @@ try {
   // --- each run is its own piece: named by its number, bounded by MAX ---
   let x = apx(['delegate', 'start', work]);
   assert.equal(x.code, 2);
-  has(x.out, `runs once per element of an EACH — name the run: node .agent-pack/apx/lead.apx delegate start ${work}-<k>`);
+  has(x.out, `runs once per element of an EACH — name the run: node .agent-pack/apx/crew.apx delegate start ${work}-<k>`);
   assert.equal(apx(['delegate', 'start', `${work}-1`]).code, 0);
   assert.equal(apx(['delegate', 'start', `${work}-2`]).code, 0);
   x = apx(['delegate', 'start', `${work}-3`]);

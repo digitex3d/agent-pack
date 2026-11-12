@@ -39,7 +39,8 @@ const run = (args, opts = {}) => {
   return { code: r.status, out: `${r.stdout}${r.stderr}`.trimEnd() };
 };
 const ok = (r, what) => { assert.equal(r.code, 0, `${what}:\n${r.out}`); return r.out; };
-const apx = (args, input) => run([join(proj, '.agent-pack', 'apx', 'lead.apx'), ...args], { input });
+// The team's own apx: it holds the team's flow, and serves the contracts and pieces the flow starts.
+const apx = (args, input) => run([join(proj, '.agent-pack', 'apx', 'fix.apx'), ...args], { input });
 const git = (...args) => { const r = spawnSync('git', args, { cwd: proj, encoding: 'utf-8' }); assert.equal(r.status, 0, `git ${args.join(' ')}: ${r.stderr}`); return r.stdout.trim(); };
 const team = join(proj, 'agents', 'teams', 'fix');
 const agent = (name, budget) => write(join(team, `${name}.ap`), [
@@ -90,7 +91,7 @@ try {
   write(join(proj, 'src', 'login.ts'), ['export function login() {', `  // agent-pack ${ctr}`, '  return null;', `  // agent-pack end ${ctr}`, '}']);
   let r = apx(['contract', 'start', mrk, '--by', 'codex:fixer']);
   assert.equal(r.code, 2, r.out);
-  has(r.out, "codex's recipe was not compiled into lead", 'DELEGATE bugs BY codex:fixer', 'nothing was started');
+  has(r.out, "codex's recipe was not compiled into fix", 'DELEGATE bugs BY codex:fixer', 'nothing was started');
   out = ok(apx(['contract', 'start', mrk, '--by', 'opencode:fixer']), 'contract start on opencode');
   has(out, `${ctr}  → fixer on opencode  src/login.ts:`, `opencode run --model ${FREE} --agent fixer --dir `, '.prompt.md',
     `# model: ${FREE} — the one fixer's BUDGET tier maps to on opencode`, '# You must never add --auto',

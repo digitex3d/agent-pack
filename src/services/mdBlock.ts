@@ -41,3 +41,15 @@ export function ensureMdBlock(opts: MdBlockOptions): MdBlockResult {
   writeFileSync(filePath, `${current + separator + block}\n`, 'utf-8');
   return { action: 'updated', path: filePath };
 }
+
+/** Remove a managed block, markers included, when the file has one. Returns whether it did. */
+export function removeMdBlock(filePath: string, key: string): boolean {
+  if (!existsSync(filePath)) return false;
+  const current = readFileSync(filePath, 'utf-8');
+  const start = escapeRegex(`<!-- agent-pack:${key}:start -->`);
+  const end = escapeRegex(`<!-- agent-pack:${key}:end -->`);
+  const pattern = new RegExp(`\\n*${start}[\\s\\S]*?${end}\\n?`);
+  if (!pattern.test(current)) return false;
+  writeFileSync(filePath, `${current.replace(pattern, '\n').trim()}\n`, 'utf-8');
+  return true;
+}

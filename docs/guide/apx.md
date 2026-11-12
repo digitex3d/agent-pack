@@ -102,7 +102,7 @@ The data is never touched directly. Where it lives is the driver's: with `files`
 
 ## Dimensions
 
-An agent that has a [`DIMENSION`](/reference/language#dimension) reaches it by its id, like every block, after the operation: `dimension <operation> <dim-id>`. `dimension` alone lists the agent's dimensions, each with its id. A dimension is an agent's own: it is reached only through that agent's apx, never imported into a project's `PROJECT.ap` or a team's `flows.ap`. When it is worth reading is the agent's to say: a [`@WITH`](/reference/language#decorators-with) names the dimension above the work it is for, and the agent's definition shows that line with the dimension's id — *For the work below, use the dimension `pseudocode` (dim-…)* — while `ls kind=dimension` lists it as holding *only where @WITH names it*. There the agent reads the answer kept for the file, and decides whether it also needs the code:
+An agent that has a [`DIMENSION`](/reference/language#dimension) reaches it by its id, like every block, after the operation: `dimension <operation> <dim-id>`. `dimension` alone lists the agent's dimensions, each with its id. A dimension is an agent's own: it is reached only through that agent's apx, never imported into the project's main or a team's file. When it is worth reading is the agent's to say: a [`@WITH`](/reference/language#decorators-with) names the dimension above the work it is for, and the agent's definition shows that line with the dimension's id — *For the work below, use the dimension `pseudocode` (dim-…)* — while `ls kind=dimension` lists it as holding *only where @WITH names it*. There the agent reads the answer kept for the file, and decides whether it also needs the code:
 
 ```bash
 node .agent-pack/apx/coder.apx dimension read dim-3f2a9c1e src/billing/invoice.py
@@ -318,6 +318,35 @@ Which work a write belongs to, the harness says only by who writes:
 - **every agent** is held to its own `@WITHIN`, pieces or not. No `@WITHIN` and no piece: no perimeter.
 
 A contract's assignee writes in its copy, never in the project folder. In the copy, `guard <path> --after` asks, once the file is written, whether it stays within the contract — the same answer as `contract within`.
+
+## The main
+
+With a [main](/reference/language#main), `bundle all` also writes its apx, `.agent-pack/apx/<main>.apx`: the engine once, what the main is and holds, and every agent it holds — each one as its own apx has it. Its first word is one of its own verbs, or the agent to run:
+
+```bash
+node .agent-pack/apx/orfeo.apx start              # the main: its rules and its orchestration
+node .agent-pack/apx/orfeo.apx ls                 # its teams, their members, its agents
+node .agent-pack/apx/orfeo.apx designer start     # an agent, served as its own apx serves it
+```
+
+`AGENTS.md` then holds only what boots the main — its name, `… start`, and the policies that hold everywhere — so the harness reads the rest from it.
+
+An agent run through the main answers every verb as its own apx does, on the same state, and every command it prints goes through the main — the main rewrites, as it prints them, the commands the compiler wrote for each agent's own apx. `agent-pack bundle orfeo --executable` makes the main one executable, `.agent-pack/bin/orfeo`, every agent inside, and `AGENTS.md` boots it from there.
+
+## A team
+
+Every team gets its apx too, `.agent-pack/apx/<team>.apx`: its members inside, and as its own text its flows and its routing — nothing of the other teams. It answers like the main: `start`, `ls`, `version`, `help`, and `<team> <member> <verb>`. `agent-pack bundle <team> --executable` makes it one executable, `.agent-pack/bin/<team>`, to hand the team out on its own.
+
+## One executable
+
+The apx is the development form: Node runs it, `bundle` rewrites it. To hand an agent out, `agent-pack bundle <agent> --executable` also compiles it with [Bun](https://bun.sh) into one executable, `.agent-pack/bin/<agent>`:
+
+```bash
+agent-pack bundle reviewer --executable
+.agent-pack/bin/reviewer start
+```
+
+The executable is the same engine with the apx's data lines carried inside it; it answers the verbs as the apx does, and, run from the project, keeps to the same state, stores and programs — `.agent-pack/bin/` is as deep as `.agent-pack/apx/`. `--target <bun target>` builds for another platform. Only the agent's context is inside: the stores, the distilled programs and the tabeli engine stay where they are, and the verbs that run another program may still need Node.
 
 ## Compression
 

@@ -12,6 +12,14 @@ export const RUNTIME_DIR = '.agent-pack';
 /** The apx files — build output, outside git. */
 export const APX_DIR = `${RUNTIME_DIR}/apx`;
 
+/** The executables `bundle --executable` writes — build output, outside git. */
+const BIN_DIR = `${RUNTIME_DIR}/bin`;
+
+/** The executable of an agent: its name, then the target when one was asked for (`-linux-x64`). */
+export function binPath(agent: string, target: string | null = null): string {
+  return `${BIN_DIR}/${agent}${target ? `-${target.replace(/^bun-/, '')}` : ''}`;
+}
+
 /** Where the copies of a session's contract instances live: one folder per instance. */
 export const WORK_DIR = `${RUNTIME_DIR}/work`;
 

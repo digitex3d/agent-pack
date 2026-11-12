@@ -109,60 +109,8 @@ console.log('Lint tests passed.');
 
 console.log('Block-scoped lint (EXPORT) tests passed.');
 
-// --- Project context: PROJECT.ap → AGENTS.md block, harness pointers ---
-
-{
-  const { emitProjectContext, ensureProjectPointers } = await import('../dist/src/projectContext.js');
-  const { loadConfig } = await import('../dist/src/config.js');
-  const { default: claudeCodeAdapter } = await import('../dist/adapters/claude-code/index.js');
-  const { existsSync, readFileSync } = await import('node:fs');
-
-  const tmp = '/tmp/agent-pack-project-context-test';
-  rmSync(tmp, { recursive: true, force: true });
-  mkdirSync(join(tmp, 'library'), { recursive: true });
-
-  const prevCwd = process.cwd();
-  process.chdir(tmp);
-
-  // PROJECT.ap missing → false, nothing written
-  let config = await loadConfig([]);
-  assert.equal(await emitProjectContext(tmp, config), false, 'no PROJECT.ap → no-op');
-  assert.equal(existsSync(join(tmp, 'AGENTS.md')), false, 'no AGENTS.md written when PROJECT.ap is absent');
-
-  // PROJECT.ap present → compiled into the project block of AGENTS.md
-  writeFileSync(join(tmp, 'PROJECT.ap'), [
-    '# Project Rules',
-    '',
-    'ABOUT  always-on rules',
-    '',
-    'Use TypeScript strict mode.',
-    'You MUST run tests before merging.',
-    '',
-  ].join('\n'), 'utf-8');
-  config = await loadConfig([]);
-  assert.equal(await emitProjectContext(tmp, config), true, 'PROJECT.ap present → written');
-  let out = readFileSync(join(tmp, 'AGENTS.md'), 'utf-8');
-  assert.ok(out.includes('<!-- agent-pack:project:start -->'), 'content lives in a managed block');
-  assert.ok(out.includes('Use TypeScript strict mode.'), 'body content preserved');
-  assert.ok(!out.includes('ABOUT  always-on rules'), 'ABOUT keyword stripped');
-
-  // The user's own text in AGENTS.md survives a rebuild
-  writeFileSync(join(tmp, 'AGENTS.md'), `My own notes.\n\n${out}`, 'utf-8');
-  await emitProjectContext(tmp, config);
-  out = readFileSync(join(tmp, 'AGENTS.md'), 'utf-8');
-  assert.ok(out.startsWith('My own notes.'), 'text outside the managed block is untouched');
-  assert.equal(out.split('agent-pack:project:start').length, 2, 'the block is replaced, not duplicated');
-
-  // Claude Code gets a pointer: CLAUDE.md imports AGENTS.md
-  assert.deepEqual(ensureProjectPointers(tmp, [claudeCodeAdapter()]), ['CLAUDE.md'], 'pointer written');
-  assert.ok(readFileSync(join(tmp, 'CLAUDE.md'), 'utf-8').includes('@AGENTS.md'), 'CLAUDE.md imports AGENTS.md');
-  assert.deepEqual(ensureProjectPointers(tmp, [claudeCodeAdapter()]), [], 'pointer is idempotent');
-
-  process.chdir(prevCwd);
-  rmSync(tmp, { recursive: true });
-
-  console.log('Project context tests passed.');
-}
+// --- The main: the project's root .ap file → AGENTS.md block, the orchestration it lists, harness pointers ---
+await import('./main.test.mjs');
 
 
 // --- Vars / @var / generateEntrypoint tests ---
@@ -396,6 +344,9 @@ await import('./storeDrivers.test.mjs');
 
 // the pack: the container of every apx — sections, offsets, seal
 await import('./pack.test.mjs');
+
+// agent-pack pack: an apx compiled by Bun into one binary — split, embedded data, the command
+await import('./executable.test.mjs');
 
 // the engine's own tables as stores, through the one store API
 await import('./engineStores.test.mjs');

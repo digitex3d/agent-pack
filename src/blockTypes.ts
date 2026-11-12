@@ -39,6 +39,9 @@ export interface BlockType {
 /** The block that declares a team — `EXPORT TEAM <name>:` (src/services/teamMetadata.ts reads it). */
 export const TEAM_KEY = 'TEAM';
 
+/** The project's root — `MAIN:` in the file at the project root that names its executable (src/services/mainMetadata.ts reads it). */
+export const MAIN_KEY = 'MAIN';
+
 /** A plugin's manifest — `PLUGIN <name>:` in its `plugin.ap` (src/plugins.ts, src/pluginLoader.ts). */
 export const PLUGIN_KEY = 'PLUGIN';
 /** One apx command of a plugin — `OPERATION <op>:` in its manifest, served by the function of that name. */
@@ -63,6 +66,8 @@ export const BLOCK_TYPES: Record<string, BlockType> = {
   DOMAIN:     { key: 'DOMAIN'     },
   // `EXPORT TEAM <name>:` — a team: its ABOUT, MEMBER lines, routing and FLOW blocks (src/services/teamMetadata.ts).
   TEAM:       { key: 'TEAM'       },
+  // `MAIN:` — the project's root: ABOUT, VERSION, TEAMS and MEMBER, its routing (src/services/mainMetadata.ts).
+  [MAIN_KEY]: { key: MAIN_KEY },
   // `PLUGIN <name>:` — a plugin's manifest: its block (AS) and its OPERATION blocks.
   [PLUGIN_KEY]:    { key: PLUGIN_KEY    },
   // `OPERATION <op>:` — an apx command of a plugin: ABOUT, and AS for its input.

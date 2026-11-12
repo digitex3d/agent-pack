@@ -39,6 +39,8 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve, basename, dirname } from 'node:path';
 import type { Block } from '../parseBlocks.js';
 import { isTeamFile, type TeamFile } from '../services/teamMetadata.js';
+import { isMainFile } from '../services/mainMetadata.js';
+import { unitNameFromPath } from '../ingest.js';
 import { splitList } from '../lists.js';
 import { domainLines, formulaFiles, DEFAULT_DOMAIN_THRESHOLDS, type DomainFormula, type DomainThresholds } from '../domains.js';
 import type { DomainLine } from '../lexer.js';
@@ -735,14 +737,23 @@ export class VarBlock extends ApBlock {
 }
 
 /** A team's scanned context: read once by the recorder, consumed here and by the index. */
+/** A unit's file as its scan reads it: the team's, or the main's. */
+type UnitFile = Pick<TeamFile, 'path' | 'source' | 'block' | 'childIndent' | 'about' | 'name'>;
+
+/** A unit read for its document — a team, or the main. */
 export interface TeamScan {
+  kind: 'team' | 'main';
   root: string;
   name: string;
-  /** The team's file, read once (services/teamMetadata.ts). */
-  file: TeamFile;
-  /** The members' names: the roster of the file. */
+  /** The unit's file, read once (services/teamMetadata.ts, services/mainMetadata.ts). */
+  file: UnitFile;
+  /** The agents it holds, by name: a team's MEMBER roster, the main's MEMBER lines. */
   members: string[];
-  /** The blocks of the TEAM block — its routing WHENs and its FLOWs. */
+  /** The main's TEAMS lines — none in a team. */
+  teams: string[];
+  /** The files of the agents it holds — where each one's own decorators are written. */
+  memberFiles: string[];
+  /** The blocks of the TEAM or MAIN block — its routing WHENs and its FLOWs. */
   blocks: Block[];
   /** The FLOW blocks sliced back to raw text, de-indented as a flow file writes them. */
   flows: { name: string; body: string; block: Block | null }[];
@@ -778,19 +789,8 @@ export class TeamBlock extends ApBlock {
       about: scan.file.about || null,
     });
     block.members = scan.members.map(name => cx.agentRef(name));
-
-    // The `WHEN … : RUN <flow>` routing entries of the TEAM block.
-    const routing: { when: string; run: ApRef }[] = [];
-    for (const b of scan.blocks) {
-      if (b.key !== 'WHEN') continue;
-      const when = [b.name, b.rest].filter(Boolean).join(' ');
-      for (const child of b.children) {
-        if (child.type === 'line' && child.keyword === 'RUN') {
-          routing.push({ when, run: cx.runnableRef(child.rest.trim()) });
-        }
-      }
-    }
-    if (routing.length > 0) block.routing = routing;
+    const routes = routesOf(scan, cx);
+    if (routes.length > 0) block.routing = routes;
 
     const teamAp = resolve(scan.root, 'team.ap');
     if (existsSync(teamAp)) {
@@ -805,6 +805,55 @@ export class TeamBlock extends ApBlock {
       members: this.members,
       ...(this.routing ? { routing: this.routing } : {}),
       ...(this.shared ? { shared: this.shared } : {}),
+    };
+  }
+}
+
+/** The `WHEN … : RUN <flow|procedure>` routing entries of a unit's block. */
+function routesOf(scan: TeamScan, cx: BlockCx): { when: string; run: ApRef }[] {
+  return scan.blocks.filter(b => b.key === 'WHEN').flatMap(b => {
+    const when = [b.name, b.rest].filter(Boolean).join(' ');
+    return b.children.flatMap(child => (child.type === 'line' && child.keyword === 'RUN' ? [{ when, run: cx.runnableRef(child.rest.trim()) }] : []));
+  });
+}
+
+/**
+ * The project's main — the root of its document: what it is, the standalone
+ * agents and the teams it holds, and its routing. Its flows are blocks of the
+ * same document, as a team's are of the team's.
+ */
+export class MainBlock extends ApBlock {
+  static readonly PREFIX = 'mai';
+  static readonly NAMESPACE = '@main.main';
+  readonly kind = 'main';
+  protected readonly idPrefix = MainBlock.PREFIX;
+  members: ApRef[] = [];
+  teams: ApRef[] = [];
+  routing: { when: string; run: ApRef }[] | null = null;
+
+  static fromData(data: ApBlockData): MainBlock {
+    const block = restore(new MainBlock(initOf(data)), data);
+    block.members = (data.args.members as ApRef[] | undefined) ?? [];
+    block.teams = (data.args.teams as ApRef[] | undefined) ?? [];
+    block.routing = (data.args.routing as { when: string; run: ApRef }[] | undefined) ?? null;
+    return block;
+  }
+
+  /** Build the main's block from its scan: its agents, its teams, its routing. */
+  static fromScan(scan: TeamScan, cx: BlockCx): MainBlock {
+    const block = new MainBlock({ name: scan.name, namespace: MainBlock.NAMESPACE, about: scan.file.about || null });
+    block.members = scan.members.map(name => cx.agentRef(name));
+    block.teams = scan.teams.map(name => cx.refFromAddress(`${TeamBlock.NAMESPACE}/${name}`, 'team'));
+    const routes = routesOf(scan, cx);
+    if (routes.length > 0) block.routing = routes;
+    return block;
+  }
+
+  protected override argsJson(): Record<string, unknown> {
+    return {
+      members: this.members,
+      teams: this.teams,
+      ...(this.routing ? { routing: this.routing } : {}),
     };
   }
 }
@@ -844,6 +893,8 @@ export class AgentBlock extends ApBlock {
   /** `BUDGET <tier>`: the cost tier the adapter maps to a model. */
   budget: string | null = null;
   lensOut: ApShape | null = null;
+  /** The team it is a member of — a reference: the team's block is the team's own document's. */
+  team: ApRef | null = null;
 
   static fromData(data: ApBlockData): AgentBlock {
     const block = restore(new AgentBlock(initOf(data)), data);
@@ -853,6 +904,7 @@ export class AgentBlock extends ApBlock {
     block.lensIn = (data.args.lensIn as ApShape | undefined) ?? null;
     block.lensOut = (data.args.lensOut as ApShape | undefined) ?? null;
     block.shape = (data.args.shape as ApShape | undefined) ?? null;
+    block.team = (data.args.team as ApRef | undefined) ?? null;
     return block;
   }
 
@@ -911,7 +963,13 @@ export class AgentBlock extends ApBlock {
       ...(this.lensIn ? { lensIn: this.lensIn } : {}),
       ...(this.lensOut ? { lensOut: this.lensOut } : {}),
       ...(this.shape ? { shape: this.shape } : {}),
+      ...(this.team ? { team: this.team } : {}),
     };
+  }
+
+  /** The reference to a team by its name — its one block's id, wherever that block is. */
+  static teamRef(name: string): ApRef {
+    return { id: refId('team', TeamBlock.NAMESPACE, name), target: `${TeamBlock.NAMESPACE}/${name}`, kind: 'team' };
   }
 }
 
@@ -968,6 +1026,7 @@ export const KIND_STRATEGIES: KindStrategy[] = [
     entries: ctx => ctx.domains, from: DomainBlock.fromDefinition },
   // Non-chapter kinds — referenceable identities only.
   { kind: 'team', revive: TeamBlock.fromData, folder: 'teams',      prefix: TeamBlock.PREFIX,                ref: null },
+  { kind: 'main', revive: MainBlock.fromData, folder: 'main',       prefix: MainBlock.PREFIX,                ref: null },
   { kind: 'agent', revive: AgentBlock.fromData, folder: 'agents',     prefix: AgentBlock.PREFIX,               ref: null },
   { kind: 'var', revive: VarBlock.fromData, folder: 'vars',         prefix: VarBlock.PREFIX,                 ref: null },
 ];
@@ -1016,8 +1075,9 @@ export function namespaceOf(def: Definition, libraryRoots: string[], libraries?:
   if (def.namespace) return def.namespace;
   const viaLibrary = buildNamespace(def.path, libraryRoots, libraries);
   if (viaLibrary) return viaLibrary.startsWith('@') ? viaLibrary : `@${viaLibrary}`.replace(/^@library/, 'library');
-  // A team's flows live in its TEAM block: one namespace per team, whoever builds them.
+  // A unit's flows live in its block: one namespace per team — and the main — whoever builds them.
   if (def.kind === 'flow' && isTeamFile(def.path)) return TeamBlock.flowsNamespace(basename(dirname(def.path)));
+  if (def.kind === 'flow' && isMainFile(def.path)) return TeamBlock.flowsNamespace(unitNameFromPath(def.path));
   return `@main.${folderOfKind(def.kind)}`;
 }
 

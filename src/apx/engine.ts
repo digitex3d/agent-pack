@@ -19,7 +19,7 @@ import { spawnSync, type SpawnSyncOptionsWithStringEncoding } from 'node:child_p
 import { ApDocument as ApDocumentClass, type ApDocument } from '../apdoc/document.js';
 import type { ApBlock } from '../apdoc/block.js';
 import type { ApRef, ApNode, ApWhenNode, ApRunNode, ApDirectiveNode } from '../apdoc/types.js';
-import { KIND_STRATEGIES, type AgentBlock, type TeamBlock, type VarBlock, type DimensionBlock, type DomainBlock } from '../apdoc/blocks.js';
+import { KIND_STRATEGIES, type AgentBlock, type TeamBlock, type MainBlock, type VarBlock, type DimensionBlock, type DomainBlock } from '../apdoc/blocks.js';
 import { mdEnv, renderPreamble, renderEntry, renderMd } from '../../adapters/md/index.js';
 import type { MdEnv } from '../../adapters/md/toolkit.js';
 import { FORMULAS, fill, type QuizQuestion } from '../formulas.js';
@@ -191,6 +191,12 @@ export interface ApxBudget {
 }
 export const APX_BUDGET: ApxBudget = { whole: 12000, block: 600 };
 
+/** Whether an executable is an `.apx` file Node runs — else an executable `bundle --executable` compiled, run as it is. */
+const isApx = (exe: string): boolean => exe.endsWith('.apx');
+
+/** The command that runs an executable of the engine, as every answer prints it. */
+const runCommand = (exe: string): string => isApx(exe) ? `node ${exe}` : exe;
+
 export class ApxEngine {
   /** The command prefix every printed command starts with. */
   readonly cmd: string;
@@ -238,8 +244,10 @@ export class ApxEngine {
     private readonly budget: ApxBudget = APX_BUDGET,
     /** The judge a check asks, by the name the apx records — a built-in one. */
     private readonly judgeNamed: (name: string) => JudgePlugin = name => resolveJudge(name),
+    /** In a unit's apx — the main's or a team's — the agent it runs: every command names it after the unit; null in an agent's own apx. */
+    private readonly inUnit: string | null = null,
   ) {
-    this.cmd = `node ${exe}`;
+    this.cmd = inUnit === null ? runCommand(exe) : `${runCommand(exe)} ${inUnit}`;
     this.env = mdEnv(doc, id => ` [${this.cmd} get ${id}]`, agent => (!agent || agent === doc.root()?.name ? this.cmd : this.sibling(agent)));
     this.root = doc.root() as AgentBlock;
     for (const block of doc.all()) this.byId.set(block.id, block);
@@ -348,11 +356,8 @@ export class ApxEngine {
     }
     const roles = root.roles.map(ref => this.doc.resolve(ref)).filter((b): b is ApBlock => b !== null);
     for (const role of roles) this.out(`role: ${this.label(role)}`);
-    const team = this.doc.byKind('team')[0] as TeamBlock | undefined;
-    if (team) {
-      this.out(`team: ${this.label(team)}${team.about ? `  — ${team.about}` : ''}`);
-      for (const r of team.routing ?? []) this.out(`  WHEN ${r.when}  -> ${this.refLabel(r.run)}`);
-    }
+    // Its team, by reference: the team's block — its members, its routing — is the team's own document's.
+    if (root.team) this.out(`team: ${this.refLabel(root.team)}`);
     const policies = this.doc.byKind('policy');
     if (policies.length > 0) {
       this.out('respect:');
@@ -839,27 +844,26 @@ export class ApxEngine {
   }
 
   private text(block: ApBlock): string {
+    // The root of an agent's document is its definition; a team — a unit's root, or a member's team — is its view.
+    if (block.kind === 'team' || block.kind === 'main') return this.teamView(block as TeamBlock | MainBlock);
     if (block === this.root) return renderPreamble(this.doc, this.env);
-    if (block.kind === 'team') return this.teamView(block as TeamBlock);
     return renderEntry(block, 1, this.env);
   }
 
-  /** The team — members with the command that reaches each, routing, shared block. */
-  private teamView(team: TeamBlock): string {
-    const out = [this.headLine(team)];
-    if (team.members.length > 0) {
-      out.push('members:');
-      for (const m of team.members) {
-        const member = this.doc.resolve(m);
-        out.push(`  ${this.refLabel(m)}${member?.about ? `  — ${member.about}` : ''}`);
-      }
-    }
-    if (team.routing?.length) {
-      out.push('routing:');
-      for (const r of team.routing) out.push(`  WHEN ${r.when}  -> ${this.refLabel(r.run)}`);
-    }
-    if (team.shared) out.push(`shared: ${team.shared}`);
-    return `${out.join('\n')}\n`;
+  /** A unit — a team, or the main: members with the command that reaches each, the main's teams, routing, a team's shared block. */
+  private teamView(team: TeamBlock | MainBlock): string {
+    const section = (title: string, rows: string[]): string[] => (rows.length > 0 ? [`${title}:`, ...rows.map(r => `  ${r}`)] : []);
+    const memberRow = (m: ApRef): string => {
+      const member = this.doc.resolve(m);
+      return `${this.refLabel(m)}${member?.about ? `  — ${member.about}` : ''}`;
+    };
+    return `${[
+      this.headLine(team),
+      ...section('members', team.members.map(memberRow)),
+      ...section('teams', team.kind === 'main' ? team.teams.map(t => this.refLabel(t)) : []),
+      ...section('routing', (team.routing ?? []).map(r => `WHEN ${r.when}  -> ${this.refLabel(r.run)}`)),
+      ...(team.kind === 'team' && team.shared ? [`shared: ${team.shared}`] : []),
+    ].join('\n')}\n`;
   }
 
   /** `uses:` and `used by:` of a block, each with its command. */
@@ -884,18 +888,20 @@ export class ApxEngine {
     return `${block.kind} ${block.name}  [${this.cmd} ${block.kind === 'flow' ? 'flow' : 'get'} ${block.id}]`;
   }
 
-  /** A reference as a label: here → its block; a fellow agent → its own executable. */
+  /** A reference as a label: here → its block; a fellow agent → its own executable; a team → its apx, whose start prints its routing and flows. */
   private refLabel(ref: ApRef): string {
     const block = this.doc.resolve(ref);
     if (block) return this.label(block);
     const name = refName(ref);
     if (ref.kind === 'agent') return `agent ${name}  [${this.sibling(name)} scope]`;
+    if (ref.kind === 'team') return `team ${name}  [${this.sibling(name)} start]`;
     return `${ref.kind} ${name}  (missing from the compiled sources)`;
   }
 
-  /** How to run a fellow agent's executable: beside this one. */
+  /** How to run a fellow agent: through the same unit, or its executable beside this one, in the same form — an apx by Node, a binary as it is. */
   private sibling(name: string): string {
-    return `node ${join(dirname(this.exe), `${name}.apx`)}`;
+    if (this.inUnit !== null) return `${runCommand(this.exe)} ${name}`;
+    return runCommand(join(dirname(this.exe), isApx(this.exe) ? `${name}.apx` : name));
   }
 
   private headLine(block: ApBlock): string {

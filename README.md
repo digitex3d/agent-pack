@@ -59,7 +59,7 @@ TEMPLATE finding:
 |---|---|
 | `.agent-pack/apx/<agent>.apx` | The agent: its definition and the engine that serves it, one file, run by Node alone |
 | `.claude/agents/<agent>.md`, `.cursor/rules/<agent>.mdc`, … | What each harness loads — the whole definition, or (`claude-code-apx`) a pointer to the `.apx` |
-| `AGENTS.md` | The project context (from `PROJECT.ap`) and the orchestration: every team, its members and routing |
+| `AGENTS.md` | The orchestration: every team, its members and routing — or, with a main (the root `.ap` file with a `MAIN:` block), the command that prints it and the universal policies |
 | `CLAUDE.md` | One line, `@AGENTS.md`, for harnesses that read their own file |
 | `.agent-pack/compiled/<agent>.ap.json` | The compiled document every output is projected from |
 

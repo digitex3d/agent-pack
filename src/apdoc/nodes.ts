@@ -230,7 +230,8 @@ function conditionHead(kind: CheckKind, n: { condition: string; check?: ApCondCh
       + (rounds ? executorRounds(rounds) : '');
   }
   if (!n.check) return `${controlHead(kind)} ${env.substitute(n.condition)}`;
-  return checkHead(kind, n.check, env.substitute(n.condition), env.apxOf(n.check.agent));
+  // A checked condition is a block of the document that holds it — an agent's body, or a unit's flow: reached by its id there.
+  return checkHead(kind, n.check, env.substitute(n.condition), env.apxOf(null));
 }
 
 export class IfNode extends NodeBase implements ApIfNode {

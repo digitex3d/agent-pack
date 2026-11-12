@@ -1,37 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
-import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { homedir } from 'node:os';
-import { JudgeError, isDirect, type JudgeCheck, type JudgeQuestion, type JudgePlugin, type JudgeAnswer } from '../../src/judge/types.js';
+import { noulJudge } from '../noul.js';
+import type { JudgePlugin } from '../../src/judge/types.js';
 
 /**
  * Jev (TypeSafe AI) as the judge — the only place that knows Jev.
  *
- * One request per line: `POST /v1/systemone` with the line as `state` and one
- * yes/no (`noul`) question per check; the answer is the probability of "yes".
- * The model is `jev-latest` until the caller pins the version Jev reported
- * (e.g. `jev-1.13.0`), which the direct API accepts as `model`.
- *
- * The API key comes from `TYPESAFE_API_KEY`, else `~/.config/typesafe/key` —
- * never from the config. It is an opaque token: no message, error or log of
- * this adapter ever carries it (every text from outside is scrubbed of it).
- *
- * Failures are typed for the phase: no key, unreachable, timed out, or key
- * rejected (401/403) take the judge offline; anything else fails only this
- * line — a 429 or 5xx after one retry.
+ * `POST /v1/systemone`, the line as `state`, the key as a Bearer token from
+ * `TYPESAFE_API_KEY` or `~/.config/typesafe/key`. The model is `jev-latest`
+ * until the caller pins the version Jev reported (e.g. `jev-1.13.0`), which
+ * the direct API accepts as `model`. The rest is every decisions API's (../noul.ts).
  */
 export interface JevOptions {
   url?: string;   // default: https://api.typesafe.ai/v1/systemone
   model?: string; // default: jev-latest
 }
 
-const URL_DEFAULT = 'https://api.typesafe.ai/v1/systemone';
-const MODEL_DEFAULT = 'jev-latest';
-/** How long one request may take before Jev counts as unreachable. */
-const TIMEOUT_MS = 30_000;
-/** The wait before the one retry of a 429 or 5xx. */
-const RETRY_DELAY_MS = 1_000;
 /**
  * The largest state Jev is sent, in characters: Jev reads about 32k tokens; at
  * roughly four characters a token, 96 000 characters (~24k tokens) leaves room
@@ -39,81 +23,16 @@ const RETRY_DELAY_MS = 1_000;
  */
 export const JEV_MAX_STATE_CHARS = 96_000;
 
-/** The API key, or null — read at each request, never kept beyond it. */
-function readKey(): string | null {
-  const env = process.env.TYPESAFE_API_KEY?.trim();
-  if (env) return env;
-  const file = resolve(homedir(), '.config/typesafe/key');
-  return existsSync(file) ? readFileSync(file, 'utf-8').trim() || null : null;
-}
-
-/** A text from outside (an error, a response body) with the key masked out. */
-function scrub(text: string, key: string): string {
-  return text.split(key).join('***');
-}
-
-/**
- * The question one check becomes — a question as is; a negative rule (`NEVER x`)
- * asked directly about the state's `line` ("Does `line` x?"), with what yes and
- * no mean when the rule says it; any other rule's statement in Jev's wording.
- */
-function questionOf(check: JudgeCheck | JudgeQuestion): { type: 'noul'; instructions: string; criteria?: Record<string, string> } {
-  if ('question' in check) return { type: 'noul', instructions: check.question };
-  if (!isDirect(check)) return { type: 'noul', instructions: `Does the line satisfy this rule: "${check.statement}"?` };
-  const { yes, no } = check.criteria ?? {};
-  const criteria = { ...(yes ? { true: yes } : {}), ...(no ? { false: no } : {}) };
-  return { type: 'noul', instructions: `Does \`line\` ${check.statement}?`, ...(yes || no ? { criteria } : {}) };
-}
-
 export default function jevJudge(opts: JevOptions = {}): JudgePlugin {
-  const url = opts.url ?? URL_DEFAULT;
-  return {
-    type: 'judge',
+  return noulJudge({
     name: 'jev',
+    url: 'https://api.typesafe.ai/v1/systemone',
+    model: 'jev-latest',
+    keyEnv: 'TYPESAFE_API_KEY',
+    keyFile: '.config/typesafe/key',
+    headers: key => ({ Authorization: `Bearer ${key}` }),
+    inputField: 'state',
+    criteriaFields: { yes: 'true', no: 'false' },
     maxStateChars: JEV_MAX_STATE_CHARS,
-    async ask(state, checks, model) {
-      const key = readKey();
-      if (!key) throw new JudgeError('offline', 'jev: no API key — set TYPESAFE_API_KEY or write it to ~/.config/typesafe/key');
-      // Question ids are positional: a check id is the caller's, not Jev's.
-      const questions = Object.fromEntries(checks.map((c, i) => [`q${i + 1}`, questionOf(c)]));
-      const post = async (): Promise<{ res: Response; text: string }> => {
-        try {
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: model ?? opts.model ?? MODEL_DEFAULT, state, questions }),
-            signal: AbortSignal.timeout(TIMEOUT_MS),
-          });
-          return { res, text: await res.text().catch(() => '') };
-        } catch (err) {
-          throw new JudgeError('offline', `jev: unreachable — ${scrub(err instanceof Error ? err.message : String(err), key)}`);
-        }
-      };
-      const retryable = (status: number): boolean => status === 429 || status >= 500;
-      let { res, text } = await post();
-      if (retryable(res.status)) {
-        await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
-        ({ res, text } = await post());
-      }
-      if (!res.ok) {
-        const kind = res.status === 401 || res.status === 403 ? 'offline' : 'line';
-        throw new JudgeError(kind, `jev: HTTP ${res.status} — ${scrub(text, key).slice(0, 300)}`);
-      }
-      let body: { model?: unknown; answers?: Record<string, { noul?: unknown; probabilities?: unknown }> };
-      try {
-        body = JSON.parse(text);
-      } catch {
-        throw new JudgeError('line', `jev: the answer is not JSON — ${scrub(text, key).slice(0, 300)}`);
-      }
-      const answers: Record<string, JudgeAnswer> = {};
-      checks.forEach((c, i) => {
-        const answer = body.answers?.[`q${i + 1}`];
-        const p = answer?.noul;
-        if (typeof p !== 'number' || p < 0 || p > 1) throw new JudgeError('line', `jev: the answer has no probability for question q${i + 1} (${c.id})`);
-        // A direct question answers whether the line breaks the rule: the check holds on a no.
-        answers[c.id] = isDirect(c) ? 1 - p : p;
-      });
-      return { model: typeof body.model === 'string' ? body.model : model ?? opts.model ?? MODEL_DEFAULT, answers };
-    },
-  };
+  }, opts);
 }

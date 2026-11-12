@@ -3,8 +3,10 @@
 /**
  * The team block — `EXPORT TEAM <name>:` in `<team>.ap`.
  *
- *   - a member's document carries the team: its ABOUT, its MEMBER roster (lines
- *     add up), its routing and its flows, each with its position in the file
+ *   - a member's document carries the team as the member knows it: its ABOUT
+ *     and its MEMBER roster (lines add up) — no routing, no flows
+ *   - the team's own document — the one compiler on the team's file — carries
+ *     its routing and its flows, each with its position in the file
  *   - the roster is authoritative: a MEMBER with no agent file, an agent file
  *     not listed, a MEMBER listed twice, a block named unlike its folder
  *   - a TEAM that is not exported, or a second one, is an error
@@ -59,6 +61,11 @@ const compile = (name = 'builder') => bundleAgentObject({
   agentName: name, agentFile: join(team, `${name}.ap`), agentDir: team, libraryRoot: lib, libraryRoots: [lib],
   libraries: { '@main': lib }, bundleConfig: { runtime: false },
 });
+/** The team's own document: the same compiler, on the team's file. */
+const compileTeam = (teamsNamed = []) => bundleAgentObject({
+  agentName: 'crew', agentFile: join(team, 'crew.ap'), agentDir: team, libraryRoot: lib, libraryRoots: [lib],
+  libraries: { '@main': lib }, bundleConfig: { runtime: false }, teams: teamsNamed,
+});
 const orchestration = () => buildOrchestrationContent({
   cwd: tmp, standaloneAgentsDir: join(tmp, 'standalone'), teamsDir: teams, libraryRoots: [lib], libraries: { '@main': lib },
 });
@@ -83,16 +90,24 @@ try {
   assert.equal(unit[10], '    STEP build it:');
   assert.deepEqual(lintFile(teamFile, read.source), [], 'a team file lints clean');
 
-  // --- a member's document carries the team ---
-  const { structure } = await compile();
-  const crew = structure.byKind('team')[0];
+  // --- one id, one block: a member's document refers to its team, and holds no copy of it ---
+  const member = (await compile()).structure;
+  assert.deepEqual(member.byKind('team'), [], "the team's block is the team's own document's");
+  assert.equal(member.root().team.target, '@main.teams/crew', 'the member refers to its team');
+  assert.deepEqual(member.byKind('flow'), [], 'an agent has procedures; the flows are the team\'s');
+  assert.equal(member.root().kind, 'agent');
+
+  // --- the team's own document: rooted at its TEAM block, with its routing and its flows ---
+  const { structure } = await compileTeam();
+  const crew = structure.root();
+  assert.equal(crew.kind, 'team');
   assert.equal(crew.name, 'crew');
-  assert.equal(crew.about, 'a crew that ships');
   assert.deepEqual(crew.members.map(r => r.target.split('/').pop()), ['builder', 'checker']);
   assert.deepEqual(crew.routing.map(r => r.when), ['asked to ship']);
   assert.deepEqual(crew.source, { file: teamFile, line: 3, col: 1 }, 'the team is its EXPORT TEAM block');
+  assert.deepEqual(structure.byKind('agent'), [], 'no agent in a team\'s document');
   const ship = structure.byKind('flow').find(b => b.name === 'ship');
-  assert.ok(ship, "the team's flow travels in the member's document");
+  assert.ok(ship, "the team's flow is in the team's document");
   assert.deepEqual(ship.source, { file: teamFile, line: 10, col: 5 }, 'the flow is where it is written');
   assert.deepEqual(ship.body.map(s => s.title), ['build it', 'check it']);
   const check = ship.body[1].body[0];
@@ -104,7 +119,7 @@ try {
   // --- MEMBER lines add up ---
   write(teamFile, ['EXPORT TEAM crew:', '    MEMBER  builder', '    MEMBER  checker', '    ABOUT   a crew']);
   assert.deepEqual(readTeamFile(team).members.map(m => m.name), ['builder', 'checker']);
-  assert.deepEqual((await compile()).structure.byKind('team')[0].members.length, 2);
+  assert.deepEqual((await compileTeam()).structure.root().members.length, 2);
 
   // --- the roster is authoritative ---
   writeTeam(TEAM_BODY, ['builder']);
@@ -128,7 +143,7 @@ try {
   assert.ok(lintFile(teamFile, 'TEAM crew:\n    ABOUT   a crew\n    MEMBER  builder, checker\n').some(e => /a team is exported — write `EXPORT TEAM crew:`/.test(e.message)));
   assert.ok(lintFile(teamFile, ['EXPORT TEAM crew:', '    ABOUT   a', '    MEMBER  builder', 'EXPORT TEAM crew:', '    ABOUT   b', '    MEMBER  checker', ''].join('\n'))
     .some(e => e.line === 4 && /a file declares one team — found 2 TEAM blocks/.test(e.message)));
-  assert.ok(lintFile(join(tmp, 'x.ap'), 'EXPORT AGENT x AS r:\n    ABOUT  x\n    MANDATE  y\n    MEMBER  z\n').some(e => /MEMBER is a line of a TEAM block — found inside AGENT/.test(e.message)));
+  assert.ok(lintFile(join(tmp, 'x.ap'), 'EXPORT AGENT x AS r:\n    ABOUT  x\n    MANDATE  y\n    MEMBER  z\n').some(e => /MEMBER is a line of a TEAM or a MAIN block — found inside AGENT/.test(e.message)));
 
   // --- the orchestration reads the same file ---
   writeTeam(TEAM_BODY);
@@ -148,10 +163,7 @@ try {
   const handOff = ['    STEP hand it to ops:', '        DELEGATE deploy what was built BY ops'];
   writeTeam([...TEAM_BODY, ...handOff]);
   const { teamNamesUnder } = await import('../dist/src/services/teamMetadata.js');
-  const withTeams = () => bundleAgentObject({
-    agentName: 'builder', agentFile: builder, agentDir: team, libraryRoot: lib, libraryRoots: [lib],
-    libraries: { '@main': lib }, bundleConfig: { runtime: false }, teams: teamNamesUnder(teams),
-  });
+  const withTeams = () => compileTeam(teamNamesUnder(teams));
   const handed = (await withTeams()).structure.byKind('flow').find(f => f.name === 'ship').body[2].body[0];
   assert.equal(handed.by, 'ops', 'a delegation may name a team');
   const routed = (await orchestration()).content;

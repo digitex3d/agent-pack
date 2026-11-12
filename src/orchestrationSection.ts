@@ -14,7 +14,9 @@ import {
   lintSource,
   strayDimensionErrors,
 } from './compiler/index.js';
-import { checkedHeadIssues, lineOfName, teamFileErrors } from './lint.js';
+import { checkedHeadIssues, lineOfName, teamFileErrors, type LintError } from './lint.js';
+import { readMainFile, type MainFile } from './services/mainMetadata.js';
+import type { UnitSection } from './apx/payload.js';
 import type { Config } from './config.js';
 import { AGENTS_MD } from './projectContext.js';
 import { apxCommand } from './apx/paths.js';
@@ -83,11 +85,17 @@ export interface OrchestrationSectionOptions {
    * absent = neutral prose (AGENTS.md is read by every harness).
    */
   renderings?: Record<string, Record<string, string>>;
+  /** One team alone: the text its own apx prints — its flows and its routing, compiled with nothing of the other teams. */
+  team?: string;
 }
 
 export interface OrchestrationSectionResult extends MdBlockResult {
   standalones: string[];
   teams: string[];
+  /** What the orchestration holds — the main's section names it (src/apx/payload.ts UnitSection). */
+  held: Pick<UnitSection, 'teams' | 'members'>;
+  /** The orchestration block as written. */
+  content: string;
 }
 
 
@@ -171,13 +179,11 @@ function readTeamFiles(teamsRoot: string, fail: (issue: TeamIssue) => void): Tea
 
 /**
  * A team's `{{…}}` reads as AGENTS.md renders them — the variables its file
- * imports, which its members compile with: a constant's read is its value, a
- * variable's how to read it with a member's apx (a SESSION variable reads the
- * same from every member). Any other read stays as written. Applied to the
+ * imports: a constant's read is its value, a variable's how to read it with
+ * the team's apx, which holds the team's document. Any other read stays as written. Applied to the
  * rendered text: a checked head's id is the condition as written.
  */
 function teamReads(team: TeamRaw): (text: string) => string {
-  const member = team.members[0]?.name;
   const { constants, variables: declared } = importedVariables(team.variables, {});
   const variables = new Set(declared.map(v => v.name));
   const V = FORMULAS.keywords.VAR;
@@ -185,7 +191,7 @@ function teamReads(team: TeamRaw): (text: string) => string {
     if (r.template) return undefined;
     const value = constantOf(constants, r.name);
     if (value !== undefined) return value;
-    return member && variables.has(r.name) ? fill(V.read, { name: r.name, command: varCommand(apxCommand(member), 'get', r.name) }) : undefined;
+    return variables.has(r.name) ? fill(V.read, { name: r.name, command: varCommand(apxCommand(team.name), 'get', r.name) }) : undefined;
   });
 }
 
@@ -212,7 +218,7 @@ function renderFlowReads(chapters: string, ctx: BundleContext, readsOf: Map<stri
  * variables a team's file imports are that team's alone: each team's
  * imports register in a list of its own.
  */
-async function collectTeams(teamsRoot: string, ctx: BundleContext): Promise<TeamRaw[]> {
+async function collectTeams(teamsRoot: string, ctx: BundleContext, wanted: (team: string) => boolean): Promise<{ teams: TeamRaw[]; roster: { name: string; members: AgentInfo[] }[] }> {
   const files = readTeamFiles(teamsRoot, issue => ctx.lintErrors.push(issue));
 
   // Walk every team's members up front so their directory-anchored `AS <role>`
@@ -233,51 +239,65 @@ async function collectTeams(teamsRoot: string, ctx: BundleContext): Promise<Team
   // A step may also name a team: it carries the step out by its own routing.
   const byNames = new Set([...agentNames, ...files.map(f => f.teamName)]);
 
+  const index: TeamIndex = { roleIndex, byNames, agentNames, membersByTeam };
   const out: TeamRaw[] = [];
-  for (const { teamName, teamDir, teamPath, about, source, team } of files) {
-    lintSource(teamPath, ctx);
-    const raw = resolveByLines(
-      source,
-      roleIndex,
-      byNames,
-      (msg, line) => ctx.lintErrors.push({ file: teamPath, line, message: msg }),
-    );
-    // Its checked heads as AGENTS.md renders them: a DELEGATE block's are its agent's, the routing's no one's.
-    ctx.lintErrors.push(...checkedHeadIssues(teamPath, raw, ctx.checks, by => (agentNames.has(by) ? by : null)));
-    // `LENS-IN <agent> <template>` — the member's default input shape, declared
-    // team-side and rendered into the members list for orchestrator discovery.
-    const { metadata: lensMeta, stripped: noLensIn } = partitionMetadata(raw, ['LENS-IN']);
-    const lensIn = new Map<string, string>();
-    for (const decl of lensMeta.get('LENS-IN') ?? []) {
-      const m = decl.trim().match(/^(\S+)\s+(\S+)$/);
-      if (!m) throw new Error(`${teamPath}: malformed LENS-IN "${decl}" — expected \`LENS-IN <agent> <template>\``);
-      lensIn.set(m[1], m[2]);
-    }
-    const stripped = noLensIn.replace(H1_LINE_RE, '').replace(ABOUT_LINE_RE, '').replace(/^\n+/, '');
-    const members = (membersByTeam.get(teamName) ?? [])
-      .map(a => ({ ...a, lensIn: lensIn.get(a.name) ?? a.lensIn }));
-    for (const name of lensIn.keys()) {
-      if (!members.some(a => a.name === name)) {
-        throw new Error(`${teamPath}: LENS-IN names unknown member "${name}"`);
-      }
-    }
-    await hoistLensInTemplates(teamDir, members, ctx);
-    ctx.variables = [];
-    const dimensions = ctx.dimensions.length;
-    const routingRaw = await resolveInlineBlocks(stripped, ctx, teamPath);
-    ctx.lintErrors.push(...strayDimensionErrors(ctx, teamPath, dimensions));
-    // What the team file imports itself — imports never pass on. A team shares constants
-    // and SESSION variables: a private one would be each member's own.
-    const variables = ctx.variables.filter(v => v.importers.includes(teamPath));
-    for (const v of variables) {
-      if (v.decl.form === 'variable' && v.decl.scope === 'private') {
-        ctx.lintErrors.push({ file: teamPath, line: lineOfName(teamPath, v.name, 'import'), message: `IMPORT ${v.name}: \`${v.name}\` is a private variable — each member would have its own; a team's file imports constants and SESSION variables` });
-      }
-    }
-    out.push({ name: teamName, about, members, routingRaw, teamPath, variables, team });
-  }
+  for (const file of files.filter(f => wanted(f.team.name))) out.push(await collectTeam(file, index, ctx));
   ctx.variables = [];
-  return out;
+  return { teams: out, roster: files.map(f => ({ name: f.team.name, members: membersByTeam.get(f.teamName) ?? [] })) };
+}
+
+/** What every team's compilation reads of all the teams: who plays which role, the names a `BY` may give, each team's members. */
+interface TeamIndex {
+  roleIndex: RoleIndex;
+  byNames: Set<string>;
+  agentNames: ReadonlySet<string>;
+  membersByTeam: ReadonlyMap<string, AgentInfo[]>;
+}
+
+/** Compile one team's file into the shared ctx: its routing kept raw, its flows, templates and imports collected. */
+async function collectTeam(file: TeamSource, index: TeamIndex, ctx: BundleContext): Promise<TeamRaw> {
+  const { teamName, teamDir, teamPath, about, source, team } = file;
+  const { roleIndex, byNames, agentNames, membersByTeam } = index;
+  lintSource(teamPath, ctx);
+  const raw = resolveByLines(
+    source,
+    roleIndex,
+    byNames,
+    (msg, line) => ctx.lintErrors.push({ file: teamPath, line, message: msg }),
+  );
+  // Its checked heads as AGENTS.md renders them: a DELEGATE block's are its agent's, the routing's no one's.
+  ctx.lintErrors.push(...checkedHeadIssues(teamPath, raw, ctx.checks, by => (agentNames.has(by) ? by : null)));
+  // `LENS-IN <agent> <template>` — the member's default input shape, declared
+  // team-side and rendered into the members list for orchestrator discovery.
+  const { metadata: lensMeta, stripped: noLensIn } = partitionMetadata(raw, ['LENS-IN']);
+  const lensIn = new Map<string, string>();
+  for (const decl of lensMeta.get('LENS-IN') ?? []) {
+    const m = decl.trim().match(/^(\S+)\s+(\S+)$/);
+    if (!m) throw new Error(`${teamPath}: malformed LENS-IN "${decl}" — expected \`LENS-IN <agent> <template>\``);
+    lensIn.set(m[1], m[2]);
+  }
+  const stripped = noLensIn.replace(H1_LINE_RE, '').replace(ABOUT_LINE_RE, '').replace(/^\n+/, '');
+  const members = (membersByTeam.get(teamName) ?? [])
+    .map(a => ({ ...a, lensIn: lensIn.get(a.name) ?? a.lensIn }));
+  for (const name of lensIn.keys()) {
+    if (!members.some(a => a.name === name)) {
+      throw new Error(`${teamPath}: LENS-IN names unknown member "${name}"`);
+    }
+  }
+  await hoistLensInTemplates(teamDir, members, ctx);
+  ctx.variables = [];
+  const dimensions = ctx.dimensions.length;
+  const routingRaw = await resolveInlineBlocks(stripped, ctx, teamPath);
+  ctx.lintErrors.push(...strayDimensionErrors(ctx, teamPath, dimensions));
+  // What the team file imports itself — imports never pass on. A team shares constants
+  // and SESSION variables: a private one would be each member's own.
+  const variables = ctx.variables.filter(v => v.importers.includes(teamPath));
+  for (const v of variables) {
+    if (v.decl.form === 'variable' && v.decl.scope === 'private') {
+      ctx.lintErrors.push({ file: teamPath, line: lineOfName(teamPath, v.name, 'import'), message: `IMPORT ${v.name}: \`${v.name}\` is a private variable — each member would have its own; a team's file imports constants and SESSION variables` });
+    }
+  }
+  return { name: teamName, about, members, routingRaw, teamPath, variables, team };
 }
 
 /** The flat agent file under `teamDir` whose `EXPORT AGENT` block name matches `name`. */
@@ -394,10 +414,42 @@ function renderTeam(team: TeamInfo, ctx: BundleContext): string {
   ].join('\n');
 }
 
+/**
+ * What the main's TEAMS and MEMBER lines get wrong against the project: a team
+ * under MEMBER or an agent under TEAMS, a member of a team under either — it is
+ * reached through its team's routing — and a name that is neither; then, as
+ * warnings, the teams and standalone agents it lists nowhere: they stay out of it.
+ */
+function mainRosterIssues(main: MainFile, teams: readonly { name: string; members: readonly AgentInfo[] }[], standalones: readonly AgentInfo[]): LintError[] {
+  const issues: LintError[] = [];
+  const teamOf = (name: string) => teams.find(t => t.members.some(m => m.name === name))?.name;
+  const isTeam = (name: string) => teams.some(t => t.name === name);
+  const isStandalone = (name: string) => standalones.some(a => a.name === name);
+  const check = (listed: readonly { name: string; line: number }[], kind: 'TEAMS' | 'MEMBER') => {
+    for (const { name, line } of listed) {
+      const team = teamOf(name);
+      const message = kind === 'MEMBER' && isTeam(name) ? `\`${name}\` is a team — list it under TEAMS: \`TEAMS ${name}\``
+        : kind === 'TEAMS' && isStandalone(name) ? `\`${name}\` is a standalone agent — list it under MEMBER: \`MEMBER ${name}\``
+        : team ? `\`${name}\` is a member of the team \`${team}\` — it is reached through its team's routing: list \`${team}\` under TEAMS`
+        : (kind === 'TEAMS' ? isTeam(name) : isStandalone(name)) ? null
+        : `${kind} names \`${name}\`, which is neither a team nor a standalone agent of the project`;
+      if (message) issues.push({ file: main.path, line, message });
+    }
+  };
+  check(main.teams, 'TEAMS');
+  check(main.members, 'MEMBER');
+  const listed = (name: string) => [...main.teams, ...main.members].some(l => l.name === name);
+  const line = main.block.startLine;
+  for (const t of teams) if (!listed(t.name)) issues.push({ file: main.path, line, severity: 'warning', message: `the team \`${t.name}\` is listed in no TEAMS line of the main — it is left out of it` });
+  for (const a of standalones) if (!listed(a.name)) issues.push({ file: main.path, line, severity: 'warning', message: `the standalone agent \`${a.name}\` is listed in no MEMBER line of the main — it is left out of it` });
+  return issues;
+}
+
 export async function buildOrchestrationContent(opts: OrchestrationSectionOptions): Promise<{
   content: string;
   standalones: string[];
   teams: string[];
+  held: Pick<UnitSection, 'teams' | 'members'>;
 }> {
   const standaloneAgentsDir = opts.standaloneAgentsDir ?? resolve(opts.cwd, 'agents/standalone');
   const teamsDir = opts.teamsDir ?? resolve(opts.cwd, 'agents/teams');
@@ -406,13 +458,19 @@ export async function buildOrchestrationContent(opts: OrchestrationSectionOption
   // Process the framework intro through the shared pipeline.
   const introBody = await processSource(introOf('team'), ctx);
 
-  const standalones = readAgentInfos(standaloneAgentsDir);
-  await hoistLensInTemplates(standaloneAgentsDir, standalones, ctx);
+  // A team's own text holds that team alone; the orchestration, what the main lists — every team and agent with no main.
+  const main = opts.team ? null : readMainFile(opts.cwd);
+  const found = opts.team ? [] : readAgentInfos(standaloneAgentsDir);
+  const wanted = (team: string): boolean => (opts.team ? team === opts.team : !main || main.teams.some(m => m.name === team));
 
-  // Phase 1: collect every team's FLOWs into the shared ctx (routing kept raw,
-  // with `BY <role>` resolved against the RoleIndex built from the same
-  // single walk/read/parse of each team's file).
-  const teamRaws = await collectTeams(teamsDir, ctx);
+  // Phase 1: collect the wanted teams' FLOWs into the shared ctx (routing kept
+  // raw, with `BY <role>` resolved against the RoleIndex built from the same
+  // single walk/read/parse of every team's file).
+  const { teams: teamRaws, roster } = await collectTeams(teamsDir, ctx, wanted);
+  // With a main, what it lists is what the project holds: its TEAMS and its MEMBER lines.
+  if (main) ctx.lintErrors.push(...mainRosterIssues(main, roster, found));
+  const standalones = main ? found.filter(a => main.members.some(m => m.name === a.name)) : found;
+  await hoistLensInTemplates(standaloneAgentsDir, standalones, ctx);
   const readsOf = new Map(teamRaws.map(t => [t.teamPath, teamReads(t)]));
 
   reportLintIssues(ctx, 'Orchestration section');
@@ -421,21 +479,25 @@ export async function buildOrchestrationContent(opts: OrchestrationSectionOption
   // stamping each flow id so RUN references can resolve to `(id)`. Post-process
   // the emitted chapters (as the agent pipeline does) so STEP/DO/DELEGATE in
   // flow bodies and force-levels in the chapter intros render to prose.
+  // A checked condition of a flow is the team's, whose apx holds the flow.
+  const teamOfAgent = new Map(teamRaws.flatMap(t => t.members.map(m => [m.name, t.name] as const)));
+  ctx.unitOf = agent => teamOfAgent.get(agent);
   const chapters = renderFlowReads(postProcessBody(emitCollectedSections(ctx), ctx).trim(), ctx, readsOf);
+  ctx.unitOf = undefined;
 
   // Phase 3: post-process each team's routing against the now-stamped ctx, so
   // `RUN <flow>` renders as `Run the flow \`<name>\` (id)` — with the command
-  // that says how to run it: `apx flow <id>` of a member, whose apx carries
-  // the team's flows (and knows whether this harness runs them as scripts).
+  // that says how to run it: `apx flow <id>` of the team, whose apx carries
+  // its flows (and knows whether this harness runs them as scripts).
   const teams: TeamInfo[] = teamRaws.map(t => {
-    const member = t.members[0]?.name;
-    ctx.flowCommand = member ? id => apxCommand(member, 'flow', id) : undefined;
+    ctx.flowCommand = id => apxCommand(t.name, 'flow', id);
     const routingBody = readsOf.get(t.teamPath)!(postProcessBody(t.routingRaw, ctx)).trim().replace(/\n{3,}/g, '\n\n');
     ctx.flowCommand = undefined;
     return { name: t.name, about: t.about, members: t.members, routingBody };
   });
 
-  const parts: string[] = [
+  // A team's own text — what its apx prints — is its flows and its routing; the main's adds the orchestration.
+  const parts: string[] = opts.team ? [chapters, ...teams.map(t => renderTeam(t, ctx))] : [
     chapters,
     `# Orchestration\n\n${introBody}`,
     renderStandalones(standalones, ctx),
@@ -446,12 +508,16 @@ export async function buildOrchestrationContent(opts: OrchestrationSectionOption
     content: parts.filter(Boolean).map(p => p.trim()).join('\n\n').replace(/\n{3,}/g, '\n\n').trim(),
     standalones: standalones.map(a => a.name),
     teams: teams.map(t => t.name),
+    held: {
+      teams: teams.map(t => ({ name: t.name, about: t.about, members: t.members.map(m => m.name) })),
+      members: standalones.map(a => ({ name: a.name, about: a.about })),
+    },
   };
 }
 
 export async function ensureOrchestrationSection(opts: OrchestrationSectionOptions): Promise<OrchestrationSectionResult> {
-  const { content, standalones, teams } = await buildOrchestrationContent(opts);
+  const { content, standalones, teams, held } = await buildOrchestrationContent(opts);
   const filePath = opts.filePath ?? resolve(opts.cwd, AGENTS_MD);
   const result = ensureMdBlock({ filePath, key: 'orchestration', content });
-  return { ...result, standalones, teams };
+  return { ...result, standalones, teams, held, content };
 }

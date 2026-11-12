@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { FORMULAS, fill, introOf } from '../formulas.js';
 import { resolve, dirname, basename, sep } from 'node:path';
 import { unitNameFromPath } from '../ingest.js';
+import type { MainFile } from '../services/mainMetadata.js';
 import { projectAgentFiles } from '../agentDiscovery.js';
 import { type Config, type BundleConfig, type LintConfig, libraryRoots as libraryRootsOf, librariesAliasMap } from '../config.js';
 import type { BundleContext, RoleEntry } from '../dispatch/index.js';
@@ -14,11 +15,13 @@ import { unappliedBlocks, unappliedIssue, withScopeLine } from '../withUse.js';
 import { readDecorator } from '../decoratorUse.js';
 import { resolveBundleDefaults, resolveTeamShared } from '../bundleDefaults.js';
 import { resolveTeamMembership } from '../services/teamMembership.js';
-import { findAgentFiles, readAgentFile, standaloneDir, agentNameOf, teamRootForAgentFile, readTeamFile, teamRosterIssues, teamNamesUnder } from '../services/teamMetadata.js';
+import { findAgentFiles, readAgentFile, standaloneDir, agentNameOf, teamRootForAgentFile, readTeamFile, teamRosterIssues, teamNamesUnder, teamFileOf, isTeamFile, outsideBlock } from '../services/teamMetadata.js';
+import { isMainFile, readMainFile } from '../services/mainMetadata.js';
+import { apxCommand } from '../apx/paths.js';
 import { harnessesOf, harnessProblem, agentModels, modelProblem, type HarnessRow } from '../harnesses.js';
 import { delegateTargetErrors, executorErrors, usesPrograms, WRITE_PROGRAM, type AgentIndexEntry } from '../executor.js';
 import { BUILTIN_AGENTS_DIR, resolveDelegateConfig, type DelegateConfig } from '../config.js';
-import { type LintError, checkVocabulary, lineOfName, checkedHeadIssues, dimensionBlockErrors, domainBlockErrors, pluginBlockErrors, teamFileErrors } from '../lint.js';
+import { type LintError, checkVocabulary, lineOfName, checkedHeadIssues, dimensionBlockErrors, domainBlockErrors, pluginBlockErrors, teamFileErrors, mainBlockErrors } from '../lint.js';
 import { CompileError, reporter } from '../report.js';
 import { extractInlineDefinitions } from '../dispatch/inlineBlocks.js';
 import { renderTree } from '../bundlers/renderTree.js';
@@ -38,11 +41,13 @@ import { hasProjectFile } from '../services/fs.js';
 import { matchesAnyGlob } from '../services/glob.js';
 import { DECORATOR_MARK, WITHIN_DECORATOR } from '../decorators.js';
 import { SourceRegistry } from '../sources.js';
+import { AGENT_KEYS } from '../blockTypes.js';
+import { splitList } from '../lists.js';
 import { judgeDocument, type JudgeRun } from '../judge/phase.js';
 import { judgeDomainFormulas } from '../judge/domains.js';
 import type { ChecksConfig } from '../judge/types.js';
 import { importedVariables, visibleIn } from '../exportedVars.js';
-import { readsOf, constantOf, parseVarLine, splitInto, takesInto } from '../vars.js';
+import { readsOf, constantOf, parseVarLine, splitInto, takesInto, eachHeadOf } from '../vars.js';
 import { refName } from '../../adapters/md/phrases.js';
 import { STORE_FIELD_RE } from '../storeDrivers/filters.js';
 import { storeDriverOf } from '../storeDrivers/registry.js';
@@ -52,8 +57,10 @@ import { storeDriverOf } from '../storeDrivers/registry.js';
 
 export interface BundleOptions {
   agentName: string;
-  /** The agent's `.ap` file (holding its `EXPORT AGENT` block). */
+  /** The agent's `.ap` file (holding its `EXPORT AGENT` block) — or a team's, or the main's: the unit's document. */
   agentFile: string;
+  /** Where an agent of the project is written, by its name — what the main's MEMBER lines name. */
+  agentFileOf?: (name: string) => string;
   agentDir: string;
   libraryRoot: string;
   libraryRoots?: string[];
@@ -118,6 +125,11 @@ export function resolveAgentFile(agentName: string, config: Config): string {
   for (const file of agentFiles(config)) {
     if (agentNameOf(file) === agentName) return file;
   }
+  // A team: its file — the same compiler makes its document, rooted at its TEAM block; the main, at its MAIN block.
+  const team = teamFileOf(resolve(config.teamsDir, agentName));
+  if (team && readTeamFile(dirname(team))?.name === agentName) return team;
+  const main = readMainFile(process.cwd());
+  if (main?.name === agentName) return main.path;
   // Fallback: a conventional standalone path so the bundler reports a precise
   // "Agent not found" against the expected flat location.
   return resolve(standaloneDir(config.agentsDir), `${agentName}.ap`);
@@ -182,6 +194,7 @@ function buildBundleOpts(
     agentIndex: agentIndexOf(config),
     harnesses: harnessesOf(config.adapters),
     teams: teamNamesUnder(config.teamsDir),
+    agentFileOf: name => resolveAgentFile(name, config),
     ...(config.delegate ? { delegate: config.delegate } : {}),
   };
 }
@@ -362,6 +375,23 @@ function roleConflicts(roles: readonly RoleEntry[], file: string): LintError[] {
  * A write — `… INTO x`, `VAR x:` — of a variable another file imports fails
  * alike: the file that writes it imports it too.
  */
+/**
+ * The elements of a file's `EACH <item> IN {{<list>}} MAX <n>:` blocks: for a
+ * line, the items of the EACH blocks it stands beneath — the element is read
+ * only there.
+ */
+function eachElements(source: string): (line: number) => ReadonlySet<string> {
+  const tokens = lex(source).filter(t => t.kind !== 'blank' && t.kind !== 'comment');
+  const scopes: { item: string; from: number; to: number }[] = [];
+  tokens.forEach((t, k) => {
+    const head = t.kind === 'keyword' && t.keyword === 'EACH' ? eachHeadOf(t.rest) : null;
+    if (!head) return;
+    const end = tokens.slice(k + 1).find(n => n.indent <= t.indent);
+    scopes.push({ item: head.item, from: t.line + 1, to: end ? end.line - 1 : Number.MAX_SAFE_INTEGER });
+  });
+  return line => new Set(scopes.filter(s => line >= s.from && line <= s.to).map(s => s.item));
+}
+
 function variableUseErrors(
   ctx: BundleContext, sourcePath: string, seen: (file: string) => { constants: Record<string, string>; variables: Set<string> },
   sessionRead: (file: string) => string | null,
@@ -374,6 +404,7 @@ function variableUseErrors(
     const refused = sessionRead(file);
     const { constants, variables } = seen(file);
     const source = ctx.sources.read(file);
+    const elementOf = eachElements(source);
     for (const t of lex(source)) {
       if (t.kind !== 'keyword') continue;
       const decl = parseVarLine(t.keyword, t.rest);
@@ -391,6 +422,8 @@ function variableUseErrors(
         if (template && constantOf(constants, name) !== undefined) err(`\`${read}\`: a constant has no shape to take — write the part you need`);
         else if (template && !ctx.templates.some(tpl => tpl.name === template)) err(`\`${read}\`: ${unresolvedMessage('template', template)}`);
         if (constantOf(constants, name) !== undefined) continue;
+        // An EACH's element, read in the lines beneath it.
+        if (elementOf(i + 1).has(name)) continue;
         if (!variables.has(name)) {
           err(unknownVariable(read, name, ctx));
         } else if (refused) {
@@ -505,16 +538,31 @@ function domainFileErrors(ctx: BundleContext, doc: ApDocument, projectRoot: stri
  * within — when a `@WITHIN` decorates the agent. A delegation is checked by its
  * own agent's compilation, so once.
  */
-function delegationPerimeterErrors(doc: ApDocument, delegations: DocumentBuilder['delegationScopes'], agentName: string): LintError[] {
-  const mine = doc.domains();
-  if (!mine) return [];
-  const names = new Set(mine.map(d => d.name));
+/**
+ * A step's `@WITHIN` names only domains of the agent it delegates to, when a
+ * `@WITHIN` decorates that agent. `domainsOf` says an agent's domains by name —
+ * null when no `@WITHIN` decorates it: in a unit's document every agent a flow
+ * delegates to, read from its own file.
+ */
+function delegationPerimeterErrors(delegations: DocumentBuilder['delegationScopes'], domainsOf: (agent: string) => string[] | null): LintError[] {
   return delegations.flatMap(s => {
-    const within = s.by === agentName ? s.scope.get(WITHIN_DECORATOR.key) ?? [] : [];
-    const outside = within.filter(u => !names.has(u.name));
+    const domains = domainsOf(s.by);
+    if (!domains) return [];
+    const names = new Set(domains);
+    const outside = (s.scope.get(WITHIN_DECORATOR.key) ?? []).filter(u => !names.has(u.name));
     if (outside.length === 0) return [];
-    return [{ file: s.path, line: s.line ?? 1, message: `${DECORATOR_MARK}${WITHIN_DECORATOR.key} ${outside.map(u => u.name).join(', ')}: \`${agentName}\`, whom this line delegates to, works within ${[...names].map(n => `\`${n}\``).join(', ')} — a step's ${DECORATOR_MARK}${WITHIN_DECORATOR.key} names only domains of the agents it delegates to` }];
+    return [{ file: s.path, line: s.line ?? 1, message: `${DECORATOR_MARK}${WITHIN_DECORATOR.key} ${outside.map(u => u.name).join(', ')}: \`${s.by}\`, whom this line delegates to, works within ${[...names].map(n => `\`${n}\``).join(', ')} — a step's ${DECORATOR_MARK}${WITHIN_DECORATOR.key} names only domains of the agents it delegates to` }];
   });
+}
+
+/** The domains an agent of a unit works within — its `@WITHIN` line above its block, by name — or null when none decorates it. */
+function memberDomains(files: string[], sources: SourceRegistry): (agent: string) => string[] | null {
+  return agent => {
+    const file = files.find(f => agentNameOf(f) === agent);
+    const block = file ? sources.tree(file).blocks.find(b => AGENT_KEYS.has(b.key) && b.name === agent) : undefined;
+    const within = (block?.decorators ?? []).filter(d => d.key === WITHIN_DECORATOR.key);
+    return within.length ? within.flatMap(d => splitList(d.rest)) : null;
+  };
 }
 
 /**
@@ -723,14 +771,38 @@ export async function bundleAgentToString(opts: BundleOptions): Promise<string> 
  * Compile a standalone .ap file (no agent metadata)
  * through the same pipeline used by agents: imports, force
  * levels, vars, and the collected primitives (Templates/Procedures).
- * Strips H1 and ABOUT from the source. Used by PROJECT.ap and any other
- * top-level standalone file that compiles to plain markdown.
+ * Strips H1 and ABOUT from the source. Used by the main's file (`main`: read
+ * as its unit) and any other top-level standalone file that compiles to plain markdown.
  */
 export async function bundleStandaloneToString(
   path: string,
   config: Config,
-  opts: { extraLibraryRoots?: string[]; extraLibraries?: Record<string, string>; adapter?: AdapterPlugin } = {},
+  opts: { extraLibraryRoots?: string[]; extraLibraries?: Record<string, string>; adapter?: AdapterPlugin; main?: MainFile } = {},
 ): Promise<string> {
+  return (await compileStandalone(path, config, opts)).text;
+}
+
+/**
+ * The main's file compiled: its whole text — what its apx prints on `start` —
+ * and its universal policies alone, the chapter AGENTS.md still holds.
+ */
+export async function bundleMainTexts(main: MainFile, config: Config): Promise<{ text: string; universal: string }> {
+  const { text, ctx } = await compileStandalone(main.path, config, { main });
+  const policies = STRATEGIES.find(s => s.kind === 'policy');
+  if (!policies) return { text, universal: '' };
+  const chapter = buildChapterFromStrategy(policies, ctx);
+  const universal = emitChapter(ctx, { ...chapter, entries: chapter.entries.filter(e => e.scopes.includes(UNIVERSAL_SCOPE)) });
+  return { text, universal: universal ? postProcessBody(universal, ctx).trim() : '' };
+}
+
+/** The scope token of a policy that holds everywhere — `APPLIES universal`. */
+const UNIVERSAL_SCOPE = 'universal';
+
+async function compileStandalone(
+  path: string,
+  config: Config,
+  opts: { extraLibraryRoots?: string[]; extraLibraries?: Record<string, string>; adapter?: AdapterPlugin; main?: MainFile },
+): Promise<{ text: string; ctx: BundleContext }> {
   const absolute = resolve(path);
   const name = unitNameFromPath(absolute);
 
@@ -741,8 +813,13 @@ export async function bundleStandaloneToString(
     libraries: { ...librariesAliasMap(config), ...(opts.extraLibraries ?? {}) },
     renderings: opts.adapter?.renderings,
   });
-  const header = parseStandaloneHeader(ctx.sources.read(absolute));
+  // The main's file is read as its unit: the MAIN block's routing and flows at the top, its head lines blanked;
+  // a flow of the main starts through the main's apx, which holds it.
+  const header = parseStandaloneHeader(opts.main?.unit ?? ctx.sources.read(absolute));
+  const mainName = opts.main?.name;
+  if (mainName) ctx.flowCommand = id => apxCommand(mainName, 'flow', id);
   lintSource(absolute, ctx);
+  if (opts.main) ctx.lintErrors.push(...mainBlockErrors(absolute, opts.main.block));
 
   let body = await resolveInlineBlocks(header.stripped, ctx, absolute);
   ctx.lintErrors.push(...standaloneDecoratorErrors(ctx, absolute, body), ...strayDimensionErrors(ctx, absolute));
@@ -751,7 +828,7 @@ export async function bundleStandaloneToString(
 
   reportLintIssues(ctx, `Standalone bundle (${basename(absolute)})`);
 
-  return postProcessBody(body, ctx);
+  return { text: postProcessBody(body, ctx), ctx };
 }
 
 /**
@@ -792,7 +869,10 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
   // (team.ap, when the agent is a team member), then the framework runtime
   // defaults. All are prepended before the agent's own identity and rules.
   // Team root is resolved from the agent's flat file (its sibling team file).
-  const bootstrap =
+  // A unit's file — a team's, the main's — compiles into its own document: its flows and what they use, no agent.
+  const main = isMainFile(agentFilePath) ? readMainFile(dirname(resolve(agentFilePath)), ctx.sources) : null;
+  const unit = isTeamFile(agentFilePath) ? 'team' as const : main ? 'main' as const : undefined;
+  const bootstrap = unit ? '' :
     resolveTeamMembership(agentFilePath) +
     resolveTeamShared(agentFilePath) +
     resolveBundleDefaults(opts.bundleConfig ?? {});
@@ -811,20 +891,26 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     lintSource(teamFile.path, ctx);
     // The block's own contract (ABOUT, MEMBER, what a team holds) and its roster against the folder.
     ctx.lintErrors.push(...teamFileErrors(teamFile.path, teamFile.source), ...teamRosterIssues(teamFile));
-    // The team's flows travel in every member's document; so do the blocks
-    // the team file imports (a step's AS template), or their ids would lead nowhere.
-    const imports = teamFile.source.split(/\r?\n/).filter(l => /^IMPORT\s/.test(l)).join('\n');
+    // The team's flows are the team's own document; so are the blocks the team
+    // file imports for them (a step's AS template). A member holds neither.
+    const imports = unit ? teamFile.source.split(/\r?\n/).filter(l => /^IMPORT\s/.test(l)).join('\n') : '';
     if (imports) await expandImports(imports, ctx, teamFile.path);
   }
 
   const metadata = new Map<string, string[]>();
-  const agentFile = readAgentFile(agentFilePath, ctx.sources);
-  const { metadata: fileMeta, stripped } = partitionMetadata(agentFile.unitSource, AGENT_METADATA_KEYWORDS);
+  const agentFile = unit ? null : readAgentFile(agentFilePath, ctx.sources);
+  const { metadata: fileMeta, stripped } = agentFile ? partitionMetadata(agentFile.unitSource, AGENT_METADATA_KEYWORDS) : { metadata: new Map<string, string[]>(), stripped: '' };
   mergeMetadata(metadata, fileMeta);
   // Symmetric to resolveFile: inline `<KIND> <name>:` blocks (the agent's
   // sibling ROLE) end up in the same ctx collections that imported files
   // target. Downstream rendering is identical.
-  const agentBody = `${await resolveInlineBlocks(stripped, ctx, agentFilePath)}\n\n`;
+  const agentBody = agentFile ? `${await resolveInlineBlocks(stripped, ctx, agentFilePath)}\n\n` : '';
+  // The main's file: its MAIN block checked, and what is written around it — its imports and definitions — compiled.
+  if (main) {
+    ctx.lintErrors.push(...mainBlockErrors(main.path, main.block));
+    await resolveInlineBlocks(outsideBlock(main.source.split(/\r?\n/), main.block), ctx, main.path);
+  }
+  const memberFiles = main ? main.members.map(m => opts.agentFileOf?.(m.name) ?? '').filter(f => f && existsSync(f)) : [];
   // A program carries out some of this agent's work: how to write one comes with it.
   if (usesPrograms(agentBody, ctx.procedures) && opts.libraries?.['@builtin'] && !ctx.procedures.some(p => p.name === WRITE_PROGRAM)) {
     await expandImports(`IMPORT ${WRITE_PROGRAM} FROM @builtin.procedures`, ctx, agentFilePath);
@@ -853,11 +939,13 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     boundRoles,
     agentBody,
     agentFilePath,
-    agentSpan: agentFile.span,
+    agentSpan: agentFile?.span ?? null,
     bootstrap,
     vars: variables.constants,
     declaredVars: variables.variables,
     teams: opts.teams ?? [],
+    ...(unit ? { unit } : {}),
+    ...(main ? { memberFiles } : {}),
   });
   // A DELEGATE without BY goes to the default delegate; the config may set this agent's model.
   const delegate = opts.delegate ?? resolveDelegateConfig(undefined);
@@ -887,7 +975,10 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     ...unappliedErrors(ctx, builder.decoratorNamed, true),
     ...storeErrors(structure, ctx, agentFilePath),
     ...dimensionErrors(structure, ctx),
-    ...delegationPerimeterErrors(structure, builder.delegationScopes, agentName),
+    // A unit's flows delegate to its members, each within its own domains; an agent's own body, to itself.
+    ...delegationPerimeterErrors(builder.delegationScopes, unit === 'team' && teamRoot ? memberDomains(findAgentFiles(teamRoot), ctx.sources)
+      : unit === 'main' ? memberDomains(memberFiles, ctx.sources)
+      : agent => (agent === agentName ? structure.domains()?.map(d => d.name) ?? null : null)),
     ...judgedDomains.errors,
     ...domainFileErrors(ctx, structure, projectRoot, judgedDomains.unjudged),
     ...pluginFileErrors(ctx),
@@ -908,7 +999,7 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     metadata,
     structure,
     // A SKILL block is an agent the adapter writes as a skill: only the bundle's kind differs.
-    skill: agentFile.info.skill,
+    skill: agentFile?.info.skill ?? false,
     agentFile: agentFilePath,
   };
 }

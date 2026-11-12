@@ -76,6 +76,8 @@ const STATIC_KEYWORDS = [
   // DOMAINS, STRATEGY, LEAD, and a CONTRACT's DOMAIN and WITHIN lines are gone:
   // still lexed, so the lint names the rewrite.
   'MEMBER', 'STRATEGY', 'LEAD', 'DOMAINS', 'DOMAIN',
+  // MAIN body (the block itself is a BLOCK_TYPES key): VERSION, and TEAMS — its teams — beside MEMBER, its standalone agents.
+  'VERSION', 'TEAMS',
   'WITHIN',
   // STORE body: DRIVER names what keeps it (src/storeDrivers/), LASTS its
   // lifetime, KEY the field that identifies a record (so re-ingesting the same

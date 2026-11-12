@@ -5,7 +5,7 @@ import { ACTION_VERBS } from './actionVerbs.js';
 import { DELEGATE_VERB, FORK_VERB, WAIT_VERB, MARK_VERB } from './delegation.js';
 import { getFamilyBases } from './forceLevelConfig.js';
 import { VERBATIM_REGIONS } from './shapeCompiler.js';
-import { PLUGIN_KEY, OPERATION_KEY } from './blockTypes.js';
+import { PLUGIN_KEY, OPERATION_KEY, MAIN_KEY } from './blockTypes.js';
 
 /**
  * The force-level families (MUST, ALWAYS/NEVER, SHOULD, MAY, …) a step admits,
@@ -213,6 +213,16 @@ export const BLOCK_CONTRACTS: Record<string, BlockContract> = {
     allows: ['ABOUT', 'MEMBER', 'LENS-IN', 'WHEN', 'FLOW'] as const,
     requiresAll: ['ABOUT'] as const,
     unique: ['ABOUT'] as const,
+    regions: ['WHEN', 'FLOW'] as const,
+  },
+  // The project's root, `MAIN:`: ABOUT, a VERSION, the TEAMS and the standalone
+  // agents (MEMBER) it holds — several lines add up — its routing, `WHEN …:`
+  // with `RUN <procedure|flow>` beneath, and its FLOW blocks: regions as in a
+  // TEAM. Checked on the parsed block (mainBlockErrors): no name, no EXPORT.
+  [MAIN_KEY]: {
+    allows: ['ABOUT', 'VERSION', 'TEAMS', 'MEMBER', 'WHEN', 'FLOW'] as const,
+    requiresAll: ['ABOUT'] as const,
+    unique: ['ABOUT', 'VERSION'] as const,
     regions: ['WHEN', 'FLOW'] as const,
   },
   // First-class `EXPORT AGENT <name> AS <role>:` block. `AS` here is a

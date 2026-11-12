@@ -2,8 +2,8 @@
 // Copyright (c) 2026 Giuseppe Federico
 /**
  * The apx's registry of background work (D47, D48, D52, D53) — a real
- * project, the real `bundle all`, the lead's apx run as a process in one
- * session:
+ * project, the real `bundle all`, the team's apx — whose document holds its
+ * flows — run as a process in one session:
  *
  *   - the compiled flow names the commands: `delegate start|deliver|block`
  *     on each `DELEGATE~`, `wait <ids> [--max]` on each WAIT
@@ -56,7 +56,7 @@ const bundle = () => {
   return { code: r.status, out: `${r.stdout}${r.stderr}` };
 };
 const apx = (args, stdin) => {
-  const r = spawnSync(process.execPath, [join(proj, '.agent-pack', 'apx', 'lead.apx'), ...args],
+  const r = spawnSync(process.execPath, [join(proj, '.agent-pack', 'apx', 'review.apx'), ...args],
     { cwd: proj, encoding: 'utf-8', input: stdin, env: { ...process.env, CLAUDE_CODE_SESSION_ID: SESSION } });
   return { code: r.status, out: `${r.stdout}${r.stderr}`.trimEnd() };
 };
@@ -83,13 +83,13 @@ try {
   flow('        WAIT style', '        WAIT ALL MAX 1s');
   r = bundle();
   assert.equal(r.code, 0, r.out);
-  // The lead runs the flow from its apx: the flow's text there names the commands.
+  // The flow is the team's: its text in the team's apx names the commands.
   const flw = readFileSync(join(proj, 'AGENTS.md'), 'utf-8').match(/flow (flw-[0-9a-f]{8})/)[1];
   const md = apx(['get', flw]).out;
   const ids = [...md.matchAll(/delegate start (dlg-[0-9a-f]{8})/g)].map(m => m[1]);
   assert.equal(new Set(ids).size, 2, `one id per background piece:\n${md}`);
   const [style, tests] = ids;
-  const APX = 'node .agent-pack/apx/lead.apx';
+  const APX = 'node .agent-pack/apx/review.apx';
   assert.ok(!md.includes('store the result as `style`'), 'delivering stores it: no set to tell');
   // Claude Code's own words (D60): a background agent, and a WAIT that never blocks the session — the notifications, then `wait --now`.
   has(md, `\`${APX} delegate deliver ${style} -\``, `\`${APX} delegate block ${tests} "<why>"\``,
@@ -120,7 +120,7 @@ try {
   r = apx(['delegate', 'start', style]);
   assert.equal(r.code, 1);
   has(r.out, 'is still running — wait for it first');
-  has(apx(['delegate', 'start', 'dlg-00000000']).out, 'no flow of lead starts dlg-00000000');
+  has(apx(['delegate', 'start', 'dlg-00000000']).out, 'no flow of review starts dlg-00000000');
 
   // --- deliver: kept in its INTO variable; the wait returns at once ---
   assert.equal(apx(['delegate', 'deliver', style, '-'], 'no style issues\n').code, 0);

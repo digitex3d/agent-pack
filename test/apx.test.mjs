@@ -5,9 +5,11 @@
  * drives it: `node <exe> <verb>`, lines out, an exit code back. Ported from
  * the Go engine's tests (apc/) as the specification of the TypeScript one.
  *
- * The fixture (test/fixtures/apx) is one team member holding every kind: a
- * policy, a role, a template, a procedure, a WHEN workflow, a store, the
- * team with its routing and flow, and a fellow member defined elsewhere.
+ * The fixture (test/fixtures/apx) is one team member holding every kind an
+ * agent holds: a policy, a role, a template, a procedure, a WHEN workflow, a
+ * store, its team (no routing, no flow) and a fellow member defined elsewhere;
+ * and the team's own document — the same compiler on the team's file — with
+ * its routing and its flow.
  */
 import { strict as assert } from 'node:assert';
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
@@ -38,6 +40,15 @@ const compiled = await bundleAgentObject({
 });
 // The apx carries the document as JSON: every run starts from the round trip.
 const doc = ApDocument.fromJson(compiled.structure.asJson());
+const compiledTeam = await bundleAgentObject({
+  agentName: 'product',
+  agentFile: join(FIXTURE, 'teams/product/product.ap'),
+  agentDir: join(FIXTURE, 'teams/product'),
+  libraryRoot: library,
+  libraryRoots: [library],
+  libraries: { '@main': library },
+});
+const teamDoc = ApDocument.fromJson(compiledTeam.structure.asJson());
 const BUILD = { builtAt: '2026-09-24T10:00:00Z', agentPackVersion: '0.26.0', hash: 'c0ffee', tabeli: TABELI_ENGINE };
 
 /** Run one invocation of an engine over `document`, called as `exe`; returns { out, code }. */
@@ -59,6 +70,9 @@ const EXE = 'apx/pm.apx';
 const CMD = `node ${EXE}`;
 const run = (...args) => apx(EXE, ...args);
 const idOf = (kind, name) => doc.all().find(b => b.kind === kind && b.name === name).id;
+const TEAM_EXE = 'apx/product.apx';
+const runTeam = (...args) => drive({ document: teamDoc, exe: TEAM_EXE, budget: { whole: 0, block: 0 } }, ...args);
+const teamIdOf = (kind, name) => teamDoc.all().find(b => b.kind === kind && b.name === name).id;
 function has(out, ...needles) {
   for (const n of needles) assert.ok(out.includes(n), `missing ${JSON.stringify(n)} in:\n${out}`);
 }
@@ -70,29 +84,29 @@ function has(out, ...needles) {
   has(out, '# agent pm — product manager', `# quiz — answer with: ${CMD} start 1=<a|b|c>`);
   const kinds = [...out.matchAll(/^\d+\. \[(\w+)\]/gm)].map(m => m[1]);
   // role, policy and the answer template open with the agent: no question on them
-  assert.deepEqual([...new Set(kinds)], ['agent', 'team', 'procedure', 'flow', 'store'],
-    'one question group per kind read on demand, in reading order');
+  assert.deepEqual([...new Set(kinds)], ['agent', 'procedure', 'store'],
+    'one question group per kind read on demand, in reading order — no flow, no team: they are the team\'s own document\'s');
   assert.ok(!out.includes('you:'), 'bare start never prints the scope before the quiz');
   assert.equal(run('start').out, out, 'no verb = start');
 }
 
 // --- the quiz is graded: all right → the scope; a miss → that kind's introduction, then the scope ---
-const quiz = ['agent', 'team', 'procedure', 'flow', 'store']
+const quiz = ['agent', 'procedure', 'store']
   .flatMap(kind => FORMULAS.blocks[kind].quiz.map(q => ({ kind, right: q.right })));
 const answers = quiz.map((q, i) => `${i + 1}=${q.right}`);
 {
   const { out, code } = run('start', ...answers);
   assert.equal(code, 0);
   has(out, `# all ${quiz.length} correct — your scope:`, 'you:  agent pm');
-  assert.ok(!/^## (agent|team|procedure|flow|store)$/m.test(out), 'no introduction on a perfect quiz');
+  assert.ok(!/^## (agent|procedure|store)$/m.test(out), 'no introduction on a perfect quiz');
 }
 {
-  const flow = quiz.findIndex(q => q.kind === 'flow');
+  const procedure = quiz.findIndex(q => q.kind === 'procedure');
   const store = quiz.findIndex(q => q.kind === 'store');
-  const wrong = answers.map((a, i) => (i === flow ? `${i + 1}=?` : a)).filter((_, i) => i !== store);
+  const wrong = answers.map((a, i) => (i === procedure ? `${i + 1}=?` : a)).filter((_, i) => i !== store);
   const { out } = run('start', ...wrong);
-  has(out, '# missed: flow, store', '## flow', '## store', 'You must not touch a store\'s files directly', 'you:  agent pm');
-  assert.ok(!/^## procedure$/m.test(out), 'only the missed kinds are introduced');
+  has(out, '# missed: procedure, store', '## procedure', '## store', 'You must not touch a store\'s files directly', 'you:  agent pm');
+  assert.ok(!/^## agent$/m.test(out), 'only the missed kinds are introduced');
 }
 {
   const { out, code } = run('start', '99=a');
@@ -108,13 +122,13 @@ const answers = quiz.map((q, i) => `${i + 1}=${q.right}`);
     'mandate: decompose requests into a plan',
     `when:  — the steps: ${CMD} get ${idOf('agent', 'pm')}`,
     `role: role planner  [${CMD} get ${idOf('role', 'planner')}]`,
-    `team: team product  [${CMD} get ${idOf('team', 'product')}]  — the product team`,
-    `  WHEN asked to evaluate an idea  -> flow shape-idea  [${CMD} flow ${idOf('flow', 'shape-idea')}]`,
+    'team: team product  [node apx/product.apx start]',
     `  policy board-rules  [${CMD} get ${idOf('policy', 'board-rules')}]  — how the board is kept`,
     `  WHEN a new feature is requested  -> procedure open-card  [${CMD} get ${idOf('procedure', 'open-card')}]`,
     `  store notes  [${CMD} get ${idOf('store', 'notes')}]  — use: ${CMD} store <op> ${idOf('store', 'notes')} …`,
     `answer as: template plan  [${CMD} get ${idOf('template', 'plan')}]`,
     `— list them: ${CMD} ls`);
+  assert.ok(!out.includes('asked to evaluate an idea'), 'how the team routes is the team\'s own document\'s');
 }
 
 // --- a store write outside its schema is refused before it reaches the table ---
@@ -145,7 +159,7 @@ const answers = quiz.map((q, i) => `${i + 1}=${q.right}`);
 {
   const printed = ['scope', 'ls'].map(v => run(v).out).join('\n');
   const ids = [...printed.matchAll(new RegExp(`\\[${CMD} get (\\S+)\\]`, 'g'))].map(m => m[1]);
-  assert.ok(ids.length >= 7, 'scope and ls print get commands');
+  assert.ok(ids.length >= 6, 'scope and ls print get commands');
   for (const id of ids) assert.equal(run('get', id).code, 0, `get ${id} runs`);
 }
 
@@ -180,14 +194,19 @@ const answers = quiz.map((q, i) => `${i + 1}=${q.right}`);
   assert.ok(!out.includes('# Templates'), 'get <agent> is the definition, not the whole prompt');
 }
 {
-  // a fellow member lives in its own executable, beside this one
-  has(run('get', idOf('team', 'product')).out, 'members:', 'agent scout  [node apx/scout.apx scope]', 'routing:');
-  has(run('refs', idOf('flow', 'shape-idea')).out, 'uses:', 'agent scout  [node apx/scout.apx scope]', 'used by:');
+  // one id, one block: the team's block is the team's own document's — a member refers to it, and holds no flow
+  assert.deepEqual(doc.byKind('team'), [], 'a member holds no copy of its team');
+  assert.equal(doc.root().team.id, teamIdOf('team', 'product'), 'it refers to the team by its id');
+  assert.deepEqual(doc.byKind('flow'), [], 'a member holds no flow of its team');
+  // the team's own document: its routing and its flow, every member reached beside it
+  has(runTeam('get', teamIdOf('team', 'product')).out, 'members:', 'agent scout  [node apx/scout.apx scope]', 'routing:');
+  has(runTeam('refs', teamIdOf('flow', 'shape-idea')).out, 'uses:', 'agent scout  [node apx/scout.apx scope]', 'used by:');
   // the policies it imports bind the agent: refs says so, both ways
   has(run('refs', idOf('agent', 'pm')).out, `policy board-rules  [${CMD} get ${idOf('policy', 'board-rules')}]`);
   has(run('refs', idOf('policy', 'board-rules')).out, 'used by:', `agent pm  [${CMD} get ${idOf('agent', 'pm')}]`);
-  const scout = doc.byKind('team')[0].members.find(m => m.target.endsWith('/scout'));
-  const { out, code } = run('get', scout.id);
+  const scout = teamDoc.root().members.find(m => m.target.endsWith('/scout'));
+  // the team's document names the fellow member: asked for there, it says where the member is
+  const { out, code } = runTeam('get', scout.id);
   assert.equal(code, 1);
   has(out, 'defined in its own executable', 'node apx/scout.apx scope');
 }
@@ -266,7 +285,10 @@ for (const compress of [false, true]) {
     }
     const text = readFileSync(join(project, apxPath('pm')), 'utf-8');
     assert.ok(text.trimEnd().split('\n').pop().startsWith('//apx:end::json:'), 'the end line closes the file');
-    assert.ok(text.includes(compress ? '\n//apx:image::gzip:' : '\n//apx:image::json:'), 'the image section is written as asked');
+    // a store of blocks and a view: the agent's document is its view, each block a section of its own, by its id
+    assert.ok(text.includes(compress ? '\n//apx:view::gzip:' : '\n//apx:view::json:'), 'the view is written as asked');
+    assert.ok(text.includes(`\n//apx:block:${idOf('agent', 'pm')}:${compress ? 'gzip' : 'json'}:`), 'each block is a section named by its id');
+    assert.equal(text.split('\n//apx:block:').length - 1, doc.all().length, 'every block once');
     const node = (...args) => spawnSync('node', [apxPath('pm'), ...args], { cwd: project, encoding: 'utf-8' });
     const scope = node('scope');
     assert.equal(scope.status, 0, scope.stderr);
@@ -284,20 +306,22 @@ console.log('apx file tests passed.');
 
 // --- flow: the harness's compiled script for this version of the flow, or the steps to carry out ---
 {
-  const flowId = idOf('flow', 'shape-idea');
-  const steps = run('flow', flowId);
+  // the team runs its flow: the team's apx serves it
+  const flowId = teamIdOf('flow', 'shape-idea');
+  const steps = runTeam('flow', flowId);
   assert.equal(steps.code, 0);
   has(steps.out, '# flow shape-idea — carry out its steps in order:', 'score the idea');
   assert.equal(run('flow', idOf('template', 'plan')).code, 2, 'only a flow runs as a flow');
   assert.equal(run('flow', 'nope').code, 1);
+  assert.equal(run('flow', flowId).code, 1, 'a member serves no flow of its team');
 
   // An adapter that runs flows as scripts: its rendering in the document, the script beside the apx.
-  const data = JSON.parse(doc.asJson());
+  const data = JSON.parse(teamDoc.asJson());
   data.meta.flowRun = 'script {script} | steps {steps}';
   const scripted = ApDocument.fromJson(JSON.stringify(data));
   const project = mkdtempSync(join(tmpdir(), 'apx-flow-'));
   try {
-    const exe = join(project, apxPath('pm'));
+    const exe = join(project, apxPath('product'));
     const flow = scripted.all().find(b => b.id === flowId);
     const flows = join(project, FLOWS_DIR);
     mkdirSync(flows, { recursive: true });
@@ -315,7 +339,7 @@ console.log('apx file tests passed.');
 // --- the claude-code Workflow script of a flow: delegations as agents, the next delegation's AS as schema ---
 {
   const plan = doc.byKind('template')[0];
-  const scout = doc.byKind('flow')[0].body[0].body[0].by;
+  const scout = teamDoc.byKind('flow')[0].body[0].body[0].by;
   const delegate = (text, { async = false, as = null } = {}) => ({ type: 'directive', keyword: 'DELEGATE', force: null, text, chars: 0, indent: 8,
     by: scout, ...(async ? { async: true } : {}), ...(as ? { as } : {}) });
   const wait = { type: 'directive', keyword: 'WAIT', force: null, text: 'ALL', chars: 0, indent: 8 };
@@ -348,21 +372,21 @@ console.log('apx file tests passed.');
   assert.ok(calls.every(c => c.prompt.startsWith('Request: the ask')), 'every delegation carries the request');
   has(calls.find(c => c.opts.phase === 'frame').prompt, 'every result so far', '"draft done"');
   has(calls.find(c => c.opts.phase === 'plan').prompt, 'only what you are handed', '"a plan"');
-  assert.equal(compileWorkflow({ ...flow, body: [step('x', [{ ...delegate('x'), by: doc.byKind('team')[0].name }])] }, doc), null,
+  assert.equal(compileWorkflow({ ...flow, body: [step('x', [{ ...delegate('x'), by: teamDoc.root().name }])] }, teamDoc), null,
     'a delegation to a team is carried out as written');
   assert.equal(compileWorkflow({ ...flow, body: [step('x', [{ type: 'directive', keyword: 'FORK', force: null, text: 'x', chars: 0, indent: 8 }])] }, doc), null,
     'a fork of the caller has no counterpart in a script');
   assert.equal(compileWorkflow({ ...flow, body: [{ type: 'text', raw: 'x', chars: 1 }] }, doc), null,
     'anything but steps is carried out as written');
 }
-// --- AGENTS.md routes a flow through a member's apx, which says how this harness runs it ---
+// --- AGENTS.md routes a flow through the team's apx, which says how this harness runs it ---
 {
   const { content } = await buildOrchestrationContent({
     cwd: FIXTURE, standaloneAgentsDir: join(FIXTURE, 'standalone'), teamsDir: join(FIXTURE, 'teams'),
     libraryRoots: [library], libraries: { '@main': library },
   });
-  const id = idOf('flow', 'shape-idea');
-  has(content, `Run the flow \`shape-idea\` (${id}) — start with \`node ${apxPath('pm')} flow ${id}\`: it says how`);
+  const id = teamIdOf('flow', 'shape-idea');
+  has(content, `Run the flow \`shape-idea\` (${id}) — start with \`node ${apxPath('product')} flow ${id}\`: it says how`);
 }
 console.log('apx flow tests passed.');
 

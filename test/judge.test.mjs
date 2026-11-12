@@ -24,6 +24,7 @@ const { openJudgeRun, finishJudgeRun } = await import('../dist/src/judge/phase.j
 const { bundleAgentObject } = await import('../dist/src/compiler/index.js');
 const { bundleAllOnce } = await import('../dist/src/commands/bundle.js');
 const { default: jevJudge } = await import('../dist/adapters/jev/index.js');
+const { default: geminiJudge } = await import('../dist/adapters/gemini/index.js');
 
 const CLI = resolve(fileURLToPath(import.meta.url), '../../dist/index.js');
 const write = (file, lines) => { mkdirSync(resolve(file, '..'), { recursive: true }); writeFileSync(file, lines.join('\n')); return file; };
@@ -885,6 +886,54 @@ try {
     } finally {
       globalThis.fetch = prevFetch;
       if (prevKey === undefined) delete process.env.TYPESAFE_API_KEY; else process.env.TYPESAFE_API_KEY = prevKey;
+    }
+  }
+
+  // --- the Gemini adapter: Google's request shape; a 400 naming a bad key takes it offline ---
+  {
+    const KEY = 'AIza-FAKE-KEY-0123456789';
+    const prevKey = process.env.GEMINI_API_KEY;
+    const prevFetch = globalThis.fetch;
+    process.env.GEMINI_API_KEY = KEY;
+    const seen = [];
+    let reply = () => null;
+    globalThis.fetch = async (url, init) => {
+      seen.push({ url, init, body: JSON.parse(init.body) });
+      const r = reply();
+      return new Response(JSON.stringify(r.json), { status: r.status ?? 200, headers: { 'Content-Type': 'application/json' } });
+    };
+    try {
+      const gemini = geminiJudge();
+      assert.equal(gemini.name, 'gemini');
+      const never = { id: 'r.a.1', statement: 'leave a detail to guess', force: { keyword: 'ALWAYS', level: -1 },
+        criteria: { yes: 'something is left open', no: 'nothing is left open' } };
+      reply = () => ({ json: { answers: { q1: { noul: 0.2, confidence: 0.8 } } } });
+      const out = await gemini.ask('{"line":"x"}', [never]);
+      assert.equal(seen[0].url, 'https://generativelanguage.googleapis.com/v1beta/decisions');
+      const headers = new Headers(seen[0].init.headers);
+      assert.equal(headers.get('x-goog-api-key'), KEY);
+      assert.equal(headers.get('authorization'), null, 'the key travels in its own header only');
+      assert.equal(seen[0].body.model, 'gemini-decision-1');
+      assert.equal(seen[0].body.input, '{"line":"x"}');
+      assert.ok(!('state' in seen[0].body));
+      assert.deepEqual(seen[0].body.questions.q1.criteria, { true_description: 'something is left open', false_description: 'nothing is left open' });
+      assert.equal(out.model, 'gemini-decision-1', 'an answer naming no model: the one sent');
+      assert.ok(Math.abs(out.answers['r.a.1'] - 0.8) < 1e-9, 'a direct question: the rule holds on a no');
+      reply = () => ({ status: 400, json: { error: { message: `API key not valid ${KEY}`, details: [{ reason: 'API_KEY_INVALID' }] } } });
+      await assert.rejects(gemini.ask('x', [never]), e => e.kind === 'offline' && /400/.test(e.message) && !e.message.includes(KEY));
+      reply = () => ({ status: 400, json: { error: { message: 'bad request' } } });
+      await assert.rejects(gemini.ask('x', [never]), e => e.kind === 'line', 'any other 400 fails only the line');
+      delete process.env.GEMINI_API_KEY;
+      const prevHomeDir = process.env.HOME;
+      process.env.HOME = join(root, 'no-key-home');
+      try {
+        await assert.rejects(geminiJudge().ask('x', [never]), e => e.kind === 'offline' && /GEMINI_API_KEY/.test(e.message));
+      } finally {
+        process.env.HOME = prevHomeDir;
+      }
+    } finally {
+      globalThis.fetch = prevFetch;
+      if (prevKey === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = prevKey;
     }
   }
 

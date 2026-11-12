@@ -9,7 +9,7 @@
  */
 
 /** The lines whose list holds single words — a glob, a name, a tag: an item with a space is the old space-separated form. */
-export const WORD_LIST_LINES: readonly string[] = ['FOR', 'EXPERTISE', 'APPLIES', 'MEMBER'];
+export const WORD_LIST_LINES: readonly string[] = ['FOR', 'EXPERTISE', 'APPLIES', 'MEMBER', 'TEAMS'];
 
 /** The items of a list, trimmed, empty ones dropped. */
 export function splitList(text: string): string[] {
