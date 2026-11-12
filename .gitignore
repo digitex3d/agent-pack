@@ -5,6 +5,7 @@ dist/
 *.pdf
 .idea/
 raw/
+wiki/
 
 .agent-pack/apx/
 .agent-pack/reference/
@@ -18,7 +19,7 @@ agents/
 !templates/agents/
 AGENTS.md
 CLAUDE.md
-PROJECT.ap
+/agent-pack.ap
 agent-pack.config.mjs
 .mailmap
 /KANBAN.md
