@@ -160,7 +160,7 @@ function move(host: ApxHost, table: DelegationTable, record: DelegationRecord, f
 function rebound(host: ApxHost, record: DelegationRecord, assignee: string): Partial<DelegationRecord> {
   if (CONTRACT_ID_RE.test(record.dlg)) return {};
   const work = host.doc.meta.background?.[pieceOf(record.dlg).work];
-  return { perimeter: host.workPerimeter(work?.within ?? [], assignee) };
+  return { perimeter: host.contracts.workPerimeter(work?.within ?? [], assignee) };
 }
 
 type RegistryOp = (host: ApxHost, table: DelegationTable, args: string[]) => number;
@@ -173,7 +173,7 @@ const REGISTRY_OPS: Record<string, RegistryOp> = {
     const fresh = pieceRecord({
       dlg: id!, flow: work.flow, step: work.step, into: work.into ?? '', assignee: work.by ?? '',
       state: 'running', started_at: new Date().toISOString(), author: host.root.name,
-      perimeter: host.workPerimeter(work.within ?? [], work.by ?? ''),
+      perimeter: host.contracts.workPerimeter(work.within ?? [], work.by ?? ''),
     });
     const prior = table.get(id!);
     // A loop starts the same piece on every round: only a piece still running cannot start again.

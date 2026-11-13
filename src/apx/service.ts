@@ -11,7 +11,6 @@
  * the engine's dispatch read them here — and serves one call. What it may use
  * of the engine is `ApxHost`: the document, the output, the shared checks.
  */
-import type { DelegationTable, DelegationRecord } from './delegations.js';
 import type { ApDocument } from '../apdoc/document.js';
 import type { VarBlock } from '../apdoc/blocks.js';
 import type { ApBlock } from '../apdoc/block.js';
@@ -19,6 +18,8 @@ import type { ApRef } from '../apdoc/types.js';
 import type { ApxBuild } from './engine.js';
 import type { SessionVars, ExecutorRecord } from './sessionVars.js';
 import type { ApExecutorSpec } from '../executor.js';
+import type { ContractWork } from './contractWork.js';
+import { FORMULAS, fill } from '../formulas.js';
 
 /** One operation of a service: its name, what follows it, what it does — as the help prints it. */
 export interface ApxOperation {
@@ -67,22 +68,35 @@ export interface ApxHost {
   answerShape(spec: ApExecutorSpec): ApRef | null;
   deliver(id: string, spec: ApExecutorSpec, text: string, outcome: ExecutorRecord['outcome'], fingerprint: string): string | null;
   delivered(id: string, spec: ApExecutorSpec, text: string): number;
-  /**
-   * The perimeter a piece is handed under, as the registry keeps it (D65): the
-   * WRITES globs of the domains of its `@WITHIN`, and those of its assignee's
-   * own — JSON, one glob list each; '' when neither has one.
-   */
-  workPerimeter(within: readonly string[], assignee: string): string;
-  /** The contracts' own steps, on their copies (src/apx/engine.ts): delivering one, where its copy is, folding a WAIT's back in. */
-  readonly contracts: {
-    deliver(table: DelegationTable, r: DelegationRecord, args: string[]): number;
-    copy(ctr: string): string | null;
-    fold(table: DelegationTable, pieces: DelegationRecord[]): DelegationRecord[];
-    /** A delegation to another harness, just started: its copy opened, its prompt written, the command printed (D66). */
-    launch(r: DelegationRecord): number;
-    /** A delegation to another harness, delivered: its answer stored, what its copy changed kept within its perimeter. */
-    deliverElsewhere(table: DelegationTable, r: DelegationRecord): number;
-  };
+  /** A formula filled with the values and the command prefix every printed command starts with. */
+  phrase(formula: string, values?: Record<string, string | number>): string;
+  /** Print a formula, filled. */
+  say(formula: string, values?: Record<string, string | number>): void;
+  /** Fail with a formula, filled — its exit code is returned. */
+  refuse(code: number, formula: string, values?: Record<string, string | number>): number;
+  /** This session's variables — or null after saying why there are none. */
+  sessionVars(): SessionVars | null;
+  /** The values this session holds for `names` — or the first one that is empty. */
+  readVariables(session: SessionVars, names: string[]): { values: NamedValue[] } | { empty: string };
+  /** The contracts: their verbs, the guard, and their own steps on copies (src/apx/contractWork.ts). */
+  readonly contracts: ContractWork;
+}
+
+/** The node types of a block's body the apx reads. */
+export const NODE = { when: 'when', run: 'run', directive: 'directive' } as const;
+
+/** A variable's name and the value this session stores for it. */
+export interface NamedValue { name: string; value: string }
+
+/** What a caught value says, whatever was thrown. */
+export const reasonOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+/** What an empty variable is told — the caller says what follows from it. */
+export const emptyVariable = (name: string): string => fill(FORMULAS.apx.variables.empty, { name });
+
+/** Why a value cannot be checked: what holds it is typed with a template this agent was not compiled with. */
+export function notCompiled(what: string, template: string): string {
+  return `\`${what}\` is shaped as \`${template}\`, a template not compiled into this agent`;
 }
 
 /** `1 entry`, `3 entries`. */
