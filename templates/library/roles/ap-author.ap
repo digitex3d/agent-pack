@@ -32,7 +32,7 @@ EXPORT ROLE ap-author:
       DO   fan out per list element with `EACH <item> IN {{<list>}} MAX <n>:` over DELEGATE / FORK lines only
       NEVER write BY, CONTEXT or AS lines in a STEP, PARALLEL in any form, or ASK — each fails the build
       DO   write each rule line with ap-rule, a WHEN behaviour with ap-workflow over an ap-action body
-      DO   write each statement with ap-statement — DO, DELEGATE, COMPUTE, RUN, IF, ELSE, UNTIL, marked forms, IN, VAR
+      DO   write each statement with ap-statement — DO, ASK, COMPUTE, RUN, IF, ELSE, UNTIL, marked forms, IN, VAR
       DO   write a POLICY with ALWAYS / NEVER lines only
 
     WHEN writing a ROLE or binding roles to an agent or a team:
@@ -135,8 +135,8 @@ EXPORT ROLE ap-author:
       NEVER rely on a check to establish a fact — the judge reads stored text, not the world behind it
 
     WHEN a line or a condition is better carried out by someone other than the agent:
-      DO   write DO for the agent, DELEGATE for a delegate, COMPUTE for a program — a line may raise, never lower
-      DO   end a DELEGATE with `INTO <name>` and then `BY <agent>`; without BY the default delegate `quick` answers it
+      DO   write DO for the agent, ASK for a question to a delegate, COMPUTE for a program — a line may raise, never lower
+      DO   end an ASK with `INTO <name>` and then `BY <agent>`; without BY the default delegate `quick` answers it
       DO   write IF* or UNTIL* for a delegate, IF** or UNTIL** for a program — the star marks only the condition
       DO   give every UNTIL someone else ends its limit: `UNTIL* <condition> MAX <n>:` — a plain UNTIL takes none
       DO   make a starred condition read at least one variable; its branch keeps the enclosing block's executor

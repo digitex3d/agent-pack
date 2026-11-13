@@ -284,7 +284,7 @@ export interface Config {
   wait?: WaitConfig;
   /** How many zones a MARK binds at most, when its line names no `MAX` — `{ max: 20 }` by default (src/delegation.ts). */
   mark?: MarkConfig;
-  /** Who a DELEGATE without BY is handed to, and the models delegates run on (src/executor.ts). */
+  /** Who an ASK without BY is handed to, and the models delegates run on (src/executor.ts). */
   delegate?: DelegateConfig;
   /** The plugins the project activates (`plugins: ['./plugins/checklist']`), installed — src/plugins.ts. */
   plugins?: PluginSpec[];
@@ -442,7 +442,7 @@ function resolveChecksConfig(raw: unknown): ChecksConfig | null {
   return { adapter, threshold: c.threshold as number };
 }
 
-/** The delegate shipped with the package (templates/agents/quick.ap): a DELEGATE without BY goes to it, unless `delegate.default` names another. */
+/** The delegate shipped with the package (templates/agents/quick.ap): an ASK without BY goes to it, unless `delegate.default` names another. */
 export const DEFAULT_DELEGATE = 'quick';
 
 /** The `delegate` key resolved: the default delegate and the models, both checked. Absent: the shipped delegate, no model set. */

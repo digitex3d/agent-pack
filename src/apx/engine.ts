@@ -21,7 +21,7 @@ import type { ApBlock } from '../apdoc/block.js';
 import type { ApRef, ApNode, ApWhenNode, ApRunNode, ApDirectiveNode } from '../apdoc/types.js';
 import { KIND_STRATEGIES, type AgentBlock, type TeamBlock, type MainBlock, type VarBlock, type DimensionBlock, type DomainBlock } from '../apdoc/blocks.js';
 import { mdEnv, renderPreamble, renderEntry, renderMd } from '../../adapters/md/index.js';
-import type { MdEnv } from '../../adapters/md/toolkit.js';
+import { renderNodes, type MdEnv } from '../../adapters/md/toolkit.js';
 import { FORMULAS, fill, type QuizQuestion } from '../formulas.js';
 import { FLOWS_DIR, WORK_DIR, apxPath, flowScriptStem, projectRootOf, } from './paths.js';
 import type { ApxVerb } from './verbs.js';
@@ -204,7 +204,10 @@ export class ApxEngine {
   get projectRoot(): string { return resolve(projectRootOf(this.exe)); }
   /** The md environment with references in the apx form. */
   private readonly env: MdEnv;
-  readonly root: AgentBlock;
+  /** The document's root: an agent, or a unit — a team, the main. */
+  readonly root: ApBlock;
+  /** The root when it is an agent — a unit has no role, mandate or team of its own. */
+  private readonly agent: AgentBlock | null;
   private readonly byId = new Map<string, ApBlock>();
   /** Every verb, by name — the table APX_VERBS lists. */
   private readonly verbs: Record<ApxVerb, (args: string[]) => number | Promise<number>> = {
@@ -249,7 +252,8 @@ export class ApxEngine {
   ) {
     this.cmd = inUnit === null ? runCommand(exe) : `${runCommand(exe)} ${inUnit}`;
     this.env = mdEnv(doc, id => ` [${this.cmd} get ${id}]`, agent => (!agent || agent === doc.root()?.name ? this.cmd : this.sibling(agent)));
-    this.root = doc.root() as AgentBlock;
+    this.root = doc.root() as ApBlock;
+    this.agent = this.root.kind === 'agent' ? (this.root as AgentBlock) : null;
     for (const block of doc.all()) this.byId.set(block.id, block);
   }
 
@@ -335,10 +339,10 @@ export class ApxEngine {
       always.add(b);
       if (b.kind === 'template') for (const r of uniqueRefs(b.toJSON())) add(this.doc.resolve(r));
     };
-    for (const role of this.root.roles) add(this.doc.resolve(role));
+    for (const role of this.agent?.roles ?? []) add(this.doc.resolve(role));
     this.doc.byKind('policy').forEach(add);
     if (this.root.lensIn) add(this.doc.resolve(this.root.lensIn.ref));
-    if (this.root.lensOut) add(this.doc.resolve(this.root.lensOut.ref));
+    if (this.agent?.lensOut) add(this.doc.resolve(this.agent.lensOut.ref));
     // A variable is runtime state, served by `get <name>` — never opened.
     return this.doc.all().filter(b => b !== this.root && b.kind !== 'var' && (always.has(b) || this.text(b).length <= this.budget.block));
   }
@@ -347,17 +351,17 @@ export class ApxEngine {
     const root = this.root;
     this.out(this.headLine(root));
     this.out(`you:  ${this.label(root)}  — your definition, complete`);
-    if (root.mandate) this.out(`mandate: ${root.mandate}`);
+    if (this.agent?.mandate) this.out(`mandate: ${this.agent.mandate}`);
     const perimeter = this.doc.perimeter();
     if (perimeter) {
       this.out(`perimeter: you write only ${perimeter.writes.join(', ') || 'nothing'} — ${perimeter.reads ? `you read only ${perimeter.reads.join(', ')}` : 'read whatever you need'}`);
       const uncertain = { ...perimeter.judged?.reads.uncertain, ...perimeter.judged?.writes.uncertain };
       if (Object.keys(uncertain).length) this.out(`uncertain: a judge could not tell whether these belong — decide each in context: ${Object.entries(uncertain).map(([f, p]) => `${f} (p=${p.toFixed(2)})`).join(', ')}`);
     }
-    const roles = root.roles.map(ref => this.doc.resolve(ref)).filter((b): b is ApBlock => b !== null);
+    const roles = (this.agent?.roles ?? []).map(ref => this.doc.resolve(ref)).filter((b): b is ApBlock => b !== null);
     for (const role of roles) this.out(`role: ${this.label(role)}`);
     // Its team, by reference: the team's block — its members, its routing — is the team's own document's.
-    if (root.team) this.out(`team: ${this.refLabel(root.team)}`);
+    if (this.agent?.team) this.out(`team: ${this.refLabel(this.agent.team)}`);
     const policies = this.doc.byKind('policy');
     if (policies.length > 0) {
       this.out('respect:');
@@ -406,7 +410,7 @@ export class ApxEngine {
       }
     }
     if (root.lensIn) this.out(`requests arrive as: ${this.refLabel(root.lensIn.ref)}`);
-    if (root.lensOut) this.out(`answer as: ${this.refLabel(root.lensOut.ref)}  — your own rules apply in addition to the shape`);
+    if (this.agent?.lensOut) this.out(`answer as: ${this.refLabel(this.agent.lensOut.ref)}  — your own rules apply in addition to the shape`);
     const counts = this.groups(this.doc.all()).map(([kind, blocks]) => `${blocks.length} ${kind}`);
     this.out(`contains: ${counts.join(', ')}  — list them: ${this.cmd} ls`);
     return 0;
@@ -845,8 +849,8 @@ export class ApxEngine {
 
   private text(block: ApBlock): string {
     // The root of an agent's document is its definition; a team — a unit's root, or a member's team — is its view.
-    if (block.kind === 'team' || block.kind === 'main') return this.teamView(block as TeamBlock | MainBlock);
     if (block === this.root) return renderPreamble(this.doc, this.env);
+    if (block.kind === 'team' || block.kind === 'main') return this.teamView(block as TeamBlock | MainBlock);
     return renderEntry(block, 1, this.env);
   }
 
@@ -854,14 +858,14 @@ export class ApxEngine {
   private teamView(team: TeamBlock | MainBlock): string {
     const section = (title: string, rows: string[]): string[] => (rows.length > 0 ? [`${title}:`, ...rows.map(r => `  ${r}`)] : []);
     const memberRow = (m: ApRef): string => {
-      const member = this.doc.resolve(m);
+      const member = this.doc.reach(m);
       return `${this.refLabel(m)}${member?.about ? `  — ${member.about}` : ''}`;
     };
     return `${[
       this.headLine(team),
       ...section('members', team.members.map(memberRow)),
       ...section('teams', team.kind === 'main' ? team.teams.map(t => this.refLabel(t)) : []),
-      ...section('routing', (team.routing ?? []).map(r => `WHEN ${r.when}  -> ${this.refLabel(r.run)}`)),
+      ...section('routing', renderNodes(this.env, team.body)),
       ...(team.kind === 'team' && team.shared ? [`shared: ${team.shared}`] : []),
     ].join('\n')}\n`;
   }

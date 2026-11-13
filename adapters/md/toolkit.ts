@@ -9,7 +9,7 @@
  * the document — the md twin of BlockCx.
  */
 import { DECORATOR_MARK } from '../../src/decorators.js';
-import { DELEGATE_VERB, delegationText } from '../../src/delegation.js';
+import { ASK_VERB, delegationText } from '../../src/delegation.js';
 import { renderKeywordBlock } from '../../src/services/text.js';
 import { FORMULAS, fill } from '../../src/formulas.js';
 import { FORCE_LEVEL_PRIMITIVES } from '../../src/primitives.js';
@@ -119,12 +119,12 @@ export function executorHow(env: MdEnv | undefined, exe: string | undefined, exe
  * to have it carried out.
  */
 export function directiveText(n: { text: string; by?: string; harness?: string; keyword?: string; exe?: string; as?: ApShape; async?: true; work?: string; element?: true; waits?: string[]; mark?: string; list?: string; max?: number; within?: string }, env?: MdEnv): string {
-  // A DELEGATE without BY goes to the default delegate: the prompt names it.
-  const agent = n.by ?? (n.keyword === DELEGATE_VERB ? env?.delegate : undefined);
+  // An ASK without BY goes to the default delegate: the prompt names it.
+  const agent = n.by ?? (n.keyword === ASK_VERB ? env?.delegate : undefined);
   const shaped = n.as ? { name: refName(n.as.ref), ref: env ? env.refOf(n.as.ref.target) : '' } : undefined;
   const apx = env && (n.work || n.waits?.length || n.mark) ? env.apxOf(null) : undefined;
   const text = delegationText({
-    keyword: n.keyword ?? '', text: n.text, agent, async: n.async, shaped, contract: !!n.exe, apx, work: n.work, element: n.element, waits: n.waits,
+    keyword: n.keyword ?? '', text: n.text, agent, async: n.async, shaped, apx, work: n.work, element: n.element, waits: n.waits,
     mark: n.mark, list: n.list, max: n.max, within: n.within, spec: shaped, harness: n.harness,
     phrases: env?.phrases,
     // A fork that works as another agent first reads who that agent is: its apx's `scope`.

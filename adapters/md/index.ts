@@ -12,7 +12,7 @@
  * class (`asMdBody`, `AgentBlock.asMdIdentity`). The core compiler consumes
  * this backend for the neutral body; harness adapters build on that body.
  */
-import type { AgentBlock, VarBlock } from '../../src/apdoc/blocks.js';
+import type { VarBlock } from '../../src/apdoc/blocks.js';
 import type { ApBlock } from '../../src/apdoc/block.js';
 import type { ApDocument } from '../../src/apdoc/document.js';
 import { renderNodes, type MdEnv } from './toolkit.js';
@@ -85,8 +85,7 @@ export function mdEnv(
  */
 export function renderPreamble(doc: ApDocument, env: MdEnv): string {
   const src = doc.mdSource ?? EMPTY_MD;
-  // A unit's document — a team's — has no agent: no identity, no body of its own beyond its blocks.
-  const root = doc.root()?.kind === 'agent' ? doc.root() as AgentBlock : null;
+  const root = doc.root();
   let out = '';
 
   // The scope warning — before everything: what the agent writes and reads.
@@ -96,16 +95,14 @@ export function renderPreamble(doc: ApDocument, env: MdEnv): string {
   // Bootstrap: team membership + shared + runtime defaults (from meta.md).
   out += src.bootstrap;
 
-  if (root) {
-    // Identity + lens — the agent block owns its own md preamble.
-    const roleBlocks = root.roles.map(r => doc.resolve(r)).filter((b): b is NonNullable<typeof b> => b !== null);
-    out += root.asMdIdentity(env, roleBlocks);
+  if (!root) return out;
+  // Identity — each root owns its own: an agent its role and lens, a unit — a team, the main — who it is and what it holds.
+  out += root.asMdIdentity(env, doc);
 
-    // The agent's own body (rules, WHEN workflows). The legacy strip leaves
-    // leading blank lines before the first rule — reproduce their count.
-    const body = renderNodes(env, root.body).join('\n');
-    if (body.trim()) out += `${'\n'.repeat(src.agentBodyLead)}${body}\n\n`;
-  }
+  // The root's own body — an agent's rules and WHEN workflows, a unit's routing. The legacy strip leaves
+  // leading blank lines before the first rule — reproduce their count.
+  const body = renderNodes(env, root.body).join('\n');
+  if (body.trim()) out += `${'\n'.repeat(src.agentBodyLead)}${body}\n\n`;
   return out;
 }
 

@@ -5,8 +5,8 @@ EXPORT TEMPLATE ap-statement:
   APPLIES #agent-pack, #authoring, #scaffold, #rule
 
   SLOTS:
-    key:  ENUM[DO, DELEGATE, COMPUTE, RUN, IF, ELSE, UNTIL, IF!, IF!!, UNTIL!, UNTIL!!, WHEN!, IF*, IF**, UNTIL*, UNTIL**, IN, VAR] "keyword"
-      MUST   act with DO (the agent), DELEGATE (a delegate), COMPUTE (a program) or RUN; branch with IF / ELSE
+    key:  ENUM[DO, ASK, COMPUTE, RUN, IF, ELSE, UNTIL, IF!, IF!!, UNTIL!, UNTIL!!, WHEN!, IF*, IF**, UNTIL*, UNTIL**, IN, VAR] "keyword"
+      MUST   act with DO (the agent), ASK (a question to a delegate), COMPUTE (a program) or RUN; branch with IF / ELSE
       MUST   loop with UNTIL; a line may raise its executor (agent, delegate, program), never lower it
       MUST   hand a condition to the judge with IF! / UNTIL! (agent sees it) or IF!! / UNTIL!! (sealed)
       MUST   make a checked condition read at least one variable — the judge sees only stored values
@@ -15,7 +15,7 @@ EXPORT TEMPLATE ap-statement:
       MUST   never put a `!` and a star on one condition — a condition has one judge
       MUST   never write a round limit on a checked or starred UNTIL — the apx counts the rounds
       MUST   open `IN <store>:` to work on a store, `VAR <name>:` to assign a block's final outcome
-      MUST   end a DO, COMPUTE or RUN line with INTO <name>; on a DELEGATE, INTO comes after the task, before BY and AS
+      MUST   end a DO, COMPUTE or RUN line with INTO <name>; on an ASK, INTO comes after the question, before BY
       MUST   write `WHEN! <condition>:` as sugar for `WHEN <condition>:` + `IF! <condition>:` beneath; never WHEN!!
     text: TEXT  "the statement body (ELSE takes none); IN, VAR and WHEN! heads end with a colon"
   BODY:

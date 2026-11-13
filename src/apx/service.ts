@@ -13,7 +13,8 @@
  */
 import type { DelegationTable, DelegationRecord } from './delegations.js';
 import type { ApDocument } from '../apdoc/document.js';
-import type { AgentBlock, VarBlock } from '../apdoc/blocks.js';
+import type { VarBlock } from '../apdoc/blocks.js';
+import type { ApBlock } from '../apdoc/block.js';
 import type { ApRef } from '../apdoc/types.js';
 import type { ApxBuild } from './engine.js';
 import type { SessionVars, ExecutorRecord } from './sessionVars.js';
@@ -45,7 +46,8 @@ export interface ApxHost {
   readonly exe: string;
   /** The command every printed command starts with. */
   readonly cmd: string;
-  readonly root: AgentBlock;
+  /** The document's root — an agent, or a unit: its name is who the apx serves. */
+  readonly root: ApBlock;
   /** The project root the apx lives in. */
   readonly projectRoot: string;
   lastCode: number;

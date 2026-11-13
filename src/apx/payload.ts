@@ -171,11 +171,16 @@ export function packPayload(pack: Pack, name = ''): ApxPayload {
   }
   const blocks: Record<string, unknown> = {};
   for (const [address, id] of view.blocks) {
-    const block = pack.json(BLOCK_SECTION, id);
+    const block = packBlock(pack, id);
     if (block === null) throw new Error(`this pack is damaged — ${name || 'its document'} names the block ${id}, which it does not hold`);
     blocks[address] = block;
   }
   return { build: view.build, document: JSON.stringify({ schemaVersion: view.schemaVersion, meta: view.meta, blocks }) };
+}
+
+/** One block of the pack's store, by its id — null when the pack holds none. */
+export function packBlock<T>(pack: Pack, id: string): T | null {
+  return pack.json<T>(BLOCK_SECTION, id);
 }
 
 /** The name of a document of the pack that has the block `id` — its own first — or null: an id is one block, whoever holds it. */

@@ -812,10 +812,6 @@ export class DocumentBuilder implements BlockCx {
     return this.ref(this.agents.get(name), name, 'agent');
   }
 
-  runnableRef(name: string): ApRef {
-    return this.ref(this.runnables.get(name), name, 'flow');
-  }
-
   /** Namespace of a library file path, or null when outside every root. */
   namespaceOfPath(path: string): string | null {
     return buildNamespace(path, this.ctx!.libraryRoots, this.ctx!.libraries) || null;
@@ -1124,7 +1120,7 @@ export class DocumentBuilder implements BlockCx {
     }
 
     const shapePos: Record<string, number> = {};
-    for (const prov of ['definition', 'team', 'agent'] as const) {
+    for (const prov of ['definition', 'agent'] as const) {
       for (const block of doc.byProvenance(prov)) {
         if (block.shapePos !== null && block.shape) shapePos[block.address] = block.shapePos;
       }
@@ -1159,7 +1155,8 @@ export class DocumentBuilder implements BlockCx {
     const doc = new ApDocument(this.buildMeta(ctx, unit ? `${unit.kind === 'main' ? MainBlock.NAMESPACE : TeamBlock.NAMESPACE}/${unit.name}` : null));
     const producers: [BlockProvenance, () => ApBlock[]][] = [
       ['definition', () => this.definitionBlocks(ctx, opts)],
-      ['team',       () => this.teamBlocks(unit !== null)],
+      // A unit's flows are its own definition — a chapter of its document, as an agent's procedures are of its own.
+      ['definition', () => this.teamBlocks(unit !== null)],
       // A unit's document has no agent: its root is the TEAM block.
       ['agent',      () => (unit ? [] : [this.agentBlock(ctx, opts)])],
       // Last: a variable's type may come from any procedure the others hold.
@@ -1212,13 +1209,15 @@ export class DocumentBuilder implements BlockCx {
  * sibling in the block (a WHEN can sit between two FLOWs), de-indented by the
  * block's indent: the text a flow file would hold.
  */
-function unitScan(sources: SourceRegistry, unit: Omit<TeamScan, 'name' | 'blocks' | 'flows'>): TeamScan {
+function unitScan(sources: SourceRegistry, unit: Omit<TeamScan, 'name' | 'blocks' | 'flows' | 'routing'>): TeamScan {
   const { file } = unit;
   const written = file.block.children.filter((c): c is Block => c.type === 'block');
+  const lines = (b: Block) => sources.nestedSpan(file.path, file.block, b).lines.map(l => l.text.slice(file.childIndent));
   const flows: TeamScan['flows'] = written
     .filter((b): b is Block & { name: string } => b.key === 'FLOW' && b.name !== null)
-    .map(b => ({ name: b.name, block: b, body: sources.nestedSpan(file.path, file.block, b).lines.slice(1).map(l => l.text.slice(file.childIndent)).join('\n') }));
-  return { ...unit, name: file.name, blocks: written, flows };
+    .map(b => ({ name: b.name, block: b, body: lines(b).slice(1).join('\n') }));
+  const routing = written.filter(b => b.key === 'WHEN').flatMap(lines).join('\n');
+  return { ...unit, name: file.name, blocks: written, flows, routing };
 }
 
 /** A definition's body nested in the decorators above it, outermost first — each opening the block the next one, then the body, stands in. */

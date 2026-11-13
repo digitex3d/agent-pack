@@ -78,7 +78,7 @@ One agent per file, anywhere under `agents/`.
 | `BUDGET cheap \| moderate \| costly` | how much it may spend — the adapter maps the tier to a model of its harness (Claude Code: haiku, sonnet, opus; any adapter: its [`models`](/guide/adapters#models) in the config) — on another harness (`BY opencode:<agent>`), that harness's model for it; it wins over the config's [`delegate.models`](/reference/config#delegate) |
 | `LENS-IN <template>` | the shape requests to it arrive in |
 | `LENS-OUT <template>` | the shape of its answers |
-| rules and `WHEN` workflows | its own behaviour — rules at every level, `SHOULD`, `MAY` and [`MEM`](#memory) included (see [Rules](#rules)), and [Control flow](#control-flow); `DELEGATE` and `COMPUTE` lines hand a line to a delegate or a program (see [Executors](#executors)) |
+| rules and `WHEN` workflows | its own behaviour — rules at every level, `SHOULD`, `MAY` and [`MEM`](#memory) included (see [Rules](#rules)), and [Control flow](#control-flow); `ASK` and `COMPUTE` lines hand a line to a delegate or a program (see [Executors](#executors)) |
 
 `@WITHIN <domain>, …` above the `AGENT` line puts all its work within the [domains](#domain) it names — see [@WITHIN](#decorators-within): the definition opens with a scope warning listing their files. Without it, the agent has no perimeter.
 
@@ -393,7 +393,7 @@ A rule is a keyword and an action. The keyword says how binding it is:
 | `ALWAYS` | You must always |
 | `NEVER` | You must never |
 | `DO` | a step the agent carries out |
-| `DELEGATE` | a line a delegate carries out — see [Executors](#executors) |
+| `ASK` | a question a delegate answers — see [Executors](#executors) |
 | `COMPUTE` | a step a program carries out — see [Executors](#executors) |
 
 A level is written with its keyword — `NEVER skip a finding`, `ALWAYS cite the line` — never as `DO never …` or `DO always …`.
@@ -429,7 +429,7 @@ Every line is carried out by one of three executors. The verb says which:
 | Write | Carried out by |
 |---|---|
 | `DO <action>` | the agent itself |
-| `DELEGATE <action>` | a delegate — another agent, handed the line's inputs and nothing else |
+| `ASK <question> INTO <name>` | a delegate — another agent, asked the question with the line's inputs and nothing else |
 | `COMPUTE <action>` | a program — a script: same input, same output, every time |
 
 On a block head, stars say the same:
@@ -451,31 +451,33 @@ VAR totals
 VAR document_total
 
 WHEN an invoice arrives:
-    DELEGATE read the invoice lines from {{pdf_text}} INTO lines
-    DELEGATE check the clauses of {{contract}} INTO risks BY legal-reviewer
+    ASK      read the invoice lines from {{pdf_text}} INTO lines
+    ASK      check the clauses of {{contract}} INTO risks BY legal-reviewer
     COMPUTE  group {{lines}} by VAT rate INTO totals
     IF** {{totals}} differ from {{document_total}} by more than 0.01:
         DO   tell the user which rates do not add up
 ```
 
 - **On a procedure, the mark covers the body**: its lines inherit the executor. **On an `IF` or an `UNTIL`, it covers only the condition**: the lines beneath inherit the enclosing block's executor — and an unmarked `IF` inside a `PROCEDURE**` is decided by the program too.
-- **A line may raise its executor, never lower it** — agent, then delegate, then program. Under a `PROCEDURE**`, a `DELEGATE`, an `IF*`, or a `RUN` of anything but a `PROCEDURE**` fails the compilation: a program cannot stop for the agent; under a `PROCEDURE*`, a `RUN` takes only a `PROCEDURE*` or a `PROCEDURE**`. A [checked condition](#checked-conditions) (`IF!`) inside a starred procedure is an error: its executor decides its conditions.
+- **A line may raise its executor, never lower it** — agent, then delegate, then program. Under a `PROCEDURE**`, an `ASK`, an `IF*`, or a `RUN` of anything but a `PROCEDURE**` fails the compilation: a program cannot stop for the agent; under a `PROCEDURE*`, a `RUN` takes only a `PROCEDURE*` or a `PROCEDURE**`. A [checked condition](#checked-conditions) (`IF!`) inside a starred procedure is an error: its executor decides its conditions.
 - **A condition has one judge.** `IF!`/`IF!!` are decided by a judge, `IF*`/`IF**` by a delegate or a program: `IF!*` or `UNTIL**!` is an error. A starred condition reads at least one variable — its only input.
 
 **What a delegate or a program receives is its input, and nothing else.** One key per `{{variable}}` the piece reads, with its value in the session; one per constant, with its value; and `in`, the input of a procedure that declares a `LENS-IN`. An empty variable stops the piece before it starts. Its answer is checked against its contract: a line with `INTO x` answers a value of `x`'s type, a procedure its `AS` template, a condition `{"holds": true}` or `{"holds": false}`. Each piece gets a contract id, `exe-<8 hex>`, and the compiled line names the apx command that carries it out — `input` and `answer` for a delegate, `run` for a program (see [The apx](/guide/apx#delegates-and-programs)):
 
 ```
-Delegate: read the invoice lines from `pdf_text` — to `quick` — hand it over its input and the shape of its answer, both from `node .agent-pack/apx/clerk.apx delegate input exe-…`, then store its answer: `node .agent-pack/apx/clerk.apx delegate answer exe-… -`
+Ask: read the invoice lines from `pdf_text` — ask `quick` — hand it over its input and the shape of its answer, both from `node .agent-pack/apx/clerk.apx delegate input exe-…`, then store its answer: `node .agent-pack/apx/clerk.apx delegate answer exe-… -`
 If `totals` differ from `document_total` by more than 0.01 — a program decides — `node .agent-pack/apx/clerk.apx run exe-…`
 ```
 
-### DELEGATE and BY
+### ASK and BY
 
-`DELEGATE … BY <agent>` names who the line is handed to: a standalone agent, a team (its routing picks the member), or a member of the delegating agent's own team. A member of another team, or a name the project does not have, fails the compilation. The parts come in their order — the task, `INTO`, `BY`, `AS`: `DELEGATE … INTO risks BY legal-reviewer` (`BY … INTO …` is an error). In an agent's body a `DELEGATE` has its contract (`exe-…`): the delegate is handed the line's inputs and nothing else, and an `AS <template>` is the shape of that input. Only `DELEGATE` and `FORK` take a `BY` — a `COMPUTE` is a program's. `ASK` became `DELEGATE`: an `ASK` line fails the build with the rewrite.
+**`ASK` is an agent's question; `DELEGATE` hands work over.** An `ASK` stands in an agent's body and its procedures, never in a flow or a unit's routing; a `DELEGATE` stands in a flow or in the routing of a team or of the main, never in an agent — each fails the build where it does not belong, saying which to write. `ASK <question> INTO <name> [BY <agent>]` asks the question and stores the answer in `<name>`: the answer takes that variable's template (`VAR verdict AS duplicate-verdict`), or is plain text when it has none. The `INTO` is required, and an `ASK` takes no `AS` — the variable gives the shape. Each `ASK` has its contract (`exe-…`): the delegate is handed the line's inputs and nothing else.
 
-**Another harness: `BY <harness>:<agent>`.** `DELEGATE … BY codex:hunter` hands the task to `hunter`, an agent of the project, as another harness runs it — launched from outside, as that harness's adapter describes in its recipe (`invoke.ap`). The harness is a dependency of the build: a name no adapter has, a harness not in the config's `adapters:`, one without a recipe, or one whose CLI is not on the PATH fails the compilation, saying which (`agent-pack harness list` shows them all). It works in a copy of its own, in the background (`DELEGATE~`) or not: `apx delegate start <dlg-id>` opens the copy, writes the prompt and prints the command to run; `apx delegate deliver <dlg-id> --answer` takes its answer, and of what it changed in its copy only what stays within its perimeter; the WAIT — or, for a line not in the background, the `apx wait <dlg-id>` the line names — merges it. It is handed the task and the variables it reads — the conversation does not cross harnesses — or, with `AS <template>`, what the template holds; `FORK … BY <harness>:<agent>` is an error. A list of contracts goes the same way: `DELEGATE <list> BY opencode:fixer` launches each contract on opencode, in its copy (`apx contract start <mrk-id> --by opencode:fixer`, then `apx delegate deliver <ctr-id> --answer`). The agent runs on the model its `BUDGET` tier maps to on that harness ([Adapters — Models](/guide/adapters#models)).
+`BY <agent>` names who answers: a standalone agent, a team (its routing picks the member), or a member of the asking agent's own team. A member of another team, or a name the project does not have, fails the compilation. The parts come in their order — the question, `INTO`, `BY`: `ASK … INTO risks BY legal-reviewer` (`BY … INTO …` is an error). Only `ASK`, `DELEGATE` and `FORK` take a `BY` — a `COMPUTE` is a program's.
 
-Without `BY`, the line goes to the **default delegate**, `quick`: a builtin agent that answers from the JSON input it is handed alone, as JSON in the shape the contract asks, saying what is missing when the input lacks it. `bundle all` builds it only when some agent hands it work and the project has no agent of that name. With Claude Code it runs on `haiku` and with no tool at all — it cannot read a file. The [`delegate`](/reference/config#delegate) key names another default and sets the model each agent runs on: the source never names a model.
+**Another harness: `BY <harness>:<agent>`.** In a flow, `DELEGATE … BY codex:hunter` hands the task to `hunter`, an agent of the project, as another harness runs it — launched from outside, as that harness's adapter describes in its recipe (`invoke.ap`). The harness is a dependency of the build: a name no adapter has, a harness not in the config's `adapters:`, one without a recipe, or one whose CLI is not on the PATH fails the compilation, saying which (`agent-pack harness list` shows them all). It works in a copy of its own, in the background (`DELEGATE~`) or not: `apx delegate start <dlg-id>` opens the copy, writes the prompt and prints the command to run; `apx delegate deliver <dlg-id> --answer` takes its answer, and of what it changed in its copy only what stays within its perimeter; the WAIT — or, for a line not in the background, the `apx wait <dlg-id>` the line names — merges it. It is handed the task and the variables it reads — the conversation does not cross harnesses — or, with `AS <template>`, what the template holds; `FORK … BY <harness>:<agent>` is an error. A list of contracts goes the same way: `DELEGATE <list> BY opencode:fixer` launches each contract on opencode, in its copy (`apx contract start <mrk-id> --by opencode:fixer`, then `apx delegate deliver <ctr-id> --answer`). The agent runs on the model its `BUDGET` tier maps to on that harness ([Adapters — Models](/guide/adapters#models)).
+
+Without `BY`, the question goes to the **default delegate**, `quick`: a builtin agent that answers from the JSON input it is handed alone, as JSON in the shape the contract asks, saying what is missing when the input lacks it. `bundle all` builds it only when some agent hands it work and the project has no agent of that name. With Claude Code it runs on `haiku` and with no tool at all — it cannot read a file. The [`delegate`](/reference/config#delegate) key names another default and sets the model each agent runs on: the source never names a model.
 
 ### Programs
 

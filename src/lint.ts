@@ -1398,7 +1398,6 @@ const WITH_REWRITE = 'WITH became a decorator — write `@WITH <names>` right ab
 /** The rewrite every retired word of the contracts model points to (D16–18, D46). */
 const CONTRACTS_REWRITE = 'a flow marks the zones and hands them out itself — in a STEP, `MARK <criterion> INTO <list> AS <spec>`, then `DELEGATE <list> BY <agent>`';
 const REMOVED_KEYWORDS: Record<string, string> = {
-  ASK: 'ASK became DELEGATE — write `DELEGATE <task> INTO <name> BY <agent>`',
   STRATEGY: `STRATEGY was removed — a team runs by its own flows: ${CONTRACTS_REWRITE}`,
   LEAD: `LEAD was removed — whoever runs a flow leads it: ${CONTRACTS_REWRITE}`,
   CONTRACT: `CONTRACT blocks were removed — a contract is what a MARK makes: ${CONTRACTS_REWRITE}`,
@@ -1488,7 +1487,7 @@ export function checkVocabulary(file: string, body: string): LintError[] {
       if (t.executor && (t.level ?? 0) > 0) {
         err(t.line, `\`${t.raw.trim().split(/\s/)[0]}\` is not allowed — a condition has one judge: write ${key}! / ${key}!! (a judge decides) or ${key}* / ${key}** (a delegate or a program decides): "${quoteRaw(t)}"`);
       }
-      if (key === 'COMPUTE' && splitBy(t.rest)) err(t.line, 'BY ends only a DELEGATE or a FORK line — COMPUTE is carried out by a program');
+      if (key === 'COMPUTE' && splitBy(t.rest)) err(t.line, 'BY ends only an ASK, a DELEGATE or a FORK line — COMPUTE is carried out by a program');
       // A delegation's parts, in their order (src/delegation.ts).
       if (isDelegationVerb(key)) for (const message of delegationLineErrors(key, t.rest)) err(t.line, message);
       if (key === WAIT_VERB) for (const message of waitLineErrors(t.rest)) err(t.line, message);

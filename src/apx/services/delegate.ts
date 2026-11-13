@@ -3,7 +3,7 @@
 /**
  * The `delegate` service — work handed to someone else (D46):
  *
- *   - a contract (`exe-…`): an agent's own `DELEGATE … BY`, a `PROCEDURE*`, an
+ *   - a contract (`exe-…`): an agent's `ASK … BY`, a `PROCEDURE*`, an
  *     `IF*` — what the delegate is handed, and its answer checked and kept:
  *     `<apx> delegate input <exe-id>`, `<apx> delegate answer <exe-id> - [--into <var>]`;
  *   - a flow's background piece (`dlg-…`, `DELEGATE~` / `FORK~`), in the

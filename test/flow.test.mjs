@@ -148,9 +148,10 @@ FLOW old-step
   assert.ok(contract.some(m => m.startsWith('9: AS is not allowed inside STEP — a step hands nothing over itself')), contract.join('\n'));
   const words = checkVocabulary('old-step.flow.ap', old).map(e => `${e.line}: ${e.message}`);
   assert.ok(words.some(m => m.startsWith('8: CONTEXT was removed — the form of a DELEGATE says the context')), words.join('\n'));
-  assert.ok(words.some(m => m.startsWith('10: ASK became DELEGATE')), words.join('\n'));
+  // ASK is an agent's question: a step hands the work over with DELEGATE.
+  assert.ok(contract.some(m => m.startsWith('10: ASK is not allowed inside STEP')), contract.join('\n'));
   // Each said once: a removed keyword is the vocabulary check's alone.
-  assert.ok(!contract.some(m => /CONTEXT|ASK/.test(m)), contract.join('\n'));
+  assert.ok(!contract.some(m => /CONTEXT/.test(m)), contract.join('\n'));
 
   console.log('Flow lint old step signature test passed.');
 }
@@ -183,7 +184,7 @@ FLOW old-step
     .map(e => `${e.line}: ${e.message}`);
   assert.deepEqual(agent, [
     "6: DELEGATE~: starting work without waiting for it is a flow STEP's — here, write DELEGATE and wait for it",
-    '7: FORK hands work to a fork of whoever runs a flow — it stands in a flow STEP; here, write DELEGATE',
+    '7: FORK hands work to a fork of whoever runs a flow — it stands in a flow STEP; an agent asks a question with ASK',
     '8: WAIT takes back what a STEP started with ~ — it stands in a flow STEP',
   ]);
 

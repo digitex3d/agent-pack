@@ -20,6 +20,9 @@ export interface QuizQuestion { ask: Text; options: Text[]; right: string }
 /** How a block kind is used: its introduction (`.ap` lines) and its entry quiz. */
 export interface KindGuide { intro: Text[]; quiz: QuizQuestion[] }
 
+/** How a unit's identity reads — the team's, or the main's: who it is, then what it holds. */
+interface UnitWords { lead: Text; members: Text }
+
 export interface Formulas {
   decorators: { use: Text; and: Text; intros: Record<string, Text> };
   keywords: {
@@ -39,6 +42,7 @@ export interface Formulas {
     DO: { intro: Text };
     DELEGATE: { intro: Text; to: Text; full: Text; shaped: Text; background: Text; started: Text; element: Text; elements: Text; contracts: Text; contractsRun: Text; contractsWait: Text; contractsHarness: Text; contractsHarnessRun: Text; harness: Text; harnessContext: Text; harnessBackground: Text; harnessRun: Text; harnessWait: Text };
     MARK: { intro: Text; text: Text; within: Text; none: Text };
+    ASK: { intro: Text; to: Text };
     FORK: { intro: Text; self: Text; agent: Text; shaped: Text };
     WAIT: { intro: Text; named: Text; all: Text; run: Text; max: Text };
     COMPUTE: { intro: Text; require: Text; return: Text; ensure: Text; rule: { require: Text; ensure: Text; never: Text } };
@@ -72,9 +76,9 @@ export interface Formulas {
     dimension: { chapter: Text; covers: Text; eachShape: Text; read: Text; write: Text; query: Text } & KindGuide;
     domain: { chapter: Text; writes: Text; reads: Text; formula: Text } & KindGuide;
     plugin: { line: Text; commands: Text; command: Text };
-    team: { heading: Text; member: Text; handles: Text; fellows: Text; fellow: Text; undescribed: Text; closing: Text } & KindGuide;
+    team: { heading: Text; member: Text; handles: Text; fellows: Text; fellow: Text; undescribed: Text; closing: Text; unit: UnitWords & { row: Text } } & KindGuide;
     /** What AGENTS.md says of the main: its name, the command that prints it, and to run it again. */
-    main: { heading: Text; boot: Text; again: Text };
+    main: { heading: Text; boot: Text; again: Text; unit: UnitWords & { teams: Text } };
     runtime: { heading: Text };
     tool: { chapter: Text; heading: Text } & KindGuide;
   };

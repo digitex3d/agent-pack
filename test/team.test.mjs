@@ -103,7 +103,7 @@ try {
   assert.equal(crew.kind, 'team');
   assert.equal(crew.name, 'crew');
   assert.deepEqual(crew.members.map(r => r.target.split('/').pop()), ['builder', 'checker']);
-  assert.deepEqual(crew.routing.map(r => r.when), ['asked to ship']);
+  assert.deepEqual(crew.body.filter(n => n.type === 'when').map(w => w.condition), ['asked to ship'], 'its routing is its body, as an agent\'s WHENs are');
   assert.deepEqual(crew.source, { file: teamFile, line: 3, col: 1 }, 'the team is its EXPORT TEAM block');
   assert.deepEqual(structure.byKind('agent'), [], 'no agent in a team\'s document');
   const ship = structure.byKind('flow').find(b => b.name === 'ship');

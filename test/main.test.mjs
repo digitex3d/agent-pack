@@ -231,8 +231,9 @@ try {
       assert.ok(got.stdout.includes('[node .agent-pack/apx/orfeo.apx designer scope]'), `its agent, reached through the main:\n${got.stdout}`);
       assert.equal(orfeo('flow', id).status, 0, 'the main runs its own flow');
       const root = orfeo('get', /mai-[0-9a-f]{8}/.exec(orfeo('ls', 'kind=main').stdout)?.[0] ?? '').stdout;
-      assert.ok(/members:\n {2}agent designer/.test(root) && root.includes('teams:\n  team crew  [node .agent-pack/apx/orfeo.apx crew start]') && root.includes('WHEN asked to ship a feature  -> flow ship'), root);
-      assert.ok(orfeo('start').stdout.includes(`start with \`node .agent-pack/apx/orfeo.apx flow ${id}\``), 'the routing starts it through the main');
+      // The main's root reads as an agent's identity does: who it is, what it holds — each with the command that starts it — and its routing.
+      assert.ok(root.includes('- `designer` — designs pages [node .agent-pack/apx/orfeo.apx designer start]') && root.includes('- `crew` — a crew [node .agent-pack/apx/orfeo.apx crew start]') && root.includes('When asked to ship a feature:\n    Run the flow `ship`'), root);
+      assert.ok(orfeo('start').stdout.includes(`Run the flow \`ship\` (${id})`), 'its start is its whole definition, as an agent\'s is: the routing names the flow by its id');
       assert.ok(orfeo('crew', 'ls', 'kind=flow').stdout.includes('build'), "a team's flows stay the team's, reached through the main");
       for (const a of ['designer', 'builder']) assert.ok(!spawnSync(process.execPath, [`.agent-pack/apx/${a}.apx`, 'ls', 'kind=flow'], { cwd: proj, encoding: 'utf-8' }).stdout.includes('flw-'), `${a} holds no flow`);
       // one id, one block, one definition: the pack is a store of blocks, a document its view

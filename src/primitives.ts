@@ -424,6 +424,12 @@ export const DelegatePrimitive = createBulletGroupPrimitive({
   intro: FORMULAS.keywords.DELEGATE.intro,
 });
 
+/** `ASK <question>` — an agent's question to a delegate (src/delegation.ts); grouped like DO. */
+const AskPrimitive = createBulletGroupPrimitive({
+  keyword: 'ASK',
+  intro: FORMULAS.keywords.ASK.intro,
+});
+
 /** `FORK <task>` — work handed to a fork, on the conversation itself (src/delegation.ts); grouped like DO. */
 export const ForkPrimitive = createBulletGroupPrimitive({
   keyword: 'FORK',
@@ -478,6 +484,7 @@ export const FORCE_LEVEL_PRIMITIVES: BulletGroupPrimitive[] = [
   WhenPrimitive,
   RunPrimitive,
   DoPrimitive,
+  AskPrimitive,
   DelegatePrimitive,
   ForkPrimitive,
   WaitPrimitive,

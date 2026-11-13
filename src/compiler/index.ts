@@ -19,7 +19,7 @@ import { findAgentFiles, readAgentFile, standaloneDir, agentNameOf, teamRootForA
 import { isMainFile, readMainFile } from '../services/mainMetadata.js';
 import { apxCommand } from '../apx/paths.js';
 import { harnessesOf, harnessProblem, agentModels, modelProblem, type HarnessRow } from '../harnesses.js';
-import { delegateTargetErrors, executorErrors, usesPrograms, WRITE_PROGRAM, type AgentIndexEntry } from '../executor.js';
+import { delegateTargetErrors, delegationSiteErrors, executorErrors, usesPrograms, WRITE_PROGRAM, type AgentIndexEntry } from '../executor.js';
 import { BUILTIN_AGENTS_DIR, resolveDelegateConfig, type DelegateConfig } from '../config.js';
 import { type LintError, checkVocabulary, lineOfName, checkedHeadIssues, dimensionBlockErrors, domainBlockErrors, pluginBlockErrors, teamFileErrors, mainBlockErrors } from '../lint.js';
 import { CompileError, reporter } from '../report.js';
@@ -947,7 +947,7 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     ...(unit ? { unit } : {}),
     ...(main ? { memberFiles } : {}),
   });
-  // A DELEGATE without BY goes to the default delegate; the config may set this agent's model.
+  // An ASK without BY goes to the default delegate; the config may set this agent's model.
   const delegate = opts.delegate ?? resolveDelegateConfig(undefined);
   if (Object.values(structure.meta.executors ?? {}).some(e => e.executor === 1 && !e.by)) structure.meta.delegate = delegate.default;
   if (delegate.models[agentName]) structure.meta.model = delegate.models[agentName];
@@ -987,6 +987,7 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     ...(opts.agentIndex ? delegateTargetErrors(structure, opts.agentIndex, teamRoot ? basename(teamRoot) : null,
       h => harnessProblem(h, opts.harnesses ?? []), (h, a) => modelProblem(h, a, opts.harnesses ?? [])) : []),
     ...executorErrors(structure),
+    ...delegationSiteErrors(structure),
     ...variableUseErrors(ctx, agentFilePath, file => visibleIn(file, ctx.variables, everywhere), libraryReadRule(ctx, agentFilePath)),
     ...templateNameErrors(ctx, [...declared, ...Object.keys(variables.constants)]),
   ], 'Bundle');

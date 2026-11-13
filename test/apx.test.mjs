@@ -199,7 +199,8 @@ const answers = quiz.map((q, i) => `${i + 1}=${q.right}`);
   assert.equal(doc.root().team.id, teamIdOf('team', 'product'), 'it refers to the team by its id');
   assert.deepEqual(doc.byKind('flow'), [], 'a member holds no flow of its team');
   // the team's own document: its routing and its flow, every member reached beside it
-  has(runTeam('get', teamIdOf('team', 'product')).out, 'members:', 'agent scout  [node apx/scout.apx scope]', 'routing:');
+  // its root reads as an agent's identity: who it is, its members with the command that starts each, its routing
+  has(runTeam('get', teamIdOf('team', 'product')).out, 'You are the team `product`: the product team.', '- `scout` — (no description) [node apx/scout.apx start]', 'When asked to evaluate an idea:', 'agent scout  [node apx/scout.apx scope]');
   has(runTeam('refs', teamIdOf('flow', 'shape-idea')).out, 'uses:', 'agent scout  [node apx/scout.apx scope]', 'used by:');
   // the policies it imports bind the agent: refs says so, both ways
   has(run('refs', idOf('agent', 'pm')).out, `policy board-rules  [${CMD} get ${idOf('policy', 'board-rules')}]`);

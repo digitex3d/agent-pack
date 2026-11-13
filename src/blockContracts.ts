@@ -115,6 +115,9 @@ const AGENT_CONTRACT: BlockContract = {
   identityKeywords: ['ROLE', 'EXPERTISE', 'APPLIES'] as const,
 };
 
+/** What a flow's step carries out: the action verbs but ASK — a question is an agent's, a step hands the work over (DELEGATE). */
+const STEP_VERBS = ACTION_VERBS.filter(v => v !== 'ASK');
+
 export const BLOCK_CONTRACTS: Record<string, BlockContract> = {
   FLOW: {
     // `IF <condition>:` (and its `ELSE`) and `UNTIL <condition>:` put some of
@@ -132,10 +135,10 @@ export const BLOCK_CONTRACTS: Record<string, BlockContract> = {
     // A force-level line (`NEVER …`, `MUST! …`) is a rule of the step, never its
     // action: it does not count toward `requiresAnyOf`.
     // `IF <condition>` (and its `ELSE`) puts some of the step's lines under a condition.
-    allows: [...ACTION_VERBS, ...STEP_ACTIONS, 'RUN', ...STEP_FAMILIES],
-    branches: { keywords: ['IF', 'ELSE'], allows: [...ACTION_VERBS, ...STEP_ACTIONS, 'RUN', ...BRANCH_FAMILIES] },
+    allows: [...STEP_VERBS, ...STEP_ACTIONS, 'RUN', ...STEP_FAMILIES],
+    branches: { keywords: ['IF', 'ELSE'], allows: [...STEP_VERBS, ...STEP_ACTIONS, 'RUN', ...BRANCH_FAMILIES] },
     excluded: STEP_EXCLUDED,
-    requiresAnyOf: [...ACTION_VERBS, ...STEP_ACTIONS, 'RUN'] as const,
+    requiresAnyOf: [...STEP_VERBS, ...STEP_ACTIONS, 'RUN'] as const,
   },
   // `DELEGATE <task> BY <agent>:` — the lines the one it goes to is told: what it does, its rules, its conditions.
   DELEGATE: {

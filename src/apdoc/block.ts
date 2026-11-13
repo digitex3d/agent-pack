@@ -12,6 +12,7 @@
  * types.ts: classes wrap the block level only, never the tree below.
  */
 import type { ApBlockData, ApNode, ApShape, ApSource } from './types.js';
+import type { ApDocument } from './document.js';
 import { stableId, blockContentHash } from './ids.js';
 import { measure } from './measure.js';
 import { renderNodes, shapeLine, type MdEnv } from '../../adapters/md/toolkit.js';
@@ -107,6 +108,11 @@ export abstract class ApBlock {
       args: this.argsJson(),
       body: this.body,
     };
+  }
+
+  /** Its identity, when it is the document's root — who it is: an agent's role, a unit's members. None for any other block. */
+  asMdIdentity(_env: MdEnv, _doc: ApDocument): string {
+    return '';
   }
 
   /**

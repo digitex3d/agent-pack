@@ -43,11 +43,13 @@ import { DECORATOR_MARK, WITHIN_DECORATOR } from './decorators.js';
 import { FORMULAS, fill } from './formulas.js';
 
 export const DELEGATE_VERB = 'DELEGATE';
+/** An agent's question to a delegate: a contract, its answer shaped by its INTO variable's template. */
+export const ASK_VERB = 'ASK';
 export const FORK_VERB = 'FORK';
 export const WAIT_VERB = 'WAIT';
 export const MARK_VERB = 'MARK';
-/** The verbs that hand work out. */
-export const DELEGATION_VERBS = [DELEGATE_VERB, FORK_VERB] as const;
+/** The verbs that hand something out: a question (ASK, an agent's), work (DELEGATE and FORK, a flow's and a unit's). */
+export const DELEGATION_VERBS = [ASK_VERB, DELEGATE_VERB, FORK_VERB] as const;
 /** The mark after a verb that starts the work without waiting for it: `DELEGATE~`. */
 export const ASYNC_MARK = '~';
 /** `WAIT ALL`: every piece started in the block. */
@@ -105,7 +107,8 @@ export function parseDelegation(verb: string, rest: string): Delegation & { orde
 export function delegationLineErrors(verb: string, rest: string): string[] {
   const d = parseDelegation(verb, rest);
   const errors: string[] = [];
-  const shape = `${verb} <task> INTO <name> BY <agent> AS <template>`;
+  // A question takes no AS: its answer takes its INTO variable's template.
+  const shape = verb === ASK_VERB ? `${verb} <question> INTO <name> BY <agent>` : `${verb} <task> INTO <name> BY <agent> AS <template>`;
   // The parts in their order: INTO, then BY, then AS — the first one out of place is named.
   const misplaced = d.order.find((part, k) => k > 0 && PARTS.indexOf(part) < PARTS.indexOf(d.order[k - 1]));
   if (misplaced === 'INTO') errors.push(`${verb}: INTO comes right after the task — write \`${shape}\``);
@@ -167,11 +170,11 @@ function phrasesOf(phrases: DelegationPhrases | undefined): typeof FORMULAS.keyw
  * A delegation line's text as rendered — who it goes to, with what context,
  * whether it runs in the background; a WAIT's what it waits for. `agent` is
  * who a DELEGATE goes to (its BY, or the default delegate); `shaped` its AS
- * template, named with its reference; `contract` when an `exe-…` contract says
- * what is handed over (an agent's own DELEGATE). Any other line: its text.
+ * template, named with its reference. An ASK says whom it asks: its contract
+ * (`exe-…`) says the rest. Any other line: its text.
  */
 export function delegationText(n: {
-  keyword: string; text: string; agent?: string; async?: boolean; shaped?: { name: string; ref: string }; contract?: boolean;
+  keyword: string; text: string; agent?: string; async?: boolean; shaped?: { name: string; ref: string };
   /** The apx command the lines name, and the registry ids: a background piece's own, a WAIT's — absent, no commands. */
   apx?: string; work?: string; waits?: string[];
   /** A background piece inside an EACH: one id per run, `<work>-<k>`. */
@@ -212,9 +215,10 @@ export function delegationText(n: {
   }
   const started = n.apx && id ? fill(K.DELEGATE.started, { apx: n.apx, id }) + (n.element ? K.DELEGATE.elements : '') : '';
   const background = n.async ? K.DELEGATE.background + started : '';
+  // A question: its contract (`exe-…`) says what is handed over and the shape of the answer.
+  if (n.keyword === ASK_VERB && n.agent) return fill(FORMULAS.keywords.ASK.to, { text: n.text, agent: n.agent });
   if (n.keyword === DELEGATE_VERB && n.agent) {
-    // A line with a contract (`exe-…`) hands over its input, as the contract says: no context phrase.
-    const context = n.contract ? '' : n.shaped ? fill(K.DELEGATE.shaped, { name: n.shaped.name, ref: n.shaped.ref }) : K.DELEGATE.full;
+    const context = n.shaped ? fill(K.DELEGATE.shaped, { name: n.shaped.name, ref: n.shaped.ref }) : K.DELEGATE.full;
     return fill(K.DELEGATE.to, { text: n.text, agent: n.agent, context, background });
   }
   if (n.keyword === FORK_VERB) {
@@ -481,7 +485,7 @@ export function concurrencyErrors(tree: readonly DelegationTreeNode[]): { line: 
         const running = scopes.flat().find(s => s.name === name);
         if (running && !(kw === WAIT_VERB)) at(t.line, `\`{{${name}}}\` is read before its WAIT — it was started with ${ASYNC_MARK} at line ${running.line}: write \`WAIT ${name}\` above this line`);
       }
-      if (kw === FORK_VERB && !inStep) at(t.line, 'FORK hands work to a fork of whoever runs a flow — it stands in a flow STEP; here, write DELEGATE');
+      if (kw === FORK_VERB && !inStep) at(t.line, 'FORK hands work to a fork of whoever runs a flow — it stands in a flow STEP; an agent asks a question with ASK');
       const each = kw === 'EACH' ? parseEachHead(t.rest ?? '') : null;
       if (each) {
         if (!inStep) at(t.line, 'EACH hands work out once per element of a list, for a flow — it stands in a flow STEP');

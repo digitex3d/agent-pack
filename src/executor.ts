@@ -26,7 +26,7 @@ import { addressName, shortId } from './apdoc/ids.js';
 import { namesMatching } from './services/fs.js';
 import { resolve } from 'node:path';
 import { DISTILLED_DIR } from './apx/paths.js';
-import { isDelegationVerb, FORK_VERB } from './delegation.js';
+import { isDelegationVerb, ASK_VERB, DELEGATE_VERB, FORK_VERB } from './delegation.js';
 
 /** The ranks of the executors — a line or a head may raise its enclosing one, never lower it. */
 export const AGENT = 0, DELEGATE = 1, PROGRAM = 2;
@@ -150,6 +150,32 @@ export function executorKey(rank: number): '1' | '2' {
   return rank === PROGRAM ? '2' : '1';
 }
 
+/** The blocks whose lines hand work over — a flow's steps, a unit's routing: DELEGATE and FORK are theirs, ASK an agent's. */
+const HANDS_WORK_OVER: ReadonlySet<string> = new Set(['flow', 'team', 'main']);
+
+/**
+ * Where a question and a delegation stand: an ASK is an agent's — its body, its
+ * procedures — and takes its INTO, the answer shaped by that variable's
+ * template, never an AS; a DELEGATE is a flow's or a unit's routing (a FORK's
+ * place is the lint's: a flow STEP).
+ */
+export function delegationSiteErrors(doc: ApDocument): LintError[] {
+  const errors: LintError[] = [];
+  for (const { node, block } of doc.nodes()) {
+    if (node.type !== 'directive') continue;
+    const err = (message: string) => errors.push({ file: block.source?.file ?? '', line: node.pos?.line ?? 0, message });
+    const handsOver = HANDS_WORK_OVER.has(block.kind);
+    if (node.keyword === ASK_VERB) {
+      if (handsOver) err(`ASK is an agent's question — in a ${block.kind}, hand the work over with \`DELEGATE <task> BY <agent>\``);
+      if (!node.into) err('ASK needs its INTO — `ASK <question> INTO <name> [BY <agent>]`: the answer takes the template of that variable');
+      if (node.as) err('ASK takes no AS — the answer takes the template of its INTO variable: declare it `VAR <name> AS <template>`');
+    } else if (node.keyword === DELEGATE_VERB && !handsOver) {
+      err('DELEGATE hands work over, a flow\'s or a unit\'s routing — write it in a FLOW of a team or of the main; to ask an agent a question here, write `ASK <question> INTO <name> [BY <agent>]`');
+    }
+  }
+  return errors;
+}
+
 /**
  * Inside a `PROCEDURE*` / `PROCEDURE**`, what would lower the executor: an
  * DELEGATE under a program, a starred condition below the procedure's mark, a RUN
@@ -270,9 +296,8 @@ export function executorSpecs(
     const own = node.type === 'directive' ? verbRank(node.keyword) : node.type === 'if' || node.type === 'until' ? node.executor ?? null : null;
     if (!own || (block.executor ?? AGENT) >= own) continue;   // the procedure's own work
     if (node.type === 'directive') {
-      // A flow's delegation is the flow runner's, with the context its form says; a fork takes the conversation, never an input.
-      // So is a delegation to another harness: it is launched from outside, in a copy, and kept by the registry (D66).
-      if (block.kind === 'flow' || node.keyword === FORK_VERB || node.harness) continue;
+      // A DELEGATE or a FORK hands the work over with the context its form says: no contract — an ASK and a COMPUTE have one.
+      if (node.keyword === DELEGATE_VERB || node.keyword === FORK_VERB) continue;
       const into = node.into ? addressName(node.into.target) : undefined;
       const template = into ? varTemplate(into) : undefined;
       add(block, {

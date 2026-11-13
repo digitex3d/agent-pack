@@ -44,18 +44,18 @@ try {
   write(join(root, 'library', 'templates', 'dose-result.ap'), [
     'EXPORT TEMPLATE dose-result:', '    ABOUT  a dose', '    SLOTS:', '        mg:  NUMBER  "mg"', '    BODY:', '        {mg} mg',
   ]);
-  write(join(root, 'library', 'vars', 'clerk.ap'), ['IMPORT dose-result FROM @main.templates', 'EXPORT VAR tolerance = 1', 'EXPORT VAR totals', 'EXPORT VAR document_total', 'EXPORT VAR weight_kg', 'EXPORT VAR dose AS dose-result', 'EXPORT VAR summary']);
+  write(join(root, 'library', 'vars', 'clerk.ap'), ['IMPORT dose-result FROM @main.templates', 'EXPORT VAR tolerance = 1', 'EXPORT VAR totals', 'EXPORT VAR document_total', 'EXPORT VAR weight_kg', 'EXPORT VAR dose AS dose-result', 'EXPORT VAR summary', 'EXPORT VAR oddities']);
   const AGENT = [
-    'IMPORT dose-result FROM @main.templates', 'IMPORT tolerance, totals, document_total, weight_kg, dose, summary FROM @main.vars',
+    'IMPORT dose-result FROM @main.templates', 'IMPORT tolerance, totals, document_total, weight_kg, dose, summary, oddities FROM @main.vars',
     'EXPORT AGENT clerk AS clerk-role:', '    ABOUT    clerk', '    MANDATE  check invoices',
     '    WHEN an invoice arrives:',
-    '        DELEGATE  summarise the invoice for {{weight_kg}} INTO summary',
-    '        DELEGATE  note anything odd about {{weight_kg}}',
+    '        ASK  summarise the invoice for {{weight_kg}} INTO summary',
+    '        ASK  note anything odd about {{weight_kg}} INTO oddities',
     '        IF** {{totals}} differ from {{document_total}} by more than {{tolerance}} cent:',
     '            DO  write to the supplier',
     '        VAR dose:', '            RUN  pediatric',
     '        UNTIL* {{summary}} is short enough MAX 3:', '            DO  shorten it',
-    '        DELEGATE  estimate a dose for {{weight_kg}} INTO dose', '',
+    '        ASK  estimate a dose for {{weight_kg}} INTO dose', '',
     'ROLE clerk-role:', '    ABOUT   a clerk', '    ALWAYS  check twice', '',
     'COMPUTE pediatric:', '    REQUIRE:', '        MUST  {{weight_kg}} be between 2 and 80', '    RETURN AS dose-result:', '        DO  mg = {{weight_kg}} × 15', '    ENSURE:', '        MUST  mg be a whole number',
   ];
@@ -70,12 +70,12 @@ try {
   const [proc, procSpec] = specs.find(([, s]) => s.site === 'procedure');
   const condSpec = doc.meta.executors[cond];
 
-  // --- the default delegate: a DELEGATE without BY is handed to `quick`, shipped with the package, bundled with the project ---
+  // --- the default delegate: an ASK without BY is handed to `quick`, shipped with the package, bundled with the project ---
   const quickMd = readFileSync(join(root, '.claude', 'agents', 'quick.md'), 'utf-8');
   assert.ok(/^model: haiku$/m.test(quickMd), 'quick runs on a fast model on Claude Code');
   assert.ok(/^tools: \[\]$/m.test(quickMd), 'quick gets no tool: it answers from the input it is handed alone');
   const clerkMd = readFileSync(join(root, '.claude', 'agents', 'clerk.md'), 'utf-8');
-  assert.ok(clerkMd.includes('— to `quick` — hand it over its input and the shape of its answer, both from `node .agent-pack/apx/clerk.apx delegate input exe-'), 'the prompt names the default delegate and how to hand it over');
+  assert.ok(clerkMd.includes('— ask `quick` — hand it over its input and the shape of its answer, both from `node .agent-pack/apx/clerk.apx delegate input exe-'), 'the prompt names the default delegate and how to hand it over');
   assert.ok(/^model: inherit$/m.test(clerkMd), 'any other agent inherits the session\'s model');
   assert.ok(/^tools: "\*"$/m.test(clerkMd) || /^tools: \*$/m.test(clerkMd), 'any other agent keeps its tools');
 

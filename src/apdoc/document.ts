@@ -17,7 +17,7 @@
  * consumer ever needs `instanceof` (duck-typing survives module realms).
  */
 import { resolve as resolvePath } from 'node:path';
-import type { ApDocumentMeta, ApMdMeta, ApOutlineItem, ApOutlinePart, ApRef, ApNode, ApLine } from './types.js';
+import type { ApBlockData, ApDocumentMeta, ApMdMeta, ApOutlineItem, ApOutlinePart, ApRef, ApNode, ApLine } from './types.js';
 import { walk, type LineHead } from './nodes.js';
 import { DISTILLED_DIR } from '../apx/paths.js';
 import type { ApBlock } from './block.js';
@@ -37,12 +37,14 @@ import { assignLeafNodes, buildTagRenderTree, type TagRenderNode } from '../bund
  * not enter toJSON/contentHash). The md layout reads it: only 'definition'
  * blocks form the chapters.
  */
-export type BlockProvenance = 'definition' | 'team' | 'agent';
+export type BlockProvenance = 'definition' | 'agent';
 
 export class ApDocument {
   readonly schemaVersion = 1 as const;
   private blocks = new Map<string, ApBlock>();
   private provenance = new Map<string, BlockProvenance>();
+  /** Where a block this document only refers to is found by its id — the store of the pack it is served from; none at compile time. */
+  private store: ((id: string) => ApBlock | null) | null = null;
 
   constructor(private readonly docMeta: ApDocumentMeta) {}
 
@@ -61,22 +63,26 @@ export class ApDocument {
   static fromJson(text: string): ApDocument {
     const data = JSON.parse(text) as {
       meta: ApDocumentMeta;
-      blocks: Record<string, import('./types.js').ApBlockData>;
+      blocks: Record<string, ApBlockData>;
     };
     const doc = new ApDocument(data.meta);
     // The plugins its blocks belong to: kinds of this process before any block is revived.
     for (const spec of Object.values(data.meta.plugins ?? {})) { registerPlugin(spec); installPluginKind(spec); }
     const md = data.meta.md;
     for (const [address, blockData] of Object.entries(data.blocks)) {
-      const strategy = strategyOf(blockData.kind);
-      if (!strategy) continue;
-      const block = strategy.revive(blockData);
+      const block = ApDocument.reviveBlock(blockData);
+      if (!block) continue;
       const provenance = (md?.provenance[address] ?? 'definition') as BlockProvenance;
       doc.add(block, provenance);
       const pos = md?.shapePos[address];
       if (pos !== undefined) block.shapePos = pos;
     }
     return doc;
+  }
+
+  /** One block from its serialized data, as its typed class — null for a kind this process does not know. */
+  static reviveBlock(data: ApBlockData): ApBlock | null {
+    return strategyOf(data.kind)?.revive(data) ?? null;
   }
 
   // ------------------------------------------------------------ construction
@@ -118,6 +124,15 @@ export class ApDocument {
     return this.blocks.get(ref.target) ?? null;
   }
 
+  /** Read the blocks it only refers to from a store: one id, one block, wherever it is held. */
+  readsFrom(store: (id: string) => ApBlock | null): void {
+    this.store = store;
+  }
+
+  /** Follow a Ref to its block — in this document, else in the store it reads from (a unit's member, the main's team). */
+  reach(ref: ApRef): ApBlock | null {
+    return this.resolve(ref) ?? (ref.id ? this.store?.(ref.id) : null) ?? null;
+  }
 
   /**
    * Every node of each block's body, at any depth, with its block and the nodes

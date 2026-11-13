@@ -27,7 +27,7 @@ import type { LintError } from '../lint.js';
 import { reporter } from '../report.js';
 import { judgeState, loadJudgeRules, severityOf } from './rules.js';
 import { AGENT, DELEGATE, PROGRAM, executorOf, scriptRuleLines } from '../executor.js';
-import { FORK_VERB } from '../delegation.js';
+import { DELEGATE_VERB, FORK_VERB } from '../delegation.js';
 import { JudgeLock, verdictKey, questionKey } from './lock.js';
 import { DEFAULT_DOMAIN_THRESHOLDS, type DomainThresholds } from '../domains.js';
 import { sha256, UnitStore, type Unit, type UnitDiagnostic } from './units.js';
@@ -278,8 +278,8 @@ function shipped(file: string | null): boolean {
 function inScope(scope: NonNullable<JudgeRule['scope']>, line: ApLine): boolean {
   if (scope === 'agent') return executorOf(line) === AGENT;
   if (line.primitive === 'RUN' || (line.line !== null && scriptRuleLines(line.block).has(line.line))) return false;
-  // A flow's delegation and a fork hand over context, never an input contract (src/executor.ts): not executed pieces.
-  if (line.block.kind === 'flow' || line.primitive === FORK_VERB) return false;
+  // A DELEGATE and a FORK hand the work over with its context, never an input contract (src/executor.ts): not executed pieces.
+  if (line.primitive === DELEGATE_VERB || line.primitive === FORK_VERB) return false;
   return executorOf(line) >= (scope === 'program' ? PROGRAM : DELEGATE);
 }
 

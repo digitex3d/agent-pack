@@ -15,7 +15,8 @@ import type { ApRef, ApShape, ApSlot, ApSlotType, ApNode, ApBlockData, ApStorePr
 import type { Definition } from '../definition.js';
 import type { BundleContext } from '../dispatch/types.js';
 import { ApBlock, type ApBlockInit } from './block.js';
-import { stableId } from './ids.js';
+import { addressName, stableId } from './ids.js';
+import type { ApDocument } from './document.js';
 import { buildNamespace } from '../namespace.js';
 import { FORMULAS, fill } from '../formulas.js';
 import { withScopeLine } from '../withUse.js';
@@ -68,7 +69,6 @@ export interface BlockCx {
   /** The SLOTS of a template the compilation holds — null when it holds none by that name. */
   templateSlots(name: string): Slot[] | null;
   agentRef(name: string): ApRef;
-  runnableRef(name: string): ApRef;
   refFromAddress(address: string, expectedKind?: string): ApRef;
   /** Namespace of a library file path, or null when outside every root. */
   namespaceOfPath(path: string): string | null;
@@ -755,6 +755,8 @@ export interface TeamScan {
   memberFiles: string[];
   /** The blocks of the TEAM or MAIN block — its routing WHENs and its FLOWs. */
   blocks: Block[];
+  /** Its routing as its body: every WHEN of the block, de-indented as an agent's body is written. */
+  routing: string;
   /** The FLOW blocks sliced back to raw text, de-indented as a flow file writes them. */
   flows: { name: string; body: string; block: Block | null }[];
 }
@@ -765,7 +767,6 @@ export class TeamBlock extends ApBlock {
   readonly kind = 'team';
   protected readonly idPrefix = TeamBlock.PREFIX;
   members: ApRef[] = [];
-  routing: { when: string; run: ApRef }[] | null = null;
   shared: string | null = null;
 
   /** The namespace a team's own flows live under. */
@@ -776,12 +777,11 @@ export class TeamBlock extends ApBlock {
   static fromData(data: ApBlockData): TeamBlock {
     const block = restore(new TeamBlock(initOf(data)), data);
     block.members = (data.args.members as ApRef[] | undefined) ?? [];
-    block.routing = (data.args.routing as { when: string; run: ApRef }[] | undefined) ?? null;
     block.shared = (data.args.shared as string | undefined) ?? null;
     return block;
   }
 
-  /** Build the team block from its scanned directory: members/routing/shared. */
+  /** Build the team block from its scanned directory: its members, its routing as its body — walked as an agent's is — and its shared text. */
   static fromScan(scan: TeamScan, cx: BlockCx): TeamBlock {
     const block = new TeamBlock({
       name: scan.name,
@@ -789,8 +789,7 @@ export class TeamBlock extends ApBlock {
       about: scan.file.about || null,
     });
     block.members = scan.members.map(name => cx.agentRef(name));
-    const routes = routesOf(scan, cx);
-    if (routes.length > 0) block.routing = routes;
+    cx.walk(scan.routing, block.body, block);
 
     const teamAp = resolve(scan.root, 'team.ap');
     if (existsSync(teamAp)) {
@@ -800,21 +799,35 @@ export class TeamBlock extends ApBlock {
     return block;
   }
 
+  /** The team's identity — who it is and its members, each with the command that reaches it: what an agent's role is to the agent. */
+  override asMdIdentity(env: MdEnv, doc: ApDocument): string {
+    const W = FORMULAS.blocks.team.unit;
+    return unitIdentity(env, doc, this, { lead: W.lead, groups: [{ title: W.members, refs: this.members }] });
+  }
+
   protected override argsJson(): Record<string, unknown> {
     return {
       members: this.members,
-      ...(this.routing ? { routing: this.routing } : {}),
       ...(this.shared ? { shared: this.shared } : {}),
     };
   }
 }
 
-/** The `WHEN … : RUN <flow|procedure>` routing entries of a unit's block. */
-function routesOf(scan: TeamScan, cx: BlockCx): { when: string; run: ApRef }[] {
-  return scan.blocks.filter(b => b.key === 'WHEN').flatMap(b => {
-    const when = [b.name, b.rest].filter(Boolean).join(' ');
-    return b.children.flatMap(child => (child.type === 'line' && child.keyword === 'RUN' ? [{ when, run: cx.runnableRef(child.rest.trim()) }] : []));
-  });
+/**
+ * A unit's identity: the line that says who it is, then each group of what it
+ * holds — its members, the main's teams — one row per block, with its ABOUT
+ * (read by id wherever the block is held) and the command that starts it.
+ */
+function unitIdentity(env: MdEnv, doc: ApDocument, unit: ApBlock, { lead, groups }: { lead: string; groups: { title: string; refs: readonly ApRef[] }[] }): string {
+  const lines = [FORMULAS.blocks.agent.identity, '', fill(lead, { name: unit.name, about: unit.about ?? '' })];
+  for (const { title, refs } of groups.filter(g => g.refs.length > 0)) {
+    lines.push('', title);
+    for (const ref of refs) {
+      const name = addressName(ref.target);
+      lines.push(fill(FORMULAS.blocks.team.unit.row, { name, about: doc.reach(ref)?.about ?? FORMULAS.blocks.team.undescribed, command: env.apxOf(name) }));
+    }
+  }
+  return `${lines.join('\n')}\n\n`;
 }
 
 /**
@@ -829,13 +842,11 @@ export class MainBlock extends ApBlock {
   protected readonly idPrefix = MainBlock.PREFIX;
   members: ApRef[] = [];
   teams: ApRef[] = [];
-  routing: { when: string; run: ApRef }[] | null = null;
 
   static fromData(data: ApBlockData): MainBlock {
     const block = restore(new MainBlock(initOf(data)), data);
     block.members = (data.args.members as ApRef[] | undefined) ?? [];
     block.teams = (data.args.teams as ApRef[] | undefined) ?? [];
-    block.routing = (data.args.routing as { when: string; run: ApRef }[] | undefined) ?? null;
     return block;
   }
 
@@ -844,16 +855,20 @@ export class MainBlock extends ApBlock {
     const block = new MainBlock({ name: scan.name, namespace: MainBlock.NAMESPACE, about: scan.file.about || null });
     block.members = scan.members.map(name => cx.agentRef(name));
     block.teams = scan.teams.map(name => cx.refFromAddress(`${TeamBlock.NAMESPACE}/${name}`, 'team'));
-    const routes = routesOf(scan, cx);
-    if (routes.length > 0) block.routing = routes;
+    cx.walk(scan.routing, block.body, block);
     return block;
+  }
+
+  /** The main's identity — who it is, its teams, its agents, each with the command that reaches it. */
+  override asMdIdentity(env: MdEnv, doc: ApDocument): string {
+    const W = FORMULAS.blocks.main.unit;
+    return unitIdentity(env, doc, this, { lead: W.lead, groups: [{ title: W.teams, refs: this.teams }, { title: W.members, refs: this.members }] });
   }
 
   protected override argsJson(): Record<string, unknown> {
     return {
       members: this.members,
       teams: this.teams,
-      ...(this.routing ? { routing: this.routing } : {}),
     };
   }
 }
@@ -912,7 +927,8 @@ export class AgentBlock extends ApBlock {
    * The agent's md preamble — Identity (via the ONE legacy composer) and the
    * lens binding lines. The block owns its own md; the backend composes.
    */
-  asMdIdentity(env: MdEnv, roleBlocks: readonly ApBlock[]): string {
+  override asMdIdentity(env: MdEnv, doc: ApDocument): string {
+    const roleBlocks = this.roles.map(r => doc.resolve(r)).filter((b): b is ApBlock => b !== null);
     // One identity line per role, in the order bound; ROLE, ROLE-ABOUT and EXPERTISE align by position.
     const identityMeta = new Map<string, string[]>();
     if (roleBlocks.length) {

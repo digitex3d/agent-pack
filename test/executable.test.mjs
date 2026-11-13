@@ -20,9 +20,10 @@ const { executableEntry, buildExecutable, bunInstalled } = await import('../dist
 const { apxPath, binPath } = await import('../dist/src/apx/paths.js');
 
 const apxDir = join(ROOT, '.agent-pack', 'apx');
-/** An agent of this project with a plain SESSION variable, `docs-audit`. */
-const AGENT = 'docs-auditor';
-const anApx = existsSync(apxDir) ? readFileSync(join(apxDir, `${AGENT}.apx`), 'utf-8') : null;
+/** A unit of this project with a plain SESSION variable, `build` — the parts below that need it are skipped when it is not built. */
+const AGENT = 'feature-delivery';
+const VARIABLE = 'build';
+const anApx = existsSync(join(apxDir, `${AGENT}.apx`)) ? readFileSync(join(apxDir, `${AGENT}.apx`), 'utf-8') : null;
 const engine = anApx ? splitPack(anApx).engine : readFileSync(join(ROOT, 'dist', 'apx-engine.js'), 'utf-8');
 
 // --- split is the inverse of packFile; the data alone reads as the file does ---
@@ -47,8 +48,8 @@ if (anApx) {
     const split = splitPack(anApx);
     writeFileSync(join(work, 'engine.cjs'), split.engine);
     writeFileSync(join(work, 'entry.cjs'), executableEntry(split.data));
-    const sim = spawnSync(process.execPath, ['entry.cjs', 'ls'], { cwd: work, encoding: 'utf-8' });
-    const real = spawnSync(process.execPath, [join(apxDir, `${AGENT}.apx`), 'ls'], { cwd: ROOT, encoding: 'utf-8' });
+    const sim = spawnSync(process.execPath, ['entry.cjs', 'ls', 'kind=template'], { cwd: work, encoding: 'utf-8' });
+    const real = spawnSync(process.execPath, [join(apxDir, `${AGENT}.apx`), 'ls', 'kind=template'], { cwd: ROOT, encoding: 'utf-8' });
     assert.equal(sim.status, 0, sim.stdout + sim.stderr);
     assert.equal(sim.stdout, real.stdout, 'the embedded data lists what the apx lists');
   } finally {
@@ -75,16 +76,16 @@ if (bunInstalled() && anApx) {
     writeFileSync(join(project, apxPath(AGENT)), anApx);
     const bin = buildExecutable(AGENT, project);
     assert.ok(existsSync(bin), 'the binary is written');
-    const fromBin = spawnSync(bin, ['ls'], { cwd: project, encoding: 'utf-8' });
-    const fromApx = spawnSync(process.execPath, [apxPath(AGENT), 'ls'], { cwd: project, encoding: 'utf-8' });
+    const fromBin = spawnSync(bin, ['ls', 'kind=template'], { cwd: project, encoding: 'utf-8' });
+    const fromApx = spawnSync(process.execPath, [apxPath(AGENT), 'ls', 'kind=template'], { cwd: project, encoding: 'utf-8' });
     assert.equal(fromBin.status, 0, fromBin.stdout + fromBin.stderr);
     assert.equal(fromBin.stdout, fromApx.stdout, 'the binary lists what the apx lists');
     const sessionEnv = JSON.parse(parsePayload(anApx).document).meta?.sessionEnv;
     if (sessionEnv) {
       const env = { ...process.env, [sessionEnv]: 'p1' };
-      const set = spawnSync(bin, ['set', 'docs-audit', '42'], { cwd: project, encoding: 'utf-8', env });
+      const set = spawnSync(bin, ['set', VARIABLE, '42'], { cwd: project, encoding: 'utf-8', env });
       assert.equal(set.status, 0, set.stdout + set.stderr);
-      const get = spawnSync(process.execPath, [apxPath(AGENT), 'get', 'docs-audit'], { cwd: project, encoding: 'utf-8', env });
+      const get = spawnSync(process.execPath, [apxPath(AGENT), 'get', VARIABLE], { cwd: project, encoding: 'utf-8', env });
       assert.equal(get.stdout.trim().split('\n').at(-1), '42', 'a variable the binary writes, the apx reads: one state');
       assert.ok(existsSync(join(project, '.agent-pack', 'state', 'p1')), 'the state is in the project, where the apx keeps it');
     }
