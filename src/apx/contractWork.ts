@@ -83,6 +83,31 @@ function deliveryRefusal(delivery: Delivery, why: string | undefined): DeliveryR
 /** What `scanZones` finds: the zones of each contract, and why some contracts' marks are wrong. */
 type ScannedZones = ReturnType<typeof scanZones>;
 
+/** A MARK of this agent's flows, with its id. */
+type IdentifiedMark = ApMark & { id: string };
+
+/** Who carries out a list's contracts, and where: in a copy here, or on another harness through its recipe. */
+interface Runner {
+  /** The `--by` value, as written. */
+  by: string;
+  agent: string;
+  elsewhere: { harness: string; invocation: HarnessInvocation } | null;
+}
+
+/** The zones each contract of a list starts on, and the WITHIN domain its MARK lets it write beyond them. */
+interface StartZones {
+  zones: ScannedZones['zones'];
+  within: string[];
+}
+
+/** One contract to start: its MARK, who runs it, its zones, and when the round started. */
+interface ContractStart extends StartZones {
+  mark: IdentifiedMark;
+  runner: Runner;
+  record: DelegationRecord;
+  startedAt: string;
+}
+
 export class ContractWork {
   constructor(private readonly host: ApxOutput & ApxContext & ApxSession) {}
 
@@ -220,7 +245,7 @@ export class ContractWork {
   }
 
   /** A MARK of this agent's flows by id — or null after saying why. */
-  private markArg(id: string | undefined, usage: string): (ApMark & { id: string }) | null {
+  private markArg(id: string | undefined, usage: string): IdentifiedMark | null {
     const mark = id ? this.host.doc.meta.marks?.[id] : undefined;
     if (!id || !MARK_ID_RE.test(id) || !mark) {
       const problem = id ? fill(WORDS.contract.markUnknown, { id }) : WORDS.contract.markMissing;
@@ -272,7 +297,7 @@ export class ContractWork {
     const mark = this.markArg(args[0], usage);
     if (!mark) return this.host.lastCode;
     if (args[1] !== '-') return this.host.refuse(2, WORDS.contract.specOnStdin, { usage });
-    const waiting = contracts.table.all().filter(record => record.mark === mark.id && record.state === STATE.marked);
+    const waiting = this.waiting(contracts, mark);
     const limit = mark.max || this.host.build.markMax || DEFAULT_MARK_MAX;
     if (waiting.length >= limit) return this.host.refuse(3, WORDS.contract.zonesFull, { list: mark.list, max: limit });
     const specTemplate = this.specRef(mark);
@@ -312,43 +337,90 @@ export class ContractWork {
     const usage = 'start <mrk-id> --by <agent | harness:agent>';
     const mark = this.markArg(args[0], usage);
     if (!mark) return this.host.lastCode;
-    const by = flagValue(args.slice(1), '--by');
-    if (!by) return this.host.refuse(2, WORDS.contract.whoMissing, { usage });
-    const other = splitHarness(by);
-    const invocation = other ? this.host.doc.meta.harnesses?.[other.harness] : undefined;
-    if (other && !invocation) return this.host.refuse(2, WORDS.contract.recipeMissing, { harness: other.harness, name: this.host.root.name, list: mark.list, by });
-    const agent = other?.agent ?? by;
-    const pending = contracts.table.all().filter(record => record.mark === mark.id && record.state === STATE.marked);
+    const runner = this.runnerOf(args, mark, usage);
+    if (!runner) return this.host.lastCode;
+    const pending = this.waiting(contracts, mark);
     if (pending.length === 0) return this.host.print(this.host.phrase(WORDS.contract.nothingMarked, { list: mark.list }));
+    const startZones = this.zonesToStart(contracts, mark, pending);
+    if (!startZones) return this.host.lastCode;
+    const landed = this.landMerged(contracts);
+    if (!landed) return this.host.lastCode;
+    if (landed.length) this.host.say(WORDS.landing.landed, { files: landed.join(', ') });
+    const startedAt = new Date().toISOString();
+    for (const record of pending) {
+      if (!this.startOne(contracts, { mark, runner, record, startedAt, ...startZones })) return this.host.lastCode;
+    }
+    return this.reportStarted(mark, runner, pending.length);
+  }
+
+  /** The contracts of a MARK waiting to start. */
+  private waiting(contracts: ContractContext, mark: IdentifiedMark): DelegationRecord[] {
+    return contracts.table.all().filter(record => record.mark === mark.id && record.state === STATE.marked);
+  }
+
+  /** Who `--by` names, and where its contracts run — or null after saying why it cannot run them. */
+  private runnerOf(args: string[], mark: IdentifiedMark, usage: string): Runner | null {
+    const by = flagValue(args.slice(1), '--by');
+    if (!by) {
+      this.host.lastCode = this.host.refuse(2, WORDS.contract.whoMissing, { usage });
+      return null;
+    }
+    const other = splitHarness(by);
+    if (!other) return { by, agent: by, elsewhere: null };
+    const invocation = this.host.doc.meta.harnesses?.[other.harness];
+    if (!invocation) {
+      this.host.lastCode = this.host.refuse(2, WORDS.contract.recipeMissing, { harness: other.harness, name: this.host.root.name, list: mark.list, by });
+      return null;
+    }
+    return { by, agent: other.agent, elsewhere: { harness: other.harness, invocation } };
+  }
+
+  /** The zones the contracts `pending` start on, found by their marks — or null after saying which cannot start. */
+  private zonesToStart(contracts: ContractContext, mark: IdentifiedMark, pending: DelegationRecord[]): StartZones | null {
     const scope = this.host.doc.perimeter()?.writes;
     const files = perimeterFiles(contracts.root, scope && scope.length ? scope : ['**']);
     const { zones, problems } = scanZones(contracts.root, files, pending.map(record => record.dlg));
     const within = this.domainGlobs(mark.within);
     const refusals = this.zoneRefusals(pending, zones, problems, within);
-    if (refusals.length) {
-      for (const line of refusals) this.host.out(`refused: ${line}`);
-      return this.host.refuse(3, WORDS.contract.startRefused, { count: countOf(refusals.length, 'contract', 'contracts') });
-    }
+    if (refusals.length === 0) return { zones, within };
+    for (const line of refusals) this.host.out(`refused: ${line}`);
+    this.host.lastCode = this.host.refuse(3, WORDS.contract.startRefused, { count: countOf(refusals.length, 'contract', 'contracts') });
+    return null;
+  }
+
+  /** What was merged since the last round, landed in the working folder: the files — or null after naming the conflicts. */
+  private landMerged(contracts: ContractContext): string[] | null {
     const landing = contracts.workspace().land();
-    if ('conflicts' in landing) return this.host.fail(3, this.conflictsText(landing.conflicts, WORDS.landing.thenStart));
-    if (landing.landed.length) this.host.say(WORDS.landing.landed, { files: landing.landed.join(', ') });
-    const startedAt = new Date().toISOString();
-    for (const record of pending) {
-      const recordZones = zones.get(record.dlg) ?? [];
-      const writes = [...new Set([...recordZones.map(zone => zone.file), ...within])];
-      let command: string | null = null;
-      if (invocation) command = this.openElsewhere(contracts, record.dlg, invocation, agent, writes, this.contractPrompt(record, mark, recordZones, within), null);
-      else contracts.workspace().open(record.dlg, { reads: null, writes });
-      const fields = { assignee: agent, zone: zonesText(recordZones), writes: within.join(','), started_at: startedAt, ...(other ? { harness: other.harness } : {}) };
-      if (!contracts.table.transition(record.dlg, STATE.marked, STATE.running, fields)) return this.host.refuse(4, WORDS.contract.changedList, { id: record.dlg, mark: mark.id });
-      this.host.out(`${record.dlg}  → ${agent}${other ? ` on ${other.harness}` : ''}${recordZones.length ? `  ${zonesText(recordZones)}` : ''}  copy: ${contracts.workspace().path(record.dlg)}`);
-      if (command) this.host.out(command);
+    if (!('conflicts' in landing)) return landing.landed;
+    this.host.lastCode = this.host.fail(3, this.conflictsText(landing.conflicts, WORDS.landing.thenStart));
+    return null;
+  }
+
+  /** One contract started: its copy opened, here or on another harness, and the registry moved to running — false after saying it moved meanwhile. */
+  private startOne(contracts: ContractContext, { mark, runner, record, zones, within, startedAt }: ContractStart): boolean {
+    const recordZones = zones.get(record.dlg) ?? [];
+    const writes = [...new Set([...recordZones.map(zone => zone.file), ...within])];
+    const { elsewhere } = runner;
+    let command: string | null = null;
+    if (elsewhere) command = this.openElsewhere(contracts, record.dlg, elsewhere.invocation, runner.agent, writes, this.contractPrompt(record, mark, recordZones, within), null);
+    else contracts.workspace().open(record.dlg, { reads: null, writes });
+    const fields = { assignee: runner.agent, zone: zonesText(recordZones), writes: within.join(','), started_at: startedAt, ...(elsewhere ? { harness: elsewhere.harness } : {}) };
+    if (!contracts.table.transition(record.dlg, STATE.marked, STATE.running, fields)) {
+      this.host.lastCode = this.host.refuse(4, WORDS.contract.changedList, { id: record.dlg, mark: mark.id });
+      return false;
     }
-    const started = countOf(pending.length, 'contract', 'contracts');
+    this.host.out(`${record.dlg}  → ${runner.agent}${elsewhere ? ` on ${elsewhere.harness}` : ''}${recordZones.length ? `  ${zonesText(recordZones)}` : ''}  copy: ${contracts.workspace().path(record.dlg)}`);
+    if (command) this.host.out(command);
+    return true;
+  }
+
+  /** What a start says once its contracts are running: how many, and how they are taken back — from another harness, how each one ends. */
+  private reportStarted(mark: IdentifiedMark, { by, agent, elsewhere }: Runner, count: number): number {
+    const started = countOf(count, 'contract', 'contracts');
     const takesBack = this.host.phrase(WORDS.contract.takesBack, { mark: mark.id });
-    if (!other || !invocation) return this.host.print(this.host.phrase(WORDS.contract.started, { started, by, takesBack }));
-    this.host.say(WORDS.contract.startedElsewhere, { started, harness: other.harness });
-    return this.elsewhereTail(invocation, agent, other.harness, { id: '<ctr-id>', many: true, flags: ' [--why "<reason>"]', then: `; ${takesBack}` });
+    if (!elsewhere) return this.host.print(this.host.phrase(WORDS.contract.started, { started, by, takesBack }));
+    this.host.say(WORDS.contract.startedElsewhere, { started, harness: elsewhere.harness });
+    return this.elsewhereTail(elsewhere.invocation, agent, elsewhere.harness, { id: '<ctr-id>', many: true, flags: ' [--why "<reason>"]', then: `; ${takesBack}` });
   }
 
   /** Why the contracts `pending` cannot start: the zones whose marks are wrong, and those with no zone and no WITHIN domain to write in. */
@@ -559,8 +631,7 @@ export class ContractWork {
     const agent = work.by ?? '';
     const contracts = this.context();
     if (!contracts) return this.host.lastCode;
-    const landing = contracts.workspace().land();
-    if ('conflicts' in landing) return this.host.fail(3, this.conflictsText(landing.conflicts, WORDS.landing.thenStart));
+    if (!this.landMerged(contracts)) return this.host.lastCode;
     const handed = this.handedValues(work.task);
     if ('empty' in handed) return this.host.refuse(1, WORDS.elsewhere.unfilled, { empty: emptyVariable(handed.empty), id: record.dlg });
     const shape = this.elsewhereShape(record.dlg);
