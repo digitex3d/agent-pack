@@ -18,7 +18,7 @@ import {
 } from '../dimensions.js';
 import { STORE_EXIT, StoreRefusal, fieldsText, installRecorded, resolveStore, type OpenStore } from '../stores.js';
 import { mark, next, q, since, writeUsage, type Dimension, type Op } from './dimensionQuery.js';
-import { countOf, serviceCommand, type ApxHost, type ApxService } from '../service.js';
+import { countOf, serviceCommand, type ApxContext, type ApxOutput, type ApxService } from '../service.js';
 
 /** How many hex digits of a fingerprint a message shows. */
 const HASH_SHOWN = 12;
@@ -27,7 +27,7 @@ const HASH_SHOWN = 12;
 const STALE = STORE_EXIT.stale;
 
 /** The dimensions, each with its store, its files and its cache at the project root. */
-async function dimensionsOf(host: ApxHost): Promise<Dimension[]> {
+async function dimensionsOf(host: ApxOutput & ApxContext): Promise<Dimension[]> {
   await installRecorded(host);
   return (host.doc.byKind('dimension') as DimensionBlock[]).flatMap(block => {
     const parts = dimensionParts(host.doc, block);
@@ -49,7 +49,7 @@ async function dimensionsOf(host: ApxHost): Promise<Dimension[]> {
 }
 
 /** The file an operation names, from the project root — or null after telling what is wrong. */
-function fileArg(host: ApxHost, dim: Dimension, op: string, arg: string | undefined, usage: string): string | null {
+function fileArg(host: ApxOutput & ApxContext, dim: Dimension, op: string, arg: string | undefined, usage: string): string | null {
   const refuse = (message: string): null => { host.lastCode = host.fail(STORE_EXIT.usage, message); return null; };
   if (!arg) return refuse(`${dim.name} ${op} needs a file — ${dim.cmd(op)} ${usage}`);
   const file = relativeWithin(dim.cache.root, resolve(arg));
@@ -88,7 +88,7 @@ async function entryFor(dim: Dimension, file: string): Promise<{ entry: CacheEnt
 }
 
 /** A read with no fresh answer: why, and how to keep one. */
-function miss(host: ApxHost, dim: Dimension, file: string, state: EntryState | null): number {
+function miss(host: ApxOutput & ApxContext, dim: Dimension, file: string, state: EntryState | null): number {
   dim.cache.count('misses');
   if (state?.state === 'gone') { host.out(`gone ${dim.name} ${file} — ${state.reason}`); return 1; }
   host.out(`miss ${dim.name} ${file} — ${state ? state.reason : 'never written'}`);
@@ -145,7 +145,7 @@ function refsOf(dim: Dimension, file: string, arg: string | undefined): Record<s
  * gave it meanwhile (exit 4). Refused: nothing is written.
  */
 /** The arguments of a write: its file, its refs option, where its value comes from — or the exit code of what is wrong with them. */
-function writeArgs(host: ApxHost, dim: Dimension, args: string[]): { file: string; refsArg: string | undefined; from: string } | number {
+function writeArgs(host: ApxOutput & ApxContext, dim: Dimension, args: string[]): { file: string; refsArg: string | undefined; from: string } | number {
   const usage = writeUsage();
   const file = fileArg(host, dim, 'write', args[0], usage);
   if (!file) return host.lastCode;
@@ -176,7 +176,7 @@ const write: Op = async (host, dim, args) => {
 };
 
 /** Keep a checked answer — the files it names among its refs — unless another agent answered the file meanwhile. */
-async function keep(host: ApxHost, dim: Dimension, entry: CacheEntry): Promise<number> {
+async function keep(host: ApxOutput & ApxContext, dim: Dimension, entry: CacheEntry): Promise<number> {
   const { cache } = dim;
   // The files the answer names are files it depends on.
   for (const named of filesNamedIn(cache.root, entry.value)) if (named !== entry.file && !(named in entry.refs)) entry.refs[named] = cache.fingerprintOf(named) ?? '';
@@ -281,7 +281,7 @@ const gc: Op = async (host, dim) => {
 const OPS: Record<string, Op> = { read, write, find, q, next, mark, since, ls, why, clear, gc };
 
 /** `dimension` alone, or `ls` with no id: the agent's dimensions, each with what it covers and its counts. */
-async function list(host: ApxHost, dimensions: Dimension[]): Promise<number> {
+async function list(host: ApxOutput & ApxContext, dimensions: Dimension[]): Promise<number> {
   if (dimensions.length === 0) host.out('# this agent has no dimensions');
   for (const dimension of dimensions) {
     host.out(`${dimension.block.id}  ${dimension.name}  ${dimension.cache.defhash}  — files: ${dimension.block.globs.join(', ')} — ${(await entriesOf(dimension)).summary}  — read: ${dimension.cmd('read')} <file>`);

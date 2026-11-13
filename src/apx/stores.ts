@@ -21,7 +21,7 @@ import { filtersOn } from '../storeDrivers/filters.js';
 import { installDriver, storeDriverNames, storeDriverOf, useTabeliEngine, type DriverEntry } from '../storeDrivers/registry.js';
 import type { Collection, Doc, DriverCapability, Filter, MaybePromise, StoreDecl, StoreDriver, StoreLifetime, StoreRef } from '../storeDrivers/types.js';
 import { CACHE_DIR, STATE_DIR } from './paths.js';
-import type { ApxHost } from './service.js';
+import type { ApxContext } from './service.js';
 
 /**
  * What a store declares, wherever it is declared: a `STORE` block is one
@@ -68,7 +68,7 @@ export class StoreRefusal extends Error {
 let driversReady: Promise<void> | null = null;
 
 /** Install, once per run, the drivers the apx's bundle recorded: the tabeli engine, then the config's own drivers. */
-export function installRecorded(host: ApxHost): Promise<void> {
+export function installRecorded(host: ApxContext): Promise<void> {
   driversReady ??= (async () => {
     useTabeliEngine(host.build.tabeli);
     for (const driver of (host.build.drivers ?? []) as DriverEntry[]) await installDriver(driver.module, driver.options);
@@ -103,7 +103,7 @@ function placeOf(spec: StoreSpec, agent: string, place: StorePlace, own: string)
 }
 
 /** The agent's stores, each with its driver and its data's place. */
-export async function storesOf(host: ApxHost): Promise<OpenStore[]> {
+export async function storesOf(host: ApxContext): Promise<OpenStore[]> {
   await installRecorded(host);
   return (host.doc.agentStores() as StoreBlock[]).map(block => resolveStore(block, host.projectRoot, host.root.name, { kind: 'agent' }));
 }

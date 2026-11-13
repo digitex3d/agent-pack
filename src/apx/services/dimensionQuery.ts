@@ -12,7 +12,7 @@ import { filtersOn } from '../../storeDrivers/filters.js';
 import type { DimensionCache } from '../dimensions.js';
 import { matchesAnyGlob } from '../../services/glob.js';
 import { STORE_EXIT, fieldsText } from '../stores.js';
-import { countOf, type ApxHost } from '../service.js';
+import { countOf, type ApxContext, type ApxOutput } from '../service.js';
 
 /** A dimension of this agent: its block, its store, the files it covers, its cache. */
 export interface Dimension {
@@ -30,7 +30,7 @@ export interface Dimension {
 const WRITE_REFS = '[refs=<path>;<path>]';
 export const writeUsage = (file = '<file>') => `${file} ${WRITE_REFS} -|none`;
 
-export type Op = (host: ApxHost, dim: Dimension, args: string[]) => number | Promise<number>;
+export type Op = (host: ApxOutput & ApxContext, dim: Dimension, args: string[]) => number | Promise<number>;
 
 
 /** `q <dim-id> [<field><op><value> …] [json]` — the instances every filter holds for, each with its file; fresh answers only. */

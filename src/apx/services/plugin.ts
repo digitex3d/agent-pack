@@ -18,7 +18,7 @@ import { pathToFileURL } from 'node:url';
 import type { PluginBlock } from '../../apdoc/blocks.js';
 import { STATE_DIR } from '../paths.js';
 import { inputUsage, recordIssues, recordOfArgs, type PluginSpec } from '../../plugins.js';
-import { serviceCommand, type ApxHost, type ApxService } from '../service.js';
+import { serviceCommand, type ApxContext, type ApxOutput, type ApxService, type ApxSession } from '../service.js';
 
 type Result = number | { refuse: string } | void;
 type Operation = (call: { block: Record<string, unknown>; input: Record<string, unknown>; state: { get(fallback: unknown): unknown; set(value: unknown): void }; out(line: string): void }) => Result | Promise<Result>;
@@ -33,7 +33,7 @@ export function pluginService(spec: PluginSpec): ApxService {
   };
 }
 
-async function serve(host: ApxHost, spec: PluginSpec, op: string | undefined, args: string[]): Promise<number> {
+async function serve(host: ApxOutput & ApxContext & ApxSession, spec: PluginSpec, op: string | undefined, args: string[]): Promise<number> {
   const blocks = host.doc.byKind(spec.name) as PluginBlock[];
   const operations = spec.operations.map(operationSpec => operationSpec.op).join('|');
   if (!op) {

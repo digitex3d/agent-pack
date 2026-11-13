@@ -9,7 +9,7 @@
 import {
   STORE_EXIT, StoreRefusal, checkWrite, countLine, fieldsOf, filtersOf, open, optionalOp, recordLine, requireCapability, storesOf, type OpenStore,
 } from '../stores.js';
-import type { ApxHost, ApxService } from '../service.js';
+import type { ApxContext, ApxOutput, ApxService } from '../service.js';
 
 const OPERATIONS = [
   { op: 'put', args: '<sto-id> <field>=<value> …', about: 'add a record — with the KEY already present, update it instead' },
@@ -22,7 +22,7 @@ const OPERATIONS = [
   { op: 'since', args: '<sto-id> <mark>', about: 'the records added or changed after a mark' },
 ];
 
-type Op = (host: ApxHost, store: OpenStore, args: string[]) => Promise<number>;
+type Op = (host: ApxOutput, store: OpenStore, args: string[]) => Promise<number>;
 
 /** Split `args` at the first `word`: what comes before, what comes after (null when absent). */
 function splitAt(args: string[], word: string): [string[], string[] | null] {
@@ -120,14 +120,14 @@ const since: Op = async (host, store, args) => {
 const OPS: Record<string, Op> = { put, get, find, set, remove, take, mark, since };
 
 /** `store` alone: the agent's stores, each with its driver and where its data lives. */
-function list(host: ApxHost, stores: OpenStore[]): number {
+function list(host: ApxOutput, stores: OpenStore[]): number {
   if (stores.length === 0) host.out('# this agent has no stores');
   for (const store of stores) host.out(`${store.spec.id}  ${store.spec.name}  ${store.driver.name}  ${store.driver.location(store.ref)}`);
   return 0;
 }
 
 /** The store an operation names by its id — or a refusal listing the agent's stores. */
-function storeArg(host: ApxHost, stores: OpenStore[], id: string | undefined): OpenStore {
+function storeArg(host: ApxOutput, stores: OpenStore[], id: string | undefined): OpenStore {
   const store = id ? stores.find(candidate => candidate.spec.id === id) : undefined;
   if (store) return store;
   const known = stores.map(candidate => `${candidate.spec.id} (${candidate.spec.name})`).join(', ') || 'none';
@@ -135,7 +135,7 @@ function storeArg(host: ApxHost, stores: OpenStore[], id: string | undefined): O
 }
 
 /** One call of the service, its refusals thrown. */
-async function serveOp(host: ApxHost, op: string | undefined, args: string[]): Promise<number> {
+async function serveOp(host: ApxOutput & ApxContext, op: string | undefined, args: string[]): Promise<number> {
   const stores = await storesOf(host);
   if (!op) return list(host, stores);
   const run = OPS[op];

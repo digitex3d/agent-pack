@@ -39,45 +39,61 @@ export interface ApxService {
   serve(host: ApxHost, op: string | undefined, args: string[]): number | Promise<number>;
 }
 
-/** What a service may use of the engine. */
-export interface ApxHost {
-  readonly doc: ApDocument;
-  readonly build: ApxBuild;
-  /** The path the harness invoked the apx by. */
-  readonly exe: string;
+/** How the apx speaks: every line it prints, every error it fails with, and the exit code of the last refusal. */
+export interface ApxOutput {
   /** The command every printed command starts with. */
   readonly cmd: string;
-  /** The document's root — an agent, or a unit: its name is who the apx serves. */
-  readonly root: ApBlock;
-  /** The project root the apx lives in. */
-  readonly projectRoot: string;
   lastCode: number;
   out(line: string): void;
   print(text: string): number;
   fail(code: number, message: string): number;
-  /** A JSON text checked against a template's slots — the issues, or null. */
-  contractIssues(json: string, template: ApRef, list?: { name: string; min: number }): string | null;
-  variable(name: string): VarBlock | null;
-  storeVariable(block: VarBlock, value: string): { code: number; reason: string } | null;
-  openSession(): SessionVars | string;
-  /** The harness session id — or why there is none, opening with what `needs` it. */
-  sessionIdOrReason(needs?: string): { id: string } | { reason: string };
-  executorArg(verb: string, id: string | undefined): ApExecutorSpec | null;
-  inputJson(spec: ApExecutorSpec, extra?: Record<string, unknown>): Record<string, unknown> | null;
-  intoArg(spec: ApExecutorSpec, id: string, args: string[]): { spec: ApExecutorSpec; args: string[] } | null;
-  answerShape(spec: ApExecutorSpec): ApRef | null;
-  deliver(id: string, spec: ApExecutorSpec, text: string, outcome: ExecutorRecord['outcome'], fingerprint: string): string | null;
-  delivered(id: string, spec: ApExecutorSpec, text: string): number;
   /** A formula filled with the values and the command prefix every printed command starts with. */
   phrase(formula: string, values?: Record<string, string | number>): string;
   /** Print a formula, filled. */
   say(formula: string, values?: Record<string, string | number>): void;
   /** Fail with a formula, filled — its exit code is returned. */
   refuse(code: number, formula: string, values?: Record<string, string | number>): number;
+}
+
+/** What the apx serves: the compiled document, how it was built, and where it lives. */
+export interface ApxContext {
+  readonly doc: ApDocument;
+  readonly build: ApxBuild;
+  /** The path the harness invoked the apx by. */
+  readonly exe: string;
+  /** The document's root — an agent, or a unit: its name is who the apx serves. */
+  readonly root: ApBlock;
+  /** The project root the apx lives in. */
+  readonly projectRoot: string;
+}
+
+/** The harness session: its id, and the variables it holds. */
+export interface ApxSession {
+  /** The harness session id — or why there is none, opening with what `needs` it. */
+  sessionIdOrReason(needs?: string): { id: string } | { reason: string };
+  openSession(): SessionVars | string;
   /** This session's variables — or null after saying why there are none. */
   sessionVars(): SessionVars | null;
   /** The values this session holds for `names` — or the first one that is empty. */
   readVariables(session: SessionVars, names: string[]): { values: NamedValue[] } | { empty: string };
+  variable(name: string): VarBlock | null;
+  storeVariable(block: VarBlock, value: string): { code: number; reason: string } | null;
+  /** A JSON text checked against a template's slots — the issues, or null. */
+  contractIssues(json: string, template: ApRef, list?: { name: string; min: number }): string | null;
+}
+
+/** The executors: a delegate's or a program's contract, its input, where its answer goes, and that answer recorded. */
+export interface ApxExecutors {
+  executorArg(verb: string, id: string | undefined): ApExecutorSpec | null;
+  inputJson(spec: ApExecutorSpec, extra?: Record<string, unknown>): Record<string, unknown> | null;
+  intoArg(spec: ApExecutorSpec, id: string, args: string[]): { spec: ApExecutorSpec; args: string[] } | null;
+  answerShape(spec: ApExecutorSpec): ApRef | null;
+  deliver(id: string, spec: ApExecutorSpec, text: string, outcome: ExecutorRecord['outcome'], fingerprint: string): string | null;
+  delivered(id: string, spec: ApExecutorSpec, text: string): number;
+}
+
+/** All a service may use of the engine — each function asks only for the parts it uses. */
+export interface ApxHost extends ApxOutput, ApxContext, ApxSession, ApxExecutors {
   /** The contracts: their verbs, the guard, and their own steps on copies (src/apx/contractWork.ts). */
   readonly contracts: ContractWork;
 }

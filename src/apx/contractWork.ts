@@ -7,8 +7,8 @@
  * `delegate` service and `wait` take on a piece with a copy of its own —
  * delivering it, launching it on another harness, folding it back in.
  *
- * What it uses of the engine is `ApxHost`: the document, the output, the
- * session's variables.
+ * What it uses of the engine: its output, its context and the session —
+ * never the executors.
  */
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -28,7 +28,7 @@ import { parsePayload } from './payload.js';
 import { resolveWorkspace } from '../workspace/registry.js';
 import type { Allowed, Delivery, WorkspaceSession } from '../workspace/types.js';
 import { constantOf, readsOf } from '../vars.js';
-import { NODE, countOf, emptyVariable, notCompiled, reasonOf, type ApxHost, type NamedValue } from './service.js';
+import { NODE, countOf, emptyVariable, notCompiled, reasonOf, type ApxContext, type ApxOutput, type ApxSession, type NamedValue } from './service.js';
 import { type PerimeterGlobs } from '../primitives.js';
 import { matchesAnyGlob, literalGlob } from '../services/glob.js';
 
@@ -84,7 +84,7 @@ function deliveryRefusal(delivery: Delivery, why: string | undefined): DeliveryR
 type ScannedZones = ReturnType<typeof scanZones>;
 
 export class ContractWork {
-  constructor(private readonly host: ApxHost) {}
+  constructor(private readonly host: ApxOutput & ApxContext & ApxSession) {}
 
   /** The session's registry and copies — or null after saying why there are none. */
   private context(): ContractContext | null {
@@ -139,7 +139,11 @@ export class ContractWork {
     }
   }
 
-  /** The perimeter a piece is handed under (D65) — see ApxHost.workPerimeter. */
+  /**
+   * The perimeter a piece is handed under, as the registry keeps it (D65): the
+   * WRITES globs of the domains of its `@WITHIN`, and those of its assignee's
+   * own — JSON, one glob list each; '' when neither has one.
+   */
   workPerimeter(within: readonly string[], assignee: string): string {
     const sets: string[][] = [];
     if (within.length > 0) sets.push([...new Set(within.flatMap(name => this.domainGlobs(name)))]);
