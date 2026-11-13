@@ -83,8 +83,8 @@ export interface NotExported {
 
 export type Resolution = ResolvedTarget | NotExported | null;
 
-function isNotExported(r: Resolution): r is NotExported {
-  return r !== null && 'notExported' in r;
+function isNotExported(resolution: Resolution): resolution is NotExported {
+  return resolution !== null && 'notExported' in resolution;
 }
 
 /**
@@ -129,7 +129,7 @@ function resolveExportUnit(
     // block resolves by name regardless of how deeply its folder nests under it.
     for (const abs of apFilesUnder(dir)) {
       const { blocks } = parseBlocks(readFileSync(abs, 'utf-8'));
-      const match = blocks.find(b => b.name === name);
+      const match = blocks.find(block => block.name === name);
       if (!match) continue;
       if (match.exported) {
         return {
@@ -230,9 +230,9 @@ export interface ResolvedImport {
 
 /** The names a source imports — every `IMPORT a, b FROM …` line at its top level. */
 function importedNames(raw: string): Set<string> {
-  return new Set(lex(raw).flatMap(t => {
-    const m = t.kind === 'keyword' && t.indent === 0 && t.keyword === 'IMPORT' ? t.rest.match(IMPORT_REST_RE) : null;
-    return m ? splitList(m[1]) : [];
+  return new Set(lex(raw).flatMap(token => {
+    const match = token.kind === 'keyword' && token.indent === 0 && token.keyword === 'IMPORT' ? token.rest.match(IMPORT_REST_RE) : null;
+    return match ? splitList(match[1]) : [];
   }));
 }
 
@@ -244,14 +244,14 @@ function importedNames(raw: string): Set<string> {
 function untypedExport(decl: VarDecl, moduleSource: string): string | null {
   if (decl.form !== 'variable' || !decl.type || importedNames(moduleSource).has(decl.type)) return null;
   // A module may define the template itself, beside the variable.
-  if (parseBlocks(moduleSource).blocks.some(b => b.key === 'TEMPLATE' && b.name === decl.type)) return null;
+  if (parseBlocks(moduleSource).blocks.some(block => block.key === 'TEMPLATE' && block.name === decl.type)) return null;
   return `EXPORT VAR ${decl.name} AS ${decl.type}: the module does not import \`${decl.type}\` — add \`IMPORT ${decl.type} FROM @<lib>.templates\` to it: a variable carries its type wherever it is imported`;
 }
 
 /** Report, once per module, an exported variable whose template the module does not bring with it. */
 function reportUntypedExport(unit: Block & { variable: VarDecl }, file: string, ctx: BundleContext): void {
   const message = untypedExport(unit.variable, ctx.sources.read(file));
-  if (message && !ctx.lintErrors.some(e => e.file === file && e.message === message)) ctx.lintErrors.push({ file, line: unit.startLine, message });
+  if (message && !ctx.lintErrors.some(lintError => lintError.file === file && lintError.message === message)) ctx.lintErrors.push({ file, line: unit.startLine, message });
 }
 
 export function resolveImports(
@@ -260,12 +260,12 @@ export function resolveImports(
   libraries: Record<string, string>,
 ): ResolvedImport[] {
   const out: ResolvedImport[] = [];
-  for (const t of lex(raw)) {
-    if (t.kind !== 'keyword' || t.indent !== 0 || t.keyword !== 'IMPORT') continue;
-    const m = t.rest.match(IMPORT_REST_RE);
-    if (!m) continue;
-    const names = splitList(m[1]);
-    const modulePath = m[2];
+  for (const token of lex(raw)) {
+    if (token.kind !== 'keyword' || token.indent !== 0 || token.keyword !== 'IMPORT') continue;
+    const match = token.rest.match(IMPORT_REST_RE);
+    if (!match) continue;
+    const names = splitList(match[1]);
+    const modulePath = match[2];
     for (const name of names) {
       const target = resolveTargetWith(modulePath, name, libraryRoots, libraries);
       // Skip unresolved (null) and found-but-not-exported (NotExported): this
@@ -309,40 +309,40 @@ export async function processImports(body: string, ctx: BundleContext, sourcePat
   // same effect: after emitting an IMPORT replacement, if the next token
   // is a blank line, skip it — equivalent to "the IMPORT line and the
   // following blank line collapse into a single separator".
-  let i = 0;
-  while (i < tokens.length) {
-    const t = tokens[i];
-    const isImport = t.kind === 'keyword' && t.indent === 0 && t.keyword === 'IMPORT';
+  let index = 0;
+  while (index < tokens.length) {
+    const token = tokens[index];
+    const isImport = token.kind === 'keyword' && token.indent === 0 && token.keyword === 'IMPORT';
 
-    if (i > 0) result += '\n';
+    if (index > 0) result += '\n';
 
     if (!isImport) {
-      result += t.kind === 'blank' ? '' : ('raw' in t ? t.raw : '');
-      i++;
+      result += token.kind === 'blank' ? '' : ('raw' in token ? token.raw : '');
+      index++;
       continue;
     }
 
-    const m = t.rest.match(IMPORT_REST_RE);
-    if (!m) {
+    const match = token.rest.match(IMPORT_REST_RE);
+    if (!match) {
       ctx.lintErrors.push({
-        ...(sourcePath ? { file: sourcePath, line: lineOfName(sourcePath, t.rest.trim().split(/\s+/)[0] ?? '', 'import') } : { file: '<body>', line: t.line }),
-        message: `malformed IMPORT directive: "${t.raw}" (expected: IMPORT <name1>, <name2> FROM <module-path>)`,
+        ...(sourcePath ? { file: sourcePath, line: lineOfName(sourcePath, token.rest.trim().split(/\s+/)[0] ?? '', 'import') } : { file: '<body>', line: token.line }),
+        message: `malformed IMPORT directive: "${token.raw}" (expected: IMPORT <name1>, <name2> FROM <module-path>)`,
       });
-      i++;
+      index++;
       continue;
     }
 
-    const names = splitList(m[1]);
-    const modulePath = m[2];
+    const names = splitList(match[1]);
+    const modulePath = match[2];
     let replacement = '';
 
     if (parseNamespace(modulePath).alias === HARNESS_ALIAS) {
       for (const name of names) {
         if (modulePath === `${HARNESS_ALIAS}.${SKILLS}`) collectSkill({ name, about: null, path: sourcePath ?? '<body>', native: true }, ctx);
-        else ctx.lintErrors.push({ ...at(name, t.line), message: `IMPORT ${name} FROM ${modulePath}: ${HARNESS_ALIAS} holds only skills — IMPORT ${name} FROM ${HARNESS_ALIAS}.${SKILLS}` });
+        else ctx.lintErrors.push({ ...at(name, token.line), message: `IMPORT ${name} FROM ${modulePath}: ${HARNESS_ALIAS} holds only skills — IMPORT ${name} FROM ${HARNESS_ALIAS}.${SKILLS}` });
       }
-      i++;
-      if (i < tokens.length && tokens[i].kind === 'blank') i++;
+      index++;
+      if (index < tokens.length && tokens[index].kind === 'blank') index++;
       continue;
     }
 
@@ -350,7 +350,7 @@ export async function processImports(body: string, ctx: BundleContext, sourcePat
       const target = resolveTarget(modulePath, name, ctx);
       if (target === null) {
         ctx.lintErrors.push({
-          ...at(name, t.line),
+          ...at(name, token.line),
           message: `IMPORT ${name} FROM ${modulePath}: not found in library roots`,
         });
         continue;
@@ -358,7 +358,7 @@ export async function processImports(body: string, ctx: BundleContext, sourcePat
 
       if (isNotExported(target)) {
         ctx.lintErrors.push({
-          ...at(name, t.line),
+          ...at(name, token.line),
           message: `IMPORT ${name} FROM ${modulePath}: "${name}" exists in ${target.namespace} but is not exported`,
         });
         continue;
@@ -369,12 +369,12 @@ export async function processImports(body: string, ctx: BundleContext, sourcePat
       // library is built, so a skill comes from there.
       if (target.kind === SKILLS) {
         if (!resolvePath(target.absolutePath).startsWith(resolvePath(ctx.libraryRoot) + sep)) {
-          ctx.lintErrors.push({ ...at(name, t.line), message: `IMPORT ${name} FROM ${modulePath}: a skill is built from the project's library only — ${SKILL_IMPORT_HINT}` });
+          ctx.lintErrors.push({ ...at(name, token.line), message: `IMPORT ${name} FROM ${modulePath}: a skill is built from the project's library only — ${SKILL_IMPORT_HINT}` });
           continue;
         }
         const info = skillInfo(target.absolutePath, ctx);
         if (!info?.skill || info.name !== name) {
-          ctx.lintErrors.push({ ...at(name, t.line), message: `IMPORT ${name} FROM ${modulePath}: \`${name}\` is no SKILL block` });
+          ctx.lintErrors.push({ ...at(name, token.line), message: `IMPORT ${name} FROM ${modulePath}: \`${name}\` is no SKILL block` });
           continue;
         }
         collectSkill({ name, about: info.about || null, path: target.absolutePath, native: false, ...info.applies }, ctx);
@@ -405,9 +405,9 @@ export async function processImports(body: string, ctx: BundleContext, sourcePat
     }
 
     result += replacement.trimEnd();
-    i++;
+    index++;
     // Consume the trailing blank line (mirrors the OLD `\s*$` greedy match).
-    if (i < tokens.length && tokens[i].kind === 'blank') i++;
+    if (index < tokens.length && tokens[index].kind === 'blank') index++;
   }
   return result;
 }
@@ -427,7 +427,7 @@ function skillInfo(path: string, ctx: BundleContext) {
  * adapter's words when it has its own (renderings.SKILL).
  */
 function collectSkill(skill: { name: string; about: string | null; path: string; native: boolean; tags?: string[]; scopes?: string[] }, ctx: BundleContext): void {
-  if (ctx.skills.some(s => s.name === skill.name)) return;
+  if (ctx.skills.some(collected => collected.name === skill.name)) return;
   const how = skill.native ? 'harness' : 'apx';
   const line = fill(ctx.renderings?.SKILL?.[how] ?? FORMULAS.blocks.skill[how], { name: skill.name, command: apxCommand(skill.name, 'start') });
   ctx.skills.push({

@@ -29,14 +29,14 @@ const RAW: Config = LIFECYCLES_JSON as Config;
 
 function validate(cfg: Config): void {
   const seen = new Set<string>();
-  for (const l of cfg.lifecycles) {
-    if (!l.alias || !/^ON-[A-Z][A-Z0-9-]*$/.test(l.alias)) {
-      throw new Error(`lifecycles.json: invalid alias "${l.alias}" (must match ON-<UPPER>)`);
+  for (const lifecycle of cfg.lifecycles) {
+    if (!lifecycle.alias || !/^ON-[A-Z][A-Z0-9-]*$/.test(lifecycle.alias)) {
+      throw new Error(`lifecycles.json: invalid alias "${lifecycle.alias}" (must match ON-<UPPER>)`);
     }
-    if (seen.has(l.alias)) throw new Error(`lifecycles.json: duplicate alias "${l.alias}"`);
-    seen.add(l.alias);
-    if (typeof l.when !== 'string' || l.when.length === 0) {
-      throw new Error(`lifecycles.json: alias "${l.alias}" has empty when text`);
+    if (seen.has(lifecycle.alias)) throw new Error(`lifecycles.json: duplicate alias "${lifecycle.alias}"`);
+    seen.add(lifecycle.alias);
+    if (typeof lifecycle.when !== 'string' || lifecycle.when.length === 0) {
+      throw new Error(`lifecycles.json: alias "${lifecycle.alias}" has empty when text`);
     }
   }
 }
@@ -44,10 +44,10 @@ validate(RAW);
 
 /** All lifecycle alias keywords (e.g. ['ON-INVOKE', 'ON-AGENT-PROMPTED', …]). */
 export function getLifecycleAliases(): string[] {
-  return RAW.lifecycles.map(l => l.alias);
+  return RAW.lifecycles.map(lifecycle => lifecycle.alias);
 }
 
 /** Canonical WHEN rest for a lifecycle alias, or null when not a known alias. */
 export function lifecycleToWhen(alias: string): string | null {
-  return RAW.lifecycles.find(l => l.alias === alias)?.when ?? null;
+  return RAW.lifecycles.find(lifecycle => lifecycle.alias === alias)?.when ?? null;
 }

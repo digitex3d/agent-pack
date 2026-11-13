@@ -28,12 +28,12 @@ const WHAT: Record<UnitSection['kind'], string> = {
 /** The verbs a unit answers itself — any other first word is an agent's name. */
 const UNIT_VERBS: Record<string, (run: UnitRun) => void> = {
   ls: ({ unit, cmd, out }) => {
-    for (const t of unit.teams) {
-      out(`team ${t.name}${about(t.about)}`);
-      for (const m of t.members) out(`  ${m}`);
+    for (const team of unit.teams) {
+      out(`team ${team.name}${about(team.about)}`);
+      for (const member of team.members) out(`  ${member}`);
     }
     if (unit.members.length) out('agents');
-    for (const a of unit.members) out(`  ${a.name}${about(a.about)}`);
+    for (const agent of unit.members) out(`  ${agent.name}${about(agent.about)}`);
     out(`# an agent's own verbs: ${cmd} <agent> help`);
   },
   version: ({ unit, out, built }) => out(`${unit.name}${unit.version ? ` ${unit.version}` : ''} — built ${built}`),
@@ -67,16 +67,16 @@ export function runUnitVerb(verb: string, run: UnitRun): void {
 export function throughUnit(unit: UnitSection, cmd: string): (line: string) => string {
   const own = new Map(unitHolds(unit).map(held => [apxCommand(held), `${cmd} ${held}`]));
   if (own.size === 0) return line => line;
-  const pattern = new RegExp([...own.keys()].sort((a, b) => b.length - a.length).map(escapeRegex).join('|'), 'g');
+  const pattern = new RegExp([...own.keys()].sort((left, right) => right.length - left.length).map(escapeRegex).join('|'), 'g');
   return line => line.replace(pattern, found => own.get(found) ?? found);
 }
 
 /** The agents a unit holds: its standalone agents, then each team's members. */
 export function unitAgents(unit: UnitSection): string[] {
-  return [...unit.members.map(a => a.name), ...unit.teams.flatMap(t => t.members)];
+  return [...unit.members.map(agent => agent.name), ...unit.teams.flatMap(team => team.members)];
 }
 
 /** What a unit holds an image of: its agents, and — the main — its teams, each with its own document. */
 export function unitHolds(unit: UnitSection): string[] {
-  return [...unitAgents(unit), ...(unit.kind === 'main' ? unit.teams.map(t => t.name) : [])];
+  return [...unitAgents(unit), ...(unit.kind === 'main' ? unit.teams.map(team => team.name) : [])];
 }

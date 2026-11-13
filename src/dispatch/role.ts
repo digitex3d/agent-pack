@@ -24,19 +24,19 @@ const H1_RE = /^#\s+(.+)$/m;
 function extractRoleName(raw: string, unwrapped: string, filePath: string): string {
   const exported = exportedBlocksOf(parseBlocks(raw).blocks)[0]?.name;
   if (exported) return exported;
-  const m = unwrapped.match(H1_RE);
-  if (m) return m[1].trim();
+  const match = unwrapped.match(H1_RE);
+  if (match) return match[1].trim();
   return unitNameFromPath(filePath);
 }
 
 function extractAbout(body: string): string | null {
-  const m = body.match(ABOUT_RE);
-  return m ? m[1].trim() : null;
+  const match = body.match(ABOUT_RE);
+  return match ? match[1].trim() : null;
 }
 
 function extractExtends(body: string): string | null {
-  const m = body.match(EXTENDS_RE);
-  return m ? m[1].trim() : null;
+  const match = body.match(EXTENDS_RE);
+  return match ? match[1].trim() : null;
 }
 
 function stripMetadata(body: string): string {
@@ -92,7 +92,7 @@ function resolveRoleFile(
 
 /** A broken EXTENDS fails the compilation, pointing at the child's EXTENDS line. */
 function extendsError(ctx: BundleContext, childPath: string, message: string): { rules: string; tags: string[] } {
-  const line = ctx.sources.read(childPath).split('\n').findIndex(l => /^\s*EXTENDS\s/.test(l)) + 1;
+  const line = ctx.sources.read(childPath).split('\n').findIndex(sourceLine => /^\s*EXTENDS\s/.test(sourceLine)) + 1;
   ctx.lintErrors.push({ file: childPath, line: line || 1, message });
   return { rules: '', tags: [] };
 }
@@ -129,10 +129,10 @@ export function extendInlineRole(body: string, sourcePath: string, ctx: BundleCo
 
 
 export async function resolveRole(imp: LoadRequest, ctx: BundleContext): Promise<string> {
-  const r = checkAndRegister(imp, ctx, `role ${basename(imp.path)}`);
-  if (typeof r === 'string') return r;
+  const registered = checkAndRegister(imp, ctx, `role ${basename(imp.path)}`);
+  if (typeof registered === 'string') return registered;
 
-  const resolved = resolveRoleFile(r.path, ctx, new Set());
+  const resolved = resolveRoleFile(registered.path, ctx, new Set());
 
   // Lift EXPERTISE out of the resolved rules: it is part of the role's identity,
   // rendered in the binding agent's `# Identity` block, never in the Roles
@@ -141,7 +141,7 @@ export async function resolveRole(imp: LoadRequest, ctx: BundleContext): Promise
   // The role's IMPORTs — its own and those of the roles it EXTENDS, lifted to
   // column 0 by the unwrap — bring their blocks into the bundle like the
   // agent's own, and leave no line behind in the rules.
-  const identity = liftRoleIdentity(await processImportsOf(resolved.rules, ctx, r.path));
+  const identity = liftRoleIdentity(await processImportsOf(resolved.rules, ctx, registered.path));
 
   const entry: RoleEntry = {
     kind: 'role',

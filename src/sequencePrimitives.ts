@@ -25,5 +25,5 @@ export const SEQUENCE_PRIMITIVES: SequencePrimitive[] = [
 ];
 
 export function sequencePrimitiveFor(keyword: string): SequencePrimitive | null {
-  return SEQUENCE_PRIMITIVES.find(p => p.keyword === keyword) ?? null;
+  return SEQUENCE_PRIMITIVES.find(primitive => primitive.keyword === keyword) ?? null;
 }

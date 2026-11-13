@@ -35,8 +35,8 @@ export async function driver(args: string[]): Promise<void> {
   const at = args.indexOf('--options');
   const tested = await driverUnderTest(target, at >= 0 ? JSON.parse(args[at + 1] ?? '{}') as Record<string, unknown> : {});
   const results = await runDriverContract(tested);
-  for (const r of results) console.log(`${r.ok ? 'ok  ' : 'FAIL'}  ${r.name}${r.detail ? ` — ${r.detail}` : ''}`);
-  const failed = results.filter(r => !r.ok).length;
+  for (const result of results) console.log(`${result.ok ? 'ok  ' : 'FAIL'}  ${result.name}${result.detail ? ` — ${result.detail}` : ''}`);
+  const failed = results.filter(result => !result.ok).length;
   console.log(`\n${tested.name}: ${results.length - failed} of ${results.length} cases hold (capabilities: ${tested.capabilities.join(', ') || 'none'})`);
   process.exit(failed > 0 ? 1 : 0);
 }

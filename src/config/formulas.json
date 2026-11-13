@@ -247,6 +247,26 @@
                   "use": "the {kind} `{name}`{ref}", "and": " and ",
                   "intros": { "WITH": "For the work below, use", "WITHIN": "For the work below, act only within" } },
 
+  "apx": {
+    "$comment": "What the apx says on its verbs. `deliver`: a contract delivered from its copy (`delegate deliver <ctr-id>`) — `refused` the reason it is not, `done` what it says when it is.",
+    "deliver": {
+      "refused": {
+        "notRunning": "{id} is {state} — only a running contract is delivered",
+        "lostZones": "{id} was not delivered — the marks of its zones are lost in {files}: put them back around your work, as they were written",
+        "strayed": "{id}: nothing changed in its copy, and {files} changed in the project folder — the work goes in its copy: {copy}",
+        "leftOut": "{id} was not delivered — what is left out stays out only with a good reason: {cmd} delegate deliver {id} --why \"<reason>\"; or undo it in the copy",
+        "moved": "{id} moved meanwhile — {cmd} delegate list"
+      },
+      "done": {
+        "delivered": "{id}  delivered — {files}",
+        "nothing": "nothing changed",
+        "leftOutLine": "left out: {entry}",
+        "leftOut": "left out: {files} — why: {why}",
+        "answer": "answer: {answer}"
+      }
+    }
+  },
+
   "document": {
     "ref": " ({id})",
     "heading": "{hashes} {title}",

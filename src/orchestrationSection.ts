@@ -185,13 +185,13 @@ function readTeamFiles(teamsRoot: string, fail: (issue: TeamIssue) => void): Tea
  */
 function teamReads(team: TeamRaw): (text: string) => string {
   const { constants, variables: declared } = importedVariables(team.variables, {});
-  const variables = new Set(declared.map(v => v.name));
-  const V = FORMULAS.keywords.VAR;
-  return text => resolveReads(text, r => {
-    if (r.template) return undefined;
-    const value = constantOf(constants, r.name);
+  const variables = new Set(declared.map(variable => variable.name));
+  const varFormulas = FORMULAS.keywords.VAR;
+  return text => resolveReads(text, read => {
+    if (read.template) return undefined;
+    const value = constantOf(constants, read.name);
     if (value !== undefined) return value;
-    return variables.has(r.name) ? fill(V.read, { name: r.name, command: varCommand(apxCommand(team.name), 'get', r.name) }) : undefined;
+    return variables.has(read.name) ? fill(varFormulas.read, { name: read.name, command: varCommand(apxCommand(team.name), 'get', read.name) }) : undefined;
   });
 }
 
@@ -199,7 +199,7 @@ function teamReads(team: TeamRaw): (text: string) => string {
 function renderFlowReads(chapters: string, ctx: BundleContext, readsOf: Map<string, (text: string) => string>): string {
   return chapters.split(/^(?=## )/m).map(section => {
     const name = /^## `([^`]+)`/.exec(section)?.[1];
-    const path = name ? ctx.flows.find(f => f.name === name)?.path : undefined;
+    const path = name ? ctx.flows.find(flow => flow.name === name)?.path : undefined;
     const reads = path ? readsOf.get(path) : undefined;
     return reads ? reads(section) : section;
   }).join('');
@@ -225,25 +225,25 @@ async function collectTeams(teamsRoot: string, ctx: BundleContext, wanted: (team
   // bindings feed the RoleIndex — that is what lets `BY <role>` resolve to a
   // directory-anchored agent, not only to an inline `AGENT … AS …` block.
   const membersByTeam = new Map<string, AgentInfo[]>(
-    files.map(f => [f.teamName, readTeamMembers(f.teamDir)]),
+    files.map(teamFile => [teamFile.teamName, readTeamMembers(teamFile.teamDir)]),
   );
   const bindings = [...membersByTeam.values()].flat()
-    .filter(a => a.roles.length > 0)
-    .map(a => ({ name: a.name, roles: a.roles }));
+    .filter(agent => agent.roles.length > 0)
+    .map(agent => ({ name: agent.name, roles: agent.roles }));
 
   const roleIndex = buildRoleIndex(
-    ...files.map(f => ({ blocks: f.blocks, anchor: 'directory' as const })),
+    ...files.map(teamFile => ({ blocks: teamFile.blocks, anchor: 'directory' as const })),
     { bindings, anchor: 'directory' as const },
   );
-  const agentNames = new Set([...membersByTeam.values()].flat().map(a => a.name));
+  const agentNames = new Set([...membersByTeam.values()].flat().map(agent => agent.name));
   // A step may also name a team: it carries the step out by its own routing.
-  const byNames = new Set([...agentNames, ...files.map(f => f.teamName)]);
+  const byNames = new Set([...agentNames, ...files.map(teamFile => teamFile.teamName)]);
 
   const index: TeamIndex = { roleIndex, byNames, agentNames, membersByTeam };
   const out: TeamRaw[] = [];
-  for (const file of files.filter(f => wanted(f.team.name))) out.push(await collectTeam(file, index, ctx));
+  for (const file of files.filter(teamFile => wanted(teamFile.team.name))) out.push(await collectTeam(file, index, ctx));
   ctx.variables = [];
-  return { teams: out, roster: files.map(f => ({ name: f.team.name, members: membersByTeam.get(f.teamName) ?? [] })) };
+  return { teams: out, roster: files.map(teamFile => ({ name: teamFile.team.name, members: membersByTeam.get(teamFile.teamName) ?? [] })) };
 }
 
 /** What every team's compilation reads of all the teams: who plays which role, the names a `BY` may give, each team's members. */
@@ -272,15 +272,15 @@ async function collectTeam(file: TeamSource, index: TeamIndex, ctx: BundleContex
   const { metadata: lensMeta, stripped: noLensIn } = partitionMetadata(raw, ['LENS-IN']);
   const lensIn = new Map<string, string>();
   for (const decl of lensMeta.get('LENS-IN') ?? []) {
-    const m = decl.trim().match(/^(\S+)\s+(\S+)$/);
-    if (!m) throw new Error(`${teamPath}: malformed LENS-IN "${decl}" — expected \`LENS-IN <agent> <template>\``);
-    lensIn.set(m[1], m[2]);
+    const match = decl.trim().match(/^(\S+)\s+(\S+)$/);
+    if (!match) throw new Error(`${teamPath}: malformed LENS-IN "${decl}" — expected \`LENS-IN <agent> <template>\``);
+    lensIn.set(match[1], match[2]);
   }
   const stripped = noLensIn.replace(H1_LINE_RE, '').replace(ABOUT_LINE_RE, '').replace(/^\n+/, '');
   const members = (membersByTeam.get(teamName) ?? [])
-    .map(a => ({ ...a, lensIn: lensIn.get(a.name) ?? a.lensIn }));
+    .map(agent => ({ ...agent, lensIn: lensIn.get(agent.name) ?? agent.lensIn }));
   for (const name of lensIn.keys()) {
-    if (!members.some(a => a.name === name)) {
+    if (!members.some(agent => agent.name === name)) {
       throw new Error(`${teamPath}: LENS-IN names unknown member "${name}"`);
     }
   }
@@ -291,10 +291,10 @@ async function collectTeam(file: TeamSource, index: TeamIndex, ctx: BundleContex
   ctx.lintErrors.push(...strayDimensionErrors(ctx, teamPath, dimensions));
   // What the team file imports itself — imports never pass on. A team shares constants
   // and SESSION variables: a private one would be each member's own.
-  const variables = ctx.variables.filter(v => v.importers.includes(teamPath));
-  for (const v of variables) {
-    if (v.decl.form === 'variable' && v.decl.scope === 'private') {
-      ctx.lintErrors.push({ file: teamPath, line: lineOfName(teamPath, v.name, 'import'), message: `IMPORT ${v.name}: \`${v.name}\` is a private variable — each member would have its own; a team's file imports constants and SESSION variables` });
+  const variables = ctx.variables.filter(variable => variable.importers.includes(teamPath));
+  for (const variable of variables) {
+    if (variable.decl.form === 'variable' && variable.decl.scope === 'private') {
+      ctx.lintErrors.push({ file: teamPath, line: lineOfName(teamPath, variable.name, 'import'), message: `IMPORT ${variable.name}: \`${variable.name}\` is a private variable — each member would have its own; a team's file imports constants and SESSION variables` });
     }
   }
   return { name: teamName, about, members, routingRaw, teamPath, variables, team };
@@ -302,7 +302,7 @@ async function collectTeam(file: TeamSource, index: TeamIndex, ctx: BundleContex
 
 /** The flat agent file under `teamDir` whose `EXPORT AGENT` block name matches `name`. */
 function memberFile(teamDir: string, name: string): string | null {
-  return findAgentFiles(teamDir).find(f => agentNameOf(f) === name) ?? null;
+  return findAgentFiles(teamDir).find(file => agentNameOf(file) === name) ?? null;
 }
 
 /**
@@ -315,17 +315,17 @@ function memberFile(teamDir: string, name: string): string | null {
  * the team file) win. The member's own lint errors are its bundle's to report.
  */
 async function hoistLensInTemplates(teamDir: string, members: AgentInfo[], ctx: BundleContext): Promise<void> {
-  for (const m of members) {
-    if (!m.lensIn || ctx.templates.some(t => t.name === m.lensIn)) continue;
-    const agentAp = memberFile(teamDir, m.name);
+  for (const member of members) {
+    if (!member.lensIn || ctx.templates.some(template => template.name === member.lensIn)) continue;
+    const agentAp = memberFile(teamDir, member.name);
     if (!agentAp || !existsSync(agentAp)) continue;
     const scratch = makeBundleContext({
-      agentName: m.name, libraryRoot: ctx.libraryRoot, libraryRoots: ctx.libraryRoots, libraries: ctx.libraries,
+      agentName: member.name, libraryRoot: ctx.libraryRoot, libraryRoots: ctx.libraryRoots, libraries: ctx.libraries,
     });
     await resolveInlineBlocks(readFileSync(agentAp, 'utf-8'), scratch, agentAp);
-    const byName = new Map(scratch.templates.map(t => [t.name, t]));
+    const byName = new Map(scratch.templates.map(template => [template.name, template]));
     const wanted = new Set<string>();
-    const queue = [m.lensIn];
+    const queue = [member.lensIn];
     while (queue.length) {
       const name = queue.pop()!;
       if (wanted.has(name) || !byName.has(name)) continue;
@@ -335,7 +335,7 @@ async function hoistLensInTemplates(teamDir: string, members: AgentInfo[], ctx: 
       }
     }
     for (const name of wanted) {
-      if (!ctx.templates.some(t => t.name === name)) ctx.templates.push(byName.get(name)!);
+      if (!ctx.templates.some(template => template.name === name)) ctx.templates.push(byName.get(name)!);
     }
   }
 }
@@ -377,27 +377,27 @@ function resolveByLines(
 }
 
 /** One agent in the orchestration: name, purpose, and the shape to talk to it in (its LENS-IN). */
-function agentLine(m: AgentInfo, ctx: BundleContext): string {
-  let line = `- \`${m.name}\` — ${m.about || '(no description)'}`;
-  if (m.lensIn) {
-    const shape = ctx.templates.find(t => t.name === m.lensIn);
+function agentLine(member: AgentInfo, ctx: BundleContext): string {
+  let line = `- \`${member.name}\` — ${member.about || '(no description)'}`;
+  if (member.lensIn) {
+    const shape = ctx.templates.find(template => template.name === member.lensIn);
     if (!shape) {
-      throw new Error(`LENS-IN: unknown template "${m.lensIn}" for agent "${m.name}" — define it in the agent's file or IMPORT it there`);
+      throw new Error(`LENS-IN: unknown template "${member.lensIn}" for agent "${member.name}" — define it in the agent's file or IMPORT it there`);
     }
-    line += ` — talk to it as \`${m.lensIn}\`${refSuffix(shape.refId)}`;
+    line += ` — talk to it as \`${member.lensIn}\`${refSuffix(shape.refId)}`;
   }
   return line;
 }
 
 function renderStandalones(standalones: AgentInfo[], ctx: BundleContext): string {
   if (standalones.length === 0) return '';
-  return `## Standalone agents\n\n${standalones.map(a => agentLine(a, ctx)).join('\n')}`;
+  return `## Standalone agents\n\n${standalones.map(agent => agentLine(agent, ctx)).join('\n')}`;
 }
 
 function renderTeam(team: TeamInfo, ctx: BundleContext): string {
   const purpose = team.about || '(no description)';
   const members = team.members.length > 0
-    ? team.members.map(m => agentLine(m, ctx)).join('\n')
+    ? team.members.map(member => agentLine(member, ctx)).join('\n')
     : '(no members)';
   const routing = team.routingBody || '(no routing declared)';
   return [
@@ -422,9 +422,9 @@ function renderTeam(team: TeamInfo, ctx: BundleContext): string {
  */
 function mainRosterIssues(main: MainFile, teams: readonly { name: string; members: readonly AgentInfo[] }[], standalones: readonly AgentInfo[]): LintError[] {
   const issues: LintError[] = [];
-  const teamOf = (name: string) => teams.find(t => t.members.some(m => m.name === name))?.name;
-  const isTeam = (name: string) => teams.some(t => t.name === name);
-  const isStandalone = (name: string) => standalones.some(a => a.name === name);
+  const teamOf = (name: string) => teams.find(team => team.members.some(member => member.name === name))?.name;
+  const isTeam = (name: string) => teams.some(team => team.name === name);
+  const isStandalone = (name: string) => standalones.some(agent => agent.name === name);
   const check = (listed: readonly { name: string; line: number }[], kind: 'TEAMS' | 'MEMBER') => {
     for (const { name, line } of listed) {
       const team = teamOf(name);
@@ -438,10 +438,10 @@ function mainRosterIssues(main: MainFile, teams: readonly { name: string; member
   };
   check(main.teams, 'TEAMS');
   check(main.members, 'MEMBER');
-  const listed = (name: string) => [...main.teams, ...main.members].some(l => l.name === name);
+  const listed = (name: string) => [...main.teams, ...main.members].some(entry => entry.name === name);
   const line = main.block.startLine;
-  for (const t of teams) if (!listed(t.name)) issues.push({ file: main.path, line, severity: 'warning', message: `the team \`${t.name}\` is listed in no TEAMS line of the main — it is left out of it` });
-  for (const a of standalones) if (!listed(a.name)) issues.push({ file: main.path, line, severity: 'warning', message: `the standalone agent \`${a.name}\` is listed in no MEMBER line of the main — it is left out of it` });
+  for (const team of teams) if (!listed(team.name)) issues.push({ file: main.path, line, severity: 'warning', message: `the team \`${team.name}\` is listed in no TEAMS line of the main — it is left out of it` });
+  for (const agent of standalones) if (!listed(agent.name)) issues.push({ file: main.path, line, severity: 'warning', message: `the standalone agent \`${agent.name}\` is listed in no MEMBER line of the main — it is left out of it` });
   return issues;
 }
 
@@ -461,7 +461,7 @@ export async function buildOrchestrationContent(opts: OrchestrationSectionOption
   // A team's own text holds that team alone; the orchestration, what the main lists — every team and agent with no main.
   const main = opts.team ? null : readMainFile(opts.cwd);
   const found = opts.team ? [] : readAgentInfos(standaloneAgentsDir);
-  const wanted = (team: string): boolean => (opts.team ? team === opts.team : !main || main.teams.some(m => m.name === team));
+  const wanted = (team: string): boolean => (opts.team ? team === opts.team : !main || main.teams.some(entry => entry.name === team));
 
   // Phase 1: collect the wanted teams' FLOWs into the shared ctx (routing kept
   // raw, with `BY <role>` resolved against the RoleIndex built from the same
@@ -469,9 +469,9 @@ export async function buildOrchestrationContent(opts: OrchestrationSectionOption
   const { teams: teamRaws, roster } = await collectTeams(teamsDir, ctx, wanted);
   // With a main, what it lists is what the project holds: its TEAMS and its MEMBER lines.
   if (main) ctx.lintErrors.push(...mainRosterIssues(main, roster, found));
-  const standalones = main ? found.filter(a => main.members.some(m => m.name === a.name)) : found;
+  const standalones = main ? found.filter(agent => main.members.some(member => member.name === agent.name)) : found;
   await hoistLensInTemplates(standaloneAgentsDir, standalones, ctx);
-  const readsOf = new Map(teamRaws.map(t => [t.teamPath, teamReads(t)]));
+  const readsOf = new Map(teamRaws.map(teamRaw => [teamRaw.teamPath, teamReads(teamRaw)]));
 
   reportLintIssues(ctx, 'Orchestration section');
 
@@ -480,7 +480,7 @@ export async function buildOrchestrationContent(opts: OrchestrationSectionOption
   // the emitted chapters (as the agent pipeline does) so STEP/DO/DELEGATE in
   // flow bodies and force-levels in the chapter intros render to prose.
   // A checked condition of a flow is the team's, whose apx holds the flow.
-  const teamOfAgent = new Map(teamRaws.flatMap(t => t.members.map(m => [m.name, t.name] as const)));
+  const teamOfAgent = new Map(teamRaws.flatMap(teamRaw => teamRaw.members.map(member => [member.name, teamRaw.name] as const)));
   ctx.unitOf = agent => teamOfAgent.get(agent);
   const chapters = renderFlowReads(postProcessBody(emitCollectedSections(ctx), ctx).trim(), ctx, readsOf);
   ctx.unitOf = undefined;
@@ -489,28 +489,28 @@ export async function buildOrchestrationContent(opts: OrchestrationSectionOption
   // `RUN <flow>` renders as `Run the flow \`<name>\` (id)` — with the command
   // that says how to run it: `apx flow <id>` of the team, whose apx carries
   // its flows (and knows whether this harness runs them as scripts).
-  const teams: TeamInfo[] = teamRaws.map(t => {
-    ctx.flowCommand = id => apxCommand(t.name, 'flow', id);
-    const routingBody = readsOf.get(t.teamPath)!(postProcessBody(t.routingRaw, ctx)).trim().replace(/\n{3,}/g, '\n\n');
+  const teams: TeamInfo[] = teamRaws.map(teamRaw => {
+    ctx.flowCommand = id => apxCommand(teamRaw.name, 'flow', id);
+    const routingBody = readsOf.get(teamRaw.teamPath)!(postProcessBody(teamRaw.routingRaw, ctx)).trim().replace(/\n{3,}/g, '\n\n');
     ctx.flowCommand = undefined;
-    return { name: t.name, about: t.about, members: t.members, routingBody };
+    return { name: teamRaw.name, about: teamRaw.about, members: teamRaw.members, routingBody };
   });
 
   // A team's own text — what its apx prints — is its flows and its routing; the main's adds the orchestration.
-  const parts: string[] = opts.team ? [chapters, ...teams.map(t => renderTeam(t, ctx))] : [
+  const parts: string[] = opts.team ? [chapters, ...teams.map(team => renderTeam(team, ctx))] : [
     chapters,
     `# Orchestration\n\n${introBody}`,
     renderStandalones(standalones, ctx),
-    ...teams.map(t => renderTeam(t, ctx)),
+    ...teams.map(team => renderTeam(team, ctx)),
   ];
 
   return {
-    content: parts.filter(Boolean).map(p => p.trim()).join('\n\n').replace(/\n{3,}/g, '\n\n').trim(),
-    standalones: standalones.map(a => a.name),
-    teams: teams.map(t => t.name),
+    content: parts.filter(Boolean).map(part => part.trim()).join('\n\n').replace(/\n{3,}/g, '\n\n').trim(),
+    standalones: standalones.map(agent => agent.name),
+    teams: teams.map(team => team.name),
     held: {
-      teams: teams.map(t => ({ name: t.name, about: t.about, members: t.members.map(m => m.name) })),
-      members: standalones.map(a => ({ name: a.name, about: a.about })),
+      teams: teams.map(team => ({ name: team.name, about: team.about, members: team.members.map(member => member.name) })),
+      members: standalones.map(agent => ({ name: agent.name, about: agent.about })),
     },
   };
 }

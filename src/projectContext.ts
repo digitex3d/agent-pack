@@ -40,17 +40,17 @@ export async function emitProjectContext(projectRoot: string, config: Config, bo
 
 /** The `project` block of AGENTS.md with a main: what boots it, then its universal policies. */
 function mainBoot(main: MainFile, universal: string, boot: string): string {
-  const M = FORMULAS.blocks.main;
+  const mainFormulas = FORMULAS.blocks.main;
   return [
-    fill(M.heading, { name: main.name, about: main.about ? fill(FORMULAS.document.about, { about: main.about }) : '' }),
+    fill(mainFormulas.heading, { name: main.name, about: main.about ? fill(FORMULAS.document.about, { about: main.about }) : '' }),
     '',
-    M.boot,
+    mainFormulas.boot,
     '',
     '```bash',
     boot,
     '```',
     '',
-    M.again,
+    mainFormulas.again,
     ...(universal ? ['', universal] : []),
   ].join('\n');
 }

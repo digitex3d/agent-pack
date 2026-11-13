@@ -116,7 +116,7 @@ const AGENT_CONTRACT: BlockContract = {
 };
 
 /** What a flow's step carries out: the action verbs but ASK — a question is an agent's, a step hands the work over (DELEGATE). */
-const STEP_VERBS = ACTION_VERBS.filter(v => v !== 'ASK');
+const STEP_VERBS = ACTION_VERBS.filter(verb => verb !== 'ASK');
 
 export const BLOCK_CONTRACTS: Record<string, BlockContract> = {
   FLOW: {

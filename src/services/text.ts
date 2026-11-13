@@ -56,11 +56,11 @@ export function unwrapExportFile(body: string): string {
   }
 
   const out: string[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    const lineNo = i + 1;
+  for (let index = 0; index < lines.length; index++) {
+    const lineNo = index + 1;
     if (dropLine.has(lineNo)) continue;
     const dedent = dedentByLine.get(lineNo);
-    out.push(dedent ? lines[i].slice(dedent) : lines[i]);
+    out.push(dedent ? lines[index].slice(dedent) : lines[index]);
   }
   return out.join('\n');
 }
@@ -115,7 +115,7 @@ export function exportedBlockBodies(source: string): ExportedBlockBody[] {
     const dedentByLine = new Map<number, number>();
     indexBlockDedent(block, dedentByLine);
     const out: string[] = [];
-    for (const [lineNo, dedent] of [...dedentByLine.entries()].sort((a, b) => a[0] - b[0])) {
+    for (const [lineNo, dedent] of [...dedentByLine.entries()].sort((left, right) => left[0] - right[0])) {
       const raw = lines[lineNo - 1] ?? '';
       out.push(dedent ? raw.slice(dedent) : raw);
     }
@@ -149,12 +149,12 @@ export function nonExportedLines(source: string): number[] {
   for (const block of exportedBlocksOf(parseBlocks(source).blocks)) {
     owned.add(block.startLine);
     // The decorators above an exported block are its own: they travel with it (src/sources.ts span).
-    for (const d of block.decorators ?? []) owned.add(d.line);
+    for (const decorator of block.decorators ?? []) owned.add(decorator.line);
     const dedentByLine = new Map<number, number>();
     indexBlockDedent(block, dedentByLine);
     for (const lineNo of dedentByLine.keys()) owned.add(lineNo);
   }
-  return source.split(/\r?\n/).map((_, idx) => idx + 1).filter(lineNo => !owned.has(lineNo));
+  return source.split(/\r?\n/).map((_line, idx) => idx + 1).filter(lineNo => !owned.has(lineNo));
 }
 
 /**
@@ -168,7 +168,7 @@ export function nonExportedLines(source: string): number[] {
  * the units use this, and the file-level gate {@link isExportFile} derives from it.
  */
 export function exportedBlocksOf(blocks: Block[]): Block[] {
-  return blocks.filter(b => b.exported && b.name !== null);
+  return blocks.filter(block => block.exported && block.name !== null);
 }
 
 /** True when the file declares at least one well-formed EXPORT unit. */
@@ -186,14 +186,14 @@ function firstChildIndent(children: Children): number | null {
 /** Every source line number under `children`, recursively (lines and nested blocks). */
 function descendantLines(children: Children): number[] {
   const out: number[] = [];
-  for (const c of children) {
-    if (c.type === 'line') {
-      out.push(c.line);
+  for (const child of children) {
+    if (child.type === 'line') {
+      out.push(child.line);
     } else {
       // The decorators right above a block are its lines too (src/decorators.ts).
-      for (const d of c.decorators ?? []) out.push(d.line);
-      out.push(c.startLine);
-      out.push(...descendantLines(c.children));
+      for (const decorator of child.decorators ?? []) out.push(decorator.line);
+      out.push(child.startLine);
+      out.push(...descendantLines(child.children));
     }
   }
   return out;
@@ -207,8 +207,8 @@ function descendantLines(children: Children): number[] {
  */
 export function extractPrimitive(body: string, keyword: Keyword): string | null {
   // TRANSITIONAL: see unwrapExportFile — exposes EXPORT-block metadata at indent 0.
-  for (const t of lex(unwrapExportFile(body))) {
-    if (t.kind === 'keyword' && t.indent === 0 && t.keyword === keyword && t.rest) return t.rest;
+  for (const token of lex(unwrapExportFile(body))) {
+    if (token.kind === 'keyword' && token.indent === 0 && token.keyword === keyword && token.rest) return token.rest;
   }
   return null;
 }
@@ -217,8 +217,8 @@ export function extractPrimitive(body: string, keyword: Keyword): string | null 
 export function extractPrimitives(body: string, keyword: Keyword): string[] {
   const out: string[] = [];
   // TRANSITIONAL: see unwrapExportFile — exposes EXPORT-block metadata at indent 0.
-  for (const t of lex(unwrapExportFile(body))) {
-    if (t.kind === 'keyword' && t.indent === 0 && t.keyword === keyword && t.rest) out.push(t.rest);
+  for (const token of lex(unwrapExportFile(body))) {
+    if (token.kind === 'keyword' && token.indent === 0 && token.keyword === keyword && token.rest) out.push(token.rest);
   }
   return out;
 }
@@ -235,10 +235,10 @@ export function stripPrimitives(body: string, ...keywords: Keyword[]): string {
   const out: string[] = [];
   // TRANSITIONAL: see unwrapExportFile — drops the EXPORT opener and de-indents
   // the block body so the indent-0 strip below matches the legacy output byte-for-byte.
-  for (const t of lex(unwrapExportFile(body))) {
-    if (t.kind === 'comment') continue;
-    if (t.kind === 'keyword' && t.indent === 0 && set.has(t.keyword)) continue;
-    out.push(t.kind === 'blank' ? '' : ('raw' in t ? t.raw : ''));
+  for (const token of lex(unwrapExportFile(body))) {
+    if (token.kind === 'comment') continue;
+    if (token.kind === 'keyword' && token.indent === 0 && set.has(token.keyword)) continue;
+    out.push(token.kind === 'blank' ? '' : ('raw' in token ? token.raw : ''));
   }
   return out.join('\n').replace(/^\n+/, '');
 }
@@ -283,17 +283,17 @@ export function partitionMetadata(
   const out: string[] = [];
   // TRANSITIONAL: see unwrapExportFile — exposes EXPORT-block metadata at indent 0
   // and de-indents the body so extract + strip match the legacy output byte-for-byte.
-  for (const t of lex(unwrapExportFile(body))) {
-    if (t.kind === 'comment') continue;
-    if (t.kind === 'keyword' && t.indent === 0 && set.has(t.keyword)) {
-      if (t.rest) {
-        const arr = metadata.get(t.keyword) ?? [];
-        arr.push(t.rest);
-        metadata.set(t.keyword, arr);
+  for (const token of lex(unwrapExportFile(body))) {
+    if (token.kind === 'comment') continue;
+    if (token.kind === 'keyword' && token.indent === 0 && set.has(token.keyword)) {
+      if (token.rest) {
+        const arr = metadata.get(token.keyword) ?? [];
+        arr.push(token.rest);
+        metadata.set(token.keyword, arr);
       }
       continue;
     }
-    out.push(t.kind === 'blank' ? '' : ('raw' in t ? t.raw : ''));
+    out.push(token.kind === 'blank' ? '' : ('raw' in token ? token.raw : ''));
   }
   return { metadata, stripped: out.join('\n').replace(/^\n+/, '') };
 }
@@ -307,9 +307,9 @@ export function mergeMetadata(
   target: Map<string, string[]>,
   source: Map<string, string[]>,
 ): void {
-  for (const [k, vs] of source) {
-    if (k === 'ABOUT' && target.has('ABOUT')) continue;
-    target.set(k, [...(target.get(k) ?? []), ...vs]);
+  for (const [keyword, vs] of source) {
+    if (keyword === 'ABOUT' && target.has('ABOUT')) continue;
+    target.set(keyword, [...(target.get(keyword) ?? []), ...vs]);
   }
 }
 
@@ -357,7 +357,7 @@ export function protectVerbatim(text: string, transform: (masked: string) => str
     stash.push(inner);
     return `<<<VB${stash.length - 1}>>>`;
   });
-  return transform(masked).replace(/<<<VB(\d+)>>>/g, (_m, i) => stash[Number(i)]);
+  return transform(masked).replace(/<<<VB(\d+)>>>/g, (_m, index) => stash[Number(index)]);
 }
 
 /**
@@ -371,7 +371,7 @@ export function renderKeywordBlock(intro: string, values: string[]): string {
   if (values.length === 0) return '';
   if (values.length === 1) return `${intro} ${values[0]}`;
   const header = intro.endsWith(':') ? intro : `${intro}:`;
-  return `${header}\n${values.map(v => `- ${v}`).join('\n')}`;
+  return `${header}\n${values.map(value => `- ${value}`).join('\n')}`;
 }
 
 /**
@@ -383,23 +383,23 @@ export function renderKeywordBlock(intro: string, values: string[]): string {
  * Driven by the lexer's keyword recognition rather than ad-hoc regex.
  */
 export const CONTROL_FLOW_HEADS: Partial<Record<string, string>> = Object.fromEntries(
-  (['IF', 'ELSE', 'UNTIL', 'STEP', 'IN'] as const).map(k => [k, FORMULAS.keywords[k].head]),
+  (['IF', 'ELSE', 'UNTIL', 'STEP', 'IN'] as const).map(keyword => [keyword, FORMULAS.keywords[keyword].head]),
 );
 
 export function renderControlFlow(text: string): string {
   const tokens = lex(text);
-  return tokens.map(t => {
-    if (t.kind === 'keyword' && CONTROL_FLOW_HEADS[t.keyword]) {
-      const indent = ' '.repeat(t.indent);
-      const head = CONTROL_FLOW_HEADS[t.keyword]!;
-      if (t.rest) {
-        const rest = t.rest.endsWith(':') ? t.rest.slice(0, -1).trimEnd() : t.rest;
+  return tokens.map(token => {
+    if (token.kind === 'keyword' && CONTROL_FLOW_HEADS[token.keyword]) {
+      const indent = ' '.repeat(token.indent);
+      const head = CONTROL_FLOW_HEADS[token.keyword]!;
+      if (token.rest) {
+        const rest = token.rest.endsWith(':') ? token.rest.slice(0, -1).trimEnd() : token.rest;
         return `${indent}${head} ${rest}:`;
       }
       return `${indent}${head}:`;
     }
-    if (t.kind === 'blank') return '';
-    return 'raw' in t ? t.raw : '';
+    if (token.kind === 'blank') return '';
+    return 'raw' in token ? token.raw : '';
   }).join('\n');
 }
 
@@ -410,50 +410,50 @@ export function renderControlFlow(text: string): string {
 export const SIMILARITY_RATIO_THRESHOLD = 0.25;
 
 /**
- * Plain dynamic-programming Levenshtein distance. O(|a|·|b|).
+ * Plain dynamic-programming Levenshtein distance. O(|first|·|second|).
  * Returns the minimum number of single-character edits (insert, delete, replace)
- * needed to transform `a` into `b`.
+ * needed to transform `first` into `second`.
  */
-export function levenshtein(a: string, b: string): number {
-  const m = a.length;
-  const n = b.length;
+export function levenshtein(first: string, second: string): number {
+  const firstLength = first.length;
+  const secondLength = second.length;
 
-  let prev = Array.from({ length: n + 1 }, (_, i) => i);
-  let curr = new Array<number>(n + 1);
+  let prev = Array.from({ length: secondLength + 1 }, (_cell, index) => index);
+  let curr = new Array<number>(secondLength + 1);
 
-  for (let i = 1; i <= m; i++) {
-    curr[0] = i;
-    for (let j = 1; j <= n; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      curr[j] = Math.min(
-        curr[j - 1] + 1,
-        prev[j] + 1,
-        prev[j - 1] + cost,
+  for (let row = 1; row <= firstLength; row++) {
+    curr[0] = row;
+    for (let column = 1; column <= secondLength; column++) {
+      const cost = first[row - 1] === second[column - 1] ? 0 : 1;
+      curr[column] = Math.min(
+        curr[column - 1] + 1,
+        prev[column] + 1,
+        prev[column - 1] + cost,
       );
     }
     [prev, curr] = [curr, prev];
   }
 
-  return prev[n];
+  return prev[secondLength];
 }
 
 /**
- * Levenshtein ratio = distance / max(len(a), len(b)).
+ * Levenshtein ratio = distance / max(len(first), len(second)).
  * Returns 1 when both strings are empty (edge case: no similarity risk).
  */
-export function levenshteinRatio(a: string, b: string): number {
-  const maxLen = Math.max(a.length, b.length);
+export function levenshteinRatio(first: string, second: string): number {
+  const maxLen = Math.max(first.length, second.length);
   if (maxLen === 0) return 1;
-  return levenshtein(a, b) / maxLen;
+  return levenshtein(first, second) / maxLen;
 }
 
-/** True when `a` is a substring of `b` or `b` is a substring of `a`. */
-export function isSubstring(a: string, b: string): boolean {
-  return a.includes(b) || b.includes(a);
+/** True when `first` is a substring of `second` or `second` is a substring of `first`. */
+export function isSubstring(first: string, second: string): boolean {
+  return first.includes(second) || second.includes(first);
 }
 
 /**
- * True when `a` and `b` are similar enough to be considered conflicting.
+ * True when `first` and `second` are similar enough to be considered conflicting.
  *
  * Criterion (OR):
  *   - Levenshtein ratio ≤ SIMILARITY_RATIO_THRESHOLD
@@ -461,15 +461,15 @@ export function isSubstring(a: string, b: string): boolean {
  *
  * Identical strings return false.
  */
-export function areSimilar(a: string, b: string): boolean {
-  if (a === b) return false;
-  return isSubstring(a, b) || levenshteinRatio(a, b) <= SIMILARITY_RATIO_THRESHOLD;
+export function areSimilar(first: string, second: string): boolean {
+  if (first === second) return false;
+  return isSubstring(first, second) || levenshteinRatio(first, second) <= SIMILARITY_RATIO_THRESHOLD;
 }
 
 /** First entry in `existing` similar to `candidate`, or null when none. */
 export function findSimilar(candidate: string, existing: Iterable<string>): string | null {
-  for (const t of existing) {
-    if (areSimilar(candidate, t)) return t;
+  for (const known of existing) {
+    if (areSimilar(candidate, known)) return known;
   }
   return null;
 }

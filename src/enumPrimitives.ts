@@ -64,7 +64,7 @@ export function renderEnumLegend(keyword: string, ctx?: BundleContext): string {
   if (!prim) return '';
   const intro = prim.legendIntro ?? `${prim.keyword} modes:`;
   const rows = Object.keys(prim.values).map(
-    v => `- \`${v}\` — ${renderEnumValue(prim, v, ctx)}`,
+    value => `- \`${value}\` — ${renderEnumValue(prim, value, ctx)}`,
   );
   return [intro, ...rows].join('\n');
 }

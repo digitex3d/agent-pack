@@ -17,7 +17,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 export function filesUnder(dir: string, ext: string): string[] {
   try { if (!statSync(dir).isDirectory()) return []; } catch { return []; }
   const out: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+  for (const entry of readdirSync(dir, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name))) {
     const abs = resolve(dir, entry.name);
     if (entry.isDirectory()) out.push(...filesUnder(abs, ext));
     else if (entry.name.endsWith(ext)) out.push(abs);
@@ -38,7 +38,7 @@ export function projectFiles(root: string, keep: (rel: string) => boolean, max =
   const walk = (dir: string): void => {
     let entries: Dirent[];
     try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
-    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
       if (out.length >= max) return;
       const abs = resolve(dir, entry.name);
       if (entry.isDirectory()) { if (!SKIPPED_DIRS.has(entry.name)) walk(abs); continue; }
@@ -89,10 +89,10 @@ export function readJsonFile(path: string): unknown {
 export function removeEmptyDirs(dir: string, top?: string): void {
   if (!existsSync(dir)) return;
   try {
-    for (const e of readdirSync(dir, { withFileTypes: true })) if (e.isDirectory()) removeEmptyDirs(join(dir, e.name));
-    for (let d = dir; top === undefined ? d === dir : d.startsWith(top + sep); d = dirname(d)) {
-      if (readdirSync(d).length > 0) return;
-      rmdirSync(d);
+    for (const entry of readdirSync(dir, { withFileTypes: true })) if (entry.isDirectory()) removeEmptyDirs(join(dir, entry.name));
+    for (let folder = dir; top === undefined ? folder === dir : folder.startsWith(top + sep); folder = dirname(folder)) {
+      if (readdirSync(folder).length > 0) return;
+      rmdirSync(folder);
     }
   } catch { /* a folder another process filled or removed meanwhile stays as it is */ }
 }

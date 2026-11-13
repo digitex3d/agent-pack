@@ -86,8 +86,8 @@ export interface ApxHost {
 }
 
 /** `1 entry`, `3 entries`. */
-export function countOf(n: number, one: string, many: string): string {
-  return `${n} ${n === 1 ? one : many}`;
+export function countOf(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
 }
 
 /** The command of one operation on one id, as the apx prints it: `<apx> <kind> <op> <id>`. */

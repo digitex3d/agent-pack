@@ -91,8 +91,8 @@ export const SLOT_LINE_RE = new RegExp(`^(${SLOT_NAME})(\\?)?\\s*:\\s*(.+)$`);
 
 /** A template's layout: its BODY as written — or, without one, every slot in order. */
 export function templateLayout(layout: string | null | undefined, slots: readonly { name: string }[]): string {
-  const T = FORMULAS.blocks.template;
-  return layout ?? slots.map(s => fill(T.layoutSlot, { name: s.name })).join(T.layoutSeparator);
+  const templateFormulas = FORMULAS.blocks.template;
+  return layout ?? slots.map(slot => fill(templateFormulas.layoutSlot, { name: slot.name })).join(templateFormulas.layoutSeparator);
 }
 
 const SHAPE_REF_RE = /@shape\(([a-z][a-z0-9_-]*)\)/g;
@@ -106,40 +106,40 @@ const EXAMPLE_REF_RE = /\{([a-z][a-z0-9_-]*)\.EXAMPLE\}/g;
 // Type → human phrase (no validation; unknown forms pass through verbatim)
 // ---------------------------------------------------------------------------
 
-function formatRange(s: string): string {
-  let m: RegExpMatchArray | null;
-  if ((m = s.match(/^(\d+)\.\.(\d+)/))) return `${m[1]}–${m[2]}`;
-  if ((m = s.match(/^>=\s*(\d+)/))) return `≥${m[1]}`;
-  if ((m = s.match(/^<=\s*(\d+)/))) return `≤${m[1]}`;
+function formatRange(text: string): string {
+  let match: RegExpMatchArray | null;
+  if ((match = text.match(/^(\d+)\.\.(\d+)/))) return `${match[1]}–${match[2]}`;
+  if ((match = text.match(/^>=\s*(\d+)/))) return `≥${match[1]}`;
+  if ((match = text.match(/^<=\s*(\d+)/))) return `≤${match[1]}`;
   return '';
 }
 
-function formatTextConstraints(s: string): string {
+function formatTextConstraints(text: string): string {
   const hints: string[] = [];
-  let m: RegExpMatchArray | null;
-  if ((m = s.match(/MIN_WORDS\s+(\d+)/i))) hints.push(`≥${m[1]} words`);
-  if ((m = s.match(/MAX_WORDS\s+(\d+)/i))) hints.push(`≤${m[1]} words`);
-  if ((m = s.match(/REGEX\s+(\/.*\/)/i))) hints.push(`matching ${m[1]}`);
+  let match: RegExpMatchArray | null;
+  if ((match = text.match(/MIN_WORDS\s+(\d+)/i))) hints.push(`≥${match[1]} words`);
+  if ((match = text.match(/MAX_WORDS\s+(\d+)/i))) hints.push(`≤${match[1]} words`);
+  if ((match = text.match(/REGEX\s+(\/.*\/)/i))) hints.push(`matching ${match[1]}`);
   return hints.join(', ');
 }
 
 function typeToPhrase(typePart: string): string {
-  let m: RegExpMatchArray | null;
-  if ((m = typePart.match(/^LIST\s+<([a-z][a-z0-9_-]*)>\s*(.*)$/i))) {
-    const card = formatRange(m[2].trim());
-    return `list of @shape(${m[1]})${card ? ` (${card})` : ''}`;
+  let match: RegExpMatchArray | null;
+  if ((match = typePart.match(/^LIST\s+<([a-z][a-z0-9_-]*)>\s*(.*)$/i))) {
+    const card = formatRange(match[2].trim());
+    return `list of @shape(${match[1]})${card ? ` (${card})` : ''}`;
   }
-  if ((m = typePart.match(/^<([a-z][a-z0-9_-]*)>$/))) return `@shape(${m[1]})`;
-  if ((m = typePart.match(/^ENUM\[(.*)\]$/i))) {
-    const vals = splitList(m[1]);
+  if ((match = typePart.match(/^<([a-z][a-z0-9_-]*)>$/))) return `@shape(${match[1]})`;
+  if ((match = typePart.match(/^ENUM\[(.*)\]$/i))) {
+    const vals = splitList(match[1]);
     return `one of: ${vals.join(', ')}`;
   }
-  if ((m = typePart.match(/^NUMBER\b\s*(.*)$/i))) {
-    const r = formatRange(m[1].trim());
-    return `number${r ? ` (${r})` : ''}`;
+  if ((match = typePart.match(/^NUMBER\b\s*(.*)$/i))) {
+    const range = formatRange(match[1].trim());
+    return `number${range ? ` (${range})` : ''}`;
   }
-  if ((m = typePart.match(/^TEXT\b\s*(.*)$/i))) {
-    const hints = formatTextConstraints(m[1].trim());
+  if ((match = typePart.match(/^TEXT\b\s*(.*)$/i))) {
+    const hints = formatTextConstraints(match[1].trim());
     return `text${hints ? ` (${hints})` : ''}`;
   }
   return typePart; // unknown — render verbatim, no error
@@ -156,17 +156,17 @@ function looksTyped(typePart: string): boolean {
 
 /** Split a trailing `"description"` off a slot/scalar declaration. */
 function splitDesc(rest: string): { typePart: string; desc?: string } {
-  const m = rest.match(/^(.*?)\s*"([^"]*)"\s*$/);
-  if (m) return { typePart: m[1].trim(), desc: m[2] || undefined };
+  const match = rest.match(/^(.*?)\s*"([^"]*)"\s*$/);
+  if (match) return { typePart: match[1].trim(), desc: match[2] || undefined };
   return { typePart: rest };
 }
 
 /** Remove the common leading indent from region lines and trim trailing space. */
 function dedent(lines: string[]): string {
-  const nonBlank = lines.filter(l => l.trim() !== '');
+  const nonBlank = lines.filter(line => line.trim() !== '');
   if (nonBlank.length === 0) return '';
-  const min = Math.min(...nonBlank.map(l => (l.match(/^\s*/) as RegExpMatchArray)[0].length));
-  return lines.map(l => l.slice(min)).join('\n').replace(/\s+$/, '');
+  const min = Math.min(...nonBlank.map(line => (line.match(/^\s*/) as RegExpMatchArray)[0].length));
+  return lines.map(line => line.slice(min)).join('\n').replace(/\s+$/, '');
 }
 
 /** Calibrated intro for a force-level rule token (direct form or alias), or null. */
@@ -188,28 +188,28 @@ function ruleIntro(token: string): string | null {
 function parseSlots(lines: string[]): Slot[] {
   const out: Slot[] = [];
   for (const raw of lines) {
-    const t = raw.trim();
-    if (t === '' || t.startsWith('#')) continue;
-    const m = t.match(SLOT_LINE_RE);
-    if (m) {
-      const { typePart, desc } = splitDesc(m[3].trim());
-      out.push({ name: m[1], optional: m[2] === '?', typePhrase: typeToPhrase(typePart), rawType: typePart, description: desc, rules: [], rawRules: [] });
+    const trimmed = raw.trim();
+    if (trimmed === '' || trimmed.startsWith('#')) continue;
+    const match = trimmed.match(SLOT_LINE_RE);
+    if (match) {
+      const { typePart, desc } = splitDesc(match[3].trim());
+      out.push({ name: match[1], optional: match[2] === '?', typePhrase: typeToPhrase(typePart), rawType: typePart, description: desc, rules: [], rawRules: [] });
       continue;
     }
-    const cm = t.match(/^(YES|NO)\s+(.+)$/);
+    const cm = trimmed.match(/^(YES|NO)\s+(.+)$/);
     if (cm) {
       const rule = out[out.length - 1]?.rawRules?.at(-1);
-      if (!rule) throw new Error(`"${t}" has no slot rule above it — YES and NO say what a judge's answer means for the rule above`);
+      if (!rule) throw new Error(`"${trimmed}" has no slot rule above it — YES and NO say what a judge's answer means for the rule above`);
       (rule.criteria ??= {})[cm[1] === 'YES' ? 'yes' : 'no'] = cm[2].trim();
       continue;
     }
-    const rm = t.match(/^(!?[A-Z][A-Z0-9-]*!*)\s+(.+)$/);
+    const rm = trimmed.match(/^(!?[A-Z][A-Z0-9-]*!*)\s+(.+)$/);
     if (rm) {
       const intro = ruleIntro(rm[1]);
       if (intro) {
         const cur = out[out.length - 1];
         if (!cur) {
-          throw new Error(`slot rule "${t}" has no slot above it — rules attach to the preceding slot`);
+          throw new Error(`slot rule "${trimmed}" has no slot above it — rules attach to the preceding slot`);
         }
         cur.rules.push(`${intro} ${rm[2].trim()}`);
         cur.rawRules!.push({ keyword: rm[1], text: rm[2].trim() });
@@ -265,12 +265,12 @@ function scalarDecl(body: string, lines: string[]): string | null {
   if (hdr && looksTyped(hdr[1].trim())) return hdr[1].trim();
   let seenHeader = false;
   for (const raw of lines) {
-    const t = raw.trim();
-    if (t === '' || t.startsWith('#')) continue;
-    if (/^TEMPLATE\b/.test(t)) { seenHeader = true; continue; }
+    const trimmed = raw.trim();
+    if (trimmed === '' || trimmed.startsWith('#')) continue;
+    if (/^TEMPLATE\b/.test(trimmed)) { seenHeader = true; continue; }
     if (!seenHeader) continue;
     if (REGION_RE.test(raw)) return null; // hit SLOTS/BODY/EXAMPLE before a type → not scalar
-    return looksTyped(t) ? t : null;      // first content line under the header decides
+    return looksTyped(trimmed) ? trimmed : null;      // first content line under the header decides
   }
   return null;
 }
@@ -329,32 +329,32 @@ export function composeExample(example: string, name: string, exampleOf: Example
  * unresolved verbatim, e.g. in isolated tests).
  */
 export function renderTemplate(body: string, name: string, templates?: ExampleRefEntry[]): string | null {
-  const t = parseTemplate(body);
-  if (!t) return null;
+  const parsed = parseTemplate(body);
+  if (!parsed) return null;
 
   const out: string[] = [];
 
-  if (t.scalar) {
-    const desc = t.scalar.description ? ` — ${t.scalar.description}` : '';
-    out.push(`**${name}** — ${t.scalar.typePhrase}${desc}`);
+  if (parsed.scalar) {
+    const desc = parsed.scalar.description ? ` — ${parsed.scalar.description}` : '';
+    out.push(`**${name}** — ${parsed.scalar.typePhrase}${desc}`);
   } else {
-    const layout = templateLayout(t.bodyLayout, t.slots);
+    const layout = templateLayout(parsed.bodyLayout, parsed.slots);
     out.push(`Produce **${name}** by filling this layout — replace every \`{slot}\`, keep the rest verbatim:`);
     out.push('', markVerbatim(layout), '');
     out.push('Fields:');
-    for (const s of t.slots) {
-      const opt = s.optional ? ' *(optional)*' : '';
-      const desc = s.description ? ` — ${s.description}` : '';
-      out.push(`- **${s.name}**${opt} — ${s.typePhrase}${desc}`);
-      for (const r of s.rules) out.push(`  - ${r}`);
+    for (const slot of parsed.slots) {
+      const opt = slot.optional ? ' *(optional)*' : '';
+      const desc = slot.description ? ` — ${slot.description}` : '';
+      out.push(`- **${slot.name}**${opt} — ${slot.typePhrase}${desc}`);
+      for (const rule of slot.rules) out.push(`  - ${rule}`);
     }
   }
 
-  if (t.example) {
-    const example = templates ? composeExample(t.example, name, slug => {
-      const ref = templates.find(e => e.name === slug);
+  if (parsed.example) {
+    const example = templates ? composeExample(parsed.example, name, slug => {
+      const ref = templates.find(entry => entry.name === slug);
       return ref ? parseTemplate(ref.body)?.example ?? null : undefined;
-    }) : t.example;
+    }) : parsed.example;
     out.push('', '<example>', markVerbatim(example), '</example>');
   }
   return out.join('\n');
@@ -378,7 +378,7 @@ interface ShapeRefCtx {
 export function resolveShapeRefs(text: string, ctx: ShapeRefCtx): string {
   const shapes = ctx.templates;
   return text.replace(SHAPE_REF_RE, (_m, slug: string) => {
-    const shape = shapes.find(s => s.name === slug);
+    const shape = shapes.find(candidate => candidate.name === slug);
     if (!shape) {
       throw new Error(
         `template references unknown shape "${slug}" (no TEMPLATE with this name is imported)`,

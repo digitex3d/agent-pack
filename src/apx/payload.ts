@@ -124,10 +124,10 @@ export function storeSections(held: readonly Held[], compress: boolean): Section
       if (prior && prior.json !== json) throw new Error(`one id, one definition: ${block.id} is one block in ${prior.from} and another in ${who}`);
       if (!prior) blocks.set(block.id, { json, from: who });
     }
-    const view: View = { build: payload.build, schemaVersion: doc.schemaVersion, meta: doc.meta, blocks: Object.entries(doc.blocks).map(([address, b]) => [address, b.id]) };
+    const view: View = { build: payload.build, schemaVersion: doc.schemaVersion, meta: doc.meta, blocks: Object.entries(doc.blocks).map(([address, block]) => [address, block.id]) };
     views.push(section(VIEW_SECTION, name, JSON.stringify(view)));
   }
-  return [...views, ...[...blocks].map(([id, b]) => section(BLOCK_SECTION, id, b.json))];
+  return [...views, ...[...blocks].map(([id, block]) => section(BLOCK_SECTION, id, block.json))];
 }
 
 /** The whole `.apx` file of an agent: the bundled engine, then the pack lines — its view and its blocks. */
@@ -185,7 +185,7 @@ export function packBlock<T>(pack: Pack, id: string): T | null {
 
 /** The name of a document of the pack that has the block `id` — its own first — or null: an id is one block, whoever holds it. */
 export function viewHolding(pack: Pack, id: string): string | null {
-  const names = pack.entries(VIEW_SECTION).map(e => e.name).sort((a, b) => Number(b === '') - Number(a === ''));
+  const names = pack.entries(VIEW_SECTION).map(entry => entry.name).sort((left, right) => Number(right === '') - Number(left === ''));
   return names.find(name => pack.json<View>(VIEW_SECTION, name)?.blocks.some(([, held]) => held === id)) ?? null;
 }
 

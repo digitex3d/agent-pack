@@ -16,10 +16,10 @@ import { parseDuration, DURATION_FORM } from './delegation.js';
 import { DEFAULT_DOMAIN_THRESHOLDS, type DomainThresholds } from './domains.js';
 import { isProbability } from './judge/lock.js';
 
-function expandHome(p: string): string {
-  if (p === '~') return homedir();
-  if (p.startsWith('~/')) return resolve(homedir(), p.slice(2));
-  return p;
+function expandHome(filePath: string): string {
+  if (filePath === '~') return homedir();
+  if (filePath.startsWith('~/')) return resolve(homedir(), filePath.slice(2));
+  return filePath;
 }
 
 // dist/src/config.js -> package root is 2 levels up.
@@ -157,7 +157,7 @@ function mergeSharedLibrariesWithOrigin(base: unknown, override: unknown): Origi
  * user alias or add its own, while leaving the rest of the user aliases intact.
  */
 function mergeSharedLibrariesByAlias(base: unknown, override: unknown): unknown[] {
-  return mergeSharedLibrariesWithOrigin(base, override).map(o => o.def);
+  return mergeSharedLibrariesWithOrigin(base, override).map(entry => entry.def);
 }
 
 /**
@@ -316,7 +316,7 @@ export function hasAdapters(config: Config): boolean {
 
 /** Names of every registered adapter, in config order. */
 export function adapterNames(config: Config): string[] {
-  return config.adapters.map(a => a.name);
+  return config.adapters.map(adapter => adapter.name);
 }
 
 const OUTPUT_DIR = '.agent-pack/compiled';
@@ -364,10 +364,10 @@ function judgeOf(key: string, entry: unknown, threshold: unknown): JudgePlugin {
 function resolveJudgeConfig(raw: unknown, projectRoot: string): JudgeConfig | null {
   if (raw === undefined || raw === null || raw === false) return null;
   if (!isPlainObject(raw)) throw new Error("judge must be an object, e.g. { adapter: 'jev' }");
-  const j = { ...JUDGE_DEFAULTS, ...raw } as Record<string, unknown>;
-  const { threshold, offline, lock, concurrency } = j;
-  const adapter = judgeOf('judge', j.adapter, threshold);
-  noMargin('judge', j);
+  const judge = { ...JUDGE_DEFAULTS, ...raw } as Record<string, unknown>;
+  const { threshold, offline, lock, concurrency } = judge;
+  const adapter = judgeOf('judge', judge.adapter, threshold);
+  noMargin('judge', judge);
   if (offline !== 'warn' && offline !== 'error') throw new Error("judge.offline must be 'warn' or 'error'");
   if (typeof lock !== 'string' || lock.trim() === '') throw new Error('judge.lock must be a file path');
   if (!Number.isInteger(concurrency) || (concurrency as number) < 1) throw new Error('judge.concurrency must be a whole number ≥ 1');
@@ -382,12 +382,12 @@ function resolveJudgeConfig(raw: unknown, projectRoot: string): JudgeConfig | nu
 function resolveDomainThresholds(raw: unknown): DomainThresholds {
   if (raw === undefined || raw === null) return { ...DEFAULT_DOMAIN_THRESHOLDS };
   if (!isPlainObject(raw)) throw new Error('domains must be an object, e.g. { in: 0.8, out: 0.2 }');
-  const unknown = Object.keys(raw).filter(k => k !== 'in' && k !== 'out');
-  if (unknown.length) throw new Error(`domains: unknown key ${unknown.map(k => `\`${k}\``).join(', ')} — it takes \`in\` and \`out\``);
-  const t = { ...DEFAULT_DOMAIN_THRESHOLDS, ...raw } as Record<string, unknown>;
-  for (const k of ['in', 'out']) if (!isProbability(t[k])) throw new Error(`domains.${k} must be a number between 0 and 1`);
-  if ((t.out as number) >= (t.in as number)) throw new Error('domains.out must be below domains.in — between them the agent decides');
-  return { in: t.in as number, out: t.out as number };
+  const unknown = Object.keys(raw).filter(key => key !== 'in' && key !== 'out');
+  if (unknown.length) throw new Error(`domains: unknown key ${unknown.map(key => `\`${key}\``).join(', ')} — it takes \`in\` and \`out\``);
+  const thresholds = { ...DEFAULT_DOMAIN_THRESHOLDS, ...raw } as Record<string, unknown>;
+  for (const key of ['in', 'out']) if (!isProbability(thresholds[key])) throw new Error(`domains.${key} must be a number between 0 and 1`);
+  if ((thresholds.out as number) >= (thresholds.in as number)) throw new Error('domains.out must be below domains.in — between them the agent decides');
+  return { in: thresholds.in as number, out: thresholds.out as number };
 }
 
 /** The `mark` key: how many zones a MARK binds at most, when its line names no `MAX`. */
@@ -401,8 +401,8 @@ export const MARK_DEFAULTS: MarkConfig = { max: 20 };
 function resolveMarkConfig(raw: unknown): MarkConfig {
   if (raw === undefined || raw === null) return { ...MARK_DEFAULTS };
   if (!isPlainObject(raw)) throw new Error('mark must be an object, e.g. { max: 20 }');
-  const unknown = Object.keys(raw).filter(k => k !== 'max');
-  if (unknown.length) throw new Error(`mark: unknown key ${unknown.map(k => `\`${k}\``).join(', ')} — it takes \`max\``);
+  const unknown = Object.keys(raw).filter(key => key !== 'max');
+  if (unknown.length) throw new Error(`mark: unknown key ${unknown.map(key => `\`${key}\``).join(', ')} — it takes \`max\``);
   const max = (raw as Record<string, unknown>).max ?? MARK_DEFAULTS.max;
   if (!Number.isInteger(max) || (max as number) < 1) throw new Error('mark.max must be a whole number ≥ 1');
   return { max: max as number };
@@ -419,8 +419,8 @@ export const WAIT_DEFAULTS: WaitConfig = { max: '30m' };
 function resolveWaitConfig(raw: unknown): WaitConfig {
   if (raw === undefined || raw === null) return { ...WAIT_DEFAULTS };
   if (!isPlainObject(raw)) throw new Error("wait must be an object, e.g. { max: '30m' }");
-  const unknown = Object.keys(raw).filter(k => k !== 'max');
-  if (unknown.length) throw new Error(`wait: unknown key ${unknown.map(k => `\`${k}\``).join(', ')} — it takes \`max\``);
+  const unknown = Object.keys(raw).filter(key => key !== 'max');
+  if (unknown.length) throw new Error(`wait: unknown key ${unknown.map(key => `\`${key}\``).join(', ')} — it takes \`max\``);
   const max = (raw as Record<string, unknown>).max ?? WAIT_DEFAULTS.max;
   if (typeof max !== 'string' || parseDuration(max) === null) throw new Error(`wait.max must be a duration — ${DURATION_FORM}`);
   return { max };
@@ -435,11 +435,11 @@ function resolveWaitConfig(raw: unknown): WaitConfig {
 function resolveChecksConfig(raw: unknown): ChecksConfig | null {
   if (raw === undefined || raw === null || raw === false) return null;
   if (!isPlainObject(raw)) throw new Error("checks must be an object, e.g. { adapter: 'jev' }");
-  const c = { ...CHECKS_DEFAULTS, ...raw } as Record<string, unknown>;
-  if (c.rounds !== undefined) throw new Error('checks.rounds was removed — write the limit on each loop: `UNTIL!! <condition> MAX <n>:` (UNTIL!, UNTIL*, UNTIL** alike)');
-  noMargin('checks', c);
-  const adapter = judgeOf('checks', c.adapter, c.threshold);
-  return { adapter, threshold: c.threshold as number };
+  const checks = { ...CHECKS_DEFAULTS, ...raw } as Record<string, unknown>;
+  if (checks.rounds !== undefined) throw new Error('checks.rounds was removed — write the limit on each loop: `UNTIL!! <condition> MAX <n>:` (UNTIL!, UNTIL*, UNTIL** alike)');
+  noMargin('checks', checks);
+  const adapter = judgeOf('checks', checks.adapter, checks.threshold);
+  return { adapter, threshold: checks.threshold as number };
 }
 
 /** The delegate shipped with the package (templates/agents/quick.ap): an ASK without BY goes to it, unless `delegate.default` names another. */
@@ -449,11 +449,11 @@ export const DEFAULT_DELEGATE = 'quick';
 export function resolveDelegateConfig(raw: unknown): DelegateConfig {
   if (raw === undefined || raw === null) return { default: DEFAULT_DELEGATE, models: {} };
   if (!isPlainObject(raw)) throw new Error(`delegate must be an object, e.g. { default: '${DEFAULT_DELEGATE}', models: { ${DEFAULT_DELEGATE}: 'haiku' } }`);
-  const d = raw as Record<string, unknown>;
-  const name = d.default ?? DEFAULT_DELEGATE;
+  const delegate = raw as Record<string, unknown>;
+  const name = delegate.default ?? DEFAULT_DELEGATE;
   if (typeof name !== 'string' || name.trim() === '') throw new Error('delegate.default must be an agent name');
-  const models = d.models ?? {};
-  if (!isPlainObject(models) || Object.values(models).some(m => typeof m !== 'string')) throw new Error('delegate.models must map agent names to model names');
+  const models = delegate.models ?? {};
+  if (!isPlainObject(models) || Object.values(models).some(model => typeof model !== 'string')) throw new Error('delegate.models must map agent names to model names');
   return { default: name, models: models as Record<string, string> };
 }
 
@@ -467,9 +467,9 @@ const DEFAULTS: Omit<Config, 'bundle' | 'lint' | 'adapters' | 'userRoot' | 'judg
 export async function loadConfig(args: string[]): Promise<Config> {
   let configPath: string | null = null;
 
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--config' && args[i + 1]) {
-      configPath = resolve(args[++i]);
+  for (let index = 0; index < args.length; index++) {
+    if (args[index] === '--config' && args[index + 1]) {
+      configPath = resolve(args[++index]);
       break;
     }
   }

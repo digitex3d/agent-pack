@@ -3,11 +3,11 @@
 export function numberSteps(body: string): string {
   const counters = new Map<string, number>();
   return body.split('\n').map(line => {
-    const m = line.match(/^(\s*)STEP\s+(.+)$/);
-    if (!m) return line;
-    const indent = m[1];
-    const n = (counters.get(indent) || 0) + 1;
-    counters.set(indent, n);
-    return `${indent}${n}. ${m[2]}`;
+    const match = line.match(/^(\s*)STEP\s+(.+)$/);
+    if (!match) return line;
+    const indent = match[1];
+    const stepNumber = (counters.get(indent) || 0) + 1;
+    counters.set(indent, stepNumber);
+    return `${indent}${stepNumber}. ${match[2]}`;
   }).join('\n');
 }

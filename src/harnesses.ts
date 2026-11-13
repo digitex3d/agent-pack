@@ -58,7 +58,7 @@ export function readInvocation(adapter: AdapterPlugin): { invocation: HarnessInv
   return {
     invocation: {
       command, cli: inv.cli,
-      rules: parsed.slots.flatMap(s => s.rules),
+      rules: parsed.slots.flatMap(slot => slot.rules),
       carry: inv.carry ?? [],
       ...(inv.shape ? { shape: inv.shape } : {}),
       ...(inv.model ? { model: inv.model } : {}),
@@ -70,15 +70,15 @@ export function readInvocation(adapter: AdapterPlugin): { invocation: HarnessInv
 /** Every harness installed — the built-ins, then any adapter object the config holds — with what the config enables. */
 export function harnessesOf(enabled: readonly AdapterPlugin[], path?: string): HarnessRow[] {
   const byName = new Map<string, AdapterPlugin>();
-  for (const a of builtinAdapters()) byName.set(a.name, a);
-  for (const a of enabled) byName.set(a.name, a);
-  const on = new Set(enabled.map(a => a.name));
-  return [...byName.values()].map(a => {
-    const read = readInvocation(a);
+  for (const adapter of builtinAdapters()) byName.set(adapter.name, adapter);
+  for (const adapter of enabled) byName.set(adapter.name, adapter);
+  const on = new Set(enabled.map(adapter => adapter.name));
+  return [...byName.values()].map(adapter => {
+    const read = readInvocation(adapter);
     const invocation = 'invocation' in read ? read.invocation : null;
     return {
-      name: a.name, enabled: on.has(a.name), invocation, problem: 'problem' in read ? read.problem : null, onPath: invocation ? onPath(invocation.cli, path) : null,
-      models: Object.fromEntries(Object.entries(a.models ?? {}).filter((e): e is [string, string] => typeof e[1] === 'string')),
+      name: adapter.name, enabled: on.has(adapter.name), invocation, problem: 'problem' in read ? read.problem : null, onPath: invocation ? onPath(invocation.cli, path) : null,
+      models: Object.fromEntries(Object.entries(adapter.models ?? {}).filter((entry): entry is [string, string] => typeof entry[1] === 'string')),
     };
   });
 }
@@ -89,12 +89,12 @@ export function harnessesOf(enabled: readonly AdapterPlugin[], path?: string): H
  * tier the harness maps to none, is left out: it runs on the harness's default.
  */
 export function agentModels(row: HarnessRow, agents: readonly { name: string; budget?: string | null }[]): Record<string, string> {
-  return Object.fromEntries(agents.flatMap(a => { const model = modelOfTier(row.models, a.budget); return model ? [[a.name, model]] : []; }));
+  return Object.fromEntries(agents.flatMap(agent => { const model = modelOfTier(row.models, agent.budget); return model ? [[agent.name, model]] : []; }));
 }
 
 /** Why the model of `agent` on `harness` falls back to the harness's own default although the agent declares a tier — or null (D66). */
 export function modelProblem(harness: string, agent: { name: string; budget?: string | null } | undefined, rows: readonly HarnessRow[]): string | null {
-  const row = rows.find(r => r.name === harness);
+  const row = rows.find(harnessRow => harnessRow.name === harness);
   if (!agent?.budget || !row || modelOfTier(row.models, agent.budget)) return null;
   return `BY ${harness}:${agent.name}: \`${agent.name}\` declares BUDGET ${agent.budget}, and ${harness} maps no model to it — it runs on ${harness}'s own default model; `
     + `map the tier in agent-pack.config.mjs: adapters: [{ name: '${harness}', models: { ${agent.budget}: '<model>' } }]`;
@@ -102,8 +102,8 @@ export function modelProblem(harness: string, agent: { name: string; budget?: st
 
 /** Why a delegation cannot go to `harness` — the dependency it does not satisfy — or null. */
 export function harnessProblem(harness: string, rows: readonly HarnessRow[]): string | null {
-  const row = rows.find(r => r.name === harness);
-  if (!row) return `no harness is called \`${harness}\` — the harnesses installed: ${rows.map(r => r.name).join(', ')}`;
+  const row = rows.find(harnessRow => harnessRow.name === harness);
+  if (!row) return `no harness is called \`${harness}\` — the harnesses installed: ${rows.map(harnessRow => harnessRow.name).join(', ')}`;
   if (!row.enabled) return `the harness \`${harness}\` is not enabled — add '${harness}' to \`adapters:\` in agent-pack.config.mjs`;
   if (!row.invocation) return row.problem ?? `${harness} cannot be delegated to`;
   if (!row.onPath) return `the harness \`${harness}\` needs its CLI, \`${row.invocation.cli}\`, on the PATH — install it, or delegate to another harness`;

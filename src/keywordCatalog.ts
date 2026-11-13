@@ -35,5 +35,5 @@ export function keywordCatalog(): Record<string, KeywordRole> {
     return meta.has(word) ? 'meta' : 'keyword';
   };
   const words = new Set([...KEYWORDS, ...Object.keys(BLOCK_TYPES), ...COMPUTE_SECTIONS, ...PATTERN_WORDS]);
-  return Object.fromEntries([...words].sort().map(w => [w, roleOf(w)]));
+  return Object.fromEntries([...words].sort().map(word => [word, roleOf(word)]));
 }

@@ -35,9 +35,9 @@ async function dimensionsOf(host: ApxHost): Promise<Dimension[]> {
     let store: OpenStore;
     try {
       store = resolveStore(parts.store, host.projectRoot, 'dimension', { kind: 'cache', defhash: dimensionDefHash(block, parts) });
-    } catch (e) {
-      if (e instanceof StoreRefusal) return [];
-      throw e;
+    } catch (error) {
+      if (error instanceof StoreRefusal) return [];
+      throw error;
     }
     const template = parts.store.shape ? host.doc.resolve(parts.store.shape.ref) as TemplateBlock | null : null;
     return [{
@@ -97,15 +97,15 @@ function miss(host: ApxHost, dim: Dimension, file: string, state: EntryState | n
 }
 
 /** One instance as text: through its template's layout when the store has one, else its fields on a line. */
-function instanceText(dim: Dimension, v: Record<string, unknown>): string {
-  return dim.template?.slots ? dim.template.instanceText(v) : fieldsText(v);
+function instanceText(dim: Dimension, instance: Record<string, unknown>): string {
+  return dim.template?.slots ? dim.template.instanceText(instance) : fieldsText(instance);
 }
 
 /** A kept value as text: each instance, or `none`. */
 function valueText(dim: Dimension, value: CacheEntry['value']): string {
   if (!Array.isArray(value)) return NONE;
-  const texts = value.map(v => instanceText(dim, v));
-  return texts.join(texts.some(t => t.includes('\n')) ? '\n\n' : '\n');
+  const texts = value.map(instance => instanceText(dim, instance));
+  return texts.join(texts.some(text => text.includes('\n')) ? '\n\n' : '\n');
 }
 
 /**
@@ -119,9 +119,9 @@ function valueOf(dim: Dimension, text: string): { value: CacheEntry['value'] } |
   try { parsed = JSON.parse(trimmed); } catch { return { error: 'the value is no JSON — write a JSON list of records, or none' }; }
   if (!Array.isArray(parsed) || parsed.length === 0) return { error: `the value is no list of records of \`${dim.store.name}\` — a list of one record at least, or none` };
   const specs = slotSpecsOf(dim.store.slots);
-  for (const [n, item] of parsed.entries()) {
+  for (const [index, item] of parsed.entries()) {
     const issues = validateRecord(item, specs);
-    if (issues.length > 0) return { error: `record ${n + 1} is no record of \`${dim.store.name}\`: ${formatIssues(issues).replace(/\n/g, '; ')}` };
+    if (issues.length > 0) return { error: `record ${index + 1} is no record of \`${dim.store.name}\`: ${formatIssues(issues).replace(/\n/g, '; ')}` };
   }
   return { value: parsed as Record<string, unknown>[] };
 }
@@ -129,7 +129,7 @@ function valueOf(dim: Dimension, text: string): { value: CacheEntry['value'] } |
 /** The refs of a write, each file's fingerprint now — or the message of one that is no file of the project. */
 function refsOf(dim: Dimension, file: string, arg: string | undefined): Record<string, string> | string {
   const refs: Record<string, string> = {};
-  for (const raw of (arg?.slice('refs='.length) ?? '').split(';').map(r => r.trim()).filter(Boolean)) {
+  for (const raw of (arg?.slice('refs='.length) ?? '').split(';').map(part => part.trim()).filter(Boolean)) {
     const ref = relativeWithin(dim.cache.root, resolve(raw));
     const print = ref === null ? null : dim.cache.fingerprintOf(ref);
     if (ref === null || print === null) return `refs: \`${raw}\` is no file of the project — name files that exist, separated by ; — nothing was written`;
@@ -149,8 +149,8 @@ function writeArgs(host: ApxHost, dim: Dimension, args: string[]): { file: strin
   const usage = writeUsage();
   const file = fileArg(host, dim, 'write', args[0], usage);
   if (!file) return host.lastCode;
-  const refsArg = args.slice(1).filter(a => a.startsWith('refs='));
-  const from = args.slice(1).filter(a => !a.startsWith('refs='));
+  const refsArg = args.slice(1).filter(arg => arg.startsWith('refs='));
+  const from = args.slice(1).filter(arg => !arg.startsWith('refs='));
   if (refsArg.length > 1 || from.length !== 1 || (from[0] !== '-' && from[0] !== NONE)) {
     return host.fail(STORE_EXIT.usage, `${dim.name} write takes the value on stdin with -, or none — ${dim.cmd('write')} ${usage}`);
   }
@@ -182,9 +182,9 @@ async function keep(host: ApxHost, dim: Dimension, entry: CacheEntry): Promise<n
   for (const named of filesNamedIn(cache.root, entry.value)) if (named !== entry.file && !(named in entry.refs)) entry.refs[named] = cache.fingerprintOf(named) ?? '';
   try {
     await cache.write(entry);
-  } catch (e) {
-    if (e instanceof StaleWrite) return host.fail(STALE, `${dim.name} ${entry.file}: another agent answered it meanwhile — read it: ${dim.cmd('read')} ${entry.file}`);
-    throw e;
+  } catch (error) {
+    if (error instanceof StaleWrite) return host.fail(STALE, `${dim.name} ${entry.file}: another agent answered it meanwhile — read it: ${dim.cmd('read')} ${entry.file}`);
+    throw error;
   }
   host.out(`# stored ${dim.name} ${entry.file} — ${cache.location}`);
   host.out(`# hash ${entry.hash.slice(0, HASH_SHOWN)}  refs: ${Object.keys(entry.refs).join(', ') || '(none)'}`);
@@ -194,12 +194,12 @@ async function keep(host: ApxHost, dim: Dimension, entry: CacheEntry): Promise<n
 /** Each entry kept (those matching `glob`) with its state — and the counts. */
 async function entriesOf(dim: Dimension, glob?: string): Promise<{ entries: { entry: CacheEntry; state: EntryState }[]; summary: string }> {
   const entries = (await dim.cache.entries(glob)).map(entry => ({ entry, state: dim.cache.state(entry) }));
-  const n = (state: string) => entries.filter(e => e.state.state === state).length;
+  const countIn = (state: string) => entries.filter(kept => kept.state.state === state).length;
   const { hits, misses } = dim.cache.stats();
   const rate = hits + misses > 0 ? `${Math.round((100 * hits) / (hits + misses))}%` : 'n/a';
   return {
     entries,
-    summary: `${countOf(entries.length, 'entry', 'entries')}: ${n('fresh')} fresh, ${n('stale')} stale, ${n('gone')} gone — ${hits} hits, ${misses} misses, hit rate ${rate}`,
+    summary: `${countOf(entries.length, 'entry', 'entries')}: ${countIn('fresh')} fresh, ${countIn('stale')} stale, ${countIn('gone')} gone — ${hits} hits, ${misses} misses, hit rate ${rate}`,
   };
 }
 
@@ -210,18 +210,18 @@ async function entriesOf(dim: Dimension, glob?: string): Promise<{ entries: { en
 const find: Op = async (host, dim, args) => {
   if (args.length === 0) return host.fail(STORE_EXIT.usage, `${dim.name} find needs text — ${dim.cmd('find')} <text>`);
   const needle = args.join(' ').toLowerCase();
-  let n = 0;
+  let found = 0;
   for (const { entry, state } of (await entriesOf(dim)).entries) {
     if (state.state !== 'fresh' || !Array.isArray(entry.value)) continue;
-    for (const v of entry.value) {
-      const text = instanceText(dim, v);
+    for (const instance of entry.value) {
+      const text = instanceText(dim, instance);
       if (!text.toLowerCase().includes(needle)) continue;
-      n++;
+      found++;
       host.out(`${entry.file}  ${text.replace(/\n/g, ' ')}`);
     }
   }
-  host.out(`# ${countOf(n, 'instance', 'instances')} of ${dim.name} hold "${args.join(' ')}" — fresh entries only`);
-  return n > 0 ? 0 : 1;
+  host.out(`# ${countOf(found, 'instance', 'instances')} of ${dim.name} hold "${args.join(' ')}" — fresh entries only`);
+  return found > 0 ? 0 : 1;
 };
 
 /** `ls <dim-id> [glob]` — the entries kept, with their state and why, then the counts. */
@@ -245,9 +245,9 @@ const why: Op = async (host, dim, args) => {
   }
   const state = dim.cache.state(entry);
   host.out(`${state.state} ${dim.name} ${file}${state.reason ? ` — ${state.reason}` : ''}  (by ${entry.by}, ${entry.at})`);
-  for (const c of state.checks) {
-    const now = c.current === null ? 'gone' : c.current === c.stored ? 'same' : 'changed';
-    host.out(`  ${c.role.padEnd(4)}  ${c.path}  kept ${c.stored.slice(0, HASH_SHOWN)}  now ${c.current ? c.current.slice(0, HASH_SHOWN) : '(none)'}  ${now}`);
+  for (const check of state.checks) {
+    const now = check.current === null ? 'gone' : check.current === check.stored ? 'same' : 'changed';
+    host.out(`  ${check.role.padEnd(4)}  ${check.path}  kept ${check.stored.slice(0, HASH_SHOWN)}  now ${check.current ? check.current.slice(0, HASH_SHOWN) : '(none)'}  ${now}`);
   }
   return 0;
 };
@@ -256,13 +256,13 @@ const why: Op = async (host, dim, args) => {
 const clear: Op = async (host, dim, args) => {
   let glob: string | undefined;
   let by: string | undefined;
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--by' && args[i + 1]) by = args[++i];
-    else if (args[i] !== '--by' && glob === undefined) glob = args[i];
+  for (let index = 0; index < args.length; index++) {
+    if (args[index] === '--by' && args[index + 1]) by = args[++index];
+    else if (args[index] !== '--by' && glob === undefined) glob = args[index];
     else return host.fail(STORE_EXIT.usage, `${dim.name} clear takes a glob and --by <agent>, both optional — ${dim.cmd('clear')} 'src/**' --by <agent>`);
   }
-  const cleared = (await dim.cache.entries(glob)).filter(e => !by || e.by === by);
-  for (const e of cleared) await dim.cache.remove(e.file);
+  const cleared = (await dim.cache.entries(glob)).filter(entry => !by || entry.by === by);
+  for (const entry of cleared) await dim.cache.remove(entry.file);
   host.out(`# cleared ${countOf(cleared.length, 'entry', 'entries')} of ${dim.name}${glob ? ` matching ${glob}` : ''}${by ? ` written by ${by}` : ''}`);
   return 0;
 };
@@ -270,9 +270,9 @@ const clear: Op = async (host, dim, args) => {
 /** `gc <dim-id>` — delete the entries of files that no longer exist. */
 const gc: Op = async (host, dim) => {
   const orphans = await dim.cache.orphans();
-  for (const e of orphans) {
-    await dim.cache.remove(e.file);
-    host.out(`removed ${e.file}`);
+  for (const orphan of orphans) {
+    await dim.cache.remove(orphan.file);
+    host.out(`removed ${orphan.file}`);
   }
   host.out(`# ${countOf(orphans.length, 'entry', 'entries')} of deleted files removed from ${dim.name}`);
   return 0;
@@ -283,8 +283,8 @@ const OPS: Record<string, Op> = { read, write, find, q, next, mark, since, ls, w
 /** `dimension` alone, or `ls` with no id: the agent's dimensions, each with what it covers and its counts. */
 async function list(host: ApxHost, dimensions: Dimension[]): Promise<number> {
   if (dimensions.length === 0) host.out('# this agent has no dimensions');
-  for (const d of dimensions) {
-    host.out(`${d.block.id}  ${d.name}  ${d.cache.defhash}  — files: ${d.block.globs.join(', ')} — ${(await entriesOf(d)).summary}  — read: ${d.cmd('read')} <file>`);
+  for (const dimension of dimensions) {
+    host.out(`${dimension.block.id}  ${dimension.name}  ${dimension.cache.defhash}  — files: ${dimension.block.globs.join(', ')} — ${(await entriesOf(dimension)).summary}  — read: ${dimension.cmd('read')} <file>`);
   }
   return 0;
 }
@@ -309,9 +309,9 @@ export const dimensionService: ApxService = {
     const dimensions = await dimensionsOf(host);
     const [id, ...rest] = args;
     if (!op || (op === 'ls' && !id)) return await list(host, dimensions);
-    const dim = id ? dimensions.find(d => d.block.id === id) : undefined;
+    const dim = id ? dimensions.find(candidate => candidate.block.id === id) : undefined;
     if (!dim) {
-      const known = dimensions.map(d => `${d.block.id} (${d.name})`).join(', ') || 'none';
+      const known = dimensions.map(dimension => `${dimension.block.id} (${dimension.name})`).join(', ') || 'none';
       return host.fail(STORE_EXIT.usage, `${id ? `no dimension \`${id}\` in this agent` : `dimension ${op} takes an id (dim-…)`} — its dimensions: ${known}; list them: ${host.cmd} dimension`);
     }
     const run = OPS[op];

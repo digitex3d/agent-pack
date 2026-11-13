@@ -76,12 +76,12 @@ function isRef(value: object): boolean {
  */
 export function nameFreeContent(block: ApBlockData): unknown {
   const strip = (value: unknown, top: boolean): unknown => {
-    if (Array.isArray(value)) return value.map(v => strip(v, false));
+    if (Array.isArray(value)) return value.map(item => strip(item, false));
     if (!value || typeof value !== 'object') return value;
     if (!top && isRef(value)) return { kind: (value as { kind: unknown }).kind };
     return Object.fromEntries(Object.entries(value)
-      .filter(([k]) => k !== 'chars' && !(top && IDENTITY_KEYS.has(k)))
-      .map(([k, v]) => [k, strip(v, false)]));
+      .filter(([key]) => key !== 'chars' && !(top && IDENTITY_KEYS.has(key)))
+      .map(([key, fieldValue]) => [key, strip(fieldValue, false)]));
   };
   return strip(JSON.parse(JSON.stringify(block)), true);
 }

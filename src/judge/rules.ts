@@ -41,8 +41,8 @@ export function severityOf(check: JudgeCheck): 'error' | 'warning' | null {
 /** The EXAMPLE lines of a judge template written `<line> → <verdict>` — the reference examples. */
 function examplesOf(template: TemplateBlock): JudgeExample[] {
   return (template.example ?? '').split('\n').flatMap(raw => {
-    const m = raw.trim().match(/^(.+?)\s+→\s+(.+)$/);
-    return m ? [{ line: m[1], verdict: m[2] }] : [];
+    const match = raw.trim().match(/^(.+?)\s+→\s+(.+)$/);
+    return match ? [{ line: match[1], verdict: match[2] }] : [];
   });
 }
 
@@ -54,10 +54,10 @@ function examplesOf(template: TemplateBlock): JudgeExample[] {
  */
 export function judgeState(rule: JudgeRule, text: string): string {
   if (!rule.checks.some(isDirect) && rule.examples.length === 0) return text;
-  const inputs = [...new Set(readsOf(text).map(r => r.name))];
+  const inputs = [...new Set(readsOf(text).map(read => read.name))];
   return JSON.stringify({
     ...(rule.role ? { role: rule.role } : {}),
-    line: resolveReads(text, r => r.name),
+    line: resolveReads(text, read => read.name),
     inputs,
     ...(rule.examples.length ? { reference_examples: rule.examples } : {}),
   });
@@ -71,9 +71,9 @@ export function judgeState(rule: JudgeRule, text: string): string {
  * its step or block, not a line.
  */
 const LINE_KEYWORDS: ReadonlySet<string> = new Set([
-  ...getFamilyBases(), ...FORCE_LEVEL_PRIMITIVES.map(p => p.keyword), ...ACTION_VERBS,
-  ...CHECK_KINDS, ...SEQUENCE_PRIMITIVES.map(p => p.keyword), 'VAR', 'IN', 'EACH',
-].filter(k => !(AGENT_METADATA_KEYWORDS as string[]).includes(k)));
+  ...getFamilyBases(), ...FORCE_LEVEL_PRIMITIVES.map(primitive => primitive.keyword), ...ACTION_VERBS,
+  ...CHECK_KINDS, ...SEQUENCE_PRIMITIVES.map(primitive => primitive.keyword), 'VAR', 'IN', 'EACH',
+].filter(keyword => !(AGENT_METADATA_KEYWORDS as string[]).includes(keyword)));
 
 /**
  * The keyword a line written with `word` is stored under: a lifecycle alias
@@ -111,12 +111,12 @@ function primitivesOf(template: TemplateBlock): { primitives: string[]; keywordS
   const layout = template.layout ?? '';
   const opening = new RegExp(`^\\s*\\{(${SLOT_NAME})\\}`).exec(layout)?.[1];
   if (opening) {
-    const slot = template.slots?.find(s => s.name === opening);
+    const slot = template.slots?.find(candidate => candidate.name === opening);
     if (slot?.type.kind !== 'enum') return { primitives: [] };
     if (slot.rules.length > 0) {
       throw new Error(`judge rule \`${template.name}\`: its slot \`${opening}\` names the lines the rule judges, so it takes no rule of its own — write the rule on the slot of the line's text`);
     }
-    return { primitives: slot.type.values.map(v => checkedPrimitive(template, v, `\`{${opening}}\`, whose value \`${v}\``)), keywordSlot: opening };
+    return { primitives: slot.type.values.map(value => checkedPrimitive(template, value, `\`{${opening}}\`, whose value \`${value}\``)), keywordSlot: opening };
   }
   const word = /^\s*(!*[A-Z][A-Z0-9-]*[!*]*)(?=[\s:{]|$)/.exec(layout)?.[1];
   return { primitives: word ? [checkedPrimitive(template, word, `\`${word}\``)] : [] };
@@ -125,7 +125,7 @@ function primitivesOf(template: TemplateBlock): { primitives: string[]; keywordS
 /** A `#judge` template as a rule — its primitives from the layout, its checks from the slot rules. */
 export function ruleOf(template: TemplateBlock): JudgeRule {
   const { primitives, keywordSlot } = primitivesOf(template);
-  const scope = JUDGE_SCOPES.find(s => template.tags.includes(s));
+  const scope = JUDGE_SCOPES.find(tag => template.tags.includes(tag));
   if (primitives.length === 0 && !scope) {
     throw new Error(`judge rule \`${template.name}\`: its BODY layout must start with the keyword of the lines it judges (e.g. \`DO {action}\`), or an ENUM slot of those keywords, or the rule be tagged #executed, #program or #agent`);
   }
@@ -137,7 +137,7 @@ export function ruleOf(template: TemplateBlock): JudgeRule {
       throw new Error(`judge rule \`${template.name}\`: ${what} is not supported — a #judge rule is MUST, SHOULD, NEVER, MUST-NOT or SHOULD-NOT (${check.id})`);
     }
   }
-  const role = template.slots?.find(s => s.name !== keywordSlot)?.description;
+  const role = template.slots?.find(slot => slot.name !== keywordSlot)?.description;
   return { id: template.address, primitives, ...(scope ? { scope } : {}), template, checks, ...(role ? { role } : {}), examples: examplesOf(template) };
 }
 
@@ -151,7 +151,7 @@ export function loadJudgeRules(config: Pick<Config, 'libraryRoot' | 'sharedLibra
     ...config,
     sharedLibraries: [...(config.sharedLibraries ?? []), { alias: 'builtin', path: BUILTIN_LIBRARY_ROOT }],
   } as Config;
-  const roots = [resolve(scanned.libraryRoot), ...scanned.sharedLibraries!.map(l => resolve(l.path))];
+  const roots = [resolve(scanned.libraryRoot), ...scanned.sharedLibraries!.map(library => resolve(library.path))];
   const libraries = librariesAliasMap(scanned);
   const index = buildMetadataIndex(scanned);
   const sources = new SourceRegistry();
@@ -161,12 +161,12 @@ export function loadJudgeRules(config: Pick<Config, 'libraryRoot' | 'sharedLibra
     .filter(entry => entry?.kind === 'template')
     .map(entry => {
       const file = entry.source.replace(/:\d+$/, '');
-      const block = exportedBlockBodies(sources.read(file)).find(b => b.key === 'TEMPLATE' && b.name === entry.name);
+      const block = exportedBlockBodies(sources.read(file)).find(body => body.key === 'TEMPLATE' && body.name === entry.name);
       if (!block) throw new Error(`judge rule \`${entry.name}\`: not found in ${file}`);
       const unit = ingestExportBlock(block, file, roots, libraries);
       const template = TemplateBlock.fromBody({
         name: unit.name, namespace: entry.namespace, about: unit.about,
-        tags: unit.tags.map(t => t.replace(/^#/, '')), when: 'always',
+        tags: unit.tags.map(tag => tag.replace(/^#/, '')), when: 'always',
       }, unit.body, cx);
       return ruleOf(template);
     });

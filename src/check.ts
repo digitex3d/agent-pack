@@ -30,9 +30,9 @@ const MAX_RE = /^(.*?)\s+MAX\s+(\S+)$/;
  * not (`MAX 0`, `MAX many`). A head without MAX keeps its text whole.
  */
 export function splitMax(rest: string): { condition: string; max?: number; bad?: string } {
-  const m = rest.trim().match(MAX_RE);
-  if (!m) return { condition: rest.trim() };
-  return /^[1-9]\d*$/.test(m[2]) ? { condition: m[1].trim(), max: Number(m[2]) } : { condition: m[1].trim(), bad: m[2] };
+  const match = rest.trim().match(MAX_RE);
+  if (!match) return { condition: rest.trim() };
+  return /^[1-9]\d*$/.test(match[2]) ? { condition: match[1].trim(), max: Number(match[2]) } : { condition: match[1].trim(), bad: match[2] };
 }
 
 /**
@@ -63,8 +63,8 @@ export function roundOf(answers: boolean[], rounds?: number): number {
 
 /** What the agent is told after a "not yet" at `round`: do the next round, or — at the limit — stop. */
 export function roundLine(round: number, rounds: number, words: { again: string; end: string }): string {
-  const C = FORMULAS.keywords.CHECK;
-  return fill(round >= rounds ? C.limit : C.nextRound, { round, rounds, ...words });
+  const checkFormulas = FORMULAS.keywords.CHECK;
+  return fill(round >= rounds ? checkFormulas.limit : checkFormulas.nextRound, { round, rounds, ...words });
 }
 
 /** The condition heads that take a level — the one list; the lexer reads it. */
@@ -103,7 +103,7 @@ export interface ApCheckSpec {
   rounds?: number;
 }
 
-const C = FORMULAS.keywords.CHECK;
+const CHECK_FORMULAS = FORMULAS.keywords.CHECK;
 
 /**
  * A checked condition's id: `cnd-` + a hash of the agent that answers for it
@@ -125,8 +125,8 @@ export function checkedKeyword(kind: ControlKind, level: number): string {
  * the answering agent's apx.
  */
 export function checkHead(kind: CheckKind, check: Pick<ApCondCheck, 'id' | 'level' | 'rounds'>, condition: string, apx: string): string {
-  const run = fill(C.run, { apx, id: check.id });
-  return fill(C[kind][String(check.level) as '1' | '2'], { head: FORMULAS.keywords[kind].head, condition, run, rounds: check.rounds ?? '' });
+  const run = fill(CHECK_FORMULAS.run, { apx, id: check.id });
+  return fill(CHECK_FORMULAS[kind][String(check.level) as '1' | '2'], { head: FORMULAS.keywords[kind].head, condition, run, rounds: check.rounds ?? '' });
 }
 
 /**
@@ -206,7 +206,7 @@ export interface CheckField {
  * vocabulary check's error, never a variable here.
  */
 export function checkedVars(condition: string, isConstant: (name: string) => boolean): string[] {
-  return [...new Set(readsOf(condition).filter(r => !r.field && !isConstant(r.name)).map(r => r.name))];
+  return [...new Set(readsOf(condition).filter(read => !read.field && !isConstant(read.name)).map(read => read.name))];
 }
 
 /**
@@ -220,18 +220,18 @@ export function questionOf(
   constant: (name: string) => string | undefined,
   fields: (template: string) => CheckField[] | null,
 ): string {
-  const named = (r: VarRead): string => {
-    const value = constant(r.name);
+  const named = (read: VarRead): string => {
+    const value = constant(read.name);
     if (value !== undefined) return value;
-    const shape = r.template ? fields(r.template) : null;
-    if (!r.template || !shape) return r.name;
-    const list = shape.map(f => (f.description ? fill(C.field, { name: f.name, description: f.description }) : f.name)).join(C.fieldSeparator);
-    return fill(C.shapedRead, { name: r.name, template: r.template, fields: list });
+    const shape = read.template ? fields(read.template) : null;
+    if (!read.template || !shape) return read.name;
+    const list = shape.map(field => (field.description ? fill(CHECK_FORMULAS.field, { name: field.name, description: field.description }) : field.name)).join(CHECK_FORMULAS.fieldSeparator);
+    return fill(CHECK_FORMULAS.shapedRead, { name: read.name, template: read.template, fields: list });
   };
-  return fill(C.question, { condition: resolveReads(condition.trim(), named) });
+  return fill(CHECK_FORMULAS.question, { condition: resolveReads(condition.trim(), named) });
 }
 
 /** The state the judge reads: each variable as `### <name>` and its value exactly as stored, a blank line between. */
 export function stateOf(values: { name: string; value: string }[]): string {
-  return values.map(v => fill(C.state, { name: v.name, value: v.value })).join(C.stateSeparator);
+  return values.map(entry => fill(CHECK_FORMULAS.state, { name: entry.name, value: entry.value })).join(CHECK_FORMULAS.stateSeparator);
 }

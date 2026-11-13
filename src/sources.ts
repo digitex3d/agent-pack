@@ -93,20 +93,20 @@ export class SourceRegistry {
     }
     const blocks = this.tree(path).blocks;
     const key = kind.toUpperCase();
-    const block = blocks.find(b => b.key === key && b.name === name);
+    const block = blocks.find(candidate => candidate.key === key && candidate.name === name);
     if (block) return this.blockSpan(path, block);
-    const named = agentNestedBlocks(blocks, key).filter(n => n.block.name === name);
-    const nested = named.find(n => n.agent.name === owner) ?? named[0];
+    const named = agentNestedBlocks(blocks, key).filter(entry => entry.block.name === name);
+    const nested = named.find(entry => entry.agent.name === owner) ?? named[0];
     if (nested) {
       const span = this.blockSpan(path, nested.agent);
-      return { ...withDecorators({ ...span }, nested.block), line: nested.block.startLine, lines: span.lines.filter(l => l.line >= nested.block.startLine) };
+      return { ...withDecorators({ ...span }, nested.block), line: nested.block.startLine, lines: span.lines.filter(spanLine => spanLine.line >= nested.block.startLine) };
     }
     // A block declared inside a team (a FLOW of its routing): its header to its next sibling.
-    for (const team of blocks.filter(b => b.key === TEAM_KEY)) {
-      const child = team.children.find((c): c is Block => c.type === 'block' && c.key === key && c.name === name);
+    for (const team of blocks.filter(candidate => candidate.key === TEAM_KEY)) {
+      const child = team.children.find((node): node is Block => node.type === 'block' && node.key === key && node.name === name);
       if (child) return this.nestedSpan(path, team, child);
     }
-    if (blocks.some(b => b.exported)) return null;
+    if (blocks.some(candidate => candidate.exported)) return null;
     return { file: resolve(path), line: 1, lines: numbered(text.split(/\r?\n/), 1) };
   }
 
@@ -115,13 +115,13 @@ export class SourceRegistry {
     const span = this.blockSpan(path, parent);
     const next = parent.children[parent.children.indexOf(child) + 1];
     const end = next ? (next.type === 'line' ? next.line : next.startLine) : span.line + span.lines.length;
-    return withDecorators({ file: span.file, line: child.startLine, lines: span.lines.filter(l => l.line >= child.startLine && l.line < end) }, child);
+    return withDecorators({ file: span.file, line: child.startLine, lines: span.lines.filter(spanLine => spanLine.line >= child.startLine && spanLine.line < end) }, child);
   }
 
   /** One top-level block of a file: its header to the line before the next top-level block (any kind), or EOF. */
   blockSpan(path: string, block: Block): SourceSpan {
     const lines = this.read(path).split(/\r?\n/);
-    const next = this.tree(path).blocks.find(b => b.startLine > block.startLine);
+    const next = this.tree(path).blocks.find(candidate => candidate.startLine > block.startLine);
     const end = next ? next.startLine - 1 : lines.length;
     return withDecorators({ file: resolve(path), line: block.startLine, lines: numbered(lines.slice(block.startLine - 1, end), block.startLine) }, block);
   }
@@ -136,7 +136,7 @@ function withDecorators(span: SourceSpan, block: Block): SourceSpan {
 
 /** Consecutive file lines, the first one numbered `from`. */
 function numbered(lines: string[], from: number): SourceLine[] {
-  return lines.map((text, i) => ({ line: from + i, text }));
+  return lines.map((text, index) => ({ line: from + index, text }));
 }
 
 /**
@@ -148,16 +148,16 @@ function numbered(lines: string[], from: number): SourceLine[] {
  * block's header line.
  */
 export function align(bodyLines: readonly string[], span: SourceSpan): number[] {
-  const patterns = span.lines.map(l => linePattern(l.text));
+  const patterns = span.lines.map(spanLine => linePattern(spanLine.text));
   let cursor = 0;
   let last = span.line;
   return bodyLines.map(raw => {
     const text = raw.trim();
     if (text === '') return last;
-    for (let j = cursor; j < patterns.length; j++) {
-      if (patterns[j]?.test(text)) {
-        cursor = j + 1;
-        last = span.lines[j].line;
+    for (let index = cursor; index < patterns.length; index++) {
+      if (patterns[index]?.test(text)) {
+        cursor = index + 1;
+        last = span.lines[index].line;
         return last;
       }
     }
@@ -167,11 +167,11 @@ export function align(bodyLines: readonly string[], span: SourceSpan): number[] 
 
 /** The position of a file line of a span: the first non-blank column, and just past the last. */
 export function positionOf(span: SourceSpan, line: number): ApPos {
-  const text = span.lines.find(l => l.line === line)?.text ?? '';
+  const text = span.lines.find(spanLine => spanLine.line === line)?.text ?? '';
   return { line, col: text.length - text.trimStart().length + 1, endCol: text.trimEnd().length + 1 };
 }
 
-const escape = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** What a source line may have become in a cleaned body — null for a blank line. */
 function linePattern(line: string): RegExp | null {

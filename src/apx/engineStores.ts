@@ -51,7 +51,7 @@ export const executorsStore = spec('executors', 'every delegation answered and p
 /** The registry of background work: every piece a flow started, by its id, with its state (src/apx/delegations.ts). */
 export const delegationsStore = (fields: readonly string[], states: readonly string[]): StoreSpec => spec('delegations',
   'the pieces of work this session handed out, and where each one stands',
-  fields.map(f => f === 'state' ? slot('state', oneOf(states)) : slot(f, text(), f !== 'dlg')), 'dlg');
+  fields.map(field => field === 'state' ? slot('state', oneOf(states)) : slot(field, text(), field !== 'dlg')), 'dlg');
 
 /** An engine table of one session, resolved under the project root. */
 export function engineStore(root: string, sessionId: string, agent: string, store: StoreSpec): OpenStore {

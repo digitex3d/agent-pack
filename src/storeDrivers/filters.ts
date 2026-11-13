@@ -34,57 +34,57 @@ export function parseFilter(arg: string): Filter | null {
 export function filtersOn(args: readonly string[], fields: readonly string[], extra: string): Filter[] | string {
   const filters: Filter[] = [];
   for (const arg of args) {
-    const f = parseFilter(arg);
-    if (!f) return `\`${arg}\` is no filter — write <field><op><value>, op one of = != > < >= <= ~`;
-    if (f.field !== extra && !fields.includes(f.field)) return `\`${f.field}\` is none of its fields (${fields.join(', ')}, or ${extra})`;
-    filters.push(f);
+    const filter = parseFilter(arg);
+    if (!filter) return `\`${arg}\` is no filter — write <field><op><value>, op one of = != > < >= <= ~`;
+    if (filter.field !== extra && !fields.includes(filter.field)) return `\`${filter.field}\` is none of its fields (${fields.join(', ')}, or ${extra})`;
+    filters.push(filter);
   }
   return filters;
 }
 
 /** The value as a number, when it reads as one. */
-function numberOf(v: string | number | undefined): number | null {
-  if (typeof v === 'number') return v;
-  if (v === undefined || v.trim() === '') return null;
-  const n = Number(v);
-  return Number.isNaN(n) ? null : n;
+function numberOf(value: string | number | undefined): number | null {
+  if (typeof value === 'number') return value;
+  if (value === undefined || value.trim() === '') return null;
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? null : parsed;
 }
 
 /** Order two values: as numbers when both are, as text otherwise. */
-function compare(a: string | number | undefined, b: string): number {
-  const x = numberOf(a);
-  const y = numberOf(b);
-  if (x !== null && y !== null) return x - y;
-  return String(a ?? '').localeCompare(b);
+function compare(left: string | number | undefined, right: string): number {
+  const leftNumber = numberOf(left);
+  const rightNumber = numberOf(right);
+  if (leftNumber !== null && rightNumber !== null) return leftNumber - rightNumber;
+  return String(left ?? '').localeCompare(right);
 }
 
 /** Whether one filter holds for a record; a field the record lacks reads as empty. */
-function holdsOne(doc: Doc, f: Filter): boolean {
-  const v = doc[f.field];
-  switch (f.op) {
+function holdsOne(doc: Doc, filter: Filter): boolean {
+  const value = doc[filter.field];
+  switch (filter.op) {
     case '~':
-      return String(v ?? '').includes(f.value);
+      return String(value ?? '').includes(filter.value);
     case '=':
-      return compare(v, f.value) === 0;
+      return compare(value, filter.value) === 0;
     case '!=':
-      return compare(v, f.value) !== 0;
+      return compare(value, filter.value) !== 0;
     case '>':
-      return compare(v, f.value) > 0;
+      return compare(value, filter.value) > 0;
     case '<':
-      return compare(v, f.value) < 0;
+      return compare(value, filter.value) < 0;
     case '>=':
-      return compare(v, f.value) >= 0;
+      return compare(value, filter.value) >= 0;
     case '<=':
-      return compare(v, f.value) <= 0;
+      return compare(value, filter.value) <= 0;
   }
 }
 
 /** Whether every filter holds for a record. */
 export function holds(doc: Doc, filters: readonly Filter[]): boolean {
-  return filters.every(f => holdsOne(doc, f));
+  return filters.every(filter => holdsOne(doc, filter));
 }
 
 /** A filter written back as `<field><op><value>` — a driver whose engine reads that language passes it on. */
-export function filterText(f: Filter): string {
-  return `${f.field}${f.op}${f.value}`;
+export function filterText(filter: Filter): string {
+  return `${filter.field}${filter.op}${filter.value}`;
 }

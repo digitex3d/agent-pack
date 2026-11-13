@@ -41,7 +41,7 @@ export interface MainFile {
 const MAIN_HEAD_LINES: ReadonlySet<string> = new Set(['VERSION', 'TEAMS', 'MEMBER']);
 
 /** A MAIN block — `EXPORT MAIN:` too, parsed as an EXPORT named MAIN: found, so its check can refuse it. */
-const isMain = (b: Block): boolean => b.key === MAIN_KEY || (b.key === EXPORT_MODIFIER && b.name === MAIN_KEY);
+const isMain = (block: Block): boolean => block.key === MAIN_KEY || (block.key === EXPORT_MODIFIER && block.name === MAIN_KEY);
 
 /** The `.ap` files at the project root that hold a `MAIN:` block — one, in a project with a main. */
 function mainFilesAt(projectRoot: string, sources: SourceRegistry = new SourceRegistry()): string[] {
@@ -55,7 +55,7 @@ function mainFilesAt(projectRoot: string, sources: SourceRegistry = new SourceRe
 /** The main of the project — null when it has none. Throws when two files hold a MAIN block. */
 export function readMainFile(projectRoot: string, sources: SourceRegistry = new SourceRegistry()): MainFile | null {
   const files = mainFilesAt(projectRoot, sources);
-  if (files.length > 1) throw new Error(`a project has one main — ${files.map(f => basename(f)).join(' and ')} each hold a MAIN block`);
+  if (files.length > 1) throw new Error(`a project has one main — ${files.map(file => basename(file)).join(' and ')} each hold a MAIN block`);
   const path = files[0];
   const block = path === undefined ? undefined : sources.tree(path).blocks.find(isMain);
   if (path === undefined || block === undefined) return null;
@@ -71,8 +71,8 @@ export function isMainFile(path: string): boolean {
 
 /** What the head lines of a MAIN block say: its ABOUT and VERSION (the first of each), its TEAMS and MEMBER lists. */
 function headOf(block: Block): Pick<MainFile, 'about' | 'version' | 'teams' | 'members'> {
-  const lines = block.children.flatMap(c => (c.type === 'line' ? [c] : []));
-  const first = (keyword: string): string => lines.find(l => l.keyword === keyword)?.rest.trim() ?? '';
-  const listed = (keyword: string): Listed[] => lines.filter(l => l.keyword === keyword).flatMap(l => splitList(l.rest.trim()).map(name => ({ name, line: l.line })));
+  const lines = block.children.flatMap(child => (child.type === 'line' ? [child] : []));
+  const first = (keyword: string): string => lines.find(line => line.keyword === keyword)?.rest.trim() ?? '';
+  const listed = (keyword: string): Listed[] => lines.filter(line => line.keyword === keyword).flatMap(line => splitList(line.rest.trim()).map(name => ({ name, line: line.line })));
   return { about: first('ABOUT'), version: first('VERSION'), teams: listed('TEAMS'), members: listed('MEMBER') };
 }

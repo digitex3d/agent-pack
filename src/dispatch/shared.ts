@@ -41,7 +41,7 @@ export function alreadyRegistered<T extends { name: string; path: string }>(
   collection: T[], name: string, path: string, kind: string, line: number,
   ctx: { lintErrors: LintError[] },
 ): T | null {
-  const existing = collection.find(e => e.name === name);
+  const existing = collection.find(entry => entry.name === name);
   if (existing && existing.path !== path) {
     ctx.lintErrors.push({ file: path, line, message: `${kind} name "${name}" collides with already-imported ${kind} at ${existing.path}` });
   }
@@ -109,11 +109,11 @@ export function checkAndRegister(
   ctx: BundleContext,
   missingLabel?: string,
 ): { path: string } | string {
-  const r = resolveImportPath(imp, ctx, missingLabel);
-  if (typeof r === 'string') return r;
-  if (ctx.importedPaths.has(r.path)) return '';
-  ctx.importedPaths.add(r.path);
-  return r;
+  const resolved = resolveImportPath(imp, ctx, missingLabel);
+  if (typeof resolved === 'string') return resolved;
+  if (ctx.importedPaths.has(resolved.path)) return '';
+  ctx.importedPaths.add(resolved.path);
+  return resolved;
 }
 
 export function loadImport(
@@ -121,7 +121,7 @@ export function loadImport(
   ctx: BundleContext,
   missingLabel?: string,
 ): IngestedFile | string {
-  const r = checkAndRegister(imp, ctx, missingLabel);
-  if (typeof r === 'string') return r;
-  return ingestRaw(readAndLint(r.path, ctx), r.path, allLibraryRoots(ctx), ctx.libraries);
+  const registered = checkAndRegister(imp, ctx, missingLabel);
+  if (typeof registered === 'string') return registered;
+  return ingestRaw(readAndLint(registered.path, ctx), registered.path, allLibraryRoots(ctx), ctx.libraries);
 }

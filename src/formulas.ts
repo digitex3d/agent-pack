@@ -87,6 +87,13 @@ export interface Formulas {
     range: Text; atLeast: Text; atMost: Text; enum: Text; shape: Text; list: Text;
     storeShape: Text; storeList: Text;
   };
+  /** What the apx says on its verbs (src/apx/engine.ts). */
+  apx: {
+    deliver: {
+      refused: { notRunning: Text; lostZones: Text; strayed: Text; leftOut: Text; moved: Text };
+      done: { delivered: Text; nothing: Text; leftOutLine: Text; leftOut: Text; answer: Text };
+    };
+  };
   document: {
     ref: Text; heading: Text; entry: Text; about: Text;
     crossReferences: { chapter: Text; row: Text; entry: Text };
@@ -101,11 +108,11 @@ function validate(node: unknown, path: string): void {
   }
   if (Array.isArray(node)) {
     if (node.length === 0) throw new Error(`formulas.json: ${path} is an empty list`);
-    node.forEach((n, i) => validate(n, `${path}[${i}]`));
+    node.forEach((child, index) => validate(child, `${path}[${index}]`));
     return;
   }
   if (node && typeof node === 'object') {
-    for (const [k, v] of Object.entries(node)) if (k !== '$comment') validate(v, path ? `${path}.${k}` : k);
+    for (const [key, value] of Object.entries(node)) if (key !== '$comment') validate(value, path ? `${path}.${key}` : key);
     return;
   }
   throw new Error(`formulas.json: ${path} is not text`);
@@ -123,7 +130,7 @@ export const FORMULAS: Formulas = RAW;
  * stays as written — that is how literal braces in prose (`{slot}`) survive.
  */
 export function fill(formula: string, values: Record<string, string | number> = {}): string {
-  return formula.replace(/\{([A-Za-z]+)\}/g, (m, k: string) => (k in values ? String(values[k]) : m));
+  return formula.replace(/\{([A-Za-z]+)\}/g, (placeholder, key: string) => (key in values ? String(values[key]) : placeholder));
 }
 
 /**

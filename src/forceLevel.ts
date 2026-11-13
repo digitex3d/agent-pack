@@ -26,60 +26,60 @@ import type { BundleContext } from './dispatch/types.js';
 export function applyForceLevels(text: string, ctx?: BundleContext): string {
   // Non-force-level bullet groups that share this rendering pass.
   const nonForceLevelByKeyword = new Map<string, BulletGroupPrimitive>(
-    FORCE_LEVEL_PRIMITIVES.map(p => [p.keyword, p]),
+    FORCE_LEVEL_PRIMITIVES.map(primitive => [primitive.keyword, primitive]),
   );
 
   const tokens = desugar(lex(text));
   const out: string[] = [];
-  let i = 0;
+  let index = 0;
 
-  while (i < tokens.length) {
-    const t = tokens[i];
-    if (t.kind !== 'keyword') {
-      out.push(rawOf(t));
-      i++;
+  while (index < tokens.length) {
+    const token = tokens[index];
+    if (token.kind !== 'keyword') {
+      out.push(rawOf(token));
+      index++;
       continue;
     }
 
-    const keyword = t.keyword as string;
+    const keyword = token.keyword as string;
     const forceLevelIntro = getIntroByKeyword(keyword);
     const nonForceLevel = forceLevelIntro === null
       ? nonForceLevelByKeyword.get(keyword)
       : undefined;
 
     if (forceLevelIntro === null && nonForceLevel === undefined) {
-      out.push(rawOf(t));
-      i++;
+      out.push(rawOf(token));
+      index++;
       continue;
     }
 
-    const indent = t.indent;
-    const actions: string[] = [t.rest];
-    let j = i + 1;
-    while (j < tokens.length) {
-      const tt = tokens[j];
+    const indent = token.indent;
+    const actions: string[] = [token.rest];
+    let nextIndex = index + 1;
+    while (nextIndex < tokens.length) {
+      const tt = tokens[nextIndex];
       if (tt.kind !== 'keyword' || (tt.keyword as string) !== keyword || tt.indent !== indent) break;
       actions.push(tt.rest);
-      j++;
+      nextIndex++;
     }
 
     let block: string;
     if (forceLevelIntro !== null) {
       block = renderKeywordBlock(forceLevelIntro, actions);
     } else {
-      const p = nonForceLevel!;
+      const primitive = nonForceLevel!;
       // Pass ctx so RunPrimitive can resolve kind from the registry.
-      block = p.renderNeutral(actions, ctx).trimEnd();
+      block = primitive.renderNeutral(actions, ctx).trimEnd();
     }
 
     const indentStr = ' '.repeat(indent);
     for (const line of block.split('\n')) out.push(indent ? indentStr + line : line);
-    i = j;
+    index = nextIndex;
   }
   return out.join('\n');
 }
 
-function rawOf(t: Token): string {
-  if (t.kind === 'blank') return '';
-  return 'raw' in t ? t.raw : '';
+function rawOf(token: Token): string {
+  if (token.kind === 'blank') return '';
+  return 'raw' in token ? token.raw : '';
 }

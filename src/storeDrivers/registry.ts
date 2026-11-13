@@ -45,12 +45,12 @@ export function useTabeliEngine(engine: string | undefined): void {
 
 /** Why a value is no driver this agent-pack can run, or null when it is one. */
 function driverIssue(driver: unknown, module: string): string | null {
-  const d = driver as Partial<StoreDriver> | null;
-  if (d?.type !== 'driver' || typeof d.name !== 'string' || typeof d.open !== 'function' || typeof d.location !== 'function') {
+  const candidate = driver as Partial<StoreDriver> | null;
+  if (candidate?.type !== 'driver' || typeof candidate.name !== 'string' || typeof candidate.open !== 'function' || typeof candidate.location !== 'function') {
     return `${module}: its default export, called with the entry's options, must answer a driver ({ type: 'driver', name, api, capabilities, location, open })`;
   }
-  if (d.api !== DRIVER_API) return `${module}: driver "${d.name}" is written for driver API ${String(d.api)}, this agent-pack runs API ${DRIVER_API}`;
-  if (BUILTIN.has(d.name)) return `${module}: "${d.name}" is the name of a driver agent-pack ships — give the driver another name`;
+  if (candidate.api !== DRIVER_API) return `${module}: driver "${candidate.name}" is written for driver API ${String(candidate.api)}, this agent-pack runs API ${DRIVER_API}`;
+  if (BUILTIN.has(candidate.name)) return `${module}: "${candidate.name}" is the name of a driver agent-pack ships — give the driver another name`;
   return null;
 }
 

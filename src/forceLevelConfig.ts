@@ -17,29 +17,29 @@ const RAW: Config = FORCE_LEVELS_JSON as Config;
 function validate(cfg: Config): void {
   const seenFamilyNames = new Set<string>();
   const seenAliasNames = new Set<string>();
-  for (const f of cfg.families) {
-    if (!f.name || !/^[A-Z][A-Z0-9-]*$/.test(f.name)) {
-      throw new Error(`force-levels.json: invalid family name "${f.name}"`);
+  for (const family of cfg.families) {
+    if (!family.name || !/^[A-Z][A-Z0-9-]*$/.test(family.name)) {
+      throw new Error(`force-levels.json: invalid family name "${family.name}"`);
     }
-    if (seenFamilyNames.has(f.name)) throw new Error(`force-levels.json: duplicate family "${f.name}"`);
-    seenFamilyNames.add(f.name);
+    if (seenFamilyNames.has(family.name)) throw new Error(`force-levels.json: duplicate family "${family.name}"`);
+    seenFamilyNames.add(family.name);
 
-    const levels = Object.keys(f.levels);
-    if (levels.length === 0) throw new Error(`force-levels.json: family "${f.name}" has no levels`);
-    for (const k of levels) {
-      const n = Number(k);
-      if (!Number.isInteger(n)) throw new Error(`force-levels.json: family "${f.name}" has non-integer level "${k}"`);
-      if (typeof f.levels[k] !== 'string' || f.levels[k].length === 0) {
-        throw new Error(`force-levels.json: family "${f.name}" level ${k} has empty intro`);
+    const levels = Object.keys(family.levels);
+    if (levels.length === 0) throw new Error(`force-levels.json: family "${family.name}" has no levels`);
+    for (const levelKey of levels) {
+      const levelNumber = Number(levelKey);
+      if (!Number.isInteger(levelNumber)) throw new Error(`force-levels.json: family "${family.name}" has non-integer level "${levelKey}"`);
+      if (typeof family.levels[levelKey] !== 'string' || family.levels[levelKey].length === 0) {
+        throw new Error(`force-levels.json: family "${family.name}" level ${levelKey} has empty intro`);
       }
     }
 
-    for (const [aliasName, aliasLevel] of Object.entries(f.aliases ?? {})) {
+    for (const [aliasName, aliasLevel] of Object.entries(family.aliases ?? {})) {
       if (!/^[A-Z][A-Z0-9-]*$/.test(aliasName)) throw new Error(`force-levels.json: invalid alias name "${aliasName}"`);
       if (seenAliasNames.has(aliasName)) throw new Error(`force-levels.json: duplicate alias "${aliasName}"`);
       if (seenFamilyNames.has(aliasName)) throw new Error(`force-levels.json: alias "${aliasName}" collides with a family name`);
-      if (!(String(aliasLevel) in f.levels)) {
-        throw new Error(`force-levels.json: alias "${aliasName}" points to level ${aliasLevel} not declared in family "${f.name}"`);
+      if (!(String(aliasLevel) in family.levels)) {
+        throw new Error(`force-levels.json: alias "${aliasName}" points to level ${aliasLevel} not declared in family "${family.name}"`);
       }
       seenAliasNames.add(aliasName);
     }
@@ -69,19 +69,19 @@ export const NON_RULE_FAMILIES: readonly string[] = ['AS', 'MEM'];
 
 /** All family base names (e.g. ['MUST', 'ALWAYS', 'SHOULD', 'MAY']). */
 export function getFamilyBases(): string[] {
-  return RAW.families.map(f => f.name);
+  return RAW.families.map(family => family.name);
 }
 
 /** All alias names declared across all families (e.g. ['MUST-NOT', 'NON-NEGOTIABLE', 'NEVER']). */
 export function getAliasNames(): string[] {
-  return RAW.families.flatMap(f => Object.keys(f.aliases ?? {}));
+  return RAW.families.flatMap(family => Object.keys(family.aliases ?? {}));
 }
 
 /** Map an alias name to its canonical derived keyword. Throws if name is not a known alias. */
 export function aliasToCanonical(name: string): string {
-  for (const f of RAW.families) {
-    if (f.aliases && name in f.aliases) {
-      return deriveCanonical(f.name, f.aliases[name]);
+  for (const family of RAW.families) {
+    if (family.aliases && name in family.aliases) {
+      return deriveCanonical(family.name, family.aliases[name]);
     }
   }
   throw new Error(`aliasToCanonical: unknown alias "${name}"`);
@@ -101,9 +101,9 @@ export function toCanonicalKeyword(keyword: string): string {
  * (`ALWAYS` at -1 → `NEVER`), else its derived keyword (`MUST!`). Not a family: the word itself.
  */
 export function writtenKeyword(family: string, level: number): string {
-  const f = RAW.families.find(x => x.name === family);
-  if (!f) return family;
-  const alias = level < 0 ? Object.entries(f.aliases ?? {}).find(([, l]) => l === level)?.[0] : undefined;
+  const familyEntry = RAW.families.find(candidate => candidate.name === family);
+  if (!familyEntry) return family;
+  const alias = level < 0 ? Object.entries(familyEntry.aliases ?? {}).find(([, aliasLevel]) => aliasLevel === level)?.[0] : undefined;
   return alias ?? deriveCanonical(family, level);
 }
 
@@ -112,9 +112,9 @@ export function writtenKeyword(family: string, level: number): string {
  * Returns all derived forms (ALWAYS, !ALWAYS) for that family only.
  */
 export function getCanonicalKeywordsForFamily(familyName: string): string[] {
-  const family = RAW.families.find(f => f.name === familyName);
+  const family = RAW.families.find(candidate => candidate.name === familyName);
   if (!family) return [];
-  return Object.keys(family.levels).map(k => deriveCanonical(familyName, Number(k)));
+  return Object.keys(family.levels).map(levelKey => deriveCanonical(familyName, Number(levelKey)));
 }
 
 /**
@@ -123,12 +123,12 @@ export function getCanonicalKeywordsForFamily(familyName: string): string[] {
  */
 export function getCanonicalKeywords(): string[] {
   const out: string[] = [];
-  for (const f of RAW.families) {
-    for (const k of Object.keys(f.levels)) {
-      out.push(deriveCanonical(f.name, Number(k)));
+  for (const family of RAW.families) {
+    for (const levelKey of Object.keys(family.levels)) {
+      out.push(deriveCanonical(family.name, Number(levelKey)));
     }
   }
-  return out.sort((a, b) => b.length - a.length);
+  return out.sort((left, right) => right.length - left.length);
 }
 
 /**
@@ -148,9 +148,9 @@ export function forceLevelBaseOf(keyword: string): string | null {
  * condition head (`IF!`, `UNTIL!!` — lexer.splitControl) both build on it.
  */
 export function splitBangs(word: string): { base: string; level: number } | null {
-  const m = word.match(/^(!*)([A-Z][A-Z0-9]*)(!*)$/);
-  if (!m) return null;
-  const [, prefix, base, suffix] = m;
+  const match = word.match(/^(!*)([A-Z][A-Z0-9]*)(!*)$/);
+  if (!match) return null;
+  const [, prefix, base, suffix] = match;
   if (prefix.length > 0 && suffix.length > 0) return null;
   return { base, level: prefix.length > 0 ? -prefix.length : suffix.length };
 }
@@ -162,7 +162,7 @@ export function splitBangs(word: string): { base: string; level: number } | null
  */
 export function parseForceLevel(canonical: string): { family: string; level: number } | null {
   const split = splitBangs(canonical);
-  if (!split || !RAW.families.some(f => f.name === split.base)) return null;
+  if (!split || !RAW.families.some(family => family.name === split.base)) return null;
   return { family: split.base, level: split.level };
 }
 
@@ -173,7 +173,7 @@ export function parseForceLevel(canonical: string): { family: string; level: num
 export function getIntroByKeyword(canonical: string): string | null {
   const parsed = parseForceLevel(canonical);
   if (!parsed) return null;
-  const family = RAW.families.find(f => f.name === parsed.family);
+  const family = RAW.families.find(candidate => candidate.name === parsed.family);
   return family?.levels[String(parsed.level)] ?? null;
 }
 
@@ -187,6 +187,6 @@ export function buildForceLevelRegexSource(): string {
   return `(!+)(${bases})|(${bases})(!*)`;
 }
 
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function escapeRegex(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

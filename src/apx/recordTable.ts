@@ -33,12 +33,12 @@ export class RecordTable<R extends { state: string }> {
 
   /** Every record, in the order written. */
   all(): R[] {
-    return this.sync(this.open().find([])).map(r => this.asRecord(r));
+    return this.sync(this.open().find([])).map(doc => this.asRecord(doc));
   }
 
   get(id: string): R | null {
-    const r = this.sync(this.open().get(id));
-    return r ? this.asRecord(r) : null;
+    const doc = this.sync(this.open().get(id));
+    return doc ? this.asRecord(doc) : null;
   }
 
   /** Add a record, checked against the table's slots. Throws on a failure. */
@@ -69,19 +69,19 @@ export class RecordTable<R extends { state: string }> {
   }
 
   /** The engine's driver answers at once; a promise here would be a driver mix-up. */
-  private sync<T>(v: T | Promise<T>): T {
-    if (v instanceof Promise) throw new Error(`${this.store.driver.name}: the engine's tables need a driver that answers synchronously`);
-    return v;
+  private sync<T>(value: T | Promise<T>): T {
+    if (value instanceof Promise) throw new Error(`${this.store.driver.name}: the engine's tables need a driver that answers synchronously`);
+    return value;
   }
 
   /** Fields as a record: text, an empty or absent field left out. */
   private asDoc(fields: Partial<R>): Doc {
-    return Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => [k, String(v)]));
+    return Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined && value !== '').map(([key, value]) => [key, String(value)]));
   }
 
-  private asRecord(r: Doc): R {
+  private asRecord(doc: Doc): R {
     const out = {} as Record<string, string>;
-    for (const f of this.fields) out[f] = r[f] === undefined ? '' : String(r[f]);
+    for (const field of this.fields) out[field] = doc[field] === undefined ? '' : String(doc[field]);
     return out as unknown as R;
   }
 }

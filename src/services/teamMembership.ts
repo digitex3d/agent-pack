@@ -41,9 +41,9 @@ export function resolveTeamMembership(agentFilePath: string): string {
   const purpose = readTeamPurpose(teamRoot) || TEAM.undescribed;
   const members = readTeamMembers(teamRoot);
 
-  const self = members.find(m => m.name === agentName);
+  const self = members.find(member => member.name === agentName);
   const own = self?.about || TEAM.undescribed;
-  const fellows = members.filter(m => m.name !== agentName);
+  const fellows = members.filter(member => member.name !== agentName);
 
   const lines = [
     TEAM.heading,

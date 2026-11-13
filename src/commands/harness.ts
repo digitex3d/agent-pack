@@ -12,30 +12,30 @@ import { printUsage } from './usage.js';
  */
 const usage = (): void => printUsage('agent-pack harness list [--json]');
 
-const yes = (v: boolean | null) => (v === null ? '—' : v ? 'yes' : 'no');
+const yes = (value: boolean | null) => (value === null ? '—' : value ? 'yes' : 'no');
 
 /** The rows as a table: one column per list, the CLI last. */
 export function renderHarnessTable(rows: readonly HarnessRow[]): string {
   const cells = [
     ['harness', 'installed', 'enabled', 'delegable', 'cli on PATH'],
-    ...rows.map(r => [r.name, 'yes', yes(r.enabled), yes(r.enabled && r.invocation !== null), r.invocation ? `${r.invocation.cli}: ${yes(r.onPath)}` : '—']),
+    ...rows.map(row => [row.name, 'yes', yes(row.enabled), yes(row.enabled && row.invocation !== null), row.invocation ? `${row.invocation.cli}: ${yes(row.onPath)}` : '—']),
   ];
-  const widths = cells[0].map((_, k) => Math.max(...cells.map(row => row[k].length)));
-  return cells.map(row => row.map((c, k) => c.padEnd(widths[k])).join('  ').trimEnd()).join('\n');
+  const widths = cells[0].map((_header, column) => Math.max(...cells.map(row => row[column].length)));
+  return cells.map(row => row.map((cell, column) => cell.padEnd(widths[column])).join('  ').trimEnd()).join('\n');
 }
 
 export async function harness(args: string[]): Promise<void> {
   const config = await loadConfig(args);
-  const sub = args.find((a, i) => !a.startsWith('--') && args[i - 1] !== '--config');
+  const sub = args.find((arg, index) => !arg.startsWith('--') && args[index - 1] !== '--config');
   if (sub !== 'list') {
     usage();
     process.exit(1);
   }
   const rows = harnessesOf(config.adapters);
   if (args.includes('--json')) {
-    console.log(JSON.stringify(rows.map(r => ({
-      harness: r.name, installed: true, enabled: r.enabled, delegable: r.enabled && r.invocation !== null,
-      cli: r.invocation?.cli ?? null, onPath: r.onPath, ...(r.problem ? { problem: r.problem } : {}),
+    console.log(JSON.stringify(rows.map(row => ({
+      harness: row.name, installed: true, enabled: row.enabled, delegable: row.enabled && row.invocation !== null,
+      cli: row.invocation?.cli ?? null, onPath: row.onPath, ...(row.problem ? { problem: row.problem } : {}),
     })), null, 2));
     return;
   }

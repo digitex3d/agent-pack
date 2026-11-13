@@ -19,5 +19,5 @@ export function servicesOf(doc: ApDocument): ApxService[] {
 }
 
 export function serviceOf(kind: string, doc: ApDocument): ApxService | null {
-  return servicesOf(doc).find(s => s.kind === kind) ?? null;
+  return servicesOf(doc).find(service => service.kind === kind) ?? null;
 }

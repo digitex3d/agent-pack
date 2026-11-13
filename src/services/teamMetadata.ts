@@ -81,7 +81,7 @@ export function readTeamFile(root: string, sources: SourceRegistry = new SourceR
   const path = teamFileOf(root);
   if (!path) return null;
   const source = sources.read(path);
-  const block = sources.tree(path).blocks.find(b => b.key === TEAM_KEY && b.exported)!;
+  const block = sources.tree(path).blocks.find(candidate => candidate.key === TEAM_KEY && candidate.exported)!;
   const lines = source.split(/\r?\n/);
   const listed: { name: string; line: number }[] = [];
   let about = '';
@@ -101,7 +101,7 @@ export function readTeamFile(root: string, sources: SourceRegistry = new SourceR
 /** A file with one of its blocks blanked — what is written around it: imports and definitions, every line number kept. */
 export function outsideBlock(lines: string[], block: Block): string {
   const end = blockEnd(block, lines.length);
-  return lines.map((line, i) => (i >= block.startLine - 1 && i < end ? '' : line)).join('\n');
+  return lines.map((line, index) => (index >= block.startLine - 1 && index < end ? '' : line)).join('\n');
 }
 
 /**
@@ -113,8 +113,8 @@ export function blockUnit(lines: string[], block: Block, head: ReadonlySet<strin
   const end = blockEnd(block, lines.length);
   const out = lines.slice();
   out[block.startLine - 1] = '';
-  for (let i = block.startLine; i < end; i++) {
-    out[i] = out[i].slice(Math.min(childIndent, out[i].length - out[i].trimStart().length));
+  for (let index = block.startLine; index < end; index++) {
+    out[index] = out[index].slice(Math.min(childIndent, out[index].length - out[index].trimStart().length));
   }
   for (const child of block.children) {
     if (child.type === 'line' && head.has(child.keyword)) out[child.line - 1] = '';
@@ -125,10 +125,10 @@ export function blockUnit(lines: string[], block: Block, head: ReadonlySet<strin
 /** The 1-based number of the last line a block owns: the line before its last descendant's successor, or EOF. */
 function blockEnd(block: Block, eof: number): number {
   let last = block.startLine;
-  const walk = (b: Block): void => {
-    for (const c of b.children) {
-      if (c.type === 'line') last = Math.max(last, c.line);
-      else { last = Math.max(last, c.startLine); walk(c); }
+  const walk = (parent: Block): void => {
+    for (const child of parent.children) {
+      if (child.type === 'line') last = Math.max(last, child.line);
+      else { last = Math.max(last, child.startLine); walk(child); }
     }
   };
   walk(block);
@@ -151,16 +151,16 @@ export function teamRosterIssues(team: TeamFile): TeamIssue[] {
     issues.push({ file: team.path, line: team.block.startLine, message: `TEAM ${team.name}: a team is named like its folder — \`${folder}\`` });
   }
   const seen = new Set<string>();
-  for (const m of team.members) {
-    if (seen.has(m.name)) issues.push({ file: team.path, line: m.line, message: `MEMBER ${m.name}: listed twice` });
-    seen.add(m.name);
-    if (!files.some(f => f.name === m.name)) {
-      issues.push({ file: team.path, line: m.line, message: `MEMBER ${m.name}: no agent file in \`${folder}/\` declares \`EXPORT AGENT ${m.name}\`` });
+  for (const member of team.members) {
+    if (seen.has(member.name)) issues.push({ file: team.path, line: member.line, message: `MEMBER ${member.name}: listed twice` });
+    seen.add(member.name);
+    if (!files.some(file => file.name === member.name)) {
+      issues.push({ file: team.path, line: member.line, message: `MEMBER ${member.name}: no agent file in \`${folder}/\` declares \`EXPORT AGENT ${member.name}\`` });
     }
   }
-  for (const f of files) {
-    if (!seen.has(f.name)) {
-      issues.push({ file: team.path, line: team.block.startLine, message: `TEAM ${team.name}: the agent \`${f.name}\` (${basename(f.path)}) is in the folder but not among its MEMBER lines` });
+  for (const file of files) {
+    if (!seen.has(file.name)) {
+      issues.push({ file: team.path, line: team.block.startLine, message: `TEAM ${team.name}: the agent \`${file.name}\` (${basename(file.path)}) is in the folder but not among its MEMBER lines` });
     }
   }
   return issues;
@@ -276,11 +276,11 @@ function asAgentBody(agent: ExportedBlockBody): string {
 export function readAgentFile(path: string, sources: SourceRegistry = new SourceRegistry()): AgentFile {
   const source = sources.read(path);
   const blocks = exportedBlockBodies(source);
-  const agent = blocks.find(b => AGENT_KEYS.has(b.key));
+  const agent = blocks.find(block => AGENT_KEYS.has(block.key));
   if (!agent) {
     throw new Error(`${path}: no EXPORT AGENT or EXPORT SKILL block — a flat agent file must declare one`);
   }
-  const role = blocks.find(b => b.key === 'ROLE');
+  const role = blocks.find(block => block.key === 'ROLE');
 
   const info: AgentInfo = {
     name: agent.name,
@@ -295,7 +295,7 @@ export function readAgentFile(path: string, sources: SourceRegistry = new Source
   // Every exported block that is neither the AGENT nor its ROLE is one the
   // agent declares for itself — kept, inlined, in source order.
   const own = blocks
-    .filter(b => b !== agent && b !== role)
+    .filter(block => block !== agent && block !== role)
     .map(asInlineDeclaration);
 
   const unitSource = `${[nonExportedSource(source), role ? asInlineRole(role) : '', ...own, asAgentBody(agent)]
@@ -316,7 +316,7 @@ export function readAgentFile(path: string, sources: SourceRegistry = new Source
 
 /** True when a `.ap` source holds at least one exported block of `key`. */
 function holdsBlock(source: string, key: string): boolean {
-  return exportedBlockBodies(source).some(b => b.key === key);
+  return exportedBlockBodies(source).some(block => block.key === key);
 }
 
 /**
@@ -356,7 +356,7 @@ function teamRootsUnder(teamsDir: string): string[] {
 
 /** The names of the teams under `teamsDir` — what a flow's `BY <team>` resolves against. */
 export function teamNamesUnder(teamsDir: string): string[] {
-  return teamRootsUnder(teamsDir).map(root => readTeamFile(root)?.name).filter((n): n is string => !!n);
+  return teamRootsUnder(teamsDir).map(root => readTeamFile(root)?.name).filter((name): name is string => !!name);
 }
 
 /**
@@ -400,7 +400,7 @@ export function readTeamMembers(teamRoot: string): AgentInfo[] {
   const team = readTeamFile(teamRoot);
   if (!team) return [];
   const infos = readAgentInfos(teamRoot);
-  return team.members.flatMap(m => infos.filter(a => a.name === m.name));
+  return team.members.flatMap(member => infos.filter(info => info.name === member.name));
 }
 
 /** A team's purpose — the ABOUT of its TEAM block; '' when absent. */

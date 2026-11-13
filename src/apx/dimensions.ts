@@ -69,7 +69,7 @@ const UNIT = 'unit';
 
 /** The keys of a file's record and of its n-th instance. */
 const fileKey = (file: string): string => `f:${file}`;
-const unitKey = (file: string, n: number): string => `u:${file}#${n}`;
+const unitKey = (file: string, index: number): string => `u:${file}#${index}`;
 
 /** One cache entry — a dimension's answer for one file, and what it was worked out from. */
 export interface CacheEntry {
@@ -124,7 +124,7 @@ export interface DimensionParts {
  * the engine's salt. Eight hex digits.
  */
 export function dimensionDefHash(dim: DimensionBlock, parts: DimensionParts): string {
-  const content = [dim, parts.store, parts.each].map(b => (b ? nameFreeContent(b.toJSON()) : null));
+  const content = [dim, parts.store, parts.each].map(block => (block ? nameFreeContent(block.toJSON()) : null));
   return sha256Hex(JSON.stringify([DIMENSION_SALT, ...content])).slice(0, DEFHASH_LENGTH);
 }
 
@@ -143,7 +143,7 @@ export function documentDefHashes(doc: ApDocument): string[] {
 
 /** A file's fingerprint: its lines with line endings, trailing whitespace and blank lines left out. */
 export function fingerprint(text: string): string {
-  return sha256Hex(text.split(/\r?\n/).map(l => l.trimEnd()).filter(l => l !== '').join('\n'));
+  return sha256Hex(text.split(/\r?\n/).map(line => line.trimEnd()).filter(line => line !== '').join('\n'));
 }
 
 /** Whether a project path names a file that exists. */
@@ -159,16 +159,16 @@ function pathWord(word: string): string {
 /** The project files a value names, literally, in any of its texts — each once, in order. */
 export function filesNamedIn(root: string, value: unknown): string[] {
   const found = new Set<string>();
-  const walk = (v: unknown): void => {
-    if (typeof v === 'string') {
-      for (const word of v.split(/[\s`'"()<>[\]{},;|]+/)) {
+  const walk = (node: unknown): void => {
+    if (typeof node === 'string') {
+      for (const word of node.split(/[\s`'"()<>[\]{},;|]+/)) {
         const candidate = pathWord(word);
         if (!/[/.]/.test(candidate)) continue;
         const rel = relativeWithin(root, resolve(root, candidate));
         if (rel && isFile(root, rel)) found.add(rel);
       }
-    } else if (Array.isArray(v)) v.forEach(walk);
-    else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+    } else if (Array.isArray(node)) node.forEach(walk);
+    else if (node && typeof node === 'object') Object.values(node).forEach(walk);
   };
   walk(value);
   return [...found];
@@ -221,7 +221,7 @@ export class DimensionCache {
       file: String(head._file),
       hash: String(head._hash),
       refs: JSON.parse(String(head._refs || '{}')) as Record<string, string>,
-      value: head._none === '1' ? NONE : units.sort((a, b) => unitIndex(a) - unitIndex(b)).map(u => this.fieldsOf(u)),
+      value: head._none === '1' ? NONE : units.sort((left, right) => unitIndex(left) - unitIndex(right)).map(unit => this.fieldsOf(unit)),
       by: String(head._by ?? ''),
       at: String(head._at ?? ''),
     };
@@ -245,20 +245,20 @@ export class DimensionCache {
    * same file never mix their instances. Throws StaleWrite when another got there.
    */
   async write(entry: CacheEntry): Promise<void> {
-    const c = await this.open();
+    const collection = await this.open();
     const key = fileKey(entry.file);
-    const head = await c.get(key);
+    const head = await collection.get(key);
     const token = randomUUID();
     if (head) {
-      if (await c.set(key, { _claim: token }, [eq('_at', String(head._at))]) !== 'set') throw new StaleWrite();
+      if (await collection.set(key, { _claim: token }, [eq('_at', String(head._at))]) !== 'set') throw new StaleWrite();
     } else {
-      await c.put({ _key: key, _kind: FILE, _file: entry.file, _hash: '', _claim: token, _claimAt: '', _at: 'pending' });
+      await collection.put({ _key: key, _kind: FILE, _file: entry.file, _hash: '', _claim: token, _claimAt: '', _at: 'pending' });
     }
-    for (const u of await this.unitsOf(entry.file)) await c.remove(String(u._key));
+    for (const unit of await this.unitsOf(entry.file)) await collection.remove(String(unit._key));
     if (Array.isArray(entry.value)) {
-      for (const [n, v] of entry.value.entries()) await c.put({ ...(v as Doc), _key: unitKey(entry.file, n), _kind: UNIT, _file: entry.file });
+      for (const [index, instance] of entry.value.entries()) await collection.put({ ...(instance as Doc), _key: unitKey(entry.file, index), _kind: UNIT, _file: entry.file });
     }
-    const settled = await c.set(key, {
+    const settled = await collection.set(key, {
       _hash: entry.hash, _refs: JSON.stringify(entry.refs), _by: entry.by, _at: entry.at,
       _none: entry.value === NONE ? '1' : '', _dim: entry.dimension, _claim: '', _claimAt: '',
     }, [eq('_claim', token)]);
@@ -266,18 +266,18 @@ export class DimensionCache {
   }
 
   async remove(file: string): Promise<void> {
-    const c = await this.open();
-    for (const u of await this.unitsOf(file)) await c.remove(String(u._key));
-    await c.remove(fileKey(file));
+    const collection = await this.open();
+    for (const unit of await this.unitsOf(file)) await collection.remove(String(unit._key));
+    await collection.remove(fileKey(file));
   }
 
   /** Every entry kept, by file, in path order — those matching `glob` when one is given. */
   async entries(glob?: string): Promise<CacheEntry[]> {
-    const c = await this.open();
-    const heads = (await c.find([eq('_kind', FILE)])).filter(h => h._hash && (!glob || matchesAnyGlob(String(h._file), [glob])));
+    const collection = await this.open();
+    const heads = (await collection.find([eq('_kind', FILE)])).filter(head => head._hash && (!glob || matchesAnyGlob(String(head._file), [glob])));
     const units = new Map<string, Doc[]>();
-    for (const u of await c.find([eq('_kind', UNIT)])) units.set(String(u._file), [...(units.get(String(u._file)) ?? []), u]);
-    return heads.map(h => this.entryOf(h, units.get(String(h._file)) ?? [])).sort((a, b) => a.file.localeCompare(b.file));
+    for (const unit of await collection.find([eq('_kind', UNIT)])) units.set(String(unit._file), [...(units.get(String(unit._file)) ?? []), unit]);
+    return heads.map(head => this.entryOf(head, units.get(String(head._file)) ?? [])).sort((left, right) => left.file.localeCompare(right.file));
   }
 
   /** A project file's fingerprint now — null when it is gone. */
@@ -292,7 +292,7 @@ export class DimensionCache {
       ...Object.entries(entry.refs ?? {}).map(([path, stored]): EntryCheck => ({ path, role: 'ref', stored, current: this.fingerprintOf(path) })),
     ];
     if (checks[0].current === null) return { state: 'gone', reason: 'file not found', checks };
-    const broken = checks.find(c => c.current !== c.stored);
+    const broken = checks.find(check => check.current !== check.stored);
     if (!broken) return { state: 'fresh', reason: '', checks };
     return { state: 'stale', reason: broken.current === null ? `ref gone: ${broken.path}` : `changed: ${broken.path}`, checks };
   }
@@ -303,7 +303,7 @@ export class DimensionCache {
    * moved to this file — and returned. Null when there is none.
    */
   async adopt(file: string, hash: string): Promise<CacheEntry | null> {
-    const orphan = (await this.entries()).find(e => e.file !== file && e.hash === hash && !isFile(this.root, e.file));
+    const orphan = (await this.entries()).find(entry => entry.file !== file && entry.hash === hash && !isFile(this.root, entry.file));
     if (!orphan) return null;
     const adopted = { ...orphan, file };
     await this.write(adopted);
@@ -313,7 +313,7 @@ export class DimensionCache {
 
   /** The entries whose file no longer exists. */
   async orphans(): Promise<CacheEntry[]> {
-    return (await this.entries()).filter(e => !isFile(this.root, e.file));
+    return (await this.entries()).filter(entry => !isFile(this.root, entry.file));
   }
 
   /**
@@ -331,45 +331,45 @@ export class DimensionCache {
 
   /** Take one file for `by`, unless another holds it — its file record is made, or freed from a claim past CLAIM_MS, first. */
   private async claim(file: string, by: string): Promise<boolean> {
-    const c = await this.open();
+    const collection = await this.open();
     const key = fileKey(file);
-    const head = await c.get(key);
+    const head = await collection.get(key);
     if (head?._claim && Date.now() - Date.parse(String(head._claimAt)) < CLAIM_MS) return false;
-    if (!head) await c.put({ _key: key, _kind: FILE, _file: file, _hash: '', _claim: '', _claimAt: '', _at: 'pending' });
-    else if (head._claim) await c.set(key, { _claim: '', _claimAt: '' }, [eq('_claimAt', String(head._claimAt))]);
-    return !!await c.take?.([eq('_key', key), eq('_claim', '')], { _claim: by, _claimAt: new Date().toISOString() });
+    if (!head) await collection.put({ _key: key, _kind: FILE, _file: file, _hash: '', _claim: '', _claimAt: '', _at: 'pending' });
+    else if (head._claim) await collection.set(key, { _claim: '', _claimAt: '' }, [eq('_claimAt', String(head._claimAt))]);
+    return !!await collection.take?.([eq('_key', key), eq('_claim', '')], { _claim: by, _claimAt: new Date().toISOString() });
   }
 
   /** The instances every filter holds for, each with its file — of fresh entries only; and the files left out as stale. */
   async query(filters: Filter[]): Promise<{ rows: { file: string; fields: Record<string, unknown> }[]; stale: string[] }> {
-    const c = await this.open();
+    const collection = await this.open();
     const fresh = new Map<string, boolean>();
     const stale: string[] = [];
     const rows: { file: string; fields: Record<string, unknown> }[] = [];
-    for (const u of await c.find([eq('_kind', UNIT), ...filters])) {
-      const file = String(u._file);
+    for (const unit of await collection.find([eq('_kind', UNIT), ...filters])) {
+      const file = String(unit._file);
       if (!fresh.has(file)) {
         const entry = await this.read(file);
         const ok = entry !== null && this.state(entry).state === 'fresh';
         fresh.set(file, ok);
         if (!ok) stale.push(file);
       }
-      if (fresh.get(file)) rows.push({ file, fields: this.fieldsOf(u) });
+      if (fresh.get(file)) rows.push({ file, fields: this.fieldsOf(unit) });
     }
     return { rows, stale };
   }
 
   /** A mark of now — the store's own. */
   async mark(): Promise<string> {
-    const c = await this.open();
-    return String(await c.mark?.() ?? '');
+    const collection = await this.open();
+    return String(await collection.mark?.() ?? '');
   }
 
   /** The files whose answer was written after a mark — null when the mark is none of this store's. */
   async changedSince(mark: string): Promise<string[] | null> {
     const docs = await (await this.open()).since?.(mark);
     if (!docs) return null;
-    return [...new Set(docs.filter(d => d._kind === FILE && d._hash).map(d => String(d._file)))].sort();
+    return [...new Set(docs.filter(doc => doc._kind === FILE && doc._hash).map(doc => String(doc._file)))].sort();
   }
 
   private statsPath(): string {
@@ -377,16 +377,16 @@ export class DimensionCache {
   }
 
   stats(): CacheStats {
-    const s = readJsonFile(this.statsPath()) as Partial<CacheStats> | undefined;
-    return { hits: Number(s?.hits) || 0, misses: Number(s?.misses) || 0 };
+    const stats = readJsonFile(this.statsPath()) as Partial<CacheStats> | undefined;
+    return { hits: Number(stats?.hits) || 0, misses: Number(stats?.misses) || 0 };
   }
 
   /** Count one read — best-effort: a counter that cannot be written never fails a read. */
   count(outcome: keyof CacheStats): void {
     try {
-      const s = this.stats();
-      s[outcome]++;
-      writeFileAtomic(this.statsPath(), `${JSON.stringify(s)}\n`);
+      const stats = this.stats();
+      stats[outcome]++;
+      writeFileAtomic(this.statsPath(), `${JSON.stringify(stats)}\n`);
     } catch { /* the counters are a convenience */ }
   }
 }
@@ -409,9 +409,9 @@ export function removeStaleCaches(root: string, live: ReadonlySet<string>): stri
   let names: string[] = [];
   try { names = readdirSync(base); } catch { /* no cache yet */ }
   const stores = names.filter(name => {
-    const m = CACHE_STORE_RE.exec(name);
-    return m !== null && !live.has(m[1]);
+    const match = CACHE_STORE_RE.exec(name);
+    return match !== null && !live.has(match[1]);
   });
   for (const name of stores) rmSync(join(base, name), { force: true });
-  return [...folders.map(name => `${CACHE_DIR}/${name}/`), ...stores.filter(n => !n.endsWith('.lock')).map(name => `${CACHE_DIR}/${name}`)];
+  return [...folders.map(name => `${CACHE_DIR}/${name}/`), ...stores.filter(name => !name.endsWith('.lock')).map(name => `${CACHE_DIR}/${name}`)];
 }

@@ -94,8 +94,8 @@ export function buildRoleIndex(...groups: BuildRoleIndexInput[]): RoleIndex {
       if (block.key !== 'AGENT' || block.name === null) continue;
       for (const role of parseAgentSignature(block.rest).roles) insertEntry(index, { name: block.name, role, anchor, priority });
     }
-    for (const b of group.bindings ?? []) {
-      for (const role of b.roles) insertEntry(index, { name: b.name, role, anchor, priority });
+    for (const binding of group.bindings ?? []) {
+      for (const role of binding.roles) insertEntry(index, { name: binding.name, role, anchor, priority });
     }
   }
 
@@ -113,7 +113,7 @@ function insertEntry(index: RoleIndex, entry: AgentEntry): void {
     index.set(entry.role, [entry]);
     return;
   }
-  if (entry.priority === holders[0].priority && !holders.some(h => h.name === entry.name)) holders.push(entry);
+  if (entry.priority === holders[0].priority && !holders.some(holder => holder.name === entry.name)) holders.push(entry);
 }
 
 /**
@@ -127,7 +127,7 @@ export function resolveRole(index: RoleIndex, roleName: string): AgentEntry | nu
 
 /** The agents holding `roleName` at the winning precedence — more than one, and a `BY <role>` cannot pick. */
 export function roleHolders(index: RoleIndex, roleName: string): string[] {
-  return (index.get(roleName) ?? []).map(h => h.name);
+  return (index.get(roleName) ?? []).map(holder => holder.name);
 }
 
 /** What a `BY <role>` says when several agents hold the role. */

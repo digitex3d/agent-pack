@@ -37,13 +37,14 @@ import { CREDIT } from '../credits.js';
 import { validateRecord, formatIssues, jsonExample, jsonSchemaOf } from '../shapeSchema.js';
 import { BLOCK_ID_RE, addressName, sha256Hex, shortId } from '../apdoc/ids.js';
 import { perimeterFiles, scanZones, zoneMarks, zonesText, parseZones } from './contracts.js';
-import { DelegationTable, CONTRACT_ID_RE, MARK_ID_RE, pieceRecord, pieceOf, answerFlag, type DelegationRecord } from './delegations.js';
+import { DelegationTable, CONTRACT_ID_RE, MARK_ID_RE, Piece, STATE, pieceRecord, pieceOf, answerFlag, type DelegationRecord } from './delegations.js';
+import { ApxArgs } from './args.js';
 import { splitHarness, type ApMark, type HarnessInvocation } from '../delegation.js';
 import { parsePayload } from './payload.js';
 import type { DriverEntry } from '../storeDrivers/registry.js';
 import { installRecorded } from './stores.js';
 import { resolveWorkspace } from '../workspace/registry.js';
-import type { Allowed, WorkspaceSession } from '../workspace/types.js';
+import type { Allowed, Delivery, WorkspaceSession } from '../workspace/types.js';
 import { constantOf, readsOf } from '../vars.js';
 import { servicesOf, serviceOf } from './services/registry.js';
 import { waitFor, OLD_DELEGATE_KIND } from './services/delegate.js';
@@ -88,7 +89,7 @@ export interface ApxChecks {
 }
 
 /** Kinds in reading order: who you are, your team, then the md chapter order. */
-const KIND_ORDER = [...new Set(['agent', 'team', ...KIND_STRATEGIES.map(s => s.kind)])];
+const KIND_ORDER = [...new Set(['agent', 'team', ...KIND_STRATEGIES.map(strategy => strategy.kind)])];
 
 /** A dimension write's optional refs — the files its answer also depends on. */
 
@@ -131,14 +132,23 @@ const CONTRACT_WORKSPACE = 'git';
 
 /** The value of `--flag <value>` among args, or undefined. */
 function flagValue(args: string[], flag: string): string | undefined {
-  const at = args.indexOf(flag);
-  return at >= 0 ? args.slice(at + 1).join(' ').trim() || undefined : undefined;
+  return new ApxArgs(args).value(flag.replace(/^--/, ''));
+}
+
+/** Why a trial delivery cannot go through — its zones' marks lost, the work done outside the copy, something left out with no reason — or null when it can. */
+type DeliveryRefusal = 'lostZones' | 'strayed' | 'leftOut';
+
+function deliveryRefusal(delivery: Delivery, why: string | undefined): DeliveryRefusal | null {
+  if (delivery.lostZones.length) return 'lostZones';
+  if (delivery.committed.length === 0 && delivery.strayed.length) return 'strayed';
+  if (delivery.leftOut.length && !why) return 'leftOut';
+  return null;
 }
 
 /** Whether some of `globs` admits every file `glob` does — by its folders before the first wildcard (`src/actors/**` under `src/**`). */
 function coversGlob(globs: string[], glob: string): boolean {
-  const prefix = glob.split('/').filter((part, i, all) => !/[*?[{]/.test(part) && all.slice(0, i).every(p => !/[*?[{]/.test(p))).join('/');
-  return globs.some(g => globRegExp(g).test(glob) || (prefix !== '' && globRegExp(g).test(`${prefix}/x`)));
+  const prefix = glob.split('/').filter((part, index, all) => !/[*?[{]/.test(part) && all.slice(0, index).every(previous => !/[*?[{]/.test(previous))).join('/');
+  return globs.some(candidate => globRegExp(candidate).test(glob) || (prefix !== '' && globRegExp(candidate).test(`${prefix}/x`)));
 }
 
 const FILTER_RE = /^(kind|tag|name|about)(=|~)(.+)$/;
@@ -161,17 +171,17 @@ type ProgramTest = { why: string; input: unknown } & ({ output: unknown } | { ex
 
 /** Two JSON texts or values that mean the same value, key order aside. */
 function sameJson(text: string, expected: unknown): boolean {
-  const canon = (v: unknown): unknown => Array.isArray(v) ? v.map(canon)
-    : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v as object).sort(([a], [b]) => a < b ? -1 : 1).map(([k, x]) => [k, canon(x)])) : v;
+  const canon = (value: unknown): unknown => Array.isArray(value) ? value.map(canon)
+    : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value as object).sort(([leftKey], [rightKey]) => leftKey < rightKey ? -1 : 1).map(([key, child]) => [key, canon(child)])) : value;
   try { return JSON.stringify(canon(JSON.parse(text))) === JSON.stringify(canon(expected)); } catch { return false; }
 }
 
 /** Why a script failed, from its stderr: the last lines that say something — stack frames, carets and runtime banners left out. */
 function stderrCause(stderr: string): string {
   return stderr.split(/\r?\n/)
-    .filter(l => l.trim() && !/^\s+at\s/.test(l) && !/^\s*\^+\s*$/.test(l) && !/^Node\.js v\d/.test(l))
+    .filter(line => line.trim() && !/^\s+at\s/.test(line) && !/^\s*\^+\s*$/.test(line) && !/^Node\.js v\d/.test(line))
     .slice(-3)
-    .map(l => l.trim())
+    .map(line => line.trim())
     .join(' | ');
 }
 const ANSWER_RE = /^(\d+)=(.*)$/;
@@ -231,11 +241,11 @@ export class ApxEngine {
 
   /** The contracts' own steps, for the `delegate` service and `wait` (src/apx/services/delegate.ts). */
   readonly contracts = {
-    deliver: (table: DelegationTable, r: DelegationRecord, args: string[]) => this.deliverContract(table, r, args),
+    deliver: (table: DelegationTable, record: DelegationRecord, args: string[]) => this.deliverContract(table, record, args),
     copy: (ctr: string) => this.contractCopy(ctr),
     fold: (table: DelegationTable, pieces: DelegationRecord[]) => this.foldContracts(table, pieces),
-    launch: (r: DelegationRecord) => this.launchElsewhere(r),
-    deliverElsewhere: (table: DelegationTable, r: DelegationRecord) => this.deliverElsewhere(table, r),
+    launch: (record: DelegationRecord) => this.launchElsewhere(record),
+    deliverElsewhere: (table: DelegationTable, record: DelegationRecord) => this.deliverElsewhere(table, record),
   };
 
   constructor(
@@ -288,25 +298,25 @@ export class ApxEngine {
     const quiz = this.quiz();
     if (quiz.length === 0) return this.opening();
     if (args.length === 0) {
-      const form = quiz.map((q, i) => `${i + 1}=<${letters(q.options).join('|')}>`).join(' ');
+      const form = quiz.map((question, index) => `${index + 1}=<${letters(question.options).join('|')}>`).join(' ');
       this.out(`# quiz — answer with: ${this.cmd} start ${form}`);
       this.out(`# '?' = don't know: it costs nothing and gets you that kind's introduction. a guess costs you a wrong prompt.`);
-      quiz.forEach((q, i) => {
-        this.out(`${i + 1}. [${q.kind}] ${q.ask}`);
-        this.out(`   ${q.options.map((o, j) => `${letters(q.options)[j]}) ${o}`).join('   ')}`);
+      quiz.forEach((question, index) => {
+        this.out(`${index + 1}. [${question.kind}] ${question.ask}`);
+        this.out(`   ${question.options.map((option, optionIndex) => `${letters(question.options)[optionIndex]}) ${option}`).join('   ')}`);
       });
       return 0;
     }
     const given = new Map<number, string>();
     for (const arg of args) {
-      const m = ANSWER_RE.exec(arg);
-      const n = m ? Number(m[1]) : 0;
-      if (!m || n < 1 || n > quiz.length) {
+      const match = ANSWER_RE.exec(arg);
+      const questionNumber = match ? Number(match[1]) : 0;
+      if (!match || questionNumber < 1 || questionNumber > quiz.length) {
         return this.fail(2, `bad answer '${arg}': expected <n>=<letter> with n in 1..${quiz.length} — the quiz: ${this.cmd} start`);
       }
-      given.set(n, m[2].trim().toLowerCase());
+      given.set(questionNumber, match[2].trim().toLowerCase());
     }
-    const missed = [...new Set(quiz.filter((q, i) => given.get(i + 1) !== q.right).map(q => q.kind))];
+    const missed = [...new Set(quiz.filter((question, index) => given.get(index + 1) !== question.right).map(question => question.kind))];
     if (missed.length === 0) {
       this.out(`# all ${quiz.length} correct — your scope:`);
     } else {
@@ -334,17 +344,17 @@ export class ApxEngine {
    */
   private opened(): ApBlock[] {
     const always = new Set<ApBlock>();
-    const add = (b: ApBlock | null | undefined) => {
-      if (!b || always.has(b)) return;
-      always.add(b);
-      if (b.kind === 'template') for (const r of uniqueRefs(b.toJSON())) add(this.doc.resolve(r));
+    const add = (block: ApBlock | null | undefined) => {
+      if (!block || always.has(block)) return;
+      always.add(block);
+      if (block.kind === 'template') for (const ref of uniqueRefs(block.toJSON())) add(this.doc.resolve(ref));
     };
     for (const role of this.agent?.roles ?? []) add(this.doc.resolve(role));
     this.doc.byKind('policy').forEach(add);
     if (this.root.lensIn) add(this.doc.resolve(this.root.lensIn.ref));
     if (this.agent?.lensOut) add(this.doc.resolve(this.agent.lensOut.ref));
     // A variable is runtime state, served by `get <name>` — never opened.
-    return this.doc.all().filter(b => b !== this.root && b.kind !== 'var' && (always.has(b) || this.text(b).length <= this.budget.block));
+    return this.doc.all().filter(block => block !== this.root && block.kind !== 'var' && (always.has(block) || this.text(block).length <= this.budget.block));
   }
 
   private scope(): number {
@@ -356,57 +366,57 @@ export class ApxEngine {
     if (perimeter) {
       this.out(`perimeter: you write only ${perimeter.writes.join(', ') || 'nothing'} — ${perimeter.reads ? `you read only ${perimeter.reads.join(', ')}` : 'read whatever you need'}`);
       const uncertain = { ...perimeter.judged?.reads.uncertain, ...perimeter.judged?.writes.uncertain };
-      if (Object.keys(uncertain).length) this.out(`uncertain: a judge could not tell whether these belong — decide each in context: ${Object.entries(uncertain).map(([f, p]) => `${f} (p=${p.toFixed(2)})`).join(', ')}`);
+      if (Object.keys(uncertain).length) this.out(`uncertain: a judge could not tell whether these belong — decide each in context: ${Object.entries(uncertain).map(([file, probability]) => `${file} (p=${probability.toFixed(2)})`).join(', ')}`);
     }
-    const roles = (this.agent?.roles ?? []).map(ref => this.doc.resolve(ref)).filter((b): b is ApBlock => b !== null);
+    const roles = (this.agent?.roles ?? []).map(ref => this.doc.resolve(ref)).filter((block): block is ApBlock => block !== null);
     for (const role of roles) this.out(`role: ${this.label(role)}`);
     // Its team, by reference: the team's block — its members, its routing — is the team's own document's.
     if (this.agent?.team) this.out(`team: ${this.refLabel(this.agent.team)}`);
     const policies = this.doc.byKind('policy');
     if (policies.length > 0) {
       this.out('respect:');
-      for (const p of policies) this.out(`  ${this.label(p)}${p.about ? `  — ${p.about}` : ''}`);
+      for (const policy of policies) this.out(`  ${this.label(policy)}${policy.about ? `  — ${policy.about}` : ''}`);
     }
     // Every WHEN and hook of the agent and of its roles: what it does, and when.
-    const own = [root, ...roles].flatMap(b => b.toJSON().body as ApNode[]);
-    const whens = own.filter((n): n is ApWhenNode => n.type === 'when');
+    const own = [root, ...roles].flatMap(block => block.toJSON().body as ApNode[]);
+    const whens = own.filter((node): node is ApWhenNode => node.type === 'when');
     if (whens.length > 0) {
       this.out(`when:  — the steps: ${this.cmd} get ${root.id}`);
-      for (const w of whens) {
-        const runs = w.body.filter((c): c is ApRunNode => c.type === 'run').map(c => this.refLabel(c.ref));
-        this.out(`  WHEN ${w.condition}${runs.length ? `  -> ${runs.join(', ')}` : ''}${w.shape ? `  — as ${this.refLabel(w.shape.ref)}` : ''}`);
+      for (const when of whens) {
+        const runs = when.body.filter((child): child is ApRunNode => child.type === 'run').map(run => this.refLabel(run.ref));
+        this.out(`  WHEN ${when.condition}${runs.length ? `  -> ${runs.join(', ')}` : ''}${when.shape ? `  — as ${this.refLabel(when.shape.ref)}` : ''}`);
       }
     }
-    const memories = own.filter((n): n is ApDirectiveNode => n.type === 'directive' && n.keyword === 'MEM' && (n.force ?? 0) >= 0);
+    const memories = own.filter((node): node is ApDirectiveNode => node.type === 'directive' && node.keyword === 'MEM' && (node.force ?? 0) >= 0);
     if (memories.length > 0) {
       this.out('remember:');
-      for (const m of memories) this.out(`  ${m.text}${m.shape ? `  — as ${this.refLabel(m.shape.ref)}` : ''}`);
+      for (const memory of memories) this.out(`  ${memory.text}${memory.shape ? `  — as ${this.refLabel(memory.shape.ref)}` : ''}`);
     }
     this.out('write to:');
     const stores = this.doc.agentStores();
     if (stores.length === 0) this.out('  (no stores declared)');
-    for (const s of stores) this.out(`  ${this.label(s)}  — use: ${this.cmd} store <op> ${s.id} …`);
+    for (const store of stores) this.out(`  ${this.label(store)}  — use: ${this.cmd} store <op> ${store.id} …`);
     const dimensions = this.doc.byKind('dimension') as DimensionBlock[];
     if (dimensions.length > 0) {
       this.out(`dimensions:  — answers about the code, kept by the apx; read one before reasoning about a file it covers: ${this.cmd} dimension read <dim-id> <file>`);
-      for (const d of dimensions) this.out(`  ${this.label(d)}  — files: ${d.globs.join(', ')}`);
+      for (const dimension of dimensions) this.out(`  ${this.label(dimension)}  — files: ${dimension.globs.join(', ')}`);
     }
     const variables = this.doc.byKind('var');
     if (variables.length > 0) {
       this.out(`variables:  — read: ${this.cmd} get <name>, store: ${this.cmd} set <name> -`);
-      for (const v of variables) this.out(`  ${v.name}  — ${v.about}`);
+      for (const variable of variables) this.out(`  ${variable.name}  — ${variable.about}`);
     }
     const checks = Object.entries(this.doc.meta.checks ?? {});
     if (checks.length > 0) {
       this.out(`checks:  — a judge decides each: ${this.cmd} check <id>`);
-      for (const [id, c] of checks) this.out(`  ${id}  ${checkedKeyword(c.kind, c.level)}${c.level === 2 ? '  (sealed)' : `  — the question: ${this.cmd} get ${id}`}`);
+      for (const [id, check] of checks) this.out(`  ${id}  ${checkedKeyword(check.kind, check.level)}${check.level === 2 ? '  (sealed)' : `  — the question: ${this.cmd} get ${id}`}`);
     }
     const executors = Object.entries(this.doc.meta.executors ?? {});
     if (executors.length > 0) {
       this.out(`executors:  — a delegate or a program carries each out; its contract: ${this.cmd} get <id>`);
-      for (const [id, e] of executors) {
-        const state = e.program ? (this.programFiles(e.program) ? '  (program ready)' : '  (no program yet)') : '';
-        this.out(`  ${id}  ${FORMULAS.keywords.EXECUTOR.who[executorKey(e.executor)]}${e.by ? ` \`${e.by}\`` : ''}  ${e.site}: ${e.text}${state}`);
+      for (const [id, executor] of executors) {
+        const state = executor.program ? (this.programFiles(executor.program) ? '  (program ready)' : '  (no program yet)') : '';
+        this.out(`  ${id}  ${FORMULAS.keywords.EXECUTOR.who[executorKey(executor.executor)]}${executor.by ? ` \`${executor.by}\`` : ''}  ${executor.site}: ${executor.text}${state}`);
       }
     }
     if (root.lensIn) this.out(`requests arrive as: ${this.refLabel(root.lensIn.ref)}`);
@@ -421,14 +431,14 @@ export class ApxEngine {
     let count = false;
     for (const arg of args) {
       if (arg === 'count') { count = true; continue; }
-      const m = FILTER_RE.exec(arg);
-      if (!m) return this.fail(2, `bad filter '${arg}' — filters look like: ${this.cmd} ls kind=template tag=planning name~idea about~plan`);
-      terms.push({ key: m[1], op: m[2], val: m[3] });
+      const match = FILTER_RE.exec(arg);
+      if (!match) return this.fail(2, `bad filter '${arg}' — filters look like: ${this.cmd} ls kind=template tag=planning name~idea about~plan`);
+      terms.push({ key: match[1], op: match[2], val: match[3] });
     }
-    const hits = this.doc.all().filter(b => terms.every(t => matches(b, t.key, t.op, t.val)));
+    const hits = this.doc.all().filter(block => terms.every(term => matches(block, term.key, term.op, term.val)));
     for (const [kind, blocks] of this.groups(hits)) {
       this.out(`${kind} (${blocks.length})`);
-      if (!count) for (const b of blocks) this.out(`  ${this.lsLine(b)}`);
+      if (!count) for (const block of blocks) this.out(`  ${this.lsLine(block)}`);
     }
     this.out(`# ${countOf(hits.length, 'block', 'blocks')}${hits.length === 0 && terms.length > 0 ? ' match' : ''}`);
     return 0;
@@ -444,7 +454,7 @@ export class ApxEngine {
     if (!block) return this.lastCode;
     if (args[1] === 'json') return this.print(JSON.stringify(block.toJSON(), null, 1));
     this.print(this.text(block));
-    const tags = block.tags.length > 0 ? `  ${block.tags.map(t => `#${t}`).join(' ')}` : '';
+    const tags = block.tags.length > 0 ? `  ${block.tags.map(tag => `#${tag}`).join(' ')}` : '';
     this.out(`# ${block.kind} ${block.name}  ${block.id}  ${block.chars}ch${tags}`);
     this.links(block);
     return 0;
@@ -460,15 +470,15 @@ export class ApxEngine {
   private find(args: string[]): number {
     if (args.length === 0) return this.fail(2, `find needs text — example: ${this.cmd} find plan`);
     const needle = args.join(' ').toLowerCase();
-    let n = 0;
+    let matched = 0;
     for (const block of this.doc.all()) {
-      const lines = this.text(block).split('\n').filter(l => l.toLowerCase().includes(needle));
+      const lines = this.text(block).split('\n').filter(line => line.toLowerCase().includes(needle));
       if (lines.length === 0) continue;
-      n++;
+      matched++;
       this.out(this.lsLine(block));
       for (const line of lines) this.out(`  > ${line.trim()}`);
     }
-    this.out(`# ${countOf(n, 'block', 'blocks')}${n === 0 ? ' match' : ''}`);
+    this.out(`# ${countOf(matched, 'block', 'blocks')}${matched === 0 ? ' match' : ''}`);
     return 0;
   }
 
@@ -535,7 +545,7 @@ export class ApxEngine {
   /** The template a contract's answer is shaped as: its INTO variable's type, or its procedure's AS — null when none. */
   answerShape(spec: ApExecutorSpec): ApRef | null {
     if (spec.output.into) return this.variable(spec.output.into)?.type ?? null;
-    const template = spec.output.template ? this.doc.byKind('template').find(b => b.name === spec.output.template) : undefined;
+    const template = spec.output.template ? this.doc.byKind('template').find(block => block.name === spec.output.template) : undefined;
     return template ? ({ id: template.id, target: template.address, kind: 'template' } as ApRef) : null;
   }
 
@@ -600,7 +610,7 @@ export class ApxEngine {
     const dir = resolve(projectRootOf(this.exe), programDir(program));
     const manifestPath = join(dir, 'manifest.json');
     if (!existsSync(manifestPath)) return null;
-    const script = readdirSync(dir).find(f => /^script(\.|$)/.test(f));
+    const script = readdirSync(dir).find(file => /^script(\.|$)/.test(file));
     if (!script) return null;
     let manifest: ProgramManifest;
     try { manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')); } catch { return null; }
@@ -654,7 +664,7 @@ export class ApxEngine {
     const files = this.programFiles(spec.program);
     if (!files) {
       const previous = this.previousProgram(spec);
-      const writer = this.doc.byKind('procedure').find(b => b.name === WRITE_PROGRAM);
+      const writer = this.doc.byKind('procedure').find(block => block.name === WRITE_PROGRAM);
       return this.fail(10, [
         `no program yet for ${id} — write it now, in ${programDir(spec.program)}/ at the project root (beside .agent-pack/): manifest.json, the script, tests.json`,
         writer ? `how: ${this.cmd} get ${writer.id}` : `its contract: ${this.cmd} get ${id}`,
@@ -714,7 +724,7 @@ export class ApxEngine {
    * answer never says what it checks.
    */
   private async check(args: string[]): Promise<number> {
-    const answer = (outcome: 'open' | 'closed', ...lines: string[]): void => { this.out(outcome); lines.forEach(l => this.out(l)); };
+    const answer = (outcome: 'open' | 'closed', ...lines: string[]): void => { this.out(outcome); lines.forEach(line => this.out(line)); };
     const refused = (message: string): number => { answer('closed', `# error: ${message}`); return 2; };
     const [id] = args;
     if (!id) return refused(`check needs a condition id — the line that asks for the check names it: ${this.cmd} check cnd-…`);
@@ -725,20 +735,20 @@ export class ApxEngine {
     const session = this.openSession();
     if (typeof session === 'string') return refused(`${session} — the gate stays closed`);
     let judge: JudgePlugin;
-    try { judge = this.judgeNamed(config.adapter); } catch (e) { return refused(`the judge \`${config.adapter}\` cannot be loaded by the apx (${e instanceof Error ? e.message : e})`); }
+    try { judge = this.judgeNamed(config.adapter); } catch (error) { return refused(`the judge \`${config.adapter}\` cannot be loaded by the apx (${error instanceof Error ? error.message : error})`); }
     try {
       const verdict = await this.verdict(spec, id, session, judge, config.model);
       const prior = spec.kind === 'UNTIL' ? session.checks(id) : [];
       // This answer's round, counted as closed: it is recorded before the verdict is known.
-      const round = roundOf([...prior.map(r => r.outcome === 'open'), false], spec.kind === 'UNTIL' ? spec.rounds : undefined);
+      const round = roundOf([...prior.map(check => check.outcome === 'open'), false], spec.kind === 'UNTIL' ? spec.rounds : undefined);
       session.record({ ...verdict.record, cnd: id, level: spec.level, round, threshold: config.threshold, at: new Date().toISOString() });
       if (verdict.open) { answer('open', verdict.why); return 0; }
       const rounds = spec.kind !== 'UNTIL' || !spec.rounds ? []
         : [roundLine(round, spec.rounds, FORMULAS.keywords.CHECK.loop)];
       answer('closed', verdict.why, ...rounds);
       return 1;
-    } catch (e) {
-      return refused(`the check could not be run or recorded: ${e instanceof Error ? e.message : e}`);
+    } catch (error) {
+      return refused(`the check could not be run or recorded: ${error instanceof Error ? error.message : error}`);
     }
   }
 
@@ -764,24 +774,24 @@ export class ApxEngine {
     let answered: Awaited<ReturnType<JudgePlugin['ask']>>;
     try {
       answered = await judge.ask(state, [{ id, question: spec.question }], model);
-    } catch (e) {
-      const why = (e instanceof Error ? e.message : String(e)).split(spec.question).join('…');
+    } catch (error) {
+      const why = (error instanceof Error ? error.message : String(error)).split(spec.question).join('…');
       return closed(`the judge could not answer (${why})`, `the judge could not answer (${why})`, { fingerprint });
     }
-    const p = answered.answers[id];
-    if (typeof p !== 'number' || !(p >= 0 && p <= 1)) return closed('the judge gave no probability', 'the judge gave no probability', { fingerprint, model: answered.model });
-    const record = { fingerprint, model: answered.model, p: String(p) };
-    if (p >= threshold) {
-      return { open: true, why: sealed ? `the gate opened (p=${p})` : `the judge answered p=${p}, at or above ${threshold} — the condition holds`, record: { ...record, outcome: 'open' } };
+    const probability = answered.answers[id];
+    if (typeof probability !== 'number' || !(probability >= 0 && probability <= 1)) return closed('the judge gave no probability', 'the judge gave no probability', { fingerprint, model: answered.model });
+    const record = { fingerprint, model: answered.model, p: String(probability) };
+    if (probability >= threshold) {
+      return { open: true, why: sealed ? `the gate opened (p=${probability})` : `the judge answered p=${probability}, at or above ${threshold} — the condition holds`, record: { ...record, outcome: 'open' } };
     }
-    return closed(`the judge answered p=${p}, below ${threshold} — the condition does not hold`, `p=${p}, below ${threshold}`, record);
+    return closed(`the judge answered p=${probability}, below ${threshold} — the condition does not hold`, `p=${probability}, below ${threshold}`, record);
   }
 
   /** A delegate's or a program's contract: what it carries out, what it receives, what it answers. */
   private getExecutor(id: string, spec: ApExecutorSpec): number {
     this.out(`# ${spec.site} ${id}  — ${FORMULAS.keywords.EXECUTOR.who[executorKey(spec.executor)]}${spec.by ? ` \`${spec.by}\`` : ''} carries it out, never you`);
     this.out(`${spec.site}: ${spec.text}`);
-    const keys = [...spec.input.vars.map(v => `${v} (as stored in this session)`), ...Object.entries(spec.input.constants).map(([k, v]) => `${k} = ${v}`), ...(spec.input.in ? [`in (shaped as ${spec.input.in})`] : [])];
+    const keys = [...spec.input.vars.map(name => `${name} (as stored in this session)`), ...Object.entries(spec.input.constants).map(([key, value]) => `${key} = ${value}`), ...(spec.input.in ? [`in (shaped as ${spec.input.in})`] : [])];
     this.out(`input: ${keys.length ? keys.join(', ') : 'nothing'}  — one key each, nothing else`);
     const out = spec.output.holds ? '{"holds": true | false}'
       : spec.output.into ? `the value of \`${spec.output.into}\`${spec.output.template ? `, shaped as ${spec.output.template}` : ''}`
@@ -826,8 +836,8 @@ export class ApxEngine {
   }
 
   private help(): number {
-    const rows: [string, string][] = [...HELP, ...servicesOf(this.doc).flatMap(s => s.operations.map(o => [`${s.kind} ${o.op} ${o.args}`.trim(), o.about] as [string, string]))];
-    const width = Math.max(...rows.map(([v]) => v.length));
+    const rows: [string, string][] = [...HELP, ...servicesOf(this.doc).flatMap(service => service.operations.map(operation => [`${service.kind} ${operation.op} ${operation.args}`.trim(), operation.about] as [string, string]))];
+    const width = Math.max(...rows.map(([command]) => command.length));
     for (const [verb, what] of rows) this.out(`${this.cmd} ${verb.padEnd(width)}  ${what}`);
     return 0;
   }
@@ -856,15 +866,15 @@ export class ApxEngine {
 
   /** A unit — a team, or the main: members with the command that reaches each, the main's teams, routing, a team's shared block. */
   private teamView(team: TeamBlock | MainBlock): string {
-    const section = (title: string, rows: string[]): string[] => (rows.length > 0 ? [`${title}:`, ...rows.map(r => `  ${r}`)] : []);
-    const memberRow = (m: ApRef): string => {
-      const member = this.doc.reach(m);
-      return `${this.refLabel(m)}${member?.about ? `  — ${member.about}` : ''}`;
+    const section = (title: string, rows: string[]): string[] => (rows.length > 0 ? [`${title}:`, ...rows.map(row => `  ${row}`)] : []);
+    const memberRow = (memberRef: ApRef): string => {
+      const member = this.doc.reach(memberRef);
+      return `${this.refLabel(memberRef)}${member?.about ? `  — ${member.about}` : ''}`;
     };
     return `${[
       this.headLine(team),
       ...section('members', team.members.map(memberRow)),
-      ...section('teams', team.kind === 'main' ? team.teams.map(t => this.refLabel(t)) : []),
+      ...section('teams', team.kind === 'main' ? team.teams.map(teamRef => this.refLabel(teamRef)) : []),
       ...section('routing', renderNodes(this.env, team.body)),
       ...(team.kind === 'team' && team.shared ? [`shared: ${team.shared}`] : []),
     ].join('\n')}\n`;
@@ -874,13 +884,13 @@ export class ApxEngine {
   private links(block: ApBlock): void {
     // Every policy in the document binds the agent — imported, not referenced by a line.
     const policies = block === this.root ? this.doc.byKind('policy') : [];
-    const uses = [...uniqueRefs(block.toJSON()).map(r => this.refLabel(r)), ...policies.map(p => this.label(p))];
+    const uses = [...uniqueRefs(block.toJSON()).map(ref => this.refLabel(ref)), ...policies.map(policy => this.label(policy))];
     this.out('uses:');
     if (uses.length === 0) this.out('  (nothing)');
     for (const use of uses) this.out(`  ${use}`);
     this.out('used by:');
-    const users = this.doc.all().filter(b => b !== block && (
-      uniqueRefs(b.toJSON()).some(r => r.target === block.address) || (block.kind === 'policy' && b === this.root)));
+    const users = this.doc.all().filter(candidate => candidate !== block && (
+      uniqueRefs(candidate.toJSON()).some(ref => ref.target === block.address) || (block.kind === 'policy' && candidate === this.root)));
     if (users.length === 0) this.out('  (nothing inside this agent)');
     for (const user of users) this.out(`  ${this.label(user)}`);
   }
@@ -913,7 +923,7 @@ export class ApxEngine {
   }
 
   private lsLine(block: ApBlock): string {
-    const tags = block.tags.length > 0 ? `  ${block.tags.map(t => `#${t}`).join(' ')}` : '';
+    const tags = block.tags.length > 0 ? `  ${block.tags.map(tag => `#${tag}`).join(' ')}` : '';
     // A policy or a skill says where it holds: its perimeter, or only under a WITH that names it (src/withUse.ts).
     const scope = SCOPED_KINDS.includes(block.kind) ? `  [${scopeLabel(block.scopes)}]` : '';
     return `${block.id}  ${block.name}${tags}${scope}${block.about ? `  — ${block.about}` : ''}`;
@@ -921,14 +931,14 @@ export class ApxEngine {
 
   /** Blocks grouped by kind, in reading order. */
   private groups(blocks: ApBlock[]): [string, ApBlock[]][] {
-    const kinds = [...new Set(blocks.map(b => b.kind))].sort((a, b) => kindRank(a) - kindRank(b));
-    return kinds.map(kind => [kind, blocks.filter(b => b.kind === kind)]);
+    const kinds = [...new Set(blocks.map(block => block.kind))].sort((left, right) => kindRank(left) - kindRank(right));
+    return kinds.map(kind => [kind, blocks.filter(block => block.kind === kind)]);
   }
 
   /** The compiled script of this version of a flow — or null. */
   private flowScript(flow: ApBlock): string | null {
     const stem = flowScriptStem(flow.id, flow.contentHash);
-    return this.findIn(FLOWS_DIR, f => f.startsWith(`${stem}.`));
+    return this.findIn(FLOWS_DIR, file => file.startsWith(`${stem}.`));
   }
 
   /** The first file of a project folder that matches — its path, or null. */
@@ -944,9 +954,9 @@ export class ApxEngine {
   private quiz(): (QuizQuestion & { kind: string })[] {
     const guides = FORMULAS.blocks as unknown as Record<string, { quiz?: QuizQuestion[] }>;
     const opened = new Set(this.opened());
-    const pending = this.doc.all().filter(b => b !== this.root && !opened.has(b));
+    const pending = this.doc.all().filter(block => block !== this.root && !opened.has(block));
     if (pending.length === 0) return [];
-    return this.groups([this.root, ...pending]).flatMap(([kind]) => (guides[kind]?.quiz ?? []).map(q => ({ ...q, kind })));
+    return this.groups([this.root, ...pending]).flatMap(([kind]) => (guides[kind]?.quiz ?? []).map(question => ({ ...question, kind })));
   }
 
   /** The block named by a verb's id argument, or null after printing the error. */
@@ -960,7 +970,7 @@ export class ApxEngine {
     const block = this.byId.get(id);
     if (block) return block;
     const team = this.doc.byKind('team')[0] as TeamBlock | undefined;
-    const fellow = team?.members.find(m => m.id === id && !this.doc.resolve(m));
+    const fellow = team?.members.find(member => member.id === id && !this.doc.resolve(member));
     this.lastCode = fellow
       ? this.fail(1, `${id} is an agent defined in its own executable — run: ${this.sibling(addressName(fellow.target))} scope`)
       : this.notFound(id);
@@ -1005,12 +1015,12 @@ export class ApxEngine {
     const vars = this.sessionVars();
     if (!vars) return this.lastCode;
     let stored: string | null;
-    try { stored = vars.read(name, block.scope); } catch (e) { return this.fail(2, `reading ${name}: ${e instanceof Error ? e.message : e}`); }
+    try { stored = vars.read(name, block.scope); } catch (error) { return this.fail(2, `reading ${name}: ${error instanceof Error ? error.message : error}`); }
     this.print(this.text(block));
     this.out(`# var ${name}  ${block.id}`);
     this.links(block);
     this.out('read by:');
-    const readers = this.doc.all().filter(b => readsOf(JSON.stringify(b.body)).some(r => r.name === name && !r.field));
+    const readers = this.doc.all().filter(candidate => readsOf(JSON.stringify(candidate.body)).some(read => read.name === name && !read.field));
     if (readers.length === 0) this.out('  (nothing inside this agent)');
     for (const reader of readers) this.out(`  ${this.label(reader)}`);
     if (stored === null) {
@@ -1063,7 +1073,7 @@ export class ApxEngine {
     }
     const session = this.openSession();
     if (typeof session === 'string') return { code: 2, reason: session };
-    try { session.write(block.name, block.scope, { value, type, by: this.root.name }); } catch (e) { return { code: 2, reason: `storing ${block.name}: ${e instanceof Error ? e.message : e}` }; }
+    try { session.write(block.name, block.scope, { value, type, by: this.root.name }); } catch (error) { return { code: 2, reason: `storing ${block.name}: ${error instanceof Error ? error.message : error}` }; }
     return null;
   }
 
@@ -1081,7 +1091,7 @@ export class ApxEngine {
 
   /** A variable of this agent, by name. */
   variable(name: string): VarBlock | null {
-    return (this.doc.byKind('var') as VarBlock[]).find(v => v.name === name) ?? null;
+    return (this.doc.byKind('var') as VarBlock[]).find(variable => variable.name === name) ?? null;
   }
 
   /**
@@ -1153,8 +1163,8 @@ export class ApxEngine {
         case 'land': return this.contractLand(cx);
         default: return this.contractList(cx, rest);
       }
-    } catch (e) {
-      return this.fail(2, `the contracts could not be read or written: ${e instanceof Error ? e.message : e}`);
+    } catch (error) {
+      return this.fail(2, `the contracts could not be read or written: ${error instanceof Error ? error.message : error}`);
     }
   }
 
@@ -1195,10 +1205,10 @@ export class ApxEngine {
    * says whether the file stays within the contract.
    */
   private guard(args: string[]): number {
-    const at = (flag: string) => { const k = args.indexOf(flag); return k >= 0 ? args[k + 1] ?? '' : null; };
+    const at = (flag: string) => { const index = args.indexOf(flag); return index >= 0 ? args[index + 1] ?? '' : null; };
     const agent = at('--agent') || '';
     const subagent = args.includes('--subagent');
-    const path = args.find((a, k) => !a.startsWith('--') && args[k - 1] !== '--agent');
+    const path = args.find((arg, index) => !arg.startsWith('--') && args[index - 1] !== '--agent');
     if (!path) return this.fail(2, `a path is needed, from the project root — ${this.cmd} guard <path> [--agent <name>] [--subagent]`);
     const copy = new RegExp(`^${WORK_DIR}/(ctr-[0-9a-f]{8})/(.+)$`).exec(path);
     if (args.includes('--after')) {
@@ -1217,22 +1227,22 @@ export class ApxEngine {
     const session = this.sessionIdOrReason('guard needs');
     if ('reason' in session) return 0;   // no session, no work recorded in it
     const table = DelegationTable.open(this.projectRoot, session.id);
-    const running = table.all().filter(r => r.state === 'running');
-    const mine = agent ? running.filter(r => r.assignee === agent) : [];
+    const running = table.all().filter(record => record.state === 'running');
+    const mine = agent ? running.filter(record => record.assignee === agent) : [];
     // A write in a contract's copy is that contract's: its zones are checked once written (--after).
-    if (copy && running.some(r => r.dlg === copy[1])) return 0;
+    if (copy && running.some(record => record.dlg === copy[1])) return 0;
     const held = mine.length > 0 ? mine : running;
-    for (const r of held) {
-      if (CONTRACT_ID_RE.test(r.dlg)) {
+    for (const record of held) {
+      if (CONTRACT_ID_RE.test(record.dlg)) {
         // Its assignee works in its copy, never in the project folder; whoever else writes is not bound by it.
-        if (mine.length > 0) return blocked(`${agent} carries out ${r.dlg} in its copy, ${WORK_DIR}/${r.dlg}/ — not in the project folder`);
+        if (mine.length > 0) return blocked(`${agent} carries out ${record.dlg} in its copy, ${WORK_DIR}/${record.dlg}/ — not in the project folder`);
         continue;
       }
-      if (!r.perimeter) continue;
-      const sets = JSON.parse(r.perimeter) as string[][];
+      if (!record.perimeter) continue;
+      const sets = JSON.parse(record.perimeter) as string[][];
       const miss = sets.find(globs => !matchesAnyGlob(path, globs));
       if (miss) {
-        const who = mine.length > 0 ? `${agent}, carrying out ${r.dlg} (${r.step})` : `the work in progress ${r.dlg} (${r.step}${r.assignee ? `, ${r.assignee}` : ''}) — this write could not be told apart from it`;
+        const who = mine.length > 0 ? `${agent}, carrying out ${record.dlg} (${record.step})` : `the work in progress ${record.dlg} (${record.step}${record.assignee ? `, ${record.assignee}` : ''}) — this write could not be told apart from it`;
         return blocked(`outside the perimeter of ${who}: ${miss.join(', ') || 'it writes nothing'}`);
       }
     }
@@ -1252,31 +1262,31 @@ export class ApxEngine {
   /** A contract by its id — or null after saying why. */
   private contractArg(cx: ContractCx, id: string | undefined, usage: string): DelegationRecord | null {
     if (!id || !CONTRACT_ID_RE.test(id)) { this.lastCode = this.fail(2, `a contract id is needed (ctr-…) — ${this.cmd} contract ${usage}`); return null; }
-    const r = cx.table.get(id);
-    if (!r) { this.lastCode = this.fail(1, `no contract ${id} in this session — ${this.cmd} contract list`); return null; }
-    return r;
+    const record = cx.table.get(id);
+    if (!record) { this.lastCode = this.fail(1, `no contract ${id} in this session — ${this.cmd} contract list`); return null; }
+    return record;
   }
 
   /** The template a MARK's spec is shaped as, as a reference — null when this agent was compiled without it. */
   private specRef(mark: ApMark): ApRef | null {
-    const t = this.doc.byKind('template').find(b => b.name === mark.spec);
-    return t ? { id: t.id, target: t.address, kind: 'template' } : null;
+    const template = this.doc.byKind('template').find(block => block.name === mark.spec);
+    return template ? { id: template.id, target: template.address, kind: 'template' } : null;
   }
 
   /** The globs a domain of this document writes — what a MARK's WITHIN lets its contracts write beyond their zones. */
   private domainGlobs(name: string | null): string[] {
-    const d = name ? (this.doc.byKind('domain') as DomainBlock[]).find(b => b.name === name) : undefined;
-    if (!d) return [];
-    const p = d.side('WRITES');
-    return [...p.globs, ...[...p.within, ...Object.keys(p.uncertain)].map(literalGlob)];
+    const domain = name ? (this.doc.byKind('domain') as DomainBlock[]).find(block => block.name === name) : undefined;
+    if (!domain) return [];
+    const side = domain.side('WRITES');
+    return [...side.globs, ...[...side.within, ...Object.keys(side.uncertain)].map(literalGlob)];
   }
 
   /** What a contract's delivery may keep: its zones, the files it created, and its MARK's WITHIN domain (D49). */
-  private allowedOf(r: DelegationRecord): Allowed {
-    const files = [...new Set(parseZones(r.zone).map(z => z.file))];
+  private allowedOf(record: DelegationRecord): Allowed {
+    const files = [...new Set(parseZones(record.zone).map(zone => zone.file))];
     return {
-      globs: [...files, ...r.writes.split(',').filter(Boolean)],
-      ...(files.length ? { marks: { ...zoneMarks(r.dlg), files, only: true } } : {}),
+      globs: [...files, ...record.writes.split(',').filter(Boolean)],
+      ...(files.length ? { marks: { ...zoneMarks(record.dlg), files, only: true } } : {}),
       created: true,
     };
   }
@@ -1291,7 +1301,7 @@ export class ApxEngine {
     const mark = this.markArg(args[0], usage);
     if (!mark) return this.lastCode;
     if (args[1] !== '-') return this.fail(2, `the spec comes on stdin — ${this.cmd} contract ${usage}`);
-    const waiting = cx.table.all().filter(r => r.mark === mark.id && r.state === 'marked');
+    const waiting = cx.table.all().filter(record => record.mark === mark.id && record.state === 'marked');
     const max = mark.max || this.build.markMax || DEFAULT_MARK_MAX;
     if (waiting.length >= max) return this.fail(3, `${mark.list} holds ${max} zones already — the MARK's limit; nothing was written`);
     const ref = this.specRef(mark);
@@ -1304,11 +1314,11 @@ export class ApxEngine {
       return this.fail(6, `the spec breaks the form of ${mark.spec}: ${issues}${example}; nothing was written`);
     }
     const spec = JSON.stringify(JSON.parse(text));
-    const ctr = shortId('ctr', JSON.stringify([cx.session, mark.id, cx.table.all().filter(r => r.mark === mark.id).length, spec]));
+    const ctr = shortId('ctr', JSON.stringify([cx.session, mark.id, cx.table.all().filter(record => record.mark === mark.id).length, spec]));
     // The list's variable holds its contracts' ids — what `{{<list>}}` reads.
     const list = this.variable(mark.list);
     if (list) {
-      const ids = [...waiting.map(r => r.dlg), ctr];
+      const ids = [...waiting.map(record => record.dlg), ctr];
       const failed = this.storeVariable(list, JSON.stringify(ids));
       if (failed) return this.fail(6, `\`${mark.list}\` holds the ids of its contracts: ${failed.reason} — declare it as a plain variable; nothing was written`);
     }
@@ -1339,16 +1349,16 @@ export class ApxEngine {
       return this.fail(2, `${other.harness}'s recipe was not compiled into ${this.root.name} — write \`DELEGATE ${mark.list} BY ${by}\` in its flow and bundle again; nothing was started`);
     }
     const agent = other?.agent ?? by;
-    const pending = cx.table.all().filter(r => r.mark === mark.id && r.state === 'marked');
+    const pending = cx.table.all().filter(record => record.mark === mark.id && record.state === 'marked');
     if (pending.length === 0) return this.print(`# ${mark.list}: no zone was marked — nothing to start`);
     const scope = this.doc.perimeter()?.writes;
     const files = perimeterFiles(cx.root, scope && scope.length ? scope : ['**']);
-    const { zones, problems } = scanZones(cx.root, files, pending.map(r => r.dlg));
+    const { zones, problems } = scanZones(cx.root, files, pending.map(record => record.dlg));
     const refusals = [...problems].map(([ctr, why]) => `${ctr}: ${why}`);
     const within = this.domainGlobs(mark.within);
-    for (const r of pending) {
-      if (!zones.get(r.dlg) && !problems.has(r.dlg) && within.length === 0) {
-        refusals.push(`${r.dlg}: no zone is marked — write \`${zoneMarks(r.dlg).open}\` … \`${zoneMarks(r.dlg).close}\` inside comments, or give its MARK a WITHIN domain`);
+    for (const record of pending) {
+      if (!zones.get(record.dlg) && !problems.has(record.dlg) && within.length === 0) {
+        refusals.push(`${record.dlg}: no zone is marked — write \`${zoneMarks(record.dlg).open}\` … \`${zoneMarks(record.dlg).close}\` inside comments, or give its MARK a WITHIN domain`);
       }
     }
     if (refusals.length) {
@@ -1359,15 +1369,15 @@ export class ApxEngine {
     if ('conflicts' in landing) return this.fail(3, `what was merged conflicts with the working folder: ${landing.conflicts.join(', ')} — make them agree there, then start again`);
     if (landing.landed.length) this.out(`# landed in the working folder: ${landing.landed.join(', ')}`);
     const at = new Date().toISOString();
-    for (const r of pending) {
-      const zs = zones.get(r.dlg) ?? [];
-      const writes = [...new Set([...zs.map(z => z.file), ...within])];
+    for (const record of pending) {
+      const zs = zones.get(record.dlg) ?? [];
+      const writes = [...new Set([...zs.map(zone => zone.file), ...within])];
       let command: string | null = null;
-      if (inv) command = this.openElsewhere(cx, r.dlg, inv, agent, writes, this.contractPrompt(r, mark, zs, within), null);
-      else cx.ws().open(r.dlg, { reads: null, writes });
+      if (inv) command = this.openElsewhere(cx, record.dlg, inv, agent, writes, this.contractPrompt(record, mark, zs, within), null);
+      else cx.ws().open(record.dlg, { reads: null, writes });
       const fields = { assignee: agent, zone: zonesText(zs), writes: within.join(','), started_at: at, ...(other ? { harness: other.harness } : {}) };
-      if (!cx.table.transition(r.dlg, 'marked', 'running', fields)) return this.fail(4, `${r.dlg} changed meanwhile — ${this.cmd} contract list ${mark.id}`);
-      this.out(`${r.dlg}  → ${agent}${other ? ` on ${other.harness}` : ''}${zs.length ? `  ${zonesText(zs)}` : ''}  copy: ${cx.ws().path(r.dlg)}`);
+      if (!cx.table.transition(record.dlg, 'marked', 'running', fields)) return this.fail(4, `${record.dlg} changed meanwhile — ${this.cmd} contract list ${mark.id}`);
+      this.out(`${record.dlg}  → ${agent}${other ? ` on ${other.harness}` : ''}${zs.length ? `  ${zonesText(zs)}` : ''}  copy: ${cx.ws().path(record.dlg)}`);
       if (command) this.out(command);
     }
     const started = countOf(pending.length, 'contract', 'contracts');
@@ -1377,11 +1387,11 @@ export class ApxEngine {
   }
 
   /** What a contract launched on another harness is handed: its spec, its zones, what else it may write — never the conversation (D66). */
-  private contractPrompt(r: DelegationRecord, mark: ApMark, zones: Parameters<typeof zonesText>[0], within: string[]): string[] {
-    const marks = zoneMarks(r.dlg);
+  private contractPrompt(record: DelegationRecord, mark: ApMark, zones: Parameters<typeof zonesText>[0], within: string[]): string[] {
+    const marks = zoneMarks(record.dlg);
     return [
-      `Carry out the contract ${r.dlg}: its spec, shaped as \`${mark.spec}\`, is`,
-      '```json', JSON.stringify(JSON.parse(r.spec || '{}'), null, 2), '```',
+      `Carry out the contract ${record.dlg}: its spec, shaped as \`${mark.spec}\`, is`,
+      '```json', JSON.stringify(JSON.parse(record.spec || '{}'), null, 2), '```',
       ...(zones.length ? ['', `Its zones: ${zonesText(zones).split(';').join(', ')} — write inside them, between the lines that hold \`${marks.open}\` and \`${marks.close}\`, and leave those marks where they are.`] : []),
       '', `You may also create files${within.length ? `, and write ${within.join(', ')}` : ''}; anything else you change is left out of the delivery.`,
       'When the contract cannot be honoured as written, change nothing and say why.',
@@ -1391,28 +1401,28 @@ export class ApxEngine {
   private contractList(cx: ContractCx, args: string[]): number {
     const mark = args[0] ? this.markArg(args[0], 'list [mrk-id]') : null;
     if (args[0] && !mark) return this.lastCode;
-    const all = cx.table.all().filter(r => CONTRACT_ID_RE.test(r.dlg) && (!mark || r.mark === mark.id));
-    for (const r of all) {
-      this.out(`${r.dlg}  ${r.into}  ${r.state === 'ended' ? 'ended without delivery' : r.state}${r.assignee ? `  → ${r.assignee}` : ''}${r.zone ? `  ${r.zone}` : ''}${r.left_out ? `  left out: ${r.left_out}` : ''}${r.reason ? `  — ${r.reason}` : ''}`);
+    const all = cx.table.all().filter(record => CONTRACT_ID_RE.test(record.dlg) && (!mark || record.mark === mark.id));
+    for (const record of all) {
+      this.out(`${record.dlg}  ${record.into}  ${record.state === 'ended' ? 'ended without delivery' : record.state}${record.assignee ? `  → ${record.assignee}` : ''}${record.zone ? `  ${record.zone}` : ''}${record.left_out ? `  left out: ${record.left_out}` : ''}${record.reason ? `  — ${record.reason}` : ''}`);
     }
     return this.print(`# ${countOf(all.length, 'contract', 'contracts')} in this session — one: ${this.cmd} contract get <ctr-id>`);
   }
 
   private contractGet(cx: ContractCx, args: string[]): number {
-    const r = this.contractArg(cx, args[0], 'get <ctr-id>');
-    if (!r) return this.lastCode;
-    this.out(`contract ${r.dlg} — of ${r.into} — ${r.state}${r.assignee ? ` — carried out by ${r.assignee}` : ''}`);
-    this.out(`zones: ${r.zone ? r.zone.split(';').join(', ') : r.state === 'marked' ? '(not started yet)' : 'none'}`);
-    this.out(`may write: its zones, the files it creates${r.writes ? `, ${r.writes.split(',').join(', ')}` : ''}`);
-    if (r.state !== 'marked') this.out(`copy: ${cx.ws().path(r.dlg)}`);
-    if (r.reason) this.out(`blocked: ${r.reason}`);
-    if (r.left_out) this.out(`left out: ${r.left_out} — why: ${r.why}`);
+    const record = this.contractArg(cx, args[0], 'get <ctr-id>');
+    if (!record) return this.lastCode;
+    this.out(`contract ${record.dlg} — of ${record.into} — ${record.state}${record.assignee ? ` — carried out by ${record.assignee}` : ''}`);
+    this.out(`zones: ${record.zone ? record.zone.split(';').join(', ') : record.state === 'marked' ? '(not started yet)' : 'none'}`);
+    this.out(`may write: its zones, the files it creates${record.writes ? `, ${record.writes.split(',').join(', ')}` : ''}`);
+    if (record.state !== 'marked') this.out(`copy: ${cx.ws().path(record.dlg)}`);
+    if (record.reason) this.out(`blocked: ${record.reason}`);
+    if (record.left_out) this.out(`left out: ${record.left_out} — why: ${record.why}`);
     this.out('spec:');
-    this.print(JSON.stringify(JSON.parse(r.spec || '{}'), null, 2));
-    if (r.state === 'running') {
-      this.out(`# work in your copy: cd ${cx.ws().path(r.dlg)} — read and write only there; write inside its zones, leave the marks where they are`);
-      this.out(`# when done: ${this.cmd} delegate deliver ${r.dlg}`);
-      this.out(`# if it cannot be honoured as written: ${this.cmd} delegate block ${r.dlg} "<why>"`);
+    this.print(JSON.stringify(JSON.parse(record.spec || '{}'), null, 2));
+    if (record.state === 'running') {
+      this.out(`# work in your copy: cd ${cx.ws().path(record.dlg)} — read and write only there; write inside its zones, leave the marks where they are`);
+      this.out(`# when done: ${this.cmd} delegate deliver ${record.dlg}`);
+      this.out(`# if it cannot be honoured as written: ${this.cmd} delegate block ${record.dlg} "<why>"`);
     }
     return 0;
   }
@@ -1423,18 +1433,18 @@ export class ApxEngine {
    * soon as the file is written (adapters/claude-code).
    */
   private contractWithin(cx: ContractCx, args: string[]): number {
-    const r = this.contractArg(cx, args[0], 'within <ctr-id> <path>');
-    if (!r) return this.lastCode;
+    const record = this.contractArg(cx, args[0], 'within <ctr-id> <path>');
+    if (!record) return this.lastCode;
     const path = args[1];
-    if (!path) return this.fail(2, `a path is needed — ${this.cmd} contract within ${r.dlg} <path>`);
-    if (r.state === 'marked') return this.fail(2, `${r.dlg} has no copy yet — it was not started`);
-    const d = cx.ws().deliver(r.dlg, this.allowedOf(r), { dryRun: true });
-    const hit = (e: string) => e === path || e.startsWith(`${path} (`);
-    const lost = d.lostZones.filter(hit);
-    if (lost.length) { this.out(`${lost.join(', ')}: the marks of ${r.dlg}'s zones are lost — put them back around your work, as they were written`); return 3; }
-    const out = d.leftOut.filter(hit);
+    if (!path) return this.fail(2, `a path is needed — ${this.cmd} contract within ${record.dlg} <path>`);
+    if (record.state === 'marked') return this.fail(2, `${record.dlg} has no copy yet — it was not started`);
+    const delivery = cx.ws().deliver(record.dlg, this.allowedOf(record), { dryRun: true });
+    const hit = (entry: string) => entry === path || entry.startsWith(`${path} (`);
+    const lost = delivery.lostZones.filter(hit);
+    if (lost.length) { this.out(`${lost.join(', ')}: the marks of ${record.dlg}'s zones are lost — put them back around your work, as they were written`); return 3; }
+    const out = delivery.leftOut.filter(hit);
     if (out.length === 0) return 0;
-    this.out(`${out.join(', ')} is outside ${r.dlg} — its zones, the files it creates${r.writes ? ` and ${r.writes}` : ''}: it will be left out of the delivery — keep it only with a good reason, you will be asked for it at deliver`);
+    this.out(`${out.join(', ')} is outside ${record.dlg} — its zones, the files it creates${record.writes ? ` and ${record.writes}` : ''}: it will be left out of the delivery — keep it only with a good reason, you will be asked for it at deliver`);
     return 3;
   }
 
@@ -1443,48 +1453,55 @@ export class ApxEngine {
    * its zones, the files it created and its WITHIN domain; anything else is
    * left out, and only with a reason (`--why`).
    */
-  private deliverContract(table: DelegationTable, r: DelegationRecord, args: string[]): number {
+  private deliverContract(table: DelegationTable, record: DelegationRecord, words: string[]): number {
     const cx = this.contractCx();
     if (!cx) return this.lastCode;
-    if (r.state !== 'running') return this.fail(1, `${r.dlg} is ${r.state} — only a running contract is delivered`);
-    const why = flagValue(args, '--why');
+    const piece = new Piece(record);
+    const args = new ApxArgs(words);
+    const refused = FORMULAS.apx.deliver.refused;
+    const done = FORMULAS.apx.deliver.done;
+    if (!piece.isRunning()) return this.fail(1, fill(refused.notRunning, { id: piece.id, state: piece.state }));
     // On another harness (D66): its answer is the file its command wrote; what was carried into its copy is never delivered.
-    if (r.harness && !args.includes('--answer')) return this.fail(2, answerFlag(r, this.cmd));
-    const answer = r.harness ? this.elsewhereAnswer(cx, r) : null;
-    if (r.harness && answer === null) return this.lastCode;
-    const allowed: Allowed = { ...this.allowedOf(r), ...(r.harness ? { exclude: [...this.carriedOf(r)] } : {}) };
-    const d = cx.ws().deliver(r.dlg, allowed, { dryRun: true });
-    if (d.lostZones.length) return this.fail(3, `${r.dlg} was not delivered — the marks of its zones are lost in ${d.lostZones.join(', ')}: put them back around your work, as they were written`);
-    if (d.committed.length === 0 && d.strayed.length) {
-      return this.fail(3, `${r.dlg}: nothing changed in its copy, and ${d.strayed.join(', ')} changed in the project folder — the work goes in its copy: ${cx.ws().path(r.dlg)}`);
+    if (piece.isElsewhere() && !args.hasAnswer()) return this.fail(2, answerFlag(record, this.cmd));
+    const answer = piece.isElsewhere() ? this.elsewhereAnswer(cx, record) : null;
+    if (piece.isElsewhere() && answer === null) return this.lastCode;
+    const allowed: Allowed = { ...this.allowedOf(record), ...(piece.isElsewhere() ? { exclude: [...this.carriedOf(record)] } : {}) };
+    const delivery = cx.ws().deliver(piece.id, allowed, { dryRun: true });
+    const why = args.why();
+    switch (deliveryRefusal(delivery, why)) {
+      case 'lostZones':
+        return this.fail(3, fill(refused.lostZones, { id: piece.id, files: delivery.lostZones.join(', ') }));
+      case 'strayed':
+        return this.fail(3, fill(refused.strayed, { id: piece.id, files: delivery.strayed.join(', '), copy: cx.ws().path(piece.id) }));
+      case 'leftOut':
+        for (const entry of delivery.leftOut) this.out(fill(done.leftOutLine, { entry }));
+        return this.fail(3, fill(refused.leftOut, { id: piece.id, cmd: this.cmd }));
+      case null:
+        break;
     }
-    if (d.leftOut.length && !why) {
-      for (const e of d.leftOut) this.out(`left out: ${e}`);
-      return this.fail(3, `${r.dlg} was not delivered — what is left out stays out only with a good reason: ${this.cmd} delegate deliver ${r.dlg} --why "<reason>"; or undo it in the copy`);
-    }
-    cx.ws().deliver(r.dlg, allowed);
-    const fields = { left_out: d.leftOut.join('; '), why: d.leftOut.length ? (why ?? '').replace(/\s+/g, ' ') : '', ...(answer !== null ? { result: JSON.stringify(answer) } : {}) };
-    if (!table.transition(r.dlg, 'running', 'delivered', fields)) return this.fail(1, `${r.dlg} moved meanwhile — ${this.cmd} delegate list`);
-    this.out(`${r.dlg}  delivered — ${d.committed.length ? d.committed.join(', ') : 'nothing changed'}`);
-    if (d.leftOut.length) this.out(`left out: ${d.leftOut.join(', ')} — why: ${why}`);
-    if (answer) this.out(`answer: ${answer}`);
+    cx.ws().deliver(piece.id, allowed);
+    const fields = { left_out: delivery.leftOut.join('; '), why: delivery.leftOut.length ? (why ?? '').replace(/\s+/g, ' ') : '', ...(answer !== null ? { result: JSON.stringify(answer) } : {}) };
+    if (!table.transition(piece.id, STATE.running, STATE.delivered, fields)) return this.fail(1, fill(refused.moved, { id: piece.id, cmd: this.cmd }));
+    this.out(fill(done.delivered, { id: piece.id, files: delivery.committed.length ? delivery.committed.join(', ') : done.nothing }));
+    if (delivery.leftOut.length) this.out(fill(done.leftOut, { files: delivery.leftOut.join(', '), why: why ?? '' }));
+    if (answer) this.out(fill(done.answer, { answer }));
     return 0;
   }
 
   /** The answer of a piece that ran on another harness, from the file its command wrote — null after saying why there is none. */
-  private elsewhereAnswer(cx: ContractCx, r: DelegationRecord): string | null {
-    const files = this.elsewhereFiles(cx, r.dlg);
+  private elsewhereAnswer(cx: ContractCx, record: DelegationRecord): string | null {
+    const files = this.elsewhereFiles(cx, record.dlg);
     if (!existsSync(files.answer)) {
-      this.lastCode = this.fail(1, `${r.dlg} wrote no answer (${files.answer}) — run its command again, or ${this.cmd} delegate block ${r.dlg} "<why>"`);
+      this.lastCode = this.fail(1, `${record.dlg} wrote no answer (${files.answer}) — run its command again, or ${this.cmd} delegate block ${record.dlg} "<why>"`);
       return null;
     }
     return readFileSync(files.answer, 'utf-8').trim();
   }
 
   /** The files carried into the copy of a piece on another harness — its agent's definition — never delivered back. */
-  private carriedOf(r: DelegationRecord): Set<string> {
-    const inv = r.harness ? this.doc.meta.harnesses?.[r.harness] : undefined;
-    return new Set((inv?.carry ?? []).map(c => c.replace(/\{agent\}/g, r.assignee)));
+  private carriedOf(record: DelegationRecord): Set<string> {
+    const inv = record.harness ? this.doc.meta.harnesses?.[record.harness] : undefined;
+    return new Set((inv?.carry ?? []).map(pattern => pattern.replace(/\{agent\}/g, record.assignee)));
   }
 
   /** The files a delegation to another harness keeps beside its copy: the prompt it is handed, the answer it writes, the schema of an AS. */
@@ -1500,33 +1517,33 @@ export class ApxEngine {
    * harness's recipe is printed, filled, with the rules to run it by. The
    * command is the caller's to run: nothing is launched here.
    */
-  private launchElsewhere(r: DelegationRecord): number {
-    const work = this.doc.meta.background?.[pieceOf(r.dlg).work];
+  private launchElsewhere(record: DelegationRecord): number {
+    const work = this.doc.meta.background?.[pieceOf(record.dlg).work];
     const inv = work?.harness ? this.doc.meta.harnesses?.[work.harness] : undefined;
-    if (!work?.harness || !inv) return this.fail(2, `${r.dlg} goes to another harness, but its recipe was not compiled into ${this.root.name} — bundle again`);
+    if (!work?.harness || !inv) return this.fail(2, `${record.dlg} goes to another harness, but its recipe was not compiled into ${this.root.name} — bundle again`);
     const agent = work.by ?? '';
     const cx = this.contractCx();
     if (!cx) return this.lastCode;
     const landing = cx.ws().land();
     if ('conflicts' in landing) return this.fail(3, `what was merged conflicts with the working folder: ${landing.conflicts.join(', ')} — make them agree there, then start again`);
     // What it is handed: the task, the variables and constants it reads — never the conversation (D66).
-    const names = [...new Set(readsOf(work.task).map(v => v.name))];
+    const names = [...new Set(readsOf(work.task).map(reference => reference.name))];
     const vars = this.sessionVars();
-    const read = vars ? this.readVariables(vars, names.filter(n => constantOf(this.doc.mdSource?.vars, n) === undefined)) : { values: [] };
-    if ('empty' in read) return this.fail(1, `${emptyVariable(read.empty)}: fill it before ${r.dlg} is handed over`);
-    const handed = [...names.flatMap(n => { const c = constantOf(this.doc.mdSource?.vars, n); return c === undefined ? [] : [{ name: n, value: c }]; }), ...read.values];
-    const shape = this.elsewhereShape(r.dlg);
+    const read = vars ? this.readVariables(vars, names.filter(name => constantOf(this.doc.mdSource?.vars, name) === undefined)) : { values: [] };
+    if ('empty' in read) return this.fail(1, `${emptyVariable(read.empty)}: fill it before ${record.dlg} is handed over`);
+    const handed = [...names.flatMap(name => { const constant = constantOf(this.doc.mdSource?.vars, name); return constant === undefined ? [] : [{ name: name, value: constant }]; }), ...read.values];
+    const shape = this.elsewhereShape(record.dlg);
     const prompt = [
       work.task,
-      ...(handed.length ? ['', 'What you are handed:', '```json', JSON.stringify(Object.fromEntries(handed.map(h => [h.name, h.value])), null, 2), '```'] : []),
+      ...(handed.length ? ['', 'What you are handed:', '```json', JSON.stringify(Object.fromEntries(handed.map(entry => [entry.name, entry.value])), null, 2), '```'] : []),
       ...(shape ? ['', `Answer with JSON shaped as \`${refName(shape)}\`, like: ${JSON.stringify(jsonExample(this.doc.slotsOf(shape)!, this.doc.slotResolver()))}`] : []),
     ];
-    const command = this.openElsewhere(cx, r.dlg, inv, agent, ['**'], prompt, shape);
-    if (!cx.table.transition(r.dlg, 'running', 'running', { harness: work.harness })) return this.fail(4, `${r.dlg} changed meanwhile — ${this.cmd} delegate list`);
-    this.out(`${r.dlg}  → ${agent} on ${work.harness}  copy: ${cx.ws().path(r.dlg)}`);
+    const command = this.openElsewhere(cx, record.dlg, inv, agent, ['**'], prompt, shape);
+    if (!cx.table.transition(record.dlg, 'running', 'running', { harness: work.harness })) return this.fail(4, `${record.dlg} changed meanwhile — ${this.cmd} delegate list`);
+    this.out(`${record.dlg}  → ${agent} on ${work.harness}  copy: ${cx.ws().path(record.dlg)}`);
     this.out('# run, with your shell:');
     this.out(command);
-    return this.elsewhereTail(inv, agent, work.harness, { id: r.dlg });
+    return this.elsewhereTail(inv, agent, work.harness, { id: record.dlg });
   }
 
   /** What follows the commands of pieces on another harness: the model, the recipe's rules, and how each one ends — `id` its id, or a placeholder when `many`. */
@@ -1554,7 +1571,7 @@ export class ApxEngine {
   private openElsewhere(cx: ContractCx, id: string, inv: HarnessInvocation, agent: string, writes: string[], task: string[], shape: ApRef | null): string {
     cx.ws().open(id, { reads: null, writes });
     const files = this.elsewhereFiles(cx, id);
-    for (const path of inv.carry.map(c => c.replace(/\{agent\}/g, agent))) {
+    for (const path of inv.carry.map(pattern => pattern.replace(/\{agent\}/g, agent))) {
       const from = join(cx.root, path);
       if (!existsSync(from)) continue;
       mkdirSync(dirname(join(files.copy, path)), { recursive: true });
@@ -1592,28 +1609,28 @@ export class ApxEngine {
    * perimeter (every glob list the registry recorded), the files carried in
    * never — anything else is left out, and said. A WAIT merges it.
    */
-  private deliverElsewhere(table: DelegationTable, r: DelegationRecord): number {
+  private deliverElsewhere(table: DelegationTable, record: DelegationRecord): number {
     const cx = this.contractCx();
     if (!cx) return this.lastCode;
-    if (r.state !== 'running') return this.fail(1, `${r.dlg} is ${r.state} — only a running piece is delivered`);
-    const text = this.elsewhereAnswer(cx, r);
+    if (record.state !== 'running') return this.fail(1, `${record.dlg} is ${record.state} — only a running piece is delivered`);
+    const text = this.elsewhereAnswer(cx, record);
     if (text === null) return this.lastCode;
-    if (r.into && pieceOf(r.dlg).run === null) {
-      const block = this.variable(r.into);
+    if (record.into && pieceOf(record.dlg).run === null) {
+      const block = this.variable(record.into);
       const failed = block ? this.storeVariable(block, text) : null;
-      if (failed) return this.fail(6, `${r.dlg} delivers into \`${r.into}\`: ${failed.reason} — run it again; nothing was stored`);
+      if (failed) return this.fail(6, `${record.dlg} delivers into \`${record.into}\`: ${failed.reason} — run it again; nothing was stored`);
     }
     // What it changed: every file, then only those within its perimeter — a glob of each list it was handed under.
-    const carried = this.carriedOf(r);
-    const lists: string[][] = r.perimeter ? JSON.parse(r.perimeter) : [];
-    const changed = cx.ws().deliver(r.dlg, { globs: ['**'], created: true }, { dryRun: true }).committed;
-    const keep = changed.filter(f => !carried.has(f) && lists.every(globs => matchesAnyGlob(f, globs)));
-    const left = changed.filter(f => !keep.includes(f) && !carried.has(f));
-    cx.ws().deliver(r.dlg, { globs: keep.map(literalGlob) });
-    if (!table.transition(r.dlg, 'running', 'delivered', { result: JSON.stringify(text), left_out: left.join('; '), why: left.length ? 'outside its perimeter' : '' })) {
-      return this.fail(1, `${r.dlg} moved meanwhile — ${this.cmd} delegate list`);
+    const carried = this.carriedOf(record);
+    const lists: string[][] = record.perimeter ? JSON.parse(record.perimeter) : [];
+    const changed = cx.ws().deliver(record.dlg, { globs: ['**'], created: true }, { dryRun: true }).committed;
+    const keep = changed.filter(file => !carried.has(file) && lists.every(globs => matchesAnyGlob(file, globs)));
+    const left = changed.filter(file => !keep.includes(file) && !carried.has(file));
+    cx.ws().deliver(record.dlg, { globs: keep.map(literalGlob) });
+    if (!table.transition(record.dlg, 'running', 'delivered', { result: JSON.stringify(text), left_out: left.join('; '), why: left.length ? 'outside its perimeter' : '' })) {
+      return this.fail(1, `${record.dlg} moved meanwhile — ${this.cmd} delegate list`);
     }
-    this.out(`${r.dlg}  delivered — ${keep.length ? keep.join(', ') : 'nothing changed'}`);
+    this.out(`${record.dlg}  delivered — ${keep.length ? keep.join(', ') : 'nothing changed'}`);
     if (left.length) this.out(`left out, outside its perimeter: ${left.join(', ')}`);
     return 0;
   }
@@ -1633,14 +1650,14 @@ export class ApxEngine {
     if (!cx) return pieces;
     const out: DelegationRecord[] = [];
     let merged = 0;
-    for (const r of pieces) {
+    for (const record of pieces) {
       // A contract, or a delegation to another harness: both delivered from a copy of their own.
-      if (r.state !== 'delivered' || !(CONTRACT_ID_RE.test(r.dlg) || r.harness)) { out.push(r); continue; }
-      const m = cx.ws().merge(r.dlg);
-      if (!m.merged) { this.out(`${r.dlg}  conflicts with what is merged in ${m.conflicts.join(', ')} — ${this.cmd} contract merge ${r.dlg} --prefer ours|theirs`); out.push(r); continue; }
-      table.transition(r.dlg, 'delivered', 'merged');
+      if (record.state !== 'delivered' || !(CONTRACT_ID_RE.test(record.dlg) || record.harness)) { out.push(record); continue; }
+      const outcome = cx.ws().merge(record.dlg);
+      if (!outcome.merged) { this.out(`${record.dlg}  conflicts with what is merged in ${outcome.conflicts.join(', ')} — ${this.cmd} contract merge ${record.dlg} --prefer ours|theirs`); out.push(record); continue; }
+      table.transition(record.dlg, 'delivered', 'merged');
       merged++;
-      out.push({ ...r, state: 'merged' });
+      out.push({ ...record, state: 'merged' });
     }
     if (merged > 0) {
       const landing = cx.ws().land();
@@ -1652,16 +1669,16 @@ export class ApxEngine {
 
   /** `merge <ctr> [--prefer ours|theirs]` — a delivered contract that conflicted, merged with the side that wins. */
   private contractMerge(cx: ContractCx, args: string[]): number {
-    const r = this.contractArg(cx, args[0], 'merge <ctr-id> [--prefer ours|theirs]');
-    if (!r) return this.lastCode;
-    if (r.state !== 'delivered') return this.fail(2, `${r.dlg} is ${r.state} — only a delivered contract is merged`);
+    const record = this.contractArg(cx, args[0], 'merge <ctr-id> [--prefer ours|theirs]');
+    if (!record) return this.lastCode;
+    if (record.state !== 'delivered') return this.fail(2, `${record.dlg} is ${record.state} — only a delivered contract is merged`);
     const prefer = flagValue(args.slice(1), '--prefer');
-    if (prefer !== undefined && prefer !== 'ours' && prefer !== 'theirs') return this.fail(2, `--prefer takes ours (keep what is merged) or theirs (take ${r.dlg}'s)`);
-    const m = cx.ws().merge(r.dlg, prefer);
-    if (!m.merged) return this.fail(3, `${r.dlg} conflicts with what is merged in ${m.conflicts.join(', ')} — merge again with --prefer ours (keep what is merged) or --prefer theirs (take ${r.dlg}'s)`);
-    if (!cx.table.transition(r.dlg, 'delivered', 'merged')) return this.fail(4, `${r.dlg} changed meanwhile — ${this.cmd} contract get ${r.dlg}`);
-    this.out(`${r.dlg}  merged`);
-    if (r.left_out) this.out(`left out: ${r.left_out} — why: ${r.why}`);
+    if (prefer !== undefined && prefer !== 'ours' && prefer !== 'theirs') return this.fail(2, `--prefer takes ours (keep what is merged) or theirs (take ${record.dlg}'s)`);
+    const outcome = cx.ws().merge(record.dlg, prefer);
+    if (!outcome.merged) return this.fail(3, `${record.dlg} conflicts with what is merged in ${outcome.conflicts.join(', ')} — merge again with --prefer ours (keep what is merged) or --prefer theirs (take ${record.dlg}'s)`);
+    if (!cx.table.transition(record.dlg, 'delivered', 'merged')) return this.fail(4, `${record.dlg} changed meanwhile — ${this.cmd} contract get ${record.dlg}`);
+    this.out(`${record.dlg}  merged`);
+    if (record.left_out) this.out(`left out: ${record.left_out} — why: ${record.why}`);
     return this.print(`# then: ${this.cmd} contract land`);
   }
 
@@ -1685,18 +1702,18 @@ function notCompiled(what: string, template: string): string {
 }
 
 function kindRank(kind: string): number {
-  const i = KIND_ORDER.indexOf(kind);
-  return i < 0 ? KIND_ORDER.length : i;
+  const index = KIND_ORDER.indexOf(kind);
+  return index < 0 ? KIND_ORDER.length : index;
 }
 
 function letters(options: string[]): string[] {
-  return options.map((_, i) => String.fromCharCode(97 + i));
+  return options.map((_option, index) => String.fromCharCode(97 + index));
 }
 
 function matches(block: ApBlock, key: string, op: string, val: string): boolean {
   if (key === 'tag') {
     const tag = val.replace(/^#/, '');   // written `#security` in the source, stored bare
-    return op === '=' ? block.tags.includes(tag) : block.tags.some(t => t.toLowerCase().includes(tag.toLowerCase()));
+    return op === '=' ? block.tags.includes(tag) : block.tags.some(blockTag => blockTag.toLowerCase().includes(tag.toLowerCase()));
   }
   const value = key === 'kind' ? block.kind : key === 'name' ? block.name : block.about ?? '';
   return op === '=' ? value === val : value.toLowerCase().includes(val.toLowerCase());
@@ -1705,15 +1722,15 @@ function matches(block: ApBlock, key: string, op: string, val: string): boolean 
 /** Every reference a block's data holds — any `{ kind, target, id }` object — once per target. */
 function uniqueRefs(data: unknown): ApRef[] {
   const found = new Map<string, ApRef>();
-  const walk = (v: unknown): void => {
-    if (Array.isArray(v)) { v.forEach(walk); return; }
-    if (!v || typeof v !== 'object') return;
-    const o = v as Record<string, unknown>;
-    if (typeof o.target === 'string' && typeof o.kind === 'string' && 'id' in o) {
-      if (!found.has(o.target)) found.set(o.target, o as unknown as ApRef);
+  const walk = (value: unknown): void => {
+    if (Array.isArray(value)) { value.forEach(walk); return; }
+    if (!value || typeof value !== 'object') return;
+    const object = value as Record<string, unknown>;
+    if (typeof object.target === 'string' && typeof object.kind === 'string' && 'id' in object) {
+      if (!found.has(object.target)) found.set(object.target, object as unknown as ApRef);
       return;
     }
-    Object.values(o).forEach(walk);
+    Object.values(object).forEach(walk);
   };
   const { args, body } = data as { args?: unknown; body?: unknown };
   walk(args);

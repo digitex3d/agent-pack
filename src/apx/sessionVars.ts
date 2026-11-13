@@ -85,14 +85,14 @@ const is = (field: string, value: string): Filter => ({ field, value, op: '=' })
 /** A record as the store keeps it: numbers as numbers, the rest text, an empty or absent field left out. */
 function docOf(record: object): Doc {
   return Object.fromEntries(Object.entries(record)
-    .filter(([, v]) => v !== undefined && v !== '')
-    .map(([k, v]) => [k, typeof v === 'number' ? v : String(v)]));
+    .filter(([, value]) => value !== undefined && value !== '')
+    .map(([key, value]) => [key, typeof value === 'number' ? value : String(value)]));
 }
 
 /** The engine's driver answers at once; a promise here would be a driver mix-up. */
-function sync<T>(v: T | Promise<T>): T {
-  if (v instanceof Promise) throw new Error("the engine's tables need a driver that answers synchronously");
-  return v;
+function sync<T>(value: T | Promise<T>): T {
+  if (value instanceof Promise) throw new Error("the engine's tables need a driver that answers synchronously");
+  return value;
 }
 
 /** One engine store of the session: opened once, every write checked against its slots. */
@@ -106,7 +106,7 @@ function table(store: OpenStore): { put(doc: Doc): void; get(key: string): Doc |
   };
 }
 
-const str = (v: unknown): string => v === undefined ? '' : String(v);
+const str = (value: unknown): string => value === undefined ? '' : String(value);
 
 /** The variables `agent` sees in one session of a project; a store's file is created when first written. */
 export function openSessionVars(projectRoot: string, sessionId: string, agent: string): SessionVars {
@@ -118,12 +118,12 @@ export function openSessionVars(projectRoot: string, sessionId: string, agent: s
     read: (name, scope) => { const doc = vars[scope].get(name); return doc ? str(doc.value) : null; },
     write: (name, scope, record) => vars[scope].put(docOf({ name, ...record })),
     record: check => checks.put(docOf({ agent, ...check })),
-    checks: cnd => checks.find([is('cnd', cnd), is('agent', agent)]).map(r => ({
-      cnd: str(r.cnd), level: Number(r.level), round: Number(r.round), fingerprint: str(r.fingerprint), model: str(r.model),
-      p: str(r.p), threshold: Number(r.threshold), outcome: r.outcome === 'open' ? 'open' : 'closed', at: str(r.at),
+    checks: cnd => checks.find([is('cnd', cnd), is('agent', agent)]).map(record => ({
+      cnd: str(record.cnd), level: Number(record.level), round: Number(record.round), fingerprint: str(record.fingerprint), model: str(record.model),
+      p: str(record.p), threshold: Number(record.threshold), outcome: record.outcome === 'open' ? 'open' : 'closed', at: str(record.at),
     })),
     executed: record => executors.put(docOf({ agent, ...record, ...(record.holds === undefined ? {} : { holds: String(record.holds) }) })),
     answers: exe => executors.find([is('exe', exe), is('agent', agent)])
-      .filter(r => r.holds === 'true' || r.holds === 'false').map(r => r.holds === 'true'),
+      .filter(record => record.holds === 'true' || record.holds === 'false').map(record => record.holds === 'true'),
   };
 }

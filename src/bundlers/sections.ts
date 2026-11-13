@@ -63,7 +63,7 @@ function scopeHeadingTitle(slug: string): string {
  * callers can then skip the "Tags:" line entirely.
  */
 function renderEntryTagsInline(def: Definition, auto: ReadonlySet<string>): string | null {
-  const extra = def.tags.filter(t => !auto.has(t)).sort();
+  const extra = def.tags.filter(tag => !auto.has(tag)).sort();
   if (extra.length === 0) return null;
   return `Tags: ${extra.join(' ')}`;
 }
@@ -113,8 +113,8 @@ function emitDefinitionEntry<E extends Definition>(
 // ---------------------------------------------------------------------------
 
 /** Unique key for a Definition within a chapter (kind + name — never just name). */
-function moduleKeyOf(e: Definition): string {
-  return `${e.kind}:${e.name}`;
+function moduleKeyOf(definition: Definition): string {
+  return `${definition.kind}:${definition.name}`;
 }
 
 /** Build the `tag -> module keys` map `buildHierarchy` expects, plus the reverse lookup to entries. */
@@ -124,13 +124,13 @@ function buildTagIndex<E extends Definition>(entries: E[]): {
 } {
   const byTag = new Map<string, Set<string>>();
   const byKey = new Map<string, E>();
-  for (const e of entries) {
-    const key = moduleKeyOf(e);
-    byKey.set(key, e);
-    for (const t of e.tags) {
-      const set = byTag.get(t) ?? new Set<string>();
+  for (const definition of entries) {
+    const key = moduleKeyOf(definition);
+    byKey.set(key, definition);
+    for (const tag of definition.tags) {
+      const set = byTag.get(tag) ?? new Set<string>();
       set.add(key);
-      byTag.set(t, set);
+      byTag.set(tag, set);
     }
   }
   return { byTag, byKey };
@@ -150,25 +150,25 @@ function tagHeadingTitle(tag: string): string {
  */
 export function assignLeafNodes(roots: TagNode[]): Map<string, TagNode> {
   const allNodes: TagNode[] = [];
-  const collect = (n: TagNode): void => { allNodes.push(n); n.children.forEach(collect); };
+  const collect = (node: TagNode): void => { allNodes.push(node); node.children.forEach(collect); };
   roots.forEach(collect);
 
   const candidatesByModule = new Map<string, TagNode[]>();
   for (const node of allNodes) {
-    const childMembers = new Set(node.children.flatMap(c => c.members));
-    for (const m of node.members) {
-      if (childMembers.has(m)) continue; // covered by a more specific descendant
-      const list = candidatesByModule.get(m) ?? [];
+    const childMembers = new Set(node.children.flatMap(child => child.members));
+    for (const member of node.members) {
+      if (childMembers.has(member)) continue; // covered by a more specific descendant
+      const list = candidatesByModule.get(member) ?? [];
       list.push(node);
-      candidatesByModule.set(m, list);
+      candidatesByModule.set(member, list);
     }
   }
 
   const assignment = new Map<string, TagNode>();
   for (const [moduleKey, candidates] of candidatesByModule) {
-    const winner = candidates.length === 1 ? candidates[0] : [...candidates].sort((a, b) => {
-      if (a.members.length !== b.members.length) return a.members.length - b.members.length;
-      return a.tag.localeCompare(b.tag);
+    const winner = candidates.length === 1 ? candidates[0] : [...candidates].sort((left, right) => {
+      if (left.members.length !== right.members.length) return left.members.length - right.members.length;
+      return left.tag.localeCompare(right.tag);
     })[0];
     assignment.set(moduleKey, winner);
   }
@@ -198,9 +198,9 @@ export interface TagRenderNode {
  */
 export function buildTagRenderTree(node: TagNode, assignment: ReadonlyMap<string, TagNode>): TagRenderNode {
   const ownMembers = node.members
-    .filter(m => assignment.get(m) === node)
-    .sort((a, b) => a.localeCompare(b));
-  const children = node.children.map(c => buildTagRenderTree(c, assignment));
+    .filter(member => assignment.get(member) === node)
+    .sort((left, right) => left.localeCompare(right));
+  const children = node.children.map(child => buildTagRenderTree(child, assignment));
   const impliedTags = new Set([node.tag, ...node.aliases]);
 
   if (ownMembers.length === 0 && children.length === 1) {
@@ -235,8 +235,8 @@ function emitTagTree<E extends Definition>(
   if (node.ownMembers.length === 0 && node.children.length === 0) return '';
   let out = `${headingLine(depth, node.title)}\n\n`;
   const here = new Set([...ancestorTags, ...node.impliedTags]);
-  for (const m of node.ownMembers) {
-    out += emitDefinitionEntry(ctx, byKey.get(m)!, spec, depth + 1, here);
+  for (const member of node.ownMembers) {
+    out += emitDefinitionEntry(ctx, byKey.get(member)!, spec, depth + 1, here);
   }
   for (const child of node.children) {
     out += emitTagTree(ctx, child, spec, depth + 1, byKey, here);
@@ -264,7 +264,7 @@ export function emitChapter<E>(ctx: BundleContext, spec: SectionSpec<E>): string
   // Detect tagged Definition entries so non-Definition specs (Tools, Memory)
   // keep the legacy flat layout without paying the hierarchy-build cost.
   const hasTags = spec.entries.some(
-    e => Array.isArray((e as unknown as Definition).tags) && (e as unknown as Definition).tags.length > 0,
+    entry => Array.isArray((entry as unknown as Definition).tags) && (entry as unknown as Definition).tags.length > 0,
   );
 
   if (!hasTags) {
@@ -287,7 +287,7 @@ export function emitChapter<E>(ctx: BundleContext, spec: SectionSpec<E>): string
   // Tag-hierarchy path: entries with no tags at all render flat first (no
   // synthetic grouping invented for them), then the tag forest.
   const defSpec = spec as unknown as SectionSpec<Definition>;
-  const untagged = defSpec.entries.filter(e => e.tags.length === 0);
+  const untagged = defSpec.entries.filter(entry => entry.tags.length === 0);
   for (const source of untagged) {
     out += emitDefinitionEntry(ctx, source, defSpec, 2);
   }

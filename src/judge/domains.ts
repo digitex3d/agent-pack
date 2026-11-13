@@ -22,11 +22,11 @@ import { resolve } from 'node:path';
 import type { JudgeRun } from './phase.js';
 
 /** The 1-based line of a formula in its domain file — the first line of its keyword, its `!`s and its text. */
-function formulaLine(file: string, f: DomainFormula): number {
+function formulaLine(file: string, formula: DomainFormula): number {
   const lines = readFileSync(file, 'utf-8').split(/\r?\n/);
-  const head = new RegExp(`^\\s*${f.keyword}!{${f.level}}\\s`);
-  const i = lines.findIndex(l => head.test(l) && l.includes(f.formula));
-  return i + 1 || 1;
+  const head = new RegExp(`^\\s*${formula.keyword}!{${formula.level}}\\s`);
+  const lineIndex = lines.findIndex(line => head.test(line) && line.includes(formula.formula));
+  return lineIndex + 1 || 1;
 }
 
 /** A file's text as the judge reads it — empty for a binary file: its path alone tells. */
@@ -48,39 +48,39 @@ function textOf(path: string): string {
 export async function judgeDomainFormulas(doc: ApDocument, ctx: BundleContext, run: JudgeRun | null | undefined, projectRoot: string): Promise<{ errors: LintError[]; unjudged: Set<string> }> {
   const errors: LintError[] = [];
   const unjudged = new Set<string>();
-  for (const d of doc.byKind('domain') as DomainBlock[]) {
-    if (d.formulas.length === 0) continue;
-    const file = ctx.domains.find(e => e.name === d.name)?.path ?? null;
+  for (const domain of doc.byKind('domain') as DomainBlock[]) {
+    if (domain.formulas.length === 0) continue;
+    const file = ctx.domains.find(entry => entry.name === domain.name)?.path ?? null;
     if (!run) {
-      for (const f of d.formulas) errors.push({ file: file ?? d.address, line: file ? formulaLine(file, f) : 1, message: noJudgeMessage(f) });
-      unjudged.add(d.name);
+      for (const formula of domain.formulas) errors.push({ file: file ?? domain.address, line: file ? formulaLine(file, formula) : 1, message: noJudgeMessage(formula) });
+      unjudged.add(domain.name);
       continue;
     }
-    d.thresholds = run.domains;
+    domain.thresholds = run.domains;
     const unit = file ? run.file(file, ctx.sources) : null;
     // The judge's own lock is no file of any domain.
     const lock = relativeWithin(projectRoot, run.options.lock);
-    for (const f of d.formulas) {
-      const question = formulaQuestion(f);
-      const candidates = projectFiles(projectRoot, rel => rel !== lock && (f.globs.length === 0 || matchesAnyGlob(rel, f.globs)));
+    for (const formula of domain.formulas) {
+      const question = formulaQuestion(formula);
+      const candidates = projectFiles(projectRoot, rel => rel !== lock && (formula.globs.length === 0 || matchesAnyGlob(rel, formula.globs)));
       const verdicts = await Promise.all(candidates.map(async rel => [rel, await run.fileVerdict(question, rel, textOf(resolve(projectRoot, rel)))] as const));
-      const p: Record<string, number> = {};
+      const probabilities: Record<string, number> = {};
       let missed: string | null = null;
-      for (const [rel, v] of verdicts) {
-        if (!('p' in v)) { missed ??= v.reason; continue; }
-        p[rel] = v.p;
-        run.usedKeys.add(v.key);
-        if (unit && v.machine !== undefined) unit.verdicts.set(v.key, v.machine);
+      for (const [rel, verdict] of verdicts) {
+        if (!('p' in verdict)) { missed ??= verdict.reason; continue; }
+        probabilities[rel] = verdict.p;
+        run.usedKeys.add(verdict.key);
+        if (unit && verdict.machine !== undefined) unit.verdicts.set(verdict.key, verdict.machine);
       }
-      f.p = p;
+      formula.p = probabilities;
       if (unit) unit.rejudged = true;
       if (missed !== null) {
-        unjudged.add(d.name);
+        unjudged.add(domain.name);
         if (unit) unit.incomplete = true;
         const diagnostic: LintError = {
-          file: file ?? d.address, line: file ? formulaLine(file, f) : 1,
+          file: file ?? domain.address, line: file ? formulaLine(file, formula) : 1,
           severity: run.options.offline === 'error' ? 'error' : 'warning', source: 'judge',
-          message: `DOMAIN ${d.name}: ${f.keyword}${'!'.repeat(f.level)} ${f.formula}: some files not judged yet — ${missed}; they stay outside the domain`,
+          message: `DOMAIN ${domain.name}: ${formula.keyword}${'!'.repeat(formula.level)} ${formula.formula}: some files not judged yet — ${missed}; they stay outside the domain`,
         };
         if (diagnostic.severity === 'error') errors.push(diagnostic);
         else run.warn({ ...diagnostic, code: 'domain-formula' });

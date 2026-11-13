@@ -16,14 +16,14 @@ export function splitList(text: string): string[] {
   const items: string[] = [];
   let depth = 0;
   let item = '';
-  for (const c of text) {
-    if (c === '{') depth++;
-    else if (c === '}' && depth > 0) depth--;
-    if (c === ',' && depth === 0) { items.push(item); item = ''; }
-    else item += c;
+  for (const char of text) {
+    if (char === '{') depth++;
+    else if (char === '}' && depth > 0) depth--;
+    if (char === ',' && depth === 0) { items.push(item); item = ''; }
+    else item += char;
   }
   items.push(item);
-  return items.map(s => s.trim()).filter(Boolean);
+  return items.map(part => part.trim()).filter(Boolean);
 }
 
 /**

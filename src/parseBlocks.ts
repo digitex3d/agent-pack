@@ -36,14 +36,14 @@ export function isExportedVar(block: Block): block is Block & { variable: VarDec
 }
 
 /** An `EXPORT … VAR …` line — the lexer gives it the keyword EXPORT (a block's EXPORT opens a block). */
-export function exportedVar(t: Token): Extract<Token, { kind: 'keyword' }> | null {
-  return t.kind === 'keyword' && t.keyword === EXPORT_MODIFIER ? t : null;
+export function exportedVar(token: Token): Extract<Token, { kind: 'keyword' }> | null {
+  return token.kind === 'keyword' && token.keyword === EXPORT_MODIFIER ? token : null;
 }
 
 /** An `EXPORT … VAR …` line's declaration, or what is wrong with it — the parser's and the lint's one check. */
-export function readExportedVar(t: Extract<Token, { kind: 'keyword' }>): VarDecl | { error: string } {
-  if (t.indent > 0) return { error: EXPORT_TOP_LEVEL_ONLY };
-  return parseExportedVar(t.rest) ?? { error: `\`EXPORT ${t.rest}\` is no declaration — write \`EXPORT VAR <name>\`` };
+export function readExportedVar(token: Extract<Token, { kind: 'keyword' }>): VarDecl | { error: string } {
+  if (token.indent > 0) return { error: EXPORT_TOP_LEVEL_ONLY };
+  return parseExportedVar(token.rest) ?? { error: `\`EXPORT ${token.rest}\` is no declaration — write \`EXPORT VAR <name>\`` };
 }
 
 export interface Line {
@@ -125,12 +125,12 @@ export interface ParseResult {
  * path: PROCEDURE, TEMPLATE, STEP, WHEN, IF, FLOW). Returns the normalised
  * `{ key, rest }` pair, or null when the token is not a block-opener.
  */
-function asBlockOpener(t: Token): { key: string; rest: string; executor?: number } | null {
-  if (t.kind === 'blockOpener') return { key: t.key, rest: t.rest };
-  if (t.kind === 'keyword') {
-    const trimmed = t.rest.trimEnd();
+function asBlockOpener(token: Token): { key: string; rest: string; executor?: number } | null {
+  if (token.kind === 'blockOpener') return { key: token.key, rest: token.rest };
+  if (token.kind === 'keyword') {
+    const trimmed = token.rest.trimEnd();
     if (trimmed.endsWith(':')) {
-      return { key: String(t.keyword), rest: trimmed.slice(0, -1).trim(), ...(t.executor ? { executor: t.executor } : {}) };
+      return { key: String(token.keyword), rest: trimmed.slice(0, -1).trim(), ...(token.executor ? { executor: token.executor } : {}) };
     }
   }
   return null;
@@ -147,12 +147,12 @@ function asBlockOpener(t: Token): { key: string; rest: string; executor?: number
 function splitNameAndRest(rest: string): { name: string | null; rest: string } {
   const trimmed = rest.trim();
   if (trimmed === '') return { name: null, rest: '' };
-  const m = trimmed.match(/^(\S+)(?:\s+(.*))?$/);
-  if (!m) return { name: null, rest: '' };
+  const match = trimmed.match(/^(\S+)(?:\s+(.*))?$/);
+  if (!match) return { name: null, rest: '' };
   // Defensive cleanup: users sometimes write `PROCEDURE foo : ` with a
   // space before the colon, so the colon survives the lexer's strip.
-  const name = m[1].replace(/:$/, '');
-  return { name: name === '' ? null : name, rest: (m[2] ?? '').trim() };
+  const name = match[1].replace(/:$/, '');
+  return { name: name === '' ? null : name, rest: (match[2] ?? '').trim() };
 }
 
 /**
@@ -183,11 +183,11 @@ function resolveExportModifier(rest: string): ExportResolution {
   if (trimmed === '') {
     return { ok: false, error: 'EXPORT requires a block KIND and a name' };
   }
-  const m = trimmed.match(/^(\S+)(?:\s+(.*))?$/);
+  const match = trimmed.match(/^(\S+)(?:\s+(.*))?$/);
   // `trimmed` is non-empty, so the leading-token match always succeeds.
   // `EXPORT PROCEDURE** name:` — the stars are the head's executor mark (src/executor.ts).
-  const { word: kind, executor } = splitExecutorMark(m![1].replace(/:$/, ''));
-  const tail = (m![2] ?? '').trim();
+  const { word: kind, executor } = splitExecutorMark(match![1].replace(/:$/, ''));
+  const tail = (match![2] ?? '').trim();
 
   const innerType = blockTypeOf(kind);
   if (innerType === null || innerType.modifier) {
@@ -209,8 +209,8 @@ function resolveExportModifier(rest: string): ExportResolution {
  * down only: a block nested deeper (in a PROCEDURE, say) is not the agent's.
  */
 export function agentNestedBlocks(blocks: readonly Block[], key?: string): { agent: Block; block: Block }[] {
-  return blocks.filter(b => AGENT_KEYS.has(b.key)).flatMap(agent => agent.children
-    .filter((c): c is Block => c.type === 'block' && (key === undefined || c.key === key))
+  return blocks.filter(candidate => AGENT_KEYS.has(candidate.key)).flatMap(agent => agent.children
+    .filter((child): child is Block => child.type === 'block' && (key === undefined || child.key === key))
     .map(block => ({ agent, block })));
 }
 
@@ -221,29 +221,29 @@ export function parseBlocks(source: string): ParseResult {
   const prologue: Token[] = [];
 
   // --- Phase 1: collect prologue (blanks, comments, top-level IMPORTs) ---
-  let i = 0;
-  while (i < tokens.length) {
-    const t = tokens[i];
-    if (asBlockOpener(t) !== null || exportedVar(t)?.indent === 0 || t.kind === 'decorator') break;
-    if (t.kind === 'blank' || t.kind === 'comment') {
-      prologue.push(t);
-      i++;
+  let index = 0;
+  while (index < tokens.length) {
+    const token = tokens[index];
+    if (asBlockOpener(token) !== null || exportedVar(token)?.indent === 0 || token.kind === 'decorator') break;
+    if (token.kind === 'blank' || token.kind === 'comment') {
+      prologue.push(token);
+      index++;
       continue;
     }
-    if (t.kind === 'keyword' && t.indent === 0 && t.keyword === 'IMPORT') {
-      prologue.push(t);
-      i++;
+    if (token.kind === 'keyword' && token.indent === 0 && token.keyword === 'IMPORT') {
+      prologue.push(token);
+      index++;
       continue;
     }
     // Anything else before the first block-opener is illegal. Every token
     // that reaches this point carries `line` and `raw` (blank+comment were
     // consumed above; block-openers exit the loop above).
-    const raw = 'raw' in t ? t.raw : '';
+    const raw = 'raw' in token ? token.raw : '';
     errors.push({
-      line: t.line,
+      line: token.line,
       message: `content before first primitive header: "${raw.trim()}"`,
     });
-    i++;
+    index++;
   }
 
   // --- Phase 2: walk the remaining tokens, nest by indent ---
@@ -272,41 +272,41 @@ export function parseBlocks(source: string): ParseResult {
   // The decorators read above the next block, waiting for it (src/decorators.ts).
   let pending: (DecoratorLine & { indent: number })[] = [];
   const dangling = (): void => {
-    for (const d of pending) errors.push({ line: d.line, message: danglingDecoratorMessage(d.key), decorator: true });
+    for (const decorator of pending) errors.push({ line: decorator.line, message: danglingDecoratorMessage(decorator.key), decorator: true });
     pending = [];
   };
   /** The decorators the block `key` opened at `indent` takes: those right above it, at its indent — each where it may stand. */
   const takePending = (indent: number, key: string): DecoratorLine[] | undefined => {
     if (pending.length === 0) return undefined;
-    if (pending.some(d => d.indent !== indent)) { dangling(); return undefined; }
-    for (const d of pending) placed(d, key);
+    if (pending.some(decorator => decorator.indent !== indent)) { dangling(); return undefined; }
+    for (const decorator of pending) placed(decorator, key);
     const taken = pending.map(({ key, rest, line }) => ({ key, rest, line }));
     pending = [];
     return taken;
   };
   /** A decorator held to some blocks, above another one (`block`) or opening one (null): the error, once. */
-  const placed = (d: { key: string; line: number }, block: string | null): void => {
-    const spec = decoratorOf(d.key);
+  const placed = (decorator: { key: string; line: number }, block: string | null): void => {
+    const spec = decoratorOf(decorator.key);
     const message = spec ? placementMessage(spec, block) : null;
-    if (message) errors.push({ line: d.line, message, decorator: true });
+    if (message) errors.push({ line: decorator.line, message, decorator: true });
   };
 
-  while (i < tokens.length) {
-    const t = tokens[i++];
+  while (index < tokens.length) {
+    const token = tokens[index++];
 
-    if (t.kind === 'blank' || t.kind === 'comment') continue;
+    if (token.kind === 'blank' || token.kind === 'comment') continue;
 
-    if (t.kind === 'decorator') {
-      if (!t.opens) {
-        pending.push({ key: t.key, rest: t.rest, line: t.line, indent: t.indent });
+    if (token.kind === 'decorator') {
+      if (!token.opens) {
+        pending.push({ key: token.key, rest: token.rest, line: token.line, indent: token.indent });
         continue;
       }
-      popUntilParentOf(t.indent);
-      const above = takePending(t.indent, `${DECORATOR_MARK}${t.key}`);
-      placed(t, null);
+      popUntilParentOf(token.indent);
+      const above = takePending(token.indent, `${DECORATOR_MARK}${token.key}`);
+      placed(token, null);
       const block: Block = {
-        type: 'block', key: `${DECORATOR_MARK}${t.key}`, name: null, rest: t.rest, children: [],
-        startLine: t.line, indent: t.indent, exported: false, decorator: { key: t.key, rest: t.rest, line: t.line },
+        type: 'block', key: `${DECORATOR_MARK}${token.key}`, name: null, rest: token.rest, children: [],
+        startLine: token.line, indent: token.indent, exported: false, decorator: { key: token.key, rest: token.rest, line: token.line },
         ...(above ? { decorators: above } : {}),
       };
       addNode(block);
@@ -317,7 +317,7 @@ export function parseBlocks(source: string): ParseResult {
     // `EXPORT VAR x` is a declaration a module exports: a top-level block with
     // no body, named by its variable, so IMPORT resolves it like any export.
     // Indented, it is no declaration — a template's literal text, or the lint's error.
-    const ev = exportedVar(t);
+    const ev = exportedVar(token);
     if (ev && ev.indent === 0) {
       const decl = readExportedVar(ev);
       if (ev.indent === 0) popUntilParentOf(0);
@@ -326,9 +326,9 @@ export function parseBlocks(source: string): ParseResult {
       continue;
     }
 
-    const bo = asBlockOpener(t);
-    if (bo !== null && 'indent' in t) {
-      popUntilParentOf(t.indent);
+    const bo = asBlockOpener(token);
+    if (bo !== null && 'indent' in token) {
+      popUntilParentOf(token.indent);
 
       // EXPORT is a visibility modifier wrapping an inner block. Unwrap it to
       // the inner KIND + name and flag the block exported. The modifier key
@@ -337,20 +337,20 @@ export function parseBlocks(source: string): ParseResult {
       let exported = false;
       let modifierFailed = false;
       if (bo.key === EXPORT_MODIFIER) {
-        if (t.indent > 0) {
+        if (token.indent > 0) {
           // Only a top-level block can be exported. Reject the modifier but
           // still parse the inner block (private) so its children stay nested.
           errors.push({
-            line: t.line,
+            line: token.line,
             message: EXPORT_TOP_LEVEL_ONLY,
           });
         }
         const resolved = resolveExportModifier(bo.rest);
         if (resolved.ok) {
           opener = resolved.inner;
-          exported = t.indent === 0;
+          exported = token.indent === 0;
         } else {
-          errors.push({ line: t.line, message: resolved.error });
+          errors.push({ line: token.line, message: resolved.error });
           modifierFailed = true;
           // Unresolvable EXPORT header: keep the raw opener as the block key so
           // the indent stack stays consistent for any indented children.
@@ -361,15 +361,15 @@ export function parseBlocks(source: string): ParseResult {
       // `COMPUTE <name>:` is a procedure a program carries out — src/executor.ts.
       const compute = computeHead(opener.key);
       if (compute) opener = { ...opener, key: compute.key, executor: compute.executor };
-      const above = takePending(t.indent, opener.key);
+      const above = takePending(token.indent, opener.key);
       const block: Block = {
         type: 'block',
         key: opener.key,
         name,
         rest,
         children: [],
-        startLine: t.line,
-        indent: t.indent,
+        startLine: token.line,
+        indent: token.indent,
         exported,
         ...(opener.executor ? { executor: opener.executor } : {}),
         ...(compute ? { computed: true } : {}),
@@ -381,7 +381,7 @@ export function parseBlocks(source: string): ParseResult {
       // modifier has already reported its own diagnostic — don't pile on.
       if (!modifierFailed && blockTypeOf(opener.key) !== null && name === null) {
         errors.push({
-          line: t.line,
+          line: token.line,
           message: `${opener.key} requires a name`,
         });
       }
@@ -390,30 +390,30 @@ export function parseBlocks(source: string): ParseResult {
       continue;
     }
 
-    if (t.kind === 'keyword') {
+    if (token.kind === 'keyword') {
       dangling();
-      popUntilParentOf(t.indent);
+      popUntilParentOf(token.indent);
       addNode({
         type: 'line',
-        keyword: String(t.keyword),
-        rest: t.rest,
-        raw: t.raw,
-        line: t.line,
-        indent: t.indent,
+        keyword: String(token.keyword),
+        rest: token.rest,
+        raw: token.raw,
+        line: token.line,
+        indent: token.indent,
       });
       continue;
     }
 
-    if (t.kind === 'procRef' || t.kind === 'unknown' || t.kind === 'rawLine') {
+    if (token.kind === 'procRef' || token.kind === 'unknown' || token.kind === 'rawLine') {
       dangling();
       // Opaque content — attach to the current block under a sentinel keyword
       // so PR3 renderers can roundtrip them verbatim. No error: the lexer's
       // `unknown` already signals weirdness; failing the parse would be too
       // aggressive while the bundler still routes some pass-through prose.
-      const indent = 'indent' in t ? t.indent : 0;
+      const indent = 'indent' in token ? token.indent : 0;
       popUntilParentOf(indent);
-      const raw = 'raw' in t ? t.raw : '';
-      const line = 'line' in t ? t.line : 0;
+      const raw = 'raw' in token ? token.raw : '';
+      const line = 'line' in token ? token.line : 0;
       addNode({
         type: 'line',
         keyword: '__opaque__',
@@ -428,15 +428,15 @@ export function parseBlocks(source: string): ParseResult {
   dangling();
   // A decorator's block holds the lines it decorates: one that holds none says nothing, and a definition is decorated from above.
   const emptyDecorators = (bs: readonly Node[]): void => {
-    for (const b of bs) {
-      if (b.type !== 'block') continue;
-      if (b.decorator && b.children.length === 0) errors.push({ line: b.startLine, message: emptyDecoratorMessage(b.decorator.key), decorator: true });
-      if (b.decorator) {
-        for (const c of b.children) {
-          if (c.type === 'block' && !c.decorator && blockTypeOf(c.key)) errors.push({ line: c.startLine, message: definitionInDecoratorMessage(b.decorator.key, c.key), decorator: true });
+    for (const node of bs) {
+      if (node.type !== 'block') continue;
+      if (node.decorator && node.children.length === 0) errors.push({ line: node.startLine, message: emptyDecoratorMessage(node.decorator.key), decorator: true });
+      if (node.decorator) {
+        for (const child of node.children) {
+          if (child.type === 'block' && !child.decorator && blockTypeOf(child.key)) errors.push({ line: child.startLine, message: definitionInDecoratorMessage(node.decorator.key, child.key), decorator: true });
         }
       }
-      emptyDecorators(b.children);
+      emptyDecorators(node.children);
     }
   };
   emptyDecorators(blocks);
@@ -444,20 +444,20 @@ export function parseBlocks(source: string): ParseResult {
   // --- Phase 3: validate uniqueness of (key, name) across the file ---
   const seen = new Map<string, number>();
   const walkForDup = (bs: Block[]): void => {
-    for (const b of bs) {
-      if (b.name !== null) {
-        const k = `${b.key}::${b.name}`;
-        const prior = seen.get(k);
+    for (const block of bs) {
+      if (block.name !== null) {
+        const key = `${block.key}::${block.name}`;
+        const prior = seen.get(key);
         if (prior !== undefined) {
           errors.push({
-            line: b.startLine,
-            message: `duplicate primitive ${b.key.toLowerCase()} ${b.name} (first declared at line ${prior})`,
+            line: block.startLine,
+            message: `duplicate primitive ${block.key.toLowerCase()} ${block.name} (first declared at line ${prior})`,
           });
         } else {
-          seen.set(k, b.startLine);
+          seen.set(key, block.startLine);
         }
       }
-      walkForDup(b.children.filter((c): c is Block => c.type === 'block'));
+      walkForDup(block.children.filter((child): child is Block => child.type === 'block'));
     }
   };
   walkForDup(blocks);
