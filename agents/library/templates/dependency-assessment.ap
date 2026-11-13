@@ -1,0 +1,22 @@
+# dependency-assessment — the assessment of one candidate npm package, from real data
+IMPORT dependency-criterion FROM @main.templates
+
+EXPORT TEMPLATE dependency-assessment:
+    ABOUT  one candidate npm package, each criterion with its value and source, and the verdict
+    SLOTS:
+        package:   TEXT MAX_WORDS 3  "the package name and the version assessed, as name@version"
+        criteria:  LIST <dependency-criterion> >=1  "one row per criterion of validate-dependency"
+        verdict:   ENUM[recommended, with-reservations, avoid]  "whether to add it"
+        reasons:   TEXT MAX_WORDS 60  "why the verdict: the criteria that decided it"
+    BODY:
+        package: {package}
+        {criteria}
+        verdict: {verdict} — {reasons}
+    EXAMPLE:
+        package: picomatch@4.0.2
+        - license: MIT, compatible with Apache-2.0 (npm view picomatch license)
+        - weekly downloads: 98,412,331 (api.npmjs.org/downloads/point/last-week/picomatch)
+        - last release: 2024-03-26 (gh api repos/micromatch/picomatch/releases)
+        - vulnerabilities: none (osv.dev query, npm audit on a scratch install)
+        - transitive dependencies: 0 (npm view picomatch dependencies)
+        verdict: recommended — permissive license, no dependency, no known vulnerability, used across the ecosystem

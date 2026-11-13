@@ -248,7 +248,7 @@
                   "intros": { "WITH": "For the work below, use", "WITHIN": "For the work below, act only within" } },
 
   "apx": {
-    "$comment": "What the apx says on its verbs. `deliver`: a contract delivered from its copy (`delegate deliver <ctr-id>`) — `refused` the reason it is not, `done` what it says when it is.",
+    "$comment": "What the apx says on its verbs, one area each (src/apx/engine.ts, src/apx/delegations.ts); {cmd} is the command prefix the engine always fills. `deliver`: a contract delivered from its copy (`delegate deliver <ctr-id>`) — `refused` the reason it is not, `done` what it says when it is.",
     "deliver": {
       "refused": {
         "notRunning": "{id} is {state} — only a running contract is delivered",
@@ -264,6 +264,191 @@
         "leftOut": "left out: {files} — why: {why}",
         "answer": "answer: {answer}"
       }
+    },
+    "start": {
+      "whole": "# your whole definition — small enough to read at once; still served here: {cmd} help",
+      "quiz": "# quiz — answer with: {cmd} start {form}",
+      "unsure": "# '?' = don't know: it costs nothing and gets you that kind's introduction. a guess costs you a wrong prompt.",
+      "badAnswer": "bad answer '{arg}': expected <n>=<letter> with n in 1..{count} — the quiz: {cmd} start",
+      "allCorrect": "# all {count} correct — your scope:",
+      "missed": "# missed: {kinds} — read how each works, then your scope:",
+      "opened": "\n# opened for you — the rest, when a step needs it: {cmd} get <id>"
+    },
+    "dispatch": {
+      "renamed": "'{verb}' is now 'delegate' — {cmd} delegate {args}",
+      "unknownVerb": "unknown verb '{verb}' — the verbs: {cmd} help"
+    },
+    "scope": {
+      "perimeter": "perimeter: you write only {writes} — {reads}",
+      "writesNothing": "nothing",
+      "readsOnly": "you read only {globs}",
+      "readsAnything": "read whatever you need",
+      "uncertain": "uncertain: a judge could not tell whether these belong — decide each in context: {entries}",
+      "uncertainEntry": "{file} (p={probability})",
+      "noStores": "  (no stores declared)",
+      "dimensions": "dimensions:  — answers about the code, kept by the apx; read one before reasoning about a file it covers: {cmd} dimension read <dim-id> <file>",
+      "checks": "checks:  — a judge decides each: {cmd} check <id>",
+      "executors": "executors:  — a delegate or a program carries each out; its contract: {cmd} get <id>",
+      "requests": "requests arrive as: {shape}",
+      "answer": "answer as: {shape}  — your own rules apply in addition to the shape"
+    },
+    "ls": {
+      "badFilter": "bad filter '{arg}' — filters look like: {cmd} ls kind=template tag=planning name~idea about~plan"
+    },
+    "find": {
+      "needsText": "find needs text — example: {cmd} find plan"
+    },
+    "flow": {
+      "notFlow": "{id} is a {kind}, not a flow — the flows: {cmd} ls kind=flow",
+      "steps": "# flow {name} — carry out its steps in order:"
+    },
+    "executor": {
+      "needsId": "{verb} needs a contract id of this agent (exe-…) — the line that asks for it names it; all of them: {cmd} scope",
+      "unfilled": "{empty}: fill it before this piece is carried out",
+      "intoNotProcedure": "--into stores a procedure's result — {id} is a {site}{stored}",
+      "intoStored": ", stored in `{into}` already",
+      "intoNeedsVariable": "--into needs a variable of this agent{none}: {cmd} scope",
+      "intoNone": " — `{name}` is none",
+      "stored": "# stored as `{into}` for this session — read it: {cmd} get {into}",
+      "describe": "# {site} {id}  — {who}{by} carries it out, never you",
+      "input": "input: {keys}  — one key each, nothing else"
+    },
+    "program": {
+      "notProgram": "a delegate carries out {id}, not a program: hand it over with `{cmd} input {id}`, then `{cmd} answer {id} -`",
+      "noTimeout": "{folder}/manifest.json sets no timeout_ms — set one",
+      "testsMissing": "{folder}/tests.json is missing or not JSON — a program comes with its tests",
+      "testsEmpty": "{folder}/tests.json holds no case — a program comes with its tests",
+      "testTimeout": "the program of {id} did not answer its test \"{why}\" within {timeout} ms — raise timeout_ms in {folder}/manifest.json, or make the program faster",
+      "testFailed": "the program of {id} fails its own test \"{why}\": {failure} — fix the program or the test, then run again",
+      "needsInput": "{id} takes its input shaped as `{shape}`: {cmd} run {id} '<json>'",
+      "inputNotJson": "the input of {id} is not JSON",
+      "timedOut": "the program of {id} did not answer within {timeout} ms — carry this one out yourself, and say so",
+      "refused": "the program of {id} refused its input ({reason}) — stop the procedure and report it; never carry this piece out yourself",
+      "broken": "the program of {id} answered outside its contract: {broken} — fix the program, then run again"
+    },
+    "check": {
+      "needsId": "check needs a condition id — the line that asks for the check names it: {cmd} check cnd-…",
+      "unknown": "no checked condition with id '{id}' in this agent — its checks: {cmd} scope",
+      "noJudge": "this apx records no judge for its checks — add checks: { adapter: 'jev' } to agent-pack.config.mjs, then run agent-pack bundle all",
+      "gateStaysClosed": "{reason} — the gate stays closed",
+      "judgeNotLoaded": "the judge `{adapter}` cannot be loaded by the apx ({reason})",
+      "failed": "the check could not be run or recorded: {reason}",
+      "gateStayedClosed": "the gate stayed closed — {gate}",
+      "gateOpened": "the gate opened (p={probability})",
+      "empty": "{empty}: the condition cannot hold",
+      "emptyGate": "a variable it reads is empty",
+      "tooLarge": "the state is too large for the judge ({length} characters, at most {limit}) — it was not sent",
+      "tooLargeGate": "its state is too large for the judge",
+      "noAnswer": "the judge could not answer ({why})",
+      "noProbability": "the judge gave no probability",
+      "holds": "the judge answered p={probability}, at or above {threshold} — the condition holds",
+      "doesNotHold": "the judge answered p={probability}, below {threshold} — the condition does not hold",
+      "belowGate": "p={probability}, below {threshold}",
+      "heading": "# check {id}  {keyword}  — a judge decides it: {cmd} check {id}",
+      "sealed": "# sealed — what it checks is the judge's alone, and is not shown",
+      "state": "state: {variables}  — each variable as stored in this session"
+    },
+    "lookup": {
+      "needsId": "{verb} needs a block id — example: {cmd} {verb} {id}",
+      "fellow": "{id} is an agent defined in its own executable — run: {sibling} scope",
+      "notFound": "no block with id '{name}' and no variable named so — list them: {cmd} ls",
+      "nothingInside": "  (nothing inside this agent)"
+    },
+    "variables": {
+      "empty": "`{name}` is empty — nothing is stored in it in this session",
+      "constant": "# constant {name} = {value}  — fixed at compile time: its value is written where it is read",
+      "valueEmpty": "# value: (empty — nothing stored in this session yet)",
+      "setNeeds": "set needs a variable and its value — {cmd} set <name> <value>, or {cmd} set <name> - with the value on stdin",
+      "setConstant": "`{name}` is a constant, fixed at compile time — only a variable is set; nothing was written",
+      "setUnknown": "no variable `{name}` in this agent — the variables: {cmd} ls kind=var; nothing was written",
+      "setRefused": "{reason} — nothing was written",
+      "setDone": "# {name} stored for this session — read it: {cmd} get {name}",
+      "nothingDone": "{reason} — nothing was read or written",
+      "noAdapter": "{needs} the harness session id, and this agent was compiled without an adapter that names where it is",
+      "notSet": "{needs} the harness session id, and {env} is not set",
+      "unusable": "{env} holds no usable session id (letters, digits, . _ - only)",
+      "needs": "variables need"
+    },
+    "contract": {
+      "verbUnknown": "'{verb}' is no verb of contract",
+      "verbMissing": "contract takes a verb",
+      "verbProblem": "{problem} — {cmd} contract {verbs}",
+      "failed": "the contracts could not be read or written: {reason}",
+      "markUnknown": "{id} is no MARK of this agent's flows",
+      "markMissing": "a MARK id is needed (mrk-…)",
+      "markProblem": "{problem} — {cmd} contract {usage}; the compiled flow names it",
+      "idMissing": "a contract id is needed (ctr-…) — {cmd} contract {usage}",
+      "noContract": "no contract {id} in this session — {cmd} contract list",
+      "specOnStdin": "the spec comes on stdin — {cmd} contract {usage}",
+      "zonesFull": "{list} holds {max} zones already — the MARK's limit; nothing was written",
+      "specBreaks": "the spec breaks the form of {spec}: {issues}{example}; nothing was written",
+      "specExample": " — a spec is JSON shaped like {example}",
+      "listRefused": "`{list}` holds the ids of its contracts: {reason} — declare it as a plain variable; nothing was written",
+      "marks": "# write `{open}` where its zone starts and `{close}` where it ends, each inside a comment — in any files; the marks stay",
+      "whoMissing": "say who carries the contracts out — {cmd} contract {usage}",
+      "recipeMissing": "{harness}'s recipe was not compiled into {name} — write `DELEGATE {list} BY {by}` in its flow and bundle again; nothing was started",
+      "nothingMarked": "# {list}: no zone was marked — nothing to start",
+      "zoneMissing": "{id}: no zone is marked — write `{open}` … `{close}` inside comments, or give its MARK a WITHIN domain",
+      "startRefused": "nothing was started — fix the {count} above and start again",
+      "started": "# {started} started — hand each one to {by} with its id; {takesBack}",
+      "startedElsewhere": "# {started} started on {harness} — run each command above with your shell, all at once",
+      "takesBack": "{cmd} wait {mark} takes them back",
+      "changedList": "{id} changed meanwhile — {cmd} contract list {mark}",
+      "changedDelegate": "{id} changed meanwhile — {cmd} delegate list",
+      "changedGet": "{id} changed meanwhile — {cmd} contract get {id}",
+      "foldConflict": "{id}  conflicts with what is merged in {files} — {cmd} contract merge {id} --prefer ours|theirs",
+      "needs": "contracts need",
+      "endedWithout": "ended without delivery",
+      "listed": "# {count} in this session — one: {cmd} contract get <ctr-id>",
+      "header": "contract {id} — of {list} — {state}{assignee}",
+      "carriedOutBy": " — carried out by {assignee}",
+      "notStartedYet": "(not started yet)",
+      "mayWrite": "may write: its zones, the files it creates{extra}",
+      "workInCopy": "# work in your copy: cd {copy} — read and write only there; write inside its zones, leave the marks where they are",
+      "cannotHonour": "# if it cannot be honoured as written: {cmd} delegate block {id} \"<why>\"",
+      "pathNeeded": "a path is needed — {cmd} contract within {id} <path>",
+      "noCopy": "{id} has no copy yet — it was not started",
+      "marksLost": "{files}: the marks of {id}'s zones are lost — put them back around your work, as they were written",
+      "outsideContract": "{files} is outside {id} — its zones, the files it creates{writes}: it will be left out of the delivery — keep it only with a good reason, you will be asked for it at deliver",
+      "andWrites": " and {writes}",
+      "notDelivered": "{id} is {state} — only a delivered contract is merged",
+      "preferTakes": "--prefer takes ours (keep what is merged) or theirs (take {id}'s)",
+      "mergeConflicts": "{id} conflicts with what is merged in {files} — merge again with --prefer ours (keep what is merged) or --prefer theirs (take {id}'s)"
+    },
+    "landing": {
+      "conflicts": "what was merged conflicts with the working folder: {files} — make them agree there, then {then}",
+      "thenStart": "start again",
+      "thenLand": "land again",
+      "thenLandCommand": "{cmd} contract land",
+      "landed": "# landed in the working folder: {files}",
+      "landedUncommitted": "# landed in the working folder: {files} — uncommitted, for the developer to commit",
+      "nothing": "# nothing to land"
+    },
+    "guard": {
+      "needs": "guard needs",
+      "pathNeeded": "a path is needed, from the project root — {cmd} guard <path> [--agent <name>] [--subagent]",
+      "blocked": "{path}: {why} — do not write it; if the work needs it, say so in your delivery",
+      "writesNothing": "it writes nothing",
+      "outsideOwn": "outside {agent}'s own perimeter ({perimeter})",
+      "inCopy": "{agent} carries out {id} in its copy, {copy}/{id}/ — not in the project folder",
+      "outsidePerimeter": "outside the perimeter of {who}: {perimeter}",
+      "carrying": "{agent}, carrying out {id} ({step})",
+      "inProgress": "the work in progress {id} ({step}{assignee}) — this write could not be told apart from it"
+    },
+    "elsewhere": {
+      "noAnswer": "{id} wrote no answer ({file}) — run its command again, or {cmd} delegate block {id} \"<why>\"",
+      "noRecipe": "{id} goes to another harness, but its recipe was not compiled into {name} — bundle again",
+      "unfilled": "{empty}: fill it before {id} is handed over",
+      "run": "# run, with your shell:",
+      "model": "# model: {model} — the one {agent}'s BUDGET tier maps to on {harness}",
+      "modelDefault": "# model: {harness}'s own default — {agent}'s BUDGET tier maps to none on {harness}",
+      "notRunning": "{id} is {state} — only a running piece is delivered",
+      "deliversInto": "{id} delivers into `{into}`: {reason} — run it again; nothing was stored",
+      "leftOut": "left out, outside its perimeter: {files}",
+      "outsidePerimeter": "outside its perimeter"
+    },
+    "registry": {
+      "answer": "{id} ran on {harness}: its answer is the file its command wrote — {cmd} delegate deliver {id} --answer"
     }
   },
 

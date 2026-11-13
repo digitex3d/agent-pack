@@ -93,6 +93,22 @@ export interface Formulas {
       refused: { notRunning: Text; lostZones: Text; strayed: Text; leftOut: Text; moved: Text };
       done: { delivered: Text; nothing: Text; leftOutLine: Text; leftOut: Text; answer: Text };
     };
+    start: { whole: Text; quiz: Text; unsure: Text; badAnswer: Text; allCorrect: Text; missed: Text; opened: Text };
+    dispatch: { renamed: Text; unknownVerb: Text };
+    scope: { perimeter: Text; writesNothing: Text; readsOnly: Text; readsAnything: Text; uncertain: Text; uncertainEntry: Text; noStores: Text; dimensions: Text; checks: Text; executors: Text; requests: Text; answer: Text };
+    ls: { badFilter: Text };
+    find: { needsText: Text };
+    flow: { notFlow: Text; steps: Text };
+    executor: { needsId: Text; unfilled: Text; intoNotProcedure: Text; intoStored: Text; intoNeedsVariable: Text; intoNone: Text; stored: Text; describe: Text; input: Text };
+    program: { notProgram: Text; noTimeout: Text; testsMissing: Text; testsEmpty: Text; testTimeout: Text; testFailed: Text; needsInput: Text; inputNotJson: Text; timedOut: Text; refused: Text; broken: Text };
+    check: { needsId: Text; unknown: Text; noJudge: Text; gateStaysClosed: Text; judgeNotLoaded: Text; failed: Text; gateStayedClosed: Text; gateOpened: Text; empty: Text; emptyGate: Text; tooLarge: Text; tooLargeGate: Text; noAnswer: Text; noProbability: Text; holds: Text; doesNotHold: Text; belowGate: Text; heading: Text; sealed: Text; state: Text };
+    lookup: { needsId: Text; fellow: Text; notFound: Text; nothingInside: Text };
+    variables: { empty: Text; constant: Text; valueEmpty: Text; setNeeds: Text; setConstant: Text; setUnknown: Text; setRefused: Text; setDone: Text; nothingDone: Text; noAdapter: Text; notSet: Text; unusable: Text; needs: Text };
+    contract: { verbUnknown: Text; verbMissing: Text; verbProblem: Text; failed: Text; markUnknown: Text; markMissing: Text; markProblem: Text; idMissing: Text; noContract: Text; specOnStdin: Text; zonesFull: Text; specBreaks: Text; specExample: Text; listRefused: Text; marks: Text; whoMissing: Text; recipeMissing: Text; nothingMarked: Text; zoneMissing: Text; startRefused: Text; started: Text; startedElsewhere: Text; takesBack: Text; changedList: Text; changedDelegate: Text; changedGet: Text; foldConflict: Text; needs: Text; endedWithout: Text; listed: Text; header: Text; carriedOutBy: Text; notStartedYet: Text; mayWrite: Text; workInCopy: Text; cannotHonour: Text; pathNeeded: Text; noCopy: Text; marksLost: Text; outsideContract: Text; andWrites: Text; notDelivered: Text; preferTakes: Text; mergeConflicts: Text };
+    landing: { conflicts: Text; thenStart: Text; thenLand: Text; thenLandCommand: Text; landed: Text; landedUncommitted: Text; nothing: Text };
+    guard: { needs: Text; pathNeeded: Text; blocked: Text; writesNothing: Text; outsideOwn: Text; inCopy: Text; outsidePerimeter: Text; carrying: Text; inProgress: Text };
+    elsewhere: { noAnswer: Text; noRecipe: Text; unfilled: Text; run: Text; model: Text; modelDefault: Text; notRunning: Text; deliversInto: Text; leftOut: Text; outsidePerimeter: Text };
+    registry: { answer: Text };
   };
   document: {
     ref: Text; heading: Text; entry: Text; about: Text;

@@ -1,0 +1,21 @@
+# typescript-implementer — implements agent-pack's TypeScript code
+IMPORT implementer FROM @main.roles
+IMPORT coding-policy, import-paths, error-handling, readable-code FROM @main.policies
+IMPORT run-project-checks, validate-dependency FROM @main.procedures
+IMPORT common FROM @main.domains
+IMPORT group-membership FROM @main.templates
+
+DOMAIN typescript-code:
+    ABOUT   the project's TypeScript code, its tests and scripts, and its TypeScript config
+    WRITES  IN index.ts, src/**, adapters/**, reporters/**, scripts/**, test/**, tsconfig.json
+
+@WITHIN typescript-code, common
+EXPORT AGENT typescript-implementer AS implementer:
+    ABOUT    Implements agent-pack's TypeScript code — the compiler, the apx engine, the CLI and the adapters
+    MANDATE  deliver the change that was asked for, within the design
+    BUDGET   costly
+
+    WHEN a change adds an external dependency:
+        RUN  validate-dependency
+    WHEN about to hand back a build or a fix:
+        RUN  run-project-checks

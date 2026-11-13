@@ -1,0 +1,138 @@
+# agent-feedback — the user's considerations on the agents' work, and the rules proposed so they do not happen again
+IMPORT agent-feedback-proposal FROM @main.policies
+IMPORT rule-proposal FROM @main.templates
+
+POLICY agent-feedback-fidelity:
+    ABOUT    whose words and which facts go in a record
+    APPLIES  #feedback-fidelity
+
+    ALWAYS  write the consideration as the user said it: translated to English if needed, otherwise unchanged
+    ALWAYS  state what happened from the session's facts: what was asked, what was done, by whom
+    NEVER   put in a consideration anything the user did not say, nor soften or sharpen what they said
+    NEVER   record the assistant's opinion as the user's: the analysis goes in cause, and only there
+    NEVER   record a change of requirements, or a preference on the product, as a consideration
+
+POLICY agent-feedback-approval:
+    ABOUT    who decides on a rule, and who writes it
+    APPLIES  #feedback-approval
+
+    NEVER   apply a rule, or change anything but the store, without the user's approval of that very rule
+    NEVER   take the approval of one rule as the approval of another
+    ALWAYS  recompile from the repo root of a .ap file a rule was written in
+    ALWAYS  send a rule in TypeScript tooling to typescript-implementer, saying the user approved it
+    NEVER   mark a record applied before the compiler or the check of the changed rule has passed
+    ALWAYS  move a status only along: open to proposed or no-rule, proposed to approved or rejected
+    ALWAYS  move a status from approved only to applied, from no-rule only to proposed, when the user asks for a rule
+
+TEMPLATE rule-to-apply:
+    ABOUT  one approved rule, as its writer needs it
+    SLOTS:
+        record:       TEXT  "the ref of the record in considerations"
+        enforcement:  ENUM[mechanical, structural, prose]  "how the rule is enforced"
+        target:       TEXT  "where the rule goes, as <repo root>:<file from that root>"
+        rule:         TEXT  "the exact text of the rule"
+
+VAR proposal AS rule-proposal
+VAR approved-rule AS rule-to-apply
+
+@WITH agent-feedback-fidelity
+PROCEDURE record-consideration:
+    ABOUT  add one record per consideration, kept across sessions
+    DO  split what the user said into one consideration per problem
+    IN considerations:
+        DO  add one record per consideration, with status open
+    DO  show the user each record as written, for them to correct
+
+PROCEDURE analyse-consideration:
+    ABOUT  link a record to the earlier ones, and find its cause in the definitions
+    IN considerations:
+        DO  read every earlier record, of any status, on the same subject or the same problem
+        IF an earlier record has the same problem:
+            DO  write the ref of the most recent one in repeats
+    DO  read the .ap sources, routing lines and briefs behind what happened, from the main's .ap file and agents/
+    DO  find which one allowed it, or which check was missing, whichever repo it is in
+    IN considerations:
+        DO  write that in cause, as the assistant's analysis
+
+@WITH agent-feedback-proposal
+PROCEDURE propose-rule:
+    ABOUT  write the one rule that would prevent the problem, or say why none would
+    DO  read the target file and every rule that already covers the same ground
+    IF the record repeats one whose status is proposed or approved:
+        DO  propose that same rule again, saying the repeat is more evidence for it
+    IF the record repeats one whose status is applied:
+        DO  propose the stronger enforcement that replaces that rule, saying the rule did not hold
+    IF the record repeats one whose status is rejected or no-rule:
+        DO  say the user's earlier decision and what the repeat changes, then propose the rule if one now helps
+    IF the record repeats nothing, or one still open, and a rule would help:
+        DO  try each enforcement in order, and write the exact text of the first that fits
+    IF the record repeats nothing, or one still open, and no rule would help:
+        DO  say why no rule would help
+    AS  rule-proposal
+
+PROCEDURE analyse-and-propose:
+    ABOUT  analyse one record, propose its rule, and stop for the user's decision
+    RUN  analyse-consideration
+    RUN  propose-rule INTO proposal
+    IN considerations:
+        DO  write what {{proposal}} says, with status proposed, or no-rule and its reason
+    DO  show {{proposal}} to the user, and stop until they answer
+
+@WITH agent-feedback-approval
+PROCEDURE apply-approved-rule:
+    ABOUT  have one approved rule written by whoever owns its file, and close its record
+    IN considerations:
+        DO  set the record's status to approved, and read its enforcement, target and rule INTO approved-rule
+    IF the target is a .ap file, in this repo or another:
+        DO  write {{approved-rule}} in its target, and recompile from the target's repo root
+    IF the target is TypeScript tooling of this repo:
+        DO  hand {{approved-rule}} to typescript-implementer: apply it exactly, the user approved it, and run its check
+    IF the target is neither:
+        DO  ask the user who writes it, and stop
+    IF the compiler or the check passed:
+        IN considerations:
+            DO  set the record's status to applied
+    ELSE
+        DO  report the failure, and leave the record approved
+
+STORE considerations:
+    ABOUT  the user's considerations on the agents' work, one record per consideration
+    DRIVER tabeli
+    LASTS  project
+    KEY    ref
+    SLOTS:
+        ref:            TEXT REGEX /^\d{4}-\d{2}-\d{2}-[a-z0-9-]+$/  "the record's name, as <date>-<kebab-case-problem>"
+        date:           TEXT REGEX /^\d{4}-\d{2}-\d{2}$/  "the day it was said, as YYYY-MM-DD"
+        subject:        TEXT REGEX /^(agent|skill|flow|routing):[a-z0-9-]+$/  "who it is about, as <kind>:<name>"
+        happened:       TEXT  "what happened, stated from the facts of the session"
+        consideration:  TEXT  "what the user said, faithful, translated to English if needed"
+        status:         ENUM[open, proposed, approved, applied, rejected, no-rule]  "where the record stands"
+        repeats?:       TEXT  "the ref of the most recent earlier record on the same problem"
+        cause?:         TEXT  "what in the definitions allowed it: the assistant's analysis, not the user's words"
+        enforcement?:   ENUM[mechanical, structural, prose]  "how the proposed rule is enforced"
+        target?:        TEXT REGEX /^\/.+:.+$/  "where the rule goes, as <repo root>:<file from that root>"
+        rule?:          TEXT  "the exact text of the proposed rule"
+        reason?:        TEXT  "why no rule would help, or why the user rejected the rule"
+
+EXPORT SKILL agent-feedback:
+    ABOUT    Load when the user criticises or corrects how an agent, flow or routing worked: records it, proposes rules
+    APPLIES  #feedback
+    MANDATE  keep a faithful record of the user's considerations, and propose only rules the user then decides on
+
+    WHEN the user comments on, criticises or corrects how an agent, flow or routing worked, or asks to record it:
+        RUN  record-consideration
+        RUN  analyse-and-propose
+
+    WHEN the user asks to analyse a recorded consideration that is still open:
+        RUN  analyse-and-propose
+
+    WHEN the user approves a proposed rule:
+        RUN  apply-approved-rule
+
+    WHEN the user rejects a proposed rule:
+        IN considerations:
+            DO  set the record's status to rejected, and write their reason
+
+    WHEN the user asks which considerations are recorded, or still undecided:
+        IN considerations:
+            DO  report them by status, with what each one repeats

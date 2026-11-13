@@ -1,0 +1,19 @@
+# feature-report
+IMPORT handled-finding, test-case FROM @main.templates
+
+EXPORT TEMPLATE feature-report:
+    ABOUT  how the feature ended: what was built, the review — quality and duplicates — and the tests
+    SLOTS:
+        built:     TEXT MAX_WORDS 60  "what was built"
+        rounds:    NUMBER 1..4  "how many review rounds ran"
+        findings:  LIST <handled-finding>  "every quality finding of scope change and every duplicate of every round, or none"
+        tests:     LIST <test-case>  "the test results, or none if the flow stopped before them"
+    BODY:
+        built: {built}
+        review rounds: {rounds}
+
+        findings:
+        {findings}
+
+        tests:
+        {tests}

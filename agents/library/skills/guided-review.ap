@@ -1,0 +1,169 @@
+# guided-review — walks the user through a review live, one critical zone at a time, pointed at in PhpStorm
+IMPORT agent-feedback FROM @main.skills
+IMPORT improve-static-analysis, run-quality-check FROM @main.procedures
+
+TEMPLATE review-zone:
+    ABOUT  one critical zone of the code in scope: a defect, or a code smell and its refactoring
+    SLOTS:
+        file:          TEXT  "the file the zone is in, from the project root"
+        line:          NUMBER >=1  "the line the zone starts at"
+        severity:      ENUM[high, medium, low]  "how severe the zone is"
+        kind:          ENUM[defect, smell]  "a defect the quality check found, or a code smell of scan-code-smells"
+        why:           TEXT MAX_WORDS 25  "why the zone is critical, in one sentence"
+        smell?:        TEXT MAX_WORDS 6  "the smell's name, e.g. long function, magic number, data clump"
+          MUST  fill it when the kind is smell
+        refactoring?:  TEXT MAX_WORDS 8  "the refactoring to apply, e.g. Extract Function, Replace Magic Literal"
+          MUST  fill it when the kind is smell
+    BODY:
+        - [{severity}] [{kind}] {file}:{line} — {why}
+          smell: {smell} — refactoring: {refactoring}
+    EXAMPLE:
+        - [medium] [smell] src/apx/engine.ts:1450 — the method checks the zones, commits the copy and prints the summary
+          smell: mixed responsibilities — refactoring: Extract Function
+
+TEMPLATE review-zones:
+    ABOUT  the critical zones selected for the walk, the most severe first
+    SLOTS:
+        zones:  LIST <review-zone>  "at most 5 zones, the most severe first, or none"
+    BODY:
+        {zones}
+
+TEMPLATE walked-zone:
+    ABOUT  one zone of the walk, and what the user decided on it
+    SLOTS:
+        zone:      <review-zone>  "the zone shown"
+        decision:  ENUM[next, deeper, noted, refactor]  "next, dig deeper, note for later, or refactored in the session"
+    BODY:
+        {zone}
+          decision: {decision}
+    EXAMPLE:
+        - [high] [defect] src/cli/quality.ts:42 — the exit code ignores a tool that failed, so a broken check passes
+          decision: noted
+
+TEMPLATE guided-review-summary:
+    ABOUT  how the guided review ended: each zone shown and the user's decision on it
+    SLOTS:
+        scope:  TEXT MAX_WORDS 30  "the diff, file or folder reviewed"
+        zones:  LIST <walked-zone>  "one entry per zone shown, in the order shown, or none"
+    BODY:
+        scope: {scope}
+
+        zones:
+        {zones}
+
+TEMPLATE smell-zones:
+    ABOUT  every code smell the skim found, the most severe first
+    SLOTS:
+        zones:  LIST <review-zone>  "one smell per zone, each of kind smell, or none"
+    BODY:
+        {zones}
+
+VAR zones AS review-zones
+VAR smells AS smell-zones
+VAR summary AS guided-review-summary
+
+PROCEDURE scan-code-smells:
+    ABOUT  skim the lines in scope for code smells, each one a zone with its refactoring
+    DO  take only the lines the diff touches, or the scope the user names, and skim them fast
+    DO  check the mechanical smells the linter also reports, from the check's report when one exists:
+        DO  a module over 300 lines
+        DO  a function over 50 lines
+        DO  a function with more than 4 parameters
+        DO  nesting deeper than 3
+        DO  tangled control flow: a cyclomatic complexity over 10
+        DO  a hard-coded magic number other than 0, 1 and -1
+    DO  check the smells that take judgment:
+        DO  a hard-coded string repeated — a path, a URL, a key — that should be one named constant
+        DO  mixed responsibilities: one function or module doing I/O, logic and formatting together
+        DO  a data clump or primitive obsession: 3 to 4 parameters always together, or a raw string for a type
+        DO  speculative generality: an option, a parameter or an abstraction nothing uses yet
+        DO  a name that does not say what the thing does, or a comment that restates the code instead of why
+        DO  a boolean flag parameter that switches the function's behaviour
+    DO  check the coupling smells that break decoupling:
+        DO  a cyclic dependency, or a layer reaching into one it should not: one zone per violation
+        DO  feature envy: a function using another module's data more than its own — Move Function
+        DO  inappropriate intimacy: reaching into another module's internals or private shapes — Move Function, Extract Module, or hide it behind an interface
+        DO  a message chain such as `a.b.c.d` — Hide Delegate
+        DO  a middle man: a module that only forwards calls — Remove Middle Man
+        DO  a hub-like module: a new import making one module depend on many, or depended on by many — Extract Module
+        DO  a hard-wired dependency, untestable alone: process.env, homedir(), Date.now(), fs deep in logic, a module singleton — inject it
+        DO  a type leaking across a boundary: node:fs, node:child_process or a harness's API where the module should not know it — map it to a type of its own at the boundary
+        DO  shotgun surgery: one reason in the diff touching many unrelated modules — Move Function, or Combine
+    DO  make each smell one zone of kind smell, usually of severity low or medium
+    DO  name in each zone the smell and the refactoring to apply: Extract Function, Introduce Parameter Object, Replace Magic Literal, Extract Module, Decompose Conditional
+    NEVER  report a spot the check's report already holds: the same spot is never reported twice
+    NEVER  report duplicate code or dead code: they belong to the dry-review skill and to knip
+    NEVER  apply the refactoring: name it only
+    AS  smell-zones
+
+PROCEDURE select-zones:
+    ABOUT  analyse the scope and select its critical zones
+    DO  take the file or folder the user names, else the uncommitted diff: `git diff` plus the untracked files
+    RUN  run-quality-check
+    DO  read the code in scope
+    RUN  scan-code-smells INTO smells
+    DO  rank the quality check's findings, as zones of kind defect, and {{smells}} together by severity
+    DO  select at most 5 critical zones from both, the most severe first
+    AS  review-zones
+
+PROCEDURE walk-zone:
+    ABOUT  point at one zone in PhpStorm, explain it, and record the user's decision
+    DO  call `mcp__phpstorm__toggle_debugger_breakpoint` with `filePathInProject` and `line` of the zone
+    DO  show the zone's line with the code around it, and the declarations in other files it depends on, then explain it in 2 to 3 lines
+    DO  ask the user: next, dig deeper, or note for later
+    IF the zone calls for a refactoring — a smell, or a defect such as a complexity over its limit:
+        DO  ask the user too whether to refactor it now
+    DO  record their decision on the zone
+
+PROCEDURE refactor-zone:
+    ABOUT  refactor the zone the user chose, yourself, keeping its behaviour
+    DO  say what you will change and which files it touches, and go on only on the user's go
+    DO  make the change yourself, in this session: the zone and what it needs, nothing else
+    RUN  run-quality-check
+    IF the user asked for the tests:
+        DO  run `npm test` from the project root
+    DO  report what changed and what the commands printed
+    RUN  improve-static-analysis
+    DO  ask the user whether to improve typescript-implementer, so the same problem is not written again
+    NEVER  change the zone's behaviour, its error messages or its exported API, unless the user asks it
+
+PROCEDURE close-review:
+    ABOUT  report each zone with the user's decision, and remove every breakpoint set
+    DO  call `mcp__phpstorm__toggle_debugger_breakpoint` again on each zone pointed at, to remove its breakpoint
+    DO  write each zone shown, with the user's decision on it INTO summary
+    DO  report {{summary}} to the user
+
+EXPORT SKILL guided-review:
+    ABOUT    Load to walk the user through a code review live in this session, one critical zone at a time in PhpStorm
+    APPLIES  #review
+    MANDATE  walk the user through the critical zones of the scope, one at a time, and refactor only what the user asks
+
+    ALWAYS  show one zone at a time, then wait for the user before moving on
+    ALWAYS  back every zone with the lines that show it
+    ALWAYS  rank the zones by severity, the most severe first
+    NEVER   hold the code against a taste of your own
+    NEVER   edit a file the user did not ask to refactor
+    NEVER   run the tests unless the user asks for them
+    NEVER   point at a line with `open_file_in_editor`: it cannot go to a line
+    MUST!   remove every breakpoint it set before it ends, even when the user stops early
+    NEVER   hand a refactoring to a contract or another agent: make it yourself, in this session
+
+    WHEN asked for a guided or live review of a change, a file or a folder:
+        RUN  select-zones INTO zones
+        DO  walk each zone of {{zones}} in order, running walk-zone, until the zones end or the user stops
+        RUN  close-review
+
+    WHEN the user stops the walk early:
+        RUN  close-review
+
+    WHEN the user chooses to refactor a zone, or asks to fix it:
+        RUN  refactor-zone
+
+    WHEN the user asks to turn a problem into a lint rule:
+        RUN  improve-static-analysis
+        IF neither tool could fail on it:
+            DO  offer to improve typescript-implementer instead
+
+    WHEN the user wants typescript-implementer improved after a fixed zone:
+        @WITH agent-feedback:
+            DO  record the fixed problem as a consideration on agent:typescript-implementer, and propose its rule

@@ -1,0 +1,20 @@
+# group-membership — a group whose members each declare it on themselves, read in one place
+
+EXPORT TEMPLATE group-membership:
+    ABOUT  a group whose members each declare it on themselves, and the one place that reads it
+    APPLIES  #coding
+    SLOTS:
+        group:     TEXT MAX_WORDS 15  "the group, and the constant that names it"
+        marker:    TEXT MAX_WORDS 25  "where each member declares it belongs: the field, meta key or tag, on the member's definition"
+        reader:    TEXT MAX_WORDS 25  "the one place that reads the marker to know a thing's group"
+        replaces?: TEXT MAX_WORDS 25  "the hand-written list of members it replaces, if any"
+    BODY:
+        group: {group}
+        declared on each member: {marker}
+        read by: {reader}
+        replaces: {replaces}
+    EXAMPLE:
+        group: the retired keywords — the lexer's keyword table in src/lexer.ts
+        declared on each member: `retired: '<its rewrite>'` on the keyword's entry in that table
+        read by: the lint's retired-keyword check in src/lint.ts
+        replaces: the REMOVED_KEYWORDS list in src/lint.ts

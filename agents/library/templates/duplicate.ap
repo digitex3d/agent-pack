@@ -1,0 +1,19 @@
+# duplicate
+IMPORT duplicate-copy FROM @main.templates
+
+EXPORT TEMPLATE duplicate:
+    ABOUT  one piece of knowledge kept in more than one place
+    SLOTS:
+        kind:    ENUM[found, added, left]  "in the scope, added by the diff, or left where it meant to remove it"
+        claim:   TEXT MAX_WORDS 25  "what is repeated, and why its copies change for the same reason"
+        source:  TEXT MAX_WORDS 25  "the single source of truth to keep"
+        copies:  LIST <duplicate-copy> >=2  "every copy, one per line"
+    BODY:
+        - [{kind}] {claim}
+          source: {source}
+          {copies}
+    EXAMPLE:
+        - [found] the VAT rate is written by hand in two files, and changes when the law does
+          source: a VAT_RATE constant in src/invoices/tax.ts
+          - src/invoices/parse.ts:63 — `const vat = amount * 0.2;`
+          - src/invoices/total.ts:18 — `return net * 1.2;`

@@ -1,0 +1,11 @@
+# duplicate-copy
+
+EXPORT TEMPLATE duplicate-copy:
+    ABOUT  one copy of a duplicate, located and quoted
+    SLOTS:
+        location:  TEXT MAX_WORDS 3  "where it is, as file:line or file:start-end"
+        quote:     TEXT  "the lines that show it, quoted verbatim"
+    BODY:
+        - {location} — {quote}
+    EXAMPLE:
+        - src/invoices/parse.ts:63 — `const vat = amount * 0.2;`

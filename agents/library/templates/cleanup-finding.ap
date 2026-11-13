@@ -1,0 +1,14 @@
+# cleanup-finding — one cleanup a review of a change found, and how to fix it
+
+EXPORT TEMPLATE cleanup-finding:
+    ABOUT  one cleanup a review of a change found
+    SLOTS:
+        file:     TEXT  "the file, from the project root"
+        line:     NUMBER >=1  "the line the finding anchors to"
+        summary:  TEXT MAX_WORDS 25  "what to clean up, in one sentence"
+        cost:     TEXT MAX_WORDS 30  "what is duplicated, wasted or harder to maintain"
+        fix:      TEXT MAX_WORDS 30  "the helper to call, the simpler form, the cheaper alternative or the deeper change"
+    BODY:
+        - {file}:{line} — {summary} — cost: {cost} — fix: {fix}
+    EXAMPLE:
+        - src/apdoc/blocks.ts:829 — slices a reference's name by hand — cost: a second rule for a name that addressName already gives — fix: call addressName from src/apdoc/ids.ts

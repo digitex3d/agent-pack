@@ -1,0 +1,9 @@
+# readable-code — how code reads: whole-word names, prose-like methods, each text and fixed value written once
+
+EXPORT POLICY readable-code:
+    ABOUT    how code reads: whole-word names, prose-like methods, each text and fixed value written once
+    APPLIES  #coding, agent:typescript-implementer
+
+    ALWAYS  name a variable, a parameter or a function with whole words that say what it holds — never a single letter, never an abbreviation
+    ALWAYS  write code that reads like prose: each step of a method named, an object asked what it is, a switch on one value instead of nested ifs
+    ALWAYS  write each text and each fixed value once — messages in formulas.json, states and exit codes in a named table — never inline in a call

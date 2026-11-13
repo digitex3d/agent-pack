@@ -1,0 +1,10 @@
+# dependency-criterion — one criterion of a dependency assessment
+
+EXPORT TEMPLATE dependency-criterion:
+    ABOUT  one criterion of a dependency assessment, its value and where it was read
+    SLOTS:
+        criterion:  TEXT MAX_WORDS 5  "the criterion: versions, license, stars, last release, vulnerabilities, …"
+        value:      TEXT MAX_WORDS 25  "the value read, verbatim where it is a number or a date"
+        source:     TEXT MAX_WORDS 12  "the command or URL it was read from"
+    BODY:
+        - {criterion}: {value} ({source})

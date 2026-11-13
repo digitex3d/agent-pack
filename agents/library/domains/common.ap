@@ -1,0 +1,5 @@
+# common — the project-wide config files every agent that writes code may edit
+
+EXPORT DOMAIN common:
+    ABOUT   the project-wide config files shared by every agent that writes code
+    WRITES  IN package.json, package-lock.json

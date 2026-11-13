@@ -22,6 +22,7 @@
  */
 import { RecordTable } from './recordTable.js';
 import { delegationsStore, engineStore } from './engineStores.js';
+import { FORMULAS, fill } from '../formulas.js';
 
 export const DELEGATION_STATES = ['marked', 'running', 'delivered', 'merged', 'blocked', 'ended'] as const;
 export type DelegationState = typeof DELEGATION_STATES[number];
@@ -95,8 +96,8 @@ export const CONTRACT_ID_RE = /^ctr-[0-9a-f]{8}$/;
 export const MARK_ID_RE = /^mrk-[0-9a-f]{8}$/;
 
 /** Why a piece that ran on another harness needs `--answer` to be delivered (D66). */
-export function answerFlag(record: { dlg: string; harness: string }, cmd: string): string {
-  return `${record.dlg} ran on ${record.harness}: its answer is the file its command wrote — ${cmd} delegate deliver ${record.dlg} --answer`;
+export function answerFlag(record: { dlg: string; harness: string }, command: string): string {
+  return fill(FORMULAS.apx.registry.answer, { id: record.dlg, harness: record.harness, cmd: command });
 }
 
 /** A record that answers about itself: what state it is in, where it runs. */
@@ -120,12 +121,20 @@ export class Piece {
   isElsewhere(): boolean {
     return this.record.harness !== '';
   }
+
+  /** Where it runs: in this harness, or on another one — the one value a switch on its place reads. */
+  where(): PiecePlace {
+    return this.isElsewhere() ? 'elsewhere' : 'here';
+  }
 }
+
+/** Where a piece runs: in this harness, or on another one (D66). */
+export type PiecePlace = 'here' | 'elsewhere';
 
 /** A fresh record: every field empty but those given. */
 export function pieceRecord(fields: Partial<DelegationRecord> & Pick<DelegationRecord, 'dlg' | 'state'>): DelegationRecord {
-  const out = Object.fromEntries(FIELDS.map(field => [field, ''])) as unknown as DelegationRecord;
-  return { ...out, ...fields };
+  const blank = Object.fromEntries(FIELDS.map(field => [field, ''])) as unknown as DelegationRecord;
+  return { ...blank, ...fields };
 }
 
 export class DelegationTable extends RecordTable<DelegationRecord> {
@@ -136,8 +145,8 @@ export class DelegationTable extends RecordTable<DelegationRecord> {
 
   /** The contracts of a MARK the latest DELEGATE of it started — or, before any started, none. */
   batchOf(mark: string): DelegationRecord[] {
-    const started = this.all().filter(record => record.mark === mark && record.state !== 'marked');
-    const latest = started.reduce((max, record) => (record.started_at > max ? record.started_at : max), '');
+    const started = this.all().filter(record => record.mark === mark && record.state !== STATE.marked);
+    const latest = started.reduce((newest, record) => (record.started_at > newest ? record.started_at : newest), '');
     return started.filter(record => record.started_at === latest);
   }
 }

@@ -1,0 +1,10 @@
+# error-handling — how the project's code turns failures into errors, passes them on and shows them
+
+EXPORT POLICY error-handling:
+    ABOUT    how the project's code turns a failure into an error, passes it on and shows it
+    APPLIES  #coding, agent:typescript-implementer
+
+    ALWAYS  turn a failure into the project's error type where it enters the code: an API call, a parse, a system call
+    ALWAYS  read a caught value as unknown and convert it with the project's one conversion function, adding it when there is none, never with a cast
+    ALWAYS  throw or reject only an Error, with a message saying what failed and on what
+    NEVER   swallow an error in an empty catch, or one that only logs, without a comment saying why

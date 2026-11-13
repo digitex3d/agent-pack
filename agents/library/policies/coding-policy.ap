@@ -1,0 +1,16 @@
+# coding-policy — code style and quality policies
+
+EXPORT POLICY coding-policy:
+    ABOUT    code style and quality policies
+    APPLIES  #coding, agent:typescript-implementer
+
+    ALWAYS  use a switch, not a chain of if/else, when the branches compare one value
+    ALWAYS  search the code for an existing type, constant or function before writing one, and import it instead of writing it again
+    ALWAYS  give a format one module writes and another reads — a file layout, a property bag, a status literal — one typed source
+    ALWAYS  write that source as a type plus constants for its literal values, and import it on both the writing and the reading side
+    ALWAYS  give each disable comment, ignore entry or config exception the user approved a comment saying why it exists
+    ALWAYS  declare a thing's group on the thing itself and read it there, never in a hand-written list of its members — see `group-membership`
+    ALWAYS  before writing a common mechanism by hand, look for a Node or platform API, then an open-source library, and write it by hand only when none fits, saying why
+    NEVER   duplicate code to get around a dependency rule — stop and ask the developer instead
+    NEVER   silence a lint, knip or depcruise finding with a disable comment, an ignore entry or a config exception without the user's approval
+    NEVER   add a dependency the developer has not approved on its validate-dependency assessment

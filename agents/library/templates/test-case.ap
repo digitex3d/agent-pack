@@ -1,0 +1,11 @@
+# test-case
+
+EXPORT TEMPLATE test-case:
+    ABOUT  one acceptance criterion, and what its test showed
+    SLOTS:
+        criterion:  TEXT MAX_WORDS 25  "the acceptance criterion"
+        test:       TEXT MAX_WORDS 10  "the test that covers it, as file:name"
+        result:     ENUM[pass, fail, not-run]  "what the run showed"
+        detail:     TEXT MAX_WORDS 40  "the failure as the run printed it, or none"
+    BODY:
+        - [{result}] {criterion} — {test}: {detail}

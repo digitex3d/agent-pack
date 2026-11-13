@@ -1,0 +1,20 @@
+# feature-brief — what the pm is handed: the request, and what is already settled
+
+EXPORT TEMPLATE feature-brief:
+    ABOUT  what the pm is handed: the request, and what is already settled
+    SLOTS:
+        request:          TEXT MAX_WORDS 40  "the feature the user asked for, in their words, translated to English if needed"
+        settled?:         TEXT  "what the conversation already agreed: choices, plan, constraints, one per line"
+        open-questions?:  TEXT  "what the user has not answered yet, each with the default proposed, one per line"
+        out-of-scope?:    TEXT  "what the user already left out, one per line"
+    BODY:
+        request: {request}
+
+        settled:
+        {settled}
+
+        open questions:
+        {open-questions}
+
+        out of scope:
+        {out-of-scope}

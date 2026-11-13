@@ -13,13 +13,16 @@ wiki/
 # Private design and legal dossier — never public
 dossier-v1/
 
-# Local development agents of this repository — not published
+# Development agents: only the project's own, in agents/ at the root, and its main (agent-pack.ap) are
+# versioned — and the agents shipped with the package (the default delegate `quick`)
 agents/
-# …but the agents shipped with the package (the default delegate `quick`) are
+!/agents/
 !templates/agents/
+# What the build generates from the .ap sources
 AGENTS.md
 CLAUDE.md
-/agent-pack.ap
 agent-pack.config.mjs
 .mailmap
 /KANBAN.md
+# Each developer's own quality check, which the agents call — not versioned
+/quality-check.sh

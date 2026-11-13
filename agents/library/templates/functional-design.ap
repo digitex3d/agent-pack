@@ -1,0 +1,34 @@
+# functional-design — what a feature does, for whom, and how to tell it is done, or why it stops here
+IMPORT acceptance-criterion FROM @main.templates
+
+EXPORT TEMPLATE functional-design:
+    ABOUT  the functional design of one feature, or why it stops before being built
+    SLOTS:
+        status:           ENUM[ready, reshape, rejected]  "whether it advances, must change shape, or stops"
+        feature:          TEXT MAX_WORDS 25  "the one feature, in one line"
+        reason:           TEXT MAX_WORDS 60  "why it holds or stops: the problem, any surplus, the leaner alternative"
+        for-whom?:        TEXT MAX_WORDS 25  "who has the problem"
+          MUST  fill it when the status is ready
+        behaviour?:       TEXT  "what the feature does, as the user sees it"
+          MUST  fill it when the status is ready
+        acceptance?:      LIST <acceptance-criterion> >=1  "the testable acceptance criteria"
+          MUST  fill it when the status is ready
+        out-of-scope?:    TEXT  "what the feature does not do, one item per line"
+        open-decisions?:  TEXT  "the decisions still open, one per line"
+    BODY:
+        status: {status}
+        feature: {feature}
+        reason: {reason}
+        for whom: {for-whom}
+
+        behaviour:
+        {behaviour}
+
+        acceptance:
+        {acceptance}
+
+        out of scope:
+        {out-of-scope}
+
+        open decisions:
+        {open-decisions}

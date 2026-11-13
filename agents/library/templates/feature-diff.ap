@@ -1,0 +1,8 @@
+# feature-diff
+
+EXPORT TEMPLATE feature-diff:
+    ABOUT  what the reviewer of a feature is handed: its diff, nothing else
+    SLOTS:
+        diff:  TEXT  "the feature's diff, new files included, none of the older uncommitted work"
+    BODY:
+        {diff}

@@ -1,0 +1,36 @@
+# new-rule — enforces a rule the user asks for: a lint check first, else the narrowest line of the right agents
+IMPORT improve-static-analysis FROM @main.procedures
+IMPORT agent-feedback-proposal FROM @main.policies
+IMPORT rule-proposal FROM @main.templates
+
+VAR proposal AS rule-proposal
+
+@WITH agent-feedback-proposal
+PROCEDURE place-rule-in-agents:
+    ABOUT  write the rule in the narrowest block of the agents it governs
+    DO  find the team, and the member or members of it, the rule governs, from agents/ and the team's routing
+    DO  read their .ap sources, and every rule of the main's .ap file and of agents/ on the same ground
+    DO  choose the narrowest block that holds it: a line in a WHEN or a procedure of that agent
+    DO  else a policy that applies only to those agents, and the main's .ap file only for a rule every agent must follow
+    DO  prefer changing an existing line to adding one
+    DO  write the exact text of the rule and its target file
+    AS  rule-proposal
+
+EXPORT SKILL new-rule:
+    ABOUT    Load when the user asks to add a rule: makes it a lint check, else the narrowest agent line
+    APPLIES  #rules
+    MANDATE  enforce each rule the user asks for in the strongest and narrowest place, and write only what they approve
+
+    NEVER   change a file before the user approves that very rule
+    ALWAYS  have the feature-delivery team add a lint rule the user approved, saying the user approved it
+    ALWAYS  recompile with `node dist/index.js bundle all` after writing a .ap rule
+
+    WHEN the user asks to add a rule:
+        DO  restate the rule in one line, ask the user to correct it if needed, and wait for the answer
+        RUN  improve-static-analysis
+        IF neither tool could fail on it:
+            RUN  place-rule-in-agents INTO proposal
+            DO  show {{proposal}} to the user, and stop until they answer
+            IF the user approves it:
+                DO  write {{proposal}} in its target file, and recompile
+        DO  report what was added, where, and what the check or the compiler printed

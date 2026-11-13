@@ -1,0 +1,11 @@
+# test-report
+IMPORT test-case FROM @main.templates
+
+EXPORT TEMPLATE test-report:
+    ABOUT  the tests written for a feature and what running them showed
+    SLOTS:
+        command:  TEXT MAX_WORDS 10  "the command that ran the tests"
+        cases:    LIST <test-case> >=1  "one row per acceptance criterion"
+    BODY:
+        command: {command}
+        {cases}

@@ -1,0 +1,18 @@
+# duplication-review
+IMPORT duplicate FROM @main.templates
+
+EXPORT TEMPLATE duplication-review:
+    ABOUT  what was reviewed for duplication, at which depth, the duplicates found, and what could not be checked
+    SLOTS:
+        scope:          TEXT MAX_WORDS 30  "the code scope or the diff that was reviewed"
+        depth:          ENUM[surface, medium, deep]  "the depth of the review"
+        findings:       LIST <duplicate>  "one finding per duplicate, or none"
+        not-verified?:  TEXT MAX_WORDS 50  "what could not be checked, and what would settle it"
+    BODY:
+        scope: {scope}
+        depth: {depth}
+
+        findings:
+        {findings}
+
+        not-verified: {not-verified}
