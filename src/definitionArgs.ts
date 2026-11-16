@@ -29,7 +29,7 @@ export const DEFINITION_ARGS: Record<string, ArgumentSpec[]> = {
   // — distinct from a DELEGATE's `AS`, which shapes what is handed over. `inline`
   // renders the binding for any signature-line consumer.
   AGENT: [
-    { keyword: 'AS', inline: v => fill(FORMULAS.keywords.AS.agent, { value: v }) },
+    { keyword: 'AS', inline: value => fill(FORMULAS.keywords.AS.agent, { value: value }) },
   ],
 };
 

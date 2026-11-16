@@ -1,0 +1,18 @@
+# validate-dependency — assesses one candidate npm package from real data, before the developer approves it
+IMPORT dependency-assessment FROM @main.templates
+
+EXPORT PROCEDURE validate-dependency:
+    ABOUT  assess one candidate npm package from real data, and give a verdict
+    NEVER  fill a criterion from memory: read each value from the command or the API it names
+    DO  run `npm view <pkg> versions time license maintainers dependencies dist.unpackedSize types type exports --json`
+    DO  read its weekly downloads with `npm view` or https://api.npmjs.org/downloads/point/last-week/<pkg>
+    DO  run `gh api repos/<owner>/<repo>` and its contributors, commits, releases and issues endpoints
+    DO  read the stars, the contributors, the last commit and release, the open issues and how fast they get an answer
+    DO  install it in a scratch folder, run `npm audit` there, or query osv.dev, for its known vulnerabilities
+    DO  count its transitive dependencies in that scratch install
+    DO  check its TypeScript types, its ESM support and its npm provenance (`npm view <pkg> dist.attestations`)
+    IF its license is not compatible with Apache-2.0:
+        DO  give the verdict avoid
+    DO  give the verdict recommended, with-reservations or avoid, with the criteria that decided it
+    DO  show the developer the assessment: only they approve it
+    AS  dependency-assessment

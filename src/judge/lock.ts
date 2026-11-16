@@ -17,7 +17,6 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { JudgeCheck, JudgeQuestion } from './types.js';
 import { sha256Hex } from '../apdoc/ids.js';
-import { errorMessage } from '../errors.js';
 
 /** A human decision: a probability on one check of one line text. */
 export interface Decision {
@@ -47,8 +46,8 @@ export function questionKey(question: JudgeQuestion, state: string): string {
 }
 
 /** Whether `p` is a probability. */
-export function isProbability(p: unknown): p is number {
-  return typeof p === 'number' && p >= 0 && p <= 1;
+export function isProbability(value: unknown): value is number {
+  return typeof value === 'number' && value >= 0 && value <= 1;
 }
 
 export class JudgeLock {
@@ -64,16 +63,16 @@ export class JudgeLock {
     try {
       data = JSON.parse(readFileSync(path, 'utf-8'));
     } catch (err) {
-      throw new Error(`Invalid JSON in the judge lock ${path}: ${errorMessage(err)}`);
+      throw new Error(`Invalid JSON in the judge lock ${path}: ${(err as Error).message}`);
     }
     if (data?.version !== 1 || typeof data.decisions !== 'object' || data.decisions === null) {
       throw new Error(`The judge lock ${path} is not a version 1 judge lock`);
     }
-    for (const [key, v] of Object.entries(data.decisions)) {
-      const d = v as { p?: unknown; choice?: unknown } | null;
+    for (const [key, entry] of Object.entries(data.decisions)) {
+      const decision = entry as { p?: unknown; choice?: unknown } | null;
       // A file's domain the developer once chose: domains are DOMAIN blocks now — dropped at the next write.
-      if (typeof d?.choice === 'string' && d.p === undefined) { delete data.decisions[key]; continue; }
-      if (!isProbability(d?.p)) throw new Error(`The judge lock ${path}: the decision "${key}" has no p between 0 and 1`);
+      if (typeof decision?.choice === 'string' && decision.p === undefined) { delete data.decisions[key]; continue; }
+      if (!isProbability(decision?.p)) throw new Error(`The judge lock ${path}: the decision "${key}" has no p between 0 and 1`);
     }
     // Another judge's pinned model is not this judge's: it is pinned again.
     const model = data.judge === judge && typeof data.model === 'string' ? data.model : null;
@@ -112,7 +111,7 @@ export class JudgeLock {
       version: 1,
       judge: this.data.judge,
       model: this.data.model,
-      decisions: Object.fromEntries(keys.map(k => [k, this.data.decisions[k]])),
+      decisions: Object.fromEntries(keys.map(key => [key, this.data.decisions[key]])),
     };
     mkdirSync(dirname(this.path), { recursive: true });
     writeFileSync(this.path, `${JSON.stringify(out, null, 2)}\n`, 'utf-8');

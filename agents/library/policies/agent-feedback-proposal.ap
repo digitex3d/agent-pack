@@ -1,0 +1,17 @@
+# agent-feedback-proposal — what a proposed rule must say, and which rule is worth proposing
+
+EXPORT POLICY agent-feedback-proposal:
+    ABOUT    what a proposed rule must say, and which rule is worth proposing
+    APPLIES  #feedback-proposal
+
+    ALWAYS  propose one rule per problem, shaped as rule-proposal
+    ALWAYS  choose the first enforcement that fits: what fails mechanically, then a structural change, then prose
+    ALWAYS  count as mechanical what the compiler, a test or the linter fails on
+    ALWAYS  count as structural a change to a flow or to a routing, as prose an ALWAYS/NEVER line
+    ALWAYS  say why each stronger enforcement does not fit, when the rule is not mechanical
+    ALWAYS  aim a rule at the source file: never AGENTS.md, .claude/, .agents/, .codex/ or .agent-pack/
+    ALWAYS  name the repo the target file is really in, as `git rev-parse --show-toplevel` prints it from its folder
+    NEVER   assume the target is in this repo: a shared scaffold or a library may live in another one
+    NEVER   propose a rule that duplicates or contradicts an existing one: change the existing one, and name it
+    NEVER   answer the repeat of an applied rule's problem with a line beside it: strengthen or replace that rule
+    NEVER   propose a rule for a one-off mistake with no cause in the definitions, and say why instead

@@ -1,0 +1,11 @@
+# cleanup-review — what one angle of a cleanup review found in a change
+IMPORT cleanup-finding FROM @main.templates
+
+EXPORT TEMPLATE cleanup-review:
+    ABOUT  what one angle of the review found in a change — cleanups only, never a correctness bug
+    SLOTS:
+        angle:     ENUM[reuse, simplification, efficiency, altitude]  "the angle the change was reviewed from"
+        findings:  LIST <cleanup-finding>  "one row per finding, or none"
+    BODY:
+        angle: {angle}
+        {findings}

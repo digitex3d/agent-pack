@@ -1,0 +1,9 @@
+# import-paths — how a module imports another one of the project
+
+EXPORT POLICY import-paths:
+    ABOUT    how a module imports another module of the project
+    APPLIES  #coding, agent:typescript-implementer
+
+    ALWAYS  import a module of the project by its relative path, ending in `.js` as Node ESM resolves it
+    ALWAYS  import a Node built-in with the `node:` prefix
+    NEVER   import a module of the project through an alias, or without its extension

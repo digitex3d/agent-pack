@@ -86,23 +86,23 @@ export class AdapterRegistry {
 
   static load(adapters: AdapterPlugin[]): AdapterRegistry {
     const seen = new Set<string>();
-    for (const a of adapters) {
-      if (a.apiVersion !== 2) {
-        throw new Error(`Adapter "${a.name}" requires apiVersion 2, got ${(a as { apiVersion: unknown }).apiVersion}`);
+    for (const adapter of adapters) {
+      if (adapter.apiVersion !== 2) {
+        throw new Error(`Adapter "${adapter.name}" requires apiVersion 2, got ${(adapter as { apiVersion: unknown }).apiVersion}`);
       }
-      if (a.type !== 'adapter') {
-        throw new Error(`Adapter "${a.name}" has invalid type "${a.type}" (expected "adapter")`);
+      if (adapter.type !== 'adapter') {
+        throw new Error(`Adapter "${adapter.name}" has invalid type "${adapter.type}" (expected "adapter")`);
       }
-      if (seen.has(a.name)) {
-        throw new Error(`Duplicate adapter name "${a.name}"`);
+      if (seen.has(adapter.name)) {
+        throw new Error(`Duplicate adapter name "${adapter.name}"`);
       }
-      seen.add(a.name);
+      seen.add(adapter.name);
     }
     return new AdapterRegistry(adapters);
   }
 
   get(name: string): AdapterPlugin {
-    const found = this.adapters.find(a => a.name === name);
+    const found = this.adapters.find(adapter => adapter.name === name);
     if (!found && name in BUILTIN_ADAPTERS) return resolveAdapter(name);
     if (!found) {
       const available = [...new Set([...this.list(), ...Object.keys(BUILTIN_ADAPTERS)])].join(', ');
@@ -112,6 +112,6 @@ export class AdapterRegistry {
   }
 
   list(): string[] {
-    return this.adapters.map(a => a.name);
+    return this.adapters.map(adapter => adapter.name);
   }
 }

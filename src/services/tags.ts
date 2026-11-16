@@ -94,7 +94,7 @@ export const JUDGE_SCOPES = ['executed', 'program', 'agent'] as const;
  * does not coin them, so they never conflict with a similar tag: `#agent` and
  * `#agent-pack` both stand.
  */
-export const LANGUAGE_TAGS: ReadonlySet<string> = new Set([JUDGE_TAG, ...JUDGE_SCOPES.map(s => `#${s}`)]);
+export const LANGUAGE_TAGS: ReadonlySet<string> = new Set([JUDGE_TAG, ...JUDGE_SCOPES.map(scope => `#${scope}`)]);
 
 // ────────────────────────────────────────────────────────────────────────────
 // Pure utilities — parsing & normalisation
@@ -115,14 +115,14 @@ export const LANGUAGE_TAGS: ReadonlySet<string> = new Set([JUDGE_TAG, ...JUDGE_S
  * (e.g. a string that is entirely punctuation).
  */
 function normalizeTag(raw: string): string | null {
-  let s = raw.startsWith('#') ? raw.slice(1) : raw;
-  s = s.toLowerCase();
-  s = s.replace(/[_\s]+/g, '-');
-  s = s.replace(/[^a-z0-9-]/g, '');
-  s = s.replace(/-+/g, '-');
-  s = s.replace(/^-+|-+$/g, '');
-  if (s === '' || !/^[a-z0-9]/.test(s)) return null;
-  return `#${s}`;
+  let slug = raw.startsWith('#') ? raw.slice(1) : raw;
+  slug = slug.toLowerCase();
+  slug = slug.replace(/[_\s]+/g, '-');
+  slug = slug.replace(/[^a-z0-9-]/g, '');
+  slug = slug.replace(/-+/g, '-');
+  slug = slug.replace(/^-+|-+$/g, '');
+  if (slug === '' || !/^[a-z0-9]/.test(slug)) return null;
+  return `#${slug}`;
 }
 
 /**
@@ -134,7 +134,7 @@ function parseApplies(payloads: readonly string[]): { tags: string[]; scopes: st
   const tags: string[] = [];
   const scopes: string[] = [];
   const invalid: string[] = [];
-  for (const tok of payloads.flatMap(p => splitList(p))) {
+  for (const tok of payloads.flatMap(payload => splitList(payload))) {
     if (TAG_RE.test(tok)) { if (!tags.includes(tok)) tags.push(tok); }
     else if (PERIMETER_RE.test(tok)) { if (!scopes.includes(tok)) scopes.push(tok); }
     else invalid.push(tok);
@@ -168,9 +168,9 @@ function setKey(modules: ReadonlySet<string>): string {
   return [...modules].sort().join('\0');
 }
 
-function isStrictSuperset(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
-  if (a.size <= b.size) return false;
-  for (const x of b) if (!a.has(x)) return false;
+function isStrictSuperset(superset: ReadonlySet<string>, subset: ReadonlySet<string>): boolean {
+  if (superset.size <= subset.size) return false;
+  for (const member of subset) if (!superset.has(member)) return false;
   return true;
 }
 
@@ -181,9 +181,9 @@ interface Concept {
 }
 
 function pickCanonicalTag(tags: string[]): { tag: string; aliases: string[] } {
-  const sorted = [...tags].sort((a, b) => {
-    if (a.length !== b.length) return a.length - b.length;
-    return a.localeCompare(b);
+  const sorted = [...tags].sort((left, right) => {
+    if (left.length !== right.length) return left.length - right.length;
+    return left.localeCompare(right);
   });
   return { tag: sorted[0], aliases: sorted.slice(1) };
 }
@@ -205,17 +205,17 @@ function mergeIntoConcepts(byTag: ReadonlyMap<string, ReadonlySet<string>>): Con
 }
 
 function pickPrimaryParent(parents: Concept[]): Concept {
-  const sorted = [...parents].sort((a, b) => {
-    if (a.modules.size !== b.modules.size) return a.modules.size - b.modules.size;
-    return a.tag.localeCompare(b.tag);
+  const sorted = [...parents].sort((left, right) => {
+    if (left.modules.size !== right.modules.size) return left.modules.size - right.modules.size;
+    return left.tag.localeCompare(right.tag);
   });
   return sorted[0];
 }
 
 function sortNodes(nodes: TagNode[]): TagNode[] {
-  return [...nodes].sort((a, b) => {
-    if (a.members.length !== b.members.length) return b.members.length - a.members.length;
-    return a.tag.localeCompare(b.tag);
+  return [...nodes].sort((left, right) => {
+    if (left.members.length !== right.members.length) return right.members.length - left.members.length;
+    return left.tag.localeCompare(right.tag);
   });
 }
 
@@ -235,28 +235,28 @@ export function buildHierarchy(byTag: ReadonlyMap<string, ReadonlySet<string>>):
   if (concepts.length === 0) return [];
 
   const directParents = new Map<Concept, Concept[]>();
-  for (const b of concepts) {
-    const strictSupers = concepts.filter(a => a !== b && isStrictSuperset(a.modules, b.modules));
-    const direct = strictSupers.filter(a =>
-      !strictSupers.some(c => c !== a && isStrictSuperset(a.modules, c.modules) && isStrictSuperset(c.modules, b.modules)),
+  for (const concept of concepts) {
+    const strictSupers = concepts.filter(candidate => candidate !== concept && isStrictSuperset(candidate.modules, concept.modules));
+    const direct = strictSupers.filter(parent =>
+      !strictSupers.some(between => between !== parent && isStrictSuperset(parent.modules, between.modules) && isStrictSuperset(between.modules, concept.modules)),
     );
-    directParents.set(b, direct);
+    directParents.set(concept, direct);
   }
 
   const nodeOf = new Map<Concept, TagNode>();
-  for (const c of concepts) {
-    nodeOf.set(c, { tag: c.tag, aliases: c.aliases, members: [...c.modules], children: [] });
+  for (const concept of concepts) {
+    nodeOf.set(concept, { tag: concept.tag, aliases: concept.aliases, members: [...concept.modules], children: [] });
   }
 
   const roots: TagNode[] = [];
-  for (const c of concepts) {
-    const parents = directParents.get(c)!;
+  for (const concept of concepts) {
+    const parents = directParents.get(concept)!;
     if (parents.length === 0) {
-      roots.push(nodeOf.get(c)!);
+      roots.push(nodeOf.get(concept)!);
       continue;
     }
     const primary = pickPrimaryParent(parents);
-    nodeOf.get(primary)!.children.push(nodeOf.get(c)!);
+    nodeOf.get(primary)!.children.push(nodeOf.get(concept)!);
   }
 
   for (const node of nodeOf.values()) node.children = sortNodes(node.children);
@@ -307,7 +307,7 @@ function useTagRegistry() {
     for (const tag of tags) {
       // Tags already in the registry are safe (same tag shared by multiple modules).
       if (byTag.has(tag) || LANGUAGE_TAGS.has(tag)) continue;
-      const conflict = findSimilar(tag, [...byTag.keys()].filter(t => !LANGUAGE_TAGS.has(t)));
+      const conflict = findSimilar(tag, [...byTag.keys()].filter(knownTag => !LANGUAGE_TAGS.has(knownTag)));
       if (conflict !== null) {
         errors.push({
           file,
@@ -348,7 +348,7 @@ function useTagRegistry() {
    */
   function snapshot(): TagRegistrySnapshot {
     return {
-      byTag: Object.fromEntries(Array.from(byTag, ([k, v]) => [k, [...v]])),
+      byTag: Object.fromEntries(Array.from(byTag, ([tag, moduleKeys]) => [tag, [...moduleKeys]])),
       errors: [...errors],
     };
   }

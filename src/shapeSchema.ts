@@ -45,11 +45,11 @@ interface ParsedRange {
 }
 
 /** Parse a range expression: `a..b`, `>=n`, `<=n`. Empty on no match. */
-function parseRange(s: string): ParsedRange {
-  let m: RegExpMatchArray | null;
-  if ((m = s.match(/^(\d+)\.\.(\d+)/))) return { min: Number(m[1]), max: Number(m[2]) };
-  if ((m = s.match(/^>=\s*(\d+)/))) return { min: Number(m[1]) };
-  if ((m = s.match(/^<=\s*(\d+)/))) return { max: Number(m[1]) };
+function parseRange(text: string): ParsedRange {
+  let match: RegExpMatchArray | null;
+  if ((match = text.match(/^(\d+)\.\.(\d+)/))) return { min: Number(match[1]), max: Number(match[2]) };
+  if ((match = text.match(/^>=\s*(\d+)/))) return { min: Number(match[1]) };
+  if ((match = text.match(/^<=\s*(\d+)/))) return { max: Number(match[1]) };
   return {};
 }
 
@@ -58,38 +58,38 @@ function parseRange(s: string): ParsedRange {
  * shapeCompiler's `typeToPhrase` exactly — same grammar, different output.
  */
 export function parseTypeSpec(rawType: string): SlotTypeSpec {
-  let m: RegExpMatchArray | null;
-  if ((m = rawType.match(/^LIST\s+<([a-z][a-z0-9_-]*)>\s*(.*)$/i))) {
-    return { kind: 'list', ref: m[1], ...parseRange(m[2].trim()) };
+  let match: RegExpMatchArray | null;
+  if ((match = rawType.match(/^LIST\s+<([a-z][a-z0-9_-]*)>\s*(.*)$/i))) {
+    return { kind: 'list', ref: match[1], ...parseRange(match[2].trim()) };
   }
-  if ((m = rawType.match(/^<([a-z][a-z0-9_-]*)>$/))) return { kind: 'shape', ref: m[1] };
-  if ((m = rawType.match(/^ENUM\[(.*)\]$/i))) {
-    return { kind: 'enum', values: splitList(m[1]) };
+  if ((match = rawType.match(/^<([a-z][a-z0-9_-]*)>$/))) return { kind: 'shape', ref: match[1] };
+  if ((match = rawType.match(/^ENUM\[(.*)\]$/i))) {
+    return { kind: 'enum', values: splitList(match[1]) };
   }
-  if ((m = rawType.match(/^NUMBER\b\s*(.*)$/i))) {
-    return { kind: 'number', ...parseRange(m[1].trim()) };
+  if ((match = rawType.match(/^NUMBER\b\s*(.*)$/i))) {
+    return { kind: 'number', ...parseRange(match[1].trim()) };
   }
-  if ((m = rawType.match(/^TEXT\b\s*(.*)$/i))) {
-    const rest = m[1].trim();
+  if ((match = rawType.match(/^TEXT\b\s*(.*)$/i))) {
+    const rest = match[1].trim();
     const spec: SlotTypeSpec = { kind: 'text' };
-    let c: RegExpMatchArray | null;
-    if ((c = rest.match(/MIN_WORDS\s+(\d+)/i))) spec.minWords = Number(c[1]);
-    if ((c = rest.match(/MAX_WORDS\s+(\d+)/i))) spec.maxWords = Number(c[1]);
-    if ((c = rest.match(/REGEX\s+\/(.*)\//i))) spec.regex = new RegExp(c[1]);
+    let constraint: RegExpMatchArray | null;
+    if ((constraint = rest.match(/MIN_WORDS\s+(\d+)/i))) spec.minWords = Number(constraint[1]);
+    if ((constraint = rest.match(/MAX_WORDS\s+(\d+)/i))) spec.maxWords = Number(constraint[1]);
+    if ((constraint = rest.match(/REGEX\s+\/(.*)\//i))) spec.regex = new RegExp(constraint[1]);
     return spec;
   }
   return { kind: 'any', raw: rawType };
 }
 
-function wordCount(s: string): number {
-  const words = s.trim().split(/\s+/).filter(Boolean);
+function wordCount(text: string): number {
+  const words = text.trim().split(/\s+/).filter(Boolean);
   return words.length;
 }
 
-function describeValue(v: unknown): string {
-  if (v === null) return 'null';
-  if (Array.isArray(v)) return 'an array';
-  return typeof v === 'object' ? 'an object' : `${typeof v} "${String(v)}"`;
+function describeValue(value: unknown): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'an array';
+  return typeof value === 'object' ? 'an object' : `${typeof value} "${String(value)}"`;
 }
 
 /** A slot as the validator sees it: name, optional, resolved type spec. */
@@ -123,7 +123,7 @@ function nestedIssues(at: string, value: unknown, ref: string, resolve?: SlotRes
   if (scalar) return checkSlot({ name: at, optional: false, spec: scalar }, value, resolve);
   const slots = slotsOf(ref, resolve);
   if (!slots) return [];
-  return validateRecord(value, slots, resolve).map(i => ({ ...i, field: i.field === '(root)' ? at : `${at}.${i.field}` }));
+  return validateRecord(value, slots, resolve).map(issue => ({ ...issue, field: issue.field === '(root)' ? at : `${at}.${issue.field}` }));
 }
 
 /** Validate one field value against its slot spec. */
@@ -184,7 +184,7 @@ function checkSlot(slot: SlotSpec, value: unknown, resolve?: SlotResolver): Sche
       if (spec.max !== undefined && value.length > spec.max) {
         return [{ field, message: `expected ≤${spec.max} items, got ${value.length}` }];
       }
-      return value.flatMap((item, i) => nestedIssues(`${field}[${i}]`, item, spec.ref, resolve));
+      return value.flatMap((item, index) => nestedIssues(`${field}[${index}]`, item, spec.ref, resolve));
     }
     case 'any':
       return [];
@@ -198,18 +198,18 @@ function checkSlot(slot: SlotSpec, value: unknown, resolve?: SlotResolver): Sche
  * accepted stray field is schema drift.
  */
 export function validateSlots(value: unknown, template: ParsedTemplate): SchemaIssue[] {
-  return validateRecord(value, template.slots.map(s => ({ name: s.name, optional: s.optional, spec: parseTypeSpec(s.rawType) })));
+  return validateRecord(value, template.slots.map(slot => ({ name: slot.name, optional: slot.optional, spec: parseTypeSpec(slot.rawType) })));
 }
 
 /** A compiled document's slot type as a validator spec — the two are mirrors. */
-export function specOfSlotType(t: ApSlotType): SlotTypeSpec {
-  switch (t.kind) {
-    case 'text': return { kind: 'text', minWords: t.minWords, maxWords: t.maxWords, regex: t.regex !== undefined ? new RegExp(t.regex) : undefined };
-    case 'number': return { kind: 'number', min: t.min, max: t.max };
-    case 'enum': return { kind: 'enum', values: t.values };
-    case 'shape': return { kind: 'shape', ref: addressName(t.ref.target) };
-    case 'list': return { kind: 'list', ref: addressName(t.ref.target), min: t.min, max: t.max };
-    case 'any': return { kind: 'any', raw: t.raw };
+export function specOfSlotType(slotType: ApSlotType): SlotTypeSpec {
+  switch (slotType.kind) {
+    case 'text': return { kind: 'text', minWords: slotType.minWords, maxWords: slotType.maxWords, regex: slotType.regex !== undefined ? new RegExp(slotType.regex) : undefined };
+    case 'number': return { kind: 'number', min: slotType.min, max: slotType.max };
+    case 'enum': return { kind: 'enum', values: slotType.values };
+    case 'shape': return { kind: 'shape', ref: addressName(slotType.ref.target) };
+    case 'list': return { kind: 'list', ref: addressName(slotType.ref.target), min: slotType.min, max: slotType.max };
+    case 'any': return { kind: 'any', raw: slotType.raw };
   }
 }
 
@@ -218,7 +218,7 @@ export function specOfSlotType(t: ApSlotType): SlotTypeSpec {
  * `allOptional` for a partial write, where no slot is required.
  */
 export function slotSpecsOf(slots: readonly { name: string; optional: boolean; type: ApSlotType }[], allOptional = false): SlotSpec[] {
-  return slots.map(s => ({ name: s.name, optional: allOptional || s.optional, spec: specOfSlotType(s.type) }));
+  return slots.map(slot => ({ name: slot.name, optional: allOptional || slot.optional, spec: specOfSlotType(slot.type) }));
 }
 
 /**
@@ -231,7 +231,7 @@ export function validateRecord(value: unknown, slots: readonly SlotSpec[], resol
   }
   const record = value as Record<string, unknown>;
   const issues: SchemaIssue[] = [];
-  const known = new Set(slots.map(s => s.name));
+  const known = new Set(slots.map(slot => slot.name));
 
   for (const key of Object.keys(record)) {
     if (!known.has(key)) {
@@ -240,12 +240,12 @@ export function validateRecord(value: unknown, slots: readonly SlotSpec[], resol
   }
 
   for (const slot of slots) {
-    const v = record[slot.name];
-    if (v === undefined) {
+    const fieldValue = record[slot.name];
+    if (fieldValue === undefined) {
       if (!slot.optional) issues.push({ field: slot.name, message: 'required field missing' });
       continue;
     }
-    issues.push(...checkSlot(slot, v, resolve));
+    issues.push(...checkSlot(slot, fieldValue, resolve));
   }
   return issues;
 }
@@ -260,8 +260,8 @@ export function validateRecord(value: unknown, slots: readonly SlotSpec[], resol
 export function jsonSchemaOf(slots: readonly SlotSpec[], resolve?: SlotResolver, expanding: ReadonlySet<string> = new Set()): Record<string, unknown> {
   return {
     type: 'object',
-    properties: Object.fromEntries(slots.map(s => [s.name, slotJsonSchema(s.spec, resolve, expanding)])),
-    required: slots.filter(s => !s.optional).map(s => s.name),
+    properties: Object.fromEntries(slots.map(slot => [slot.name, slotJsonSchema(slot.spec, resolve, expanding)])),
+    required: slots.filter(slot => !slot.optional).map(slot => slot.name),
     additionalProperties: false,
   };
 }
@@ -292,17 +292,17 @@ function slotJsonSchema(spec: SlotTypeSpec, resolve: SlotResolver | undefined, e
 
 /** Render issues as one actionable multi-line message (one line per issue). */
 export function formatIssues(issues: SchemaIssue[]): string {
-  return issues.map(i => `${i.field}: ${i.message}`).join('\n');
+  return issues.map(issue => `${issue.field}: ${issue.message}`).join('\n');
 }
 
 /** The bodies of a template and of every template its slots reach, each once, depth first. */
 export function templateClosure(name: string, templates: readonly { name: string; body: string }[], seen = new Set<string>()): string[] {
-  const template = templates.find(t => t.name === name);
+  const template = templates.find(candidate => candidate.name === name);
   if (!template || seen.has(name)) return [];
   seen.add(name);
   const parsed = parseTemplate(template.body);
-  const nested = (parsed?.slots ?? []).flatMap(s => {
-    const spec = parseTypeSpec(s.rawType);
+  const nested = (parsed?.slots ?? []).flatMap(slot => {
+    const spec = parseTypeSpec(slot.rawType);
     return spec.kind === 'shape' || spec.kind === 'list' ? templateClosure(spec.ref, templates, seen) : [];
   });
   return [template.body, ...nested];
@@ -330,5 +330,5 @@ export function jsonExample(slots: readonly SlotSpec[], resolve: SlotResolver, s
       case 'any': return null;
     }
   };
-  return Object.fromEntries(slots.map(s => [s.name, value(s.spec)]));
+  return Object.fromEntries(slots.map(slot => [slot.name, value(slot.spec)]));
 }

@@ -152,7 +152,7 @@ function unitsForFile(
   const namespace = buildNamespace(filePath, roots, libraries);
   const all = exportedBlocksOf(parseBlocks(raw).blocks);
   // An exported VAR is no unit of the catalogue: IMPORT finds it directly.
-  const exported = all.filter(b => !isExportedVar(b));
+  const exported = all.filter(block => !isExportedVar(block));
   if (exported.length === 0 && all.length > 0) return [];
 
   if (exported.length === 0) {
@@ -240,7 +240,7 @@ function scanUnits(config: Config): ScanResult {
   // any still-remote entry (unmaterialised) is skipped here exactly as before.
   const roots: string[] = [
     resolve(config.libraryRoot),
-    ...(config.sharedLibraries ?? []).map(l => resolve(l.path)),
+    ...(config.sharedLibraries ?? []).map(library => resolve(library.path)),
   ];
 
   // Collect and sort all files across all roots for deterministic first-wins ordering.

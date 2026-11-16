@@ -77,7 +77,7 @@ export function pluginOf(kind: string): PluginSpec | null {
 
 /** The plugin whose block opens with a keyword (`CHECKLIST`), or null. */
 export function pluginOfKey(key: string): PluginSpec | null {
-  return [...PLUGINS.values()].find(p => p.key === key) ?? null;
+  return [...PLUGINS.values()].find(plugin => plugin.key === key) ?? null;
 }
 
 /** Every plugin known to this process. */
@@ -88,20 +88,20 @@ export function plugins(): PluginSpec[] {
 /** A plugin's templates as the validator reads them: a record's slots, or a scalar's type. */
 export function pluginResolver(spec: PluginSpec): SlotResolver {
   return name => {
-    const t = spec.templates[name];
-    if (!t) return null;
-    return 'scalar' in t ? parseTypeSpec(t.scalar) : slotSpecs(t);
+    const template = spec.templates[name];
+    if (!template) return null;
+    return 'scalar' in template ? parseTypeSpec(template.scalar) : slotSpecs(template);
   };
 }
 
-function slotSpecs(t: { slots: { name: string; optional: boolean; rawType: string }[] }): SlotSpec[] {
-  return t.slots.map(s => ({ name: s.name, optional: s.optional, spec: parseTypeSpec(s.rawType) }));
+function slotSpecs(template: { slots: { name: string; optional: boolean; rawType: string }[] }): SlotSpec[] {
+  return template.slots.map(slot => ({ name: slot.name, optional: slot.optional, spec: parseTypeSpec(slot.rawType) }));
 }
 
 /** The slots of a plugin template that is a record — [] for a scalar or none. */
 export function templateSlots(spec: PluginSpec, name: string | null): SlotSpec[] {
-  const t = name ? spec.templates[name] : undefined;
-  return t && 'slots' in t ? slotSpecs(t) : [];
+  const template = name ? spec.templates[name] : undefined;
+  return template && 'slots' in template ? slotSpecs(template) : [];
 }
 
 /** The type a value of a slot takes once written as text: a scalar reached through a template, or the slot's own. */
@@ -125,7 +125,7 @@ export function recordOfLines(spec: PluginSpec, lines: readonly { key: string; r
   const resolve = pluginResolver(spec);
   const record: Record<string, unknown> = {};
   for (const slot of templateSlots(spec, spec.block)) {
-    const written = lines.filter(l => l.key === lineKeyOf(slot.name)).map(l => valueOf(scalarType(slot.spec, resolve), l.rest.trim()));
+    const written = lines.filter(line => line.key === lineKeyOf(slot.name)).map(line => valueOf(scalarType(slot.spec, resolve), line.rest.trim()));
     if (slot.spec.kind === 'list') { if (written.length > 0) record[slot.name] = written; }
     else if (written.length > 0) record[slot.name] = written[written.length - 1];
   }
@@ -146,10 +146,10 @@ export function recordIssues(spec: PluginSpec, template: string | null, record: 
 export function lineIssues(spec: PluginSpec, record: Record<string, unknown>): string | null {
   const issues = validateRecord(record, templateSlots(spec, spec.block), pluginResolver(spec));
   if (issues.length === 0) return null;
-  return issues.map(i => {
-    const at = i.field.match(/^([^.[]+)(?:\[(\d+)\])?(.*)$/);
-    const line = at ? `${lineKeyOf(at[1])}${at[2] !== undefined ? ` line ${Number(at[2]) + 1}` : ''}${at[3]}` : i.field;
-    return i.message === 'required field missing' ? `${line}: missing — the block needs this line` : `${line}: ${i.message}`;
+  return issues.map(issue => {
+    const at = issue.field.match(/^([^.[]+)(?:\[(\d+)\])?(.*)$/);
+    const line = at ? `${lineKeyOf(at[1])}${at[2] !== undefined ? ` line ${Number(at[2]) + 1}` : ''}${at[3]}` : issue.field;
+    return issue.message === 'required field missing' ? `${line}: missing — the block needs this line` : `${line}: ${issue.message}`;
   }).join('; ');
 }
 
@@ -169,7 +169,7 @@ export function recordOfArgs(spec: PluginSpec, template: string | null, args: re
     const eq = pair.indexOf('=');
     if (eq <= 0) return { error: `\`${pair}\` is not a field=value pair` };
     const field = pair.slice(0, eq);
-    const slot = slots.find(s => s.name === field);
+    const slot = slots.find(candidate => candidate.name === field);
     record[field] = slot ? valueOf(scalarType(slot.spec, resolve), pair.slice(eq + 1)) : pair.slice(eq + 1);
   }
   return { record };
@@ -177,8 +177,8 @@ export function recordOfArgs(spec: PluginSpec, template: string | null, args: re
 
 /** An operation's input as its command shows it: `item=<check>`, `[note=<text>]` — `-` for JSON on stdin. */
 export function inputUsage(spec: PluginSpec, template: string | null): string {
-  return templateSlots(spec, template).map(s => {
-    const shown = s.spec.kind === 'shape' || s.spec.kind === 'list' ? `<${s.spec.ref}>` : `<${s.spec.kind}>`;
-    return s.optional ? `[${s.name}=${shown}]` : `${s.name}=${shown}`;
+  return templateSlots(spec, template).map(slot => {
+    const shown = slot.spec.kind === 'shape' || slot.spec.kind === 'list' ? `<${slot.spec.ref}>` : `<${slot.spec.kind}>`;
+    return slot.optional ? `[${slot.name}=${shown}]` : `${slot.name}=${shown}`;
   }).join(' ');
 }

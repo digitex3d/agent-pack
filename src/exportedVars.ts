@@ -59,9 +59,9 @@ export function importVariable(
 export function visibleIn(
   file: string, imported: ImportedVariable[], everywhere: { constants: Record<string, string>; variables: Iterable<string> },
 ): { constants: Record<string, string>; variables: Set<string> } {
-  const own = imported.filter(v => v.importers.includes(file));
+  const own = imported.filter(variable => variable.importers.includes(file));
   const { constants } = importedVariables(own, everywhere.constants);
-  return { constants, variables: new Set([...everywhere.variables, ...own.filter(v => v.decl.form !== 'constant').map(v => v.name)]) };
+  return { constants, variables: new Set([...everywhere.variables, ...own.filter(variable => variable.decl.form !== 'constant').map(variable => variable.name)]) };
 }
 
 /** The constants — merged over `known` — and the variables a compilation imported. */

@@ -38,9 +38,9 @@ function markLines(text: string, ctr: string): { opens: number[]; closes: number
   const { open, close } = zoneMarks(ctr);
   const opens: number[] = [];
   const closes: number[] = [];
-  text.split(/\r?\n/).forEach((line, i) => {
-    if (line.includes(close)) closes.push(i + 1);
-    else if (line.includes(open)) opens.push(i + 1);
+  text.split(/\r?\n/).forEach((line, index) => {
+    if (line.includes(close)) closes.push(index + 1);
+    else if (line.includes(open)) opens.push(index + 1);
   });
   return { opens, closes };
 }
@@ -60,13 +60,13 @@ export function scanZones(projectRoot: string, files: string[], ids: string[]): 
     for (const ctr of ids) {
       if (!text.includes(ctr) || problems.has(ctr)) continue;
       const { opens, closes } = markLines(text, ctr);
-      const marks = [...opens.map(line => ({ line, open: true })), ...closes.map(line => ({ line, open: false }))].sort((a, b) => a.line - b.line);
+      const marks = [...opens.map(line => ({ line, open: true })), ...closes.map(line => ({ line, open: false }))].sort((left, right) => left.line - right.line);
       let open: number | null = null;
-      for (const m of marks) {
-        if (m.open && open !== null) { problems.set(ctr, `${file}: two opening marks, lines ${open} and ${m.line} — close the first one`); break; }
-        if (!m.open && open === null) { problems.set(ctr, `${file}: the closing mark (line ${m.line}) comes with no opening one before it`); break; }
-        if (m.open) open = m.line;
-        else { zones.set(ctr, [...(zones.get(ctr) ?? []), { file, open: open!, close: m.line }]); open = null; }
+      for (const mark of marks) {
+        if (mark.open && open !== null) { problems.set(ctr, `${file}: two opening marks, lines ${open} and ${mark.line} — close the first one`); break; }
+        if (!mark.open && open === null) { problems.set(ctr, `${file}: the closing mark (line ${mark.line}) comes with no opening one before it`); break; }
+        if (mark.open) open = mark.line;
+        else { zones.set(ctr, [...(zones.get(ctr) ?? []), { file, open: open!, close: mark.line }]); open = null; }
       }
       if (open !== null && !problems.has(ctr)) problems.set(ctr, `${file}: the opening mark (line ${open}) is never closed`);
     }
@@ -76,10 +76,10 @@ export function scanZones(projectRoot: string, files: string[], ids: string[]): 
 
 /** Zones as the table writes them, and back. */
 export function zonesText(zones: Zone[]): string {
-  return zones.map(z => `${z.file}:${z.open}-${z.close}`).join(';');
+  return zones.map(zone => `${zone.file}:${zone.open}-${zone.close}`).join(';');
 }
 
 export function parseZones(text: string): Zone[] {
-  return text.split(';').map(part => /^(.+):(\d+)-(\d+)$/.exec(part)).filter((m): m is RegExpExecArray => m !== null)
-    .map(m => ({ file: m[1], open: Number(m[2]), close: Number(m[3]) }));
+  return text.split(';').map(part => /^(.+):(\d+)-(\d+)$/.exec(part)).filter((match): match is RegExpExecArray => match !== null)
+    .map(match => ({ file: match[1], open: Number(match[2]), close: Number(match[3]) }));
 }

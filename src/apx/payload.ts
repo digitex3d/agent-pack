@@ -124,10 +124,10 @@ export function storeSections(held: readonly Held[], compress: boolean): Section
       if (prior && prior.json !== json) throw new Error(`one id, one definition: ${block.id} is one block in ${prior.from} and another in ${who}`);
       if (!prior) blocks.set(block.id, { json, from: who });
     }
-    const view: View = { build: payload.build, schemaVersion: doc.schemaVersion, meta: doc.meta, blocks: Object.entries(doc.blocks).map(([address, b]) => [address, b.id]) };
+    const view: View = { build: payload.build, schemaVersion: doc.schemaVersion, meta: doc.meta, blocks: Object.entries(doc.blocks).map(([address, block]) => [address, block.id]) };
     views.push(section(VIEW_SECTION, name, JSON.stringify(view)));
   }
-  return [...views, ...[...blocks].map(([id, b]) => section(BLOCK_SECTION, id, b.json))];
+  return [...views, ...[...blocks].map(([id, block]) => section(BLOCK_SECTION, id, block.json))];
 }
 
 /** The whole `.apx` file of an agent: the bundled engine, then the pack lines — its view and its blocks. */
@@ -158,8 +158,8 @@ export function packHolds(pack: Pack, name = ''): boolean {
 
 /** The names of the documents a pack holds — its own ('') first. */
 export function heldNames(pack: Pack): string[] {
-  const names = new Set([VIEW_SECTION, IMAGE_SECTION].flatMap(type => pack.entries(type).map(e => e.name)));
-  return [...names].sort((a, b) => Number(b === '') - Number(a === ''));
+  const names = new Set([VIEW_SECTION, IMAGE_SECTION].flatMap(type => pack.entries(type).map(entry => entry.name)));
+  return [...names].sort((left, right) => Number(right === '') - Number(left === ''));
 }
 
 /**
@@ -177,16 +177,21 @@ export function packPayload(pack: Pack, name = ''): ApxPayload {
   }
   const blocks: Record<string, unknown> = {};
   for (const [address, id] of view.blocks) {
-    const block = pack.json(BLOCK_SECTION, id);
+    const block = packBlock(pack, id);
     if (block === null) throw new Error(`this pack is damaged — ${name || 'its document'} names the block ${id}, which it does not hold`);
     blocks[address] = block;
   }
   return { build: view.build, document: JSON.stringify({ schemaVersion: view.schemaVersion, meta: view.meta, blocks }) };
 }
 
+/** One block of the pack's store, by its id — null when the pack holds none. */
+export function packBlock<T>(pack: Pack, id: string): T | null {
+  return pack.json<T>(BLOCK_SECTION, id);
+}
+
 /** The name of a document of the pack that has the block `id` — its own first — or null: an id is one block, whoever holds it. */
 export function viewHolding(pack: Pack, id: string): string | null {
-  const names = pack.entries(VIEW_SECTION).map(e => e.name).sort((a, b) => Number(b === '') - Number(a === ''));
+  const names = pack.entries(VIEW_SECTION).map(entry => entry.name).sort((left, right) => Number(right === '') - Number(left === ''));
   return names.find(name => pack.json<View>(VIEW_SECTION, name)?.blocks.some(([, held]) => held === id)) ?? null;
 }
 

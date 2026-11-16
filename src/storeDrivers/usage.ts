@@ -14,14 +14,14 @@ import type { StoreDecl, StoreDriver } from './types.js';
 
 /** A field placeholder written with this slot's real type, not a generic one. */
 function hint(slot: ApSlot): string {
-  const t = slot.type;
-  switch (t.kind) {
+  const slotType = slot.type;
+  switch (slotType.kind) {
     case 'enum':
-      return `<${t.values.join('|')}>`;
+      return `<${slotType.values.join('|')}>`;
     case 'number':
-      if (t.min !== undefined && t.max !== undefined) return `<${t.min}..${t.max}>`;
-      if (t.min !== undefined) return `<≥${t.min}>`;
-      if (t.max !== undefined) return `<≤${t.max}>`;
+      if (slotType.min !== undefined && slotType.max !== undefined) return `<${slotType.min}..${slotType.max}>`;
+      if (slotType.min !== undefined) return `<≥${slotType.min}>`;
+      if (slotType.max !== undefined) return `<≤${slotType.max}>`;
       return '<n>';
     case 'text':
       return "'…'";
@@ -45,7 +45,7 @@ function statusSlot(store: StoreDecl): { name: string; values: string[] } | null
 export function storeUsage(store: StoreDecl, driver: StoreDriver, command: (op: string) => string): string[] {
   const can = new Set(driver.capabilities);
   const key = `<${store.key ?? 'id'}>`;
-  const fields = store.slots.map(s => `${s.name}=${hint(s)}`).join(' ');
+  const fields = store.slots.map(slot => `${slot.name}=${hint(slot)}`).join(' ');
   const lines = [`${command('put')} ${fields}`];
 
   const st = statusSlot(store);

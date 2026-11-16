@@ -1,0 +1,35 @@
+# agent-pack — the main of agent-pack's own development
+
+POLICY language:
+    ABOUT    the language of everything written in this project
+    APPLIES  universal
+
+    ALWAYS  write code, comments, .ap files, documentation and commit messages in English
+
+POLICY commits:
+    ABOUT    the authorization and the content of every git commit in this project
+    APPLIES  universal
+
+    NEVER  create a commit, a branch or a tag without the developer's explicit authorization
+    NEVER  credit any AI harness or tool in a commit or a pull request — Claude, Claude Code or other — not even in a Co-Authored-By line
+
+POLICY security:
+    ABOUT    baseline security rules every agent in this project respects
+    APPLIES  universal
+
+    ALWAYS  validate every input crossing a trust boundary
+    ALWAYS  treat secrets as opaque tokens — never log them, never echo them
+    ALWAYS  fail closed when a permission check is ambiguous
+    NEVER   commit credentials, .env files or private keys
+
+POLICY raw-access:
+    ABOUT    who may access raw/
+    APPLIES  universal
+
+    NEVER  access raw/, unless you are the wiki-curator agent
+
+MAIN:
+    ABOUT   always-on rules for agent-pack core development
+    VERSION 0.1.0
+    TEAMS   feature-delivery
+    MEMBER  wiki-curator

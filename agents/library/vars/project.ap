@@ -1,0 +1,4 @@
+# project — the constants of this project
+
+EXPORT VAR project-name = agent-pack
+EXPORT VAR quality-check = ./quality-check.sh

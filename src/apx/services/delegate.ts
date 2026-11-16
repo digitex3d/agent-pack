@@ -3,7 +3,7 @@
 /**
  * The `delegate` service — work handed to someone else (D46):
  *
- *   - a contract (`exe-…`): an agent's own `DELEGATE … BY`, a `PROCEDURE*`, an
+ *   - a contract (`exe-…`): an agent's `ASK … BY`, a `PROCEDURE*`, an
  *     `IF*` — what the delegate is handed, and its answer checked and kept:
  *     `<apx> delegate input <exe-id>`, `<apx> delegate answer <exe-id> - [--into <var>]`;
  *   - a flow's background piece (`dlg-…`, `DELEGATE~` / `FORK~`), in the
@@ -24,7 +24,6 @@ import { sha256Hex } from '../../apdoc/ids.js';
 import { parseDuration, DURATION_FORM } from '../../delegation.js';
 import { DelegationTable, DELEGATION_ID_RE, CONTRACT_ID_RE, MARK_ID_RE, SETTLED_STATES, pieceRecord, pieceOf, runsOf, answerFlag, type DelegationRecord, type DelegationState } from '../delegations.js';
 import { countOf, type ApxHost, type ApxService } from '../service.js';
-import { errorMessage } from '../../errors.js';
 
 /** The service's old name: what it says to whoever still calls it. */
 export const OLD_DELEGATE_KIND = 'ask';
@@ -53,7 +52,7 @@ export const delegateService: ApxService = {
       case 'start': case 'deliver': case 'block': case 'ended': case 'take': case 'reassign': case 'list':
         return withRegistry(host, `delegate ${op}`, table => REGISTRY_OPS[op](host, table, args));
     }
-    return host.fail(2, `${op ? `'${op}' is no operation of delegate` : 'delegate takes an operation'} — ${host.cmd} delegate ${delegateService.operations.map(o => o.op).join('|')} …`);
+    return host.fail(2, `${op ? `'${op}' is no operation of delegate` : 'delegate takes an operation'} — ${host.cmd} delegate ${delegateService.operations.map(operation => operation.op).join('|')} …`);
   },
 };
 
@@ -68,12 +67,12 @@ function input(host: ApxHost, args: string[]): number {
   const json = host.inputJson(spec);
   if (!json) return host.lastCode;
   host.out(JSON.stringify(json, null, 1));
-  const A = FORMULAS.keywords.EXECUTOR.answer;
+  const answers = FORMULAS.keywords.EXECUTOR.answer;
   const shape = host.answerShape(spec);
-  if (spec.output.holds) return host.print(A.holds);
-  if (!shape) return host.print(A.text);
+  if (spec.output.holds) return host.print(answers.holds);
+  if (!shape) return host.print(answers.text);
   const slots = host.doc.slotsOf(shape);
-  host.out(fill(A.shaped, { name: refName(shape) }));
+  host.out(fill(answers.shaped, { name: refName(shape) }));
   return host.print(JSON.stringify(slots ? jsonExample(slots, host.doc.slotResolver()) : {}));
 }
 
@@ -103,14 +102,14 @@ function withRegistry(host: ApxHost, needs: string, then: (table: DelegationTabl
   const table = DelegationTable.open(host.projectRoot, session.id);
   try {
     return then(table);
-  } catch (e) {
-    return host.fail(2, `the background work could not be read or written: ${errorMessage(e)}`);
+  } catch (error) {
+    return host.fail(2, `the background work could not be read or written: ${error instanceof Error ? error.message : error}`);
   }
 }
 
 /** A piece's line: its id, what it fills, its state, who carries it out. */
-function line(r: DelegationRecord): string {
-  return `${r.dlg}  ${r.into || r.step}  ${r.state === 'ended' ? 'ended without delivery' : r.state}  → ${r.assignee || 'a fork'}${r.reason ? `  — ${r.reason}` : ''}`;
+function line(record: DelegationRecord): string {
+  return `${record.dlg}  ${record.into || record.step}  ${record.state === 'ended' ? 'ended without delivery' : record.state}  → ${record.assignee || 'a fork'}${record.reason ? `  — ${record.reason}` : ''}`;
 }
 
 /**
@@ -136,32 +135,32 @@ function known(host: ApxHost, id: string | undefined, usage: string): string | n
 /** A recorded piece — or null after saying why. */
 function recorded(host: ApxHost, table: DelegationTable, id: string | undefined, usage: string): DelegationRecord | null {
   if (!known(host, id, usage)) return null;
-  const r = table.get(id!);
-  if (!r) {
+  const record = table.get(id!);
+  if (!record) {
     host.lastCode = host.fail(1, CONTRACT_ID_RE.test(id!) ? `no contract ${id} in this session — ${host.cmd} contract list` : `${id} was never started in this session — ${host.cmd} delegate start ${id}`);
     return null;
   }
-  return r;
+  return record;
 }
 
 /** Move a piece from one of `from` to `to` — false after saying why when it is in none of them, or moved meanwhile. */
-function move(host: ApxHost, table: DelegationTable, r: DelegationRecord, from: readonly DelegationState[], to: DelegationState, fields: Partial<DelegationRecord> = {}): boolean {
-  if (!from.includes(r.state)) {
-    host.lastCode = host.fail(1, `${r.dlg} is ${r.state}, not ${from.join(' or ')} — ${host.cmd} delegate list`);
+function move(host: ApxHost, table: DelegationTable, record: DelegationRecord, from: readonly DelegationState[], to: DelegationState, fields: Partial<DelegationRecord> = {}): boolean {
+  if (!from.includes(record.state)) {
+    host.lastCode = host.fail(1, `${record.dlg} is ${record.state}, not ${from.join(' or ')} — ${host.cmd} delegate list`);
     return false;
   }
-  if (!table.transition(r.dlg, r.state, to, fields)) {
-    host.lastCode = host.fail(1, `${r.dlg} moved meanwhile — ${host.cmd} delegate list`);
+  if (!table.transition(record.dlg, record.state, to, fields)) {
+    host.lastCode = host.fail(1, `${record.dlg} moved meanwhile — ${host.cmd} delegate list`);
     return false;
   }
   return true;
 }
 
 /** A background piece handed to someone else keeps its step's `@WITHIN` and takes its new assignee's own perimeter; a contract keeps its zones. */
-function rebound(host: ApxHost, r: DelegationRecord, assignee: string): Partial<DelegationRecord> {
-  if (CONTRACT_ID_RE.test(r.dlg)) return {};
-  const work = host.doc.meta.background?.[pieceOf(r.dlg).work];
-  return { perimeter: host.workPerimeter(work?.within ?? [], assignee) };
+function rebound(host: ApxHost, record: DelegationRecord, assignee: string): Partial<DelegationRecord> {
+  if (CONTRACT_ID_RE.test(record.dlg)) return {};
+  const work = host.doc.meta.background?.[pieceOf(record.dlg).work];
+  return { perimeter: host.contracts.workPerimeter(work?.within ?? [], assignee) };
 }
 
 type RegistryOp = (host: ApxHost, table: DelegationTable, args: string[]) => number;
@@ -174,7 +173,7 @@ const REGISTRY_OPS: Record<string, RegistryOp> = {
     const fresh = pieceRecord({
       dlg: id!, flow: work.flow, step: work.step, into: work.into ?? '', assignee: work.by ?? '',
       state: 'running', started_at: new Date().toISOString(), author: host.root.name,
-      perimeter: host.workPerimeter(work.within ?? [], work.by ?? ''),
+      perimeter: host.contracts.workPerimeter(work.within ?? [], work.by ?? ''),
     });
     const prior = table.get(id!);
     // A loop starts the same piece on every round: only a piece still running cannot start again.
@@ -188,65 +187,65 @@ const REGISTRY_OPS: Record<string, RegistryOp> = {
   },
 
   deliver(host, table, [id, from, ...rest]) {
-    const r = recorded(host, table, id, 'deliver <dlg-id> -');
-    if (!r) return host.lastCode;
+    const record = recorded(host, table, id, 'deliver <dlg-id> -');
+    if (!record) return host.lastCode;
     // A contract is delivered from its copy, not from stdin.
-    if (CONTRACT_ID_RE.test(r.dlg)) return host.contracts.deliver(table, r, [from, ...rest].filter((a): a is string => a !== undefined));
+    if (CONTRACT_ID_RE.test(record.dlg)) return host.contracts.deliver(table, record, [from, ...rest].filter((arg): arg is string => arg !== undefined));
     // Another harness: its answer is the file its command wrote, its changes are in its copy (D66).
-    if (r.harness) {
-      if (from !== '--answer') return host.fail(2, answerFlag(r, host.cmd));
-      return host.contracts.deliverElsewhere(table, r);
+    if (record.harness) {
+      if (from !== '--answer') return host.fail(2, answerFlag(record, host.cmd));
+      return host.contracts.deliverElsewhere(table, record);
     }
-    if (r.state !== 'running') return host.fail(1, `${id} is ${r.state} — only a running piece is delivered`);
+    if (record.state !== 'running') return host.fail(1, `${id} is ${record.state} — only a running piece is delivered`);
     const text = (from === '-' || from === undefined ? readFileSync(0, 'utf-8') : from).trim();
     // One run of an EACH keeps its result: the WAIT collects the runs' into the list its INTO names.
-    if (r.into && pieceOf(r.dlg).run === null) {
-      const block = host.variable(r.into);
+    if (record.into && pieceOf(record.dlg).run === null) {
+      const block = host.variable(record.into);
       const failed = block ? host.storeVariable(block, text) : null;
-      if (failed) return host.fail(6, `${id} delivers into \`${r.into}\`: ${failed.reason} — deliver it again; nothing was stored`);
+      if (failed) return host.fail(6, `${id} delivers into \`${record.into}\`: ${failed.reason} — deliver it again; nothing was stored`);
     }
-    if (!move(host, table, r, ['running'], 'delivered', { result: JSON.stringify(text) })) return host.lastCode;
-    return host.print(line({ ...r, state: 'delivered' }));
+    if (!move(host, table, record, ['running'], 'delivered', { result: JSON.stringify(text) })) return host.lastCode;
+    return host.print(line({ ...record, state: 'delivered' }));
   },
 
   block(host, table, [id, ...why]) {
-    const r = recorded(host, table, id, 'block <dlg-id> "<why>"');
-    if (!r) return host.lastCode;
+    const record = recorded(host, table, id, 'block <dlg-id> "<why>"');
+    if (!record) return host.lastCode;
     const reason = why.join(' ').trim();
     if (!reason) return host.fail(2, `say why ${id} cannot be done — ${host.cmd} delegate block ${id} "<why>"`);
-    if (!move(host, table, r, ['running', 'ended'], 'blocked', { reason })) return host.lastCode;
-    return host.print(line({ ...r, state: 'blocked', reason }));
+    if (!move(host, table, record, ['running', 'ended'], 'blocked', { reason })) return host.lastCode;
+    return host.print(line({ ...record, state: 'blocked', reason }));
   },
 
   ended(host, table, [id]) {
-    const r = recorded(host, table, id, 'ended <dlg-id>');
-    if (!r) return host.lastCode;
-    if (!move(host, table, r, ['running'], 'ended')) return host.lastCode;
-    host.out(line({ ...r, state: 'ended' }));
+    const record = recorded(host, table, id, 'ended <dlg-id>');
+    if (!record) return host.lastCode;
+    if (!move(host, table, record, ['running'], 'ended')) return host.lastCode;
+    host.out(line({ ...record, state: 'ended' }));
     return host.print(`# decide: ${host.cmd} delegate take ${id}, ${host.cmd} delegate reassign ${id} <agent>, or ${host.cmd} delegate block ${id} "<why>"`);
   },
 
   take(host, table, [id]) {
-    const r = recorded(host, table, id, 'take <dlg-id>');
-    if (!r) return host.lastCode;
-    if (!move(host, table, r, ['running', 'ended'], 'running', { assignee: host.root.name, ...rebound(host, r, host.root.name) })) return host.lastCode;
-    host.out(line({ ...r, state: 'running', assignee: host.root.name }));
-    if (CONTRACT_ID_RE.test(r.dlg)) return host.print(`# it is yours: work in its copy, ${host.contracts.copy(r.dlg)}, then ${host.cmd} delegate deliver ${id}`);
+    const record = recorded(host, table, id, 'take <dlg-id>');
+    if (!record) return host.lastCode;
+    if (!move(host, table, record, ['running', 'ended'], 'running', { assignee: host.root.name, ...rebound(host, record, host.root.name) })) return host.lastCode;
+    host.out(line({ ...record, state: 'running', assignee: host.root.name }));
+    if (CONTRACT_ID_RE.test(record.dlg)) return host.print(`# it is yours: work in its copy, ${host.contracts.copy(record.dlg)}, then ${host.cmd} delegate deliver ${id}`);
     return host.print(`# it is yours: carry it out, then ${host.cmd} delegate deliver ${id} -`);
   },
 
   reassign(host, table, [id, agent]) {
-    const r = recorded(host, table, id, 'reassign <dlg-id> <agent>');
-    if (!r) return host.lastCode;
+    const record = recorded(host, table, id, 'reassign <dlg-id> <agent>');
+    if (!record) return host.lastCode;
     if (!agent) return host.fail(2, `name who takes ${id} over — ${host.cmd} delegate reassign ${id} <agent>`);
-    if (!move(host, table, r, ['running', 'ended'], 'running', { assignee: agent, ...rebound(host, r, agent) })) return host.lastCode;
-    host.out(line({ ...r, state: 'running', assignee: agent }));
+    if (!move(host, table, record, ['running', 'ended'], 'running', { assignee: agent, ...rebound(host, record, agent) })) return host.lastCode;
+    host.out(line({ ...record, state: 'running', assignee: agent }));
     return host.print(`# hand it to ${agent}: it ends with ${host.cmd} delegate deliver ${id} -   — or: ${host.cmd} delegate block ${id} "<why>"`);
   },
 
   list(host, table) {
     const all = table.all();
-    for (const r of all) host.out(line(r));
+    for (const record of all) host.out(line(record));
     return host.print(`# ${countOf(all.length, 'background piece', 'background pieces')} in this session`);
   },
 };
@@ -267,52 +266,52 @@ export function waitFor(host: ApxHost, argv: string[], pollMs = 500): number | P
   const max = at >= 0 ? args.splice(at, 2)[1] : host.build.waitMax ?? DEFAULT_WAIT_MAX;
   const ms = max ? parseDuration(max) : null;
   if (ms === null) return host.fail(2, `--max ${max ?? ''}: a duration is ${DURATION_FORM}`);
-  const names = args.flatMap(a => a.split(',')).map(a => a.trim()).filter(Boolean);
+  const names = args.flatMap(arg => arg.split(',')).map(name => name.trim()).filter(Boolean);
   if (names.length === 0) return host.fail(2, `wait takes what to wait for — ${host.cmd} wait <dlg-id | mrk-id | var> … [--max <duration>] [--now] | ${host.cmd} wait all`);
   return withRegistry(host, 'wait', async table => {
     const pick = (): DelegationRecord[] | string => {
       const all = table.all();
-      if (names.length === 1 && names[0] === 'all') return all.filter(r => r.state === 'running');
+      if (names.length === 1 && names[0] === 'all') return all.filter(record => record.state === 'running');
       const out: DelegationRecord[] = [];
       for (const name of names) {
         // A MARK's id: the contracts its latest DELEGATE started — none started: nothing to wait for.
         if (MARK_ID_RE.test(name)) { out.push(...table.batchOf(name)); continue; }
-        const r = DELEGATION_ID_RE.test(name) ? all.find(x => x.dlg === name || pieceOf(x.dlg).work === name) : [...all].reverse().find(x => x.into === name);
-        if (!r) return `${name} was never started in this session — ${DELEGATION_ID_RE.test(name) ? `${host.cmd} delegate start ${name}` : `no background piece fills \`${name}\``}`;
+        const record = DELEGATION_ID_RE.test(name) ? all.find(candidate => candidate.dlg === name || pieceOf(candidate.dlg).work === name) : [...all].reverse().find(candidate => candidate.into === name);
+        if (!record) return `${name} was never started in this session — ${DELEGATION_ID_RE.test(name) ? `${host.cmd} delegate start ${name}` : `no background piece fills \`${name}\``}`;
         // A delegation of an EACH: every run of it; a run named alone, that run.
-        out.push(...(r.dlg === name ? [r] : runsOf(all, pieceOf(r.dlg).work)));
+        out.push(...(record.dlg === name ? [record] : runsOf(all, pieceOf(record.dlg).work)));
       }
       return out;
     };
     const first = pick();
     if (typeof first === 'string') return host.fail(1, first);
-    const ids = [...new Set(first.map(r => r.dlg))];
+    const ids = [...new Set(first.map(record => record.dlg))];
     const deadline = now ? Date.now() : Date.now() + ms;
     let pieces = first;
-    while (pieces.some(r => !SETTLED_STATES.includes(r.state)) && Date.now() < deadline) {
+    while (pieces.some(record => !SETTLED_STATES.includes(record.state)) && Date.now() < deadline) {
       await new Promise(done => setTimeout(done, Math.min(pollMs, Math.max(0, deadline - Date.now()))));
       const all = table.all();
-      pieces = ids.map(id => all.find(r => r.dlg === id)!);
+      pieces = ids.map(id => all.find(record => record.dlg === id)!);
     }
     // What the contracts delivered is merged and lands; then each one's state.
     pieces = host.contracts.fold(table, pieces);
     collectRuns(host, pieces);
     contractStates(host, table, pieces);
     // Past its limit: the time it has run, from its start — with --now; else the wait itself.
-    const past = (r: DelegationRecord) => !now || Date.now() - Date.parse(r.started_at) >= ms;
-    for (const r of pieces) {
-      host.out(r.state !== 'running' ? line(r) : past(r) ? `${line(r)}  — still running after ${max}` : `${line(r)}  — running, within its ${max}`);
-      if (r.state === 'delivered' && !r.into && r.result) host.out(`  result: ${JSON.parse(r.result)}`);
+    const past = (record: DelegationRecord) => !now || Date.now() - Date.parse(record.started_at) >= ms;
+    for (const record of pieces) {
+      host.out(record.state !== 'running' ? line(record) : past(record) ? `${line(record)}  — still running after ${max}` : `${line(record)}  — running, within its ${max}`);
+      if (record.state === 'delivered' && !record.into && record.result) host.out(`  result: ${JSON.parse(record.result)}`);
     }
-    const open = pieces.filter(r => r.state !== 'delivered' && r.state !== 'merged');
+    const open = pieces.filter(record => record.state !== 'delivered' && record.state !== 'merged');
     if (open.length === 0) return host.print(`# ${countOf(pieces.length, 'piece', 'pieces')} delivered — go on with each one's result`);
     // Still within their limit, and nothing else open: wait for the word of each one.
-    if (open.every(r => r.state === 'running' && !past(r))) {
+    if (open.every(record => record.state === 'running' && !past(record))) {
       host.out(`# ${countOf(open.length, 'piece', 'pieces')} still running, within the limit — wait for the word that each one ended, then look again`);
       host.lastCode = 1;
       return 1;
     }
-    host.out(`# ${countOf(open.length, 'piece', 'pieces')} not delivered — you decide: wait again (${host.cmd} wait ${open.map(r => r.dlg).join(' ')}),`);
+    host.out(`# ${countOf(open.length, 'piece', 'pieces')} not delivered — you decide: wait again (${host.cmd} wait ${open.map(record => record.dlg).join(' ')}),`);
     host.out(`#   ${host.cmd} delegate take <dlg-id>, ${host.cmd} delegate reassign <dlg-id> <agent>, or ${host.cmd} delegate block <dlg-id> "<why>"`);
     host.lastCode = 1;
     return 1;
@@ -327,19 +326,19 @@ export function waitFor(host: ApxHost, argv: string[], pollMs = 500): number | P
  */
 function collectRuns(host: ApxHost, pieces: readonly DelegationRecord[]): void {
   const works = new Map<string, DelegationRecord[]>();
-  for (const r of pieces) {
-    const { work, run } = pieceOf(r.dlg);
-    if (run !== null) works.set(work, [...(works.get(work) ?? []), r]);
+  for (const record of pieces) {
+    const { work, run } = pieceOf(record.dlg);
+    if (run !== null) works.set(work, [...(works.get(work) ?? []), record]);
   }
   for (const [work, runs] of works) {
     const into = host.doc.meta.background?.[work]?.into;
-    if (!into || runs.some(r => !SETTLED_STATES.includes(r.state))) continue;
+    if (!into || runs.some(record => !SETTLED_STATES.includes(record.state))) continue;
     const block = host.variable(into);
     if (!block) continue;
-    const result = (r: DelegationRecord) => { try { return JSON.parse(JSON.parse(r.result)); } catch { return r.result ? JSON.parse(r.result) : ''; } };
-    const list = runs.map(r => (r.state === 'delivered' ? result(r) : { state: r.state === 'ended' ? 'ended without delivery' : r.state, ...(r.reason ? { reason: r.reason } : {}) }));
-    const slot = block.type ? (host.doc.slotsOf(block.type) ?? []).find(x => x.spec.kind === 'list') : undefined;
-    if (block.type && runs.some(r => r.state !== 'delivered')) {
+    const result = (record: DelegationRecord) => { try { return JSON.parse(JSON.parse(record.result)); } catch { return record.result ? JSON.parse(record.result) : ''; } };
+    const list = runs.map(record => (record.state === 'delivered' ? result(record) : { state: record.state === 'ended' ? 'ended without delivery' : record.state, ...(record.reason ? { reason: record.reason } : {}) }));
+    const slot = block.type ? (host.doc.slotsOf(block.type) ?? []).find(candidate => candidate.spec.kind === 'list') : undefined;
+    if (block.type && runs.some(record => record.state !== 'delivered')) {
       host.out(`# \`${into}\` not stored: not every run of ${work} delivered, and its template takes only results`);
       continue;
     }
@@ -354,13 +353,13 @@ function collectRuns(host: ApxHost, pieces: readonly DelegationRecord[]): void {
  * it was blocked. Before the WAIT it holds their ids.
  */
 function contractStates(host: ApxHost, table: DelegationTable, pieces: readonly DelegationRecord[]): void {
-  const marks = new Set(pieces.filter(r => CONTRACT_ID_RE.test(r.dlg) && r.mark).map(r => r.mark));
+  const marks = new Set(pieces.filter(record => CONTRACT_ID_RE.test(record.dlg) && record.mark).map(record => record.mark));
   for (const mark of marks) {
     const batch = table.batchOf(mark);
     const list = batch[0]?.into;
     const block = list ? host.variable(list) : null;
     if (!block) continue;
-    const states = batch.map(r => ({ id: r.dlg, state: r.state === 'ended' ? 'ended without delivery' : r.state, ...(r.reason ? { reason: r.reason } : {}) }));
+    const states = batch.map(record => ({ id: record.dlg, state: record.state === 'ended' ? 'ended without delivery' : record.state, ...(record.reason ? { reason: record.reason } : {}) }));
     const failed = host.storeVariable(block, JSON.stringify(states));
     if (failed) host.out(`# \`${list}\` not stored: ${failed.reason}`);
   }

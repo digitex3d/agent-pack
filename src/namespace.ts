@@ -32,7 +32,7 @@ export function buildNamespace(
 ): string {
   const leafDir = dirname(resolve(filePath));
   const roots = Array.isArray(libraryRoot) ? libraryRoot : [libraryRoot];
-  const resolvedRoots = roots.map(r => resolve(r));
+  const resolvedRoots = roots.map(rootPath => resolve(rootPath));
 
   const rootAlias = new Map<string, string>();
   if (libraries) {
@@ -41,7 +41,7 @@ export function buildNamespace(
     }
   }
 
-  const root = resolvedRoots.find(r => !relative(r, leafDir).startsWith('..'));
+  const root = resolvedRoots.find(candidate => !relative(candidate, leafDir).startsWith('..'));
   if (!root) return '';
 
   const rel = relative(root, leafDir);

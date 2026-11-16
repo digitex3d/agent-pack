@@ -73,7 +73,7 @@ export class UnitStore {
       // Another model's verdicts (or any, while no model is pinned) are asked again.
       if (model === null || (unit.model ?? model) !== model) unit = { ...unit, verdicts: {} };
       this.units.set(file, unit);
-      for (const [key, v] of Object.entries(unit.verdicts)) if (!this.known.has(key)) this.known.set(key, v.p);
+      for (const [key, verdict] of Object.entries(unit.verdicts)) if (!this.known.has(key)) this.known.set(key, verdict.p);
     }
   }
 
@@ -119,7 +119,7 @@ export class UnitStore {
 
   /** Delete every unit file but those of `seen` sources, then the directories left empty. */
   prune(seen: Iterable<string>): void {
-    const keep = new Set([...seen].map(f => this.pathOf(f)));
+    const keep = new Set([...seen].map(source => this.pathOf(source)));
     for (const file of filesUnder(this.dir, '.json')) if (!keep.has(file)) unlinkSync(file);
     removeEmptyDirs(this.dir);
   }
@@ -134,6 +134,6 @@ function readUnit(file: string): Unit | null {
   const ok = unit?.version === 1 && typeof unit.hash === 'string' && typeof unit.rules === 'string'
     && typeof unit.verdicts === 'object' && unit.verdicts !== null && Array.isArray(unit.diagnostics)
     && (unit.model === undefined || typeof unit.model === 'string')
-    && Object.values(unit.verdicts).every(v => isProbability(v?.p));
+    && Object.values(unit.verdicts).every(verdict => isProbability(verdict?.p));
   return ok ? unit : null;
 }

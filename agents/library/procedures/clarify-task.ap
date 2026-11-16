@@ -1,0 +1,13 @@
+# clarify-task — whoever runs develop-feature makes the user's request one clear task, before its design
+IMPORT feature-brief FROM @main.templates
+IMPORT brief FROM @main.vars
+
+EXPORT PROCEDURE clarify-task:
+    ABOUT  make the user's request one clear task, asking the user what blocks the design
+    DO  write the user's request, what is settled, the open questions and what is out of scope INTO brief
+    IF {{brief}} leaves the user's task unclear:
+        UNTIL! the user's task and its request in {{brief AS feature-brief}} are clear MAX 3:
+            DO  ask the user the one question that most blocks the design, and wait for the answer
+            DO  rewrite the brief with the answer INTO brief
+        IF the last round ended with the task still unclear:
+            DO  report that the task is still unclear, and what is missing

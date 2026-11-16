@@ -9,8 +9,7 @@
 import {
   STORE_EXIT, StoreRefusal, checkWrite, countLine, fieldsOf, filtersOf, open, optionalOp, recordLine, requireCapability, storesOf, type OpenStore,
 } from '../stores.js';
-import type { ApxHost, ApxService } from '../service.js';
-import { errorMessage } from '../../errors.js';
+import type { ApxContext, ApxOutput, ApxService } from '../service.js';
 
 const OPERATIONS = [
   { op: 'put', args: '<sto-id> <field>=<value> …', about: 'add a record — with the KEY already present, update it instead' },
@@ -23,7 +22,7 @@ const OPERATIONS = [
   { op: 'since', args: '<sto-id> <mark>', about: 'the records added or changed after a mark' },
 ];
 
-type Op = (host: ApxHost, store: OpenStore, args: string[]) => Promise<number>;
+type Op = (host: ApxOutput, store: OpenStore, args: string[]) => Promise<number>;
 
 /** Split `args` at the first `word`: what comes before, what comes after (null when absent). */
 function splitAt(args: string[], word: string): [string[], string[] | null] {
@@ -40,10 +39,10 @@ function keyArg(store: OpenStore, args: string[], op: string): string {
 const put: Op = async (host, store, args) => {
   const doc = fieldsOf(store, args);
   checkWrite(store, doc, true);
-  const r = await (await open(store)).put(doc);
+  const written = await (await open(store)).put(doc);
   const key = store.spec.storeKey;
-  if (r.updated && key) host.out(`# ${key}=${String(doc[key])} exists as id=${r.id} — updated, not duplicated`);
-  host.out(recordLine({ id: r.id, ...doc }));
+  if (written.updated && key) host.out(`# ${key}=${String(doc[key])} exists as id=${written.id} — updated, not duplicated`);
+  host.out(recordLine({ id: written.id, ...doc }));
   return 0;
 };
 
@@ -56,16 +55,16 @@ const get: Op = async (host, store, args) => {
 };
 
 const find: Op = async (host, store, args) => {
-  const flags = new Set<string>(args.filter(a => a === 'count' || a === 'json'));
-  const limitArg = args.find(a => a.startsWith('limit='));
+  const flags = new Set<string>(args.filter(arg => arg === 'count' || arg === 'json'));
+  const limitArg = args.find(arg => arg.startsWith('limit='));
   const limit = limitArg ? Number(limitArg.slice('limit='.length)) : undefined;
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) throw new StoreRefusal(STORE_EXIT.usage, `${store.spec.name}: limit takes a whole number above 0`);
-  const filters = filtersOf(store, args.filter(a => !flags.has(a) && a !== limitArg));
+  const filters = filtersOf(store, args.filter(arg => !flags.has(arg) && arg !== limitArg));
   const docs = await (await open(store)).find(filters, limit);
   if (flags.has('count')) host.out(countLine(docs.length));
   else if (flags.has('json')) host.out(JSON.stringify(docs));
   else {
-    for (const d of docs) host.out(recordLine(d));
+    for (const doc of docs) host.out(recordLine(doc));
     host.out(countLine(docs.length));
   }
   return 0;
@@ -77,9 +76,9 @@ const set: Op = async (host, store, args) => {
   if (guardArgs) requireCapability(store, 'guard', 'set … if');
   const fields = fieldsOf(store, fieldArgs);
   checkWrite(store, fields, false);
-  const r = await (await open(store)).set(key, fields, guardArgs ? filtersOf(store, guardArgs) : []);
-  if (r === 'missing') return host.fail(STORE_EXIT.missing, `${store.spec.name}: no record ${key} — nothing was written`);
-  if (r === 'stale') return host.fail(STORE_EXIT.stale, `${store.spec.name}: the condition no longer holds for ${key} — your view of it is stale: get it again`);
+  const outcome = await (await open(store)).set(key, fields, guardArgs ? filtersOf(store, guardArgs) : []);
+  if (outcome === 'missing') return host.fail(STORE_EXIT.missing, `${store.spec.name}: no record ${key} — nothing was written`);
+  if (outcome === 'stale') return host.fail(STORE_EXIT.stale, `${store.spec.name}: the condition no longer holds for ${key} — your view of it is stale: get it again`);
   host.out(`# ${key} set`);
   return 0;
 };
@@ -103,9 +102,9 @@ const take: Op = async (host, store, args) => {
 };
 
 const mark: Op = async (host, store) => {
-  const m = await (await optionalOp(store, 'mark', 'since'))();
-  host.out(`# mark=${m}`);
-  host.out(`# later: store since ${store.spec.id} ${m}   -> only what changed since now`);
+  const stamp = await (await optionalOp(store, 'mark', 'since'))();
+  host.out(`# mark=${stamp}`);
+  host.out(`# later: store since ${store.spec.id} ${stamp}   -> only what changed since now`);
   return 0;
 };
 
@@ -113,7 +112,7 @@ const since: Op = async (host, store, args) => {
   if (!args[0]) throw new StoreRefusal(STORE_EXIT.usage, `since takes a mark: store since ${store.spec.id} <mark> (from store mark)`);
   const docs = await (await optionalOp(store, 'since', 'since'))(args[0]);
   if (!docs) return host.fail(STORE_EXIT.usage, `${store.spec.name}: \`${args[0]}\` is no mark of this store — take one with store mark ${store.spec.id}`);
-  for (const d of docs) host.out(recordLine(d));
+  for (const doc of docs) host.out(recordLine(doc));
   host.out(`${countLine(docs.length)} added or changed since the mark`);
   return 0;
 };
@@ -121,22 +120,22 @@ const since: Op = async (host, store, args) => {
 const OPS: Record<string, Op> = { put, get, find, set, remove, take, mark, since };
 
 /** `store` alone: the agent's stores, each with its driver and where its data lives. */
-function list(host: ApxHost, stores: OpenStore[]): number {
+function list(host: ApxOutput, stores: OpenStore[]): number {
   if (stores.length === 0) host.out('# this agent has no stores');
-  for (const s of stores) host.out(`${s.spec.id}  ${s.spec.name}  ${s.driver.name}  ${s.driver.location(s.ref)}`);
+  for (const store of stores) host.out(`${store.spec.id}  ${store.spec.name}  ${store.driver.name}  ${store.driver.location(store.ref)}`);
   return 0;
 }
 
 /** The store an operation names by its id — or a refusal listing the agent's stores. */
-function storeArg(host: ApxHost, stores: OpenStore[], id: string | undefined): OpenStore {
-  const store = id ? stores.find(s => s.spec.id === id) : undefined;
+function storeArg(host: ApxOutput, stores: OpenStore[], id: string | undefined): OpenStore {
+  const store = id ? stores.find(candidate => candidate.spec.id === id) : undefined;
   if (store) return store;
-  const known = stores.map(s => `${s.spec.id} (${s.spec.name})`).join(', ') || 'none';
+  const known = stores.map(candidate => `${candidate.spec.id} (${candidate.spec.name})`).join(', ') || 'none';
   throw new StoreRefusal(STORE_EXIT.usage, `${id ? `no store \`${id}\` in this agent` : 'store takes an id (sto-…)'} — its stores: ${known}; e.g. ${host.cmd} store find <sto-id>`);
 }
 
 /** One call of the service, its refusals thrown. */
-async function serveOp(host: ApxHost, op: string | undefined, args: string[]): Promise<number> {
+async function serveOp(host: ApxOutput & ApxContext, op: string | undefined, args: string[]): Promise<number> {
   const stores = await storesOf(host);
   if (!op) return list(host, stores);
   const run = OPS[op];
@@ -152,9 +151,9 @@ export const storeService: ApxService = {
   async serve(host, op, args) {
     try {
       return await serveOp(host, op, args);
-    } catch (e) {
-      if (e instanceof StoreRefusal) return host.fail(e.code, e.message);
-      return host.fail(STORE_EXIT.usage, errorMessage(e));
+    } catch (error) {
+      if (error instanceof StoreRefusal) return host.fail(error.code, error.message);
+      return host.fail(STORE_EXIT.usage, error instanceof Error ? error.message : String(error));
     }
   },
 };

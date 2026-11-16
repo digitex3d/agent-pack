@@ -12,7 +12,7 @@ import { filtersOn } from '../../storeDrivers/filters.js';
 import type { DimensionCache } from '../dimensions.js';
 import { matchesAnyGlob } from '../../services/glob.js';
 import { STORE_EXIT, fieldsText } from '../stores.js';
-import { countOf, type ApxHost } from '../service.js';
+import { countOf, type ApxContext, type ApxOutput } from '../service.js';
 
 /** A dimension of this agent: its block, its store, the files it covers, its cache. */
 export interface Dimension {
@@ -30,17 +30,17 @@ export interface Dimension {
 const WRITE_REFS = '[refs=<path>;<path>]';
 export const writeUsage = (file = '<file>') => `${file} ${WRITE_REFS} -|none`;
 
-export type Op = (host: ApxHost, dim: Dimension, args: string[]) => number | Promise<number>;
+export type Op = (host: ApxOutput & ApxContext, dim: Dimension, args: string[]) => number | Promise<number>;
 
 
 /** `q <dim-id> [<field><op><value> …] [json]` — the instances every filter holds for, each with its file; fresh answers only. */
 export const q: Op = async (host, dim, args) => {
   const json = args.includes('json');
-  const filters = filtersOn(args.filter(a => a !== 'json'), dim.store.slots.map(s => s.name), '_file');
+  const filters = filtersOn(args.filter(arg => arg !== 'json'), dim.store.slots.map(slot => slot.name), '_file');
   if (typeof filters === 'string') return host.fail(STORE_EXIT.usage, `${dim.name}: ${filters}`);
   const { rows, stale } = await dim.cache.query(filters);
   if (json) host.out(JSON.stringify(rows));
-  else for (const r of rows) host.out(`${r.file}  ${fieldsText(r.fields)}`);
+  else for (const row of rows) host.out(`${row.file}  ${fieldsText(row.fields)}`);
   host.out(`# ${countOf(rows.length, 'instance', 'instances')} of ${dim.name} — fresh answers only`);
   if (stale.length > 0) host.out(`# ${countOf(stale.length, 'file', 'files')} left out, no fresh answer: ${stale.join(', ')} — ${dim.cmd('next')} to answer them`);
   return 0;
@@ -61,9 +61,9 @@ export const next: Op = async (host, dim) => {
 
 /** `mark <dim-id>` — a mark of now; `since <dim-id> <mark>` — the files answered after it. */
 export const mark: Op = async (host, dim) => {
-  const m = await dim.cache.mark();
-  host.out(`# mark=${m}`);
-  host.out(`# later: ${dim.cmd('since')} ${m}   -> only the files answered since now`);
+  const stamp = await dim.cache.mark();
+  host.out(`# mark=${stamp}`);
+  host.out(`# later: ${dim.cmd('since')} ${stamp}   -> only the files answered since now`);
   return 0;
 };
 
@@ -71,7 +71,7 @@ export const since: Op = async (host, dim, args) => {
   if (!args[0]) return host.fail(STORE_EXIT.usage, `since takes a mark: ${dim.cmd('since')} <mark> (from ${dim.cmd('mark')})`);
   const files = await dim.cache.changedSince(args[0]);
   if (!files) return host.fail(STORE_EXIT.usage, `\`${args[0]}\` is no mark of ${dim.name} — take one with ${dim.cmd('mark')}`);
-  for (const f of files) host.out(f);
+  for (const file of files) host.out(file);
   host.out(`# ${countOf(files.length, 'file', 'files')} of ${dim.name} answered since the mark`);
   return 0;
 };

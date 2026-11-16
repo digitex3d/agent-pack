@@ -37,7 +37,7 @@ const FIELD = '(?:\\.[\\w-]+)*';
  * pattern of a read — with its parts captured, or without (to split on it).
  */
 function varRef(capture: boolean): RegExp {
-  const group = (p: string) => (capture ? `(${p})` : `(?:${p})`);
+  const group = (pattern: string) => (capture ? `(${pattern})` : `(?:${pattern})`);
   return new RegExp(`\\{\\{${group(NAME)}${group(FIELD)}(?:\\s+${group('!*AS!*')}\\s+${group(NAME)})?\\}\\}`, 'g');
 }
 
@@ -73,8 +73,8 @@ export function splitOnReads(line: string): string[] {
  * written. A field read (`{{x.status}}`) is always left: not supported yet.
  */
 export function resolveReads(text: string, value: (read: VarRead) => string | undefined): string {
-  return text.replace(varRef(true), (...m: string[]) => {
-    const read = toRead(m);
+  return text.replace(varRef(true), (...groups: string[]) => {
+    const read = toRead(groups);
     return (read.field ? undefined : value(read)) ?? read.read;
   });
 }
@@ -86,7 +86,7 @@ export function constantOf(vars: Record<string, string> | undefined, name: strin
 
 /** `{{name}}` → its value, for every name in `vars`; any other read stays as written. */
 export function applyVars(text: string, vars: Record<string, string>): string {
-  return resolveReads(text, r => (r.template ? undefined : constantOf(vars, r.name)));
+  return resolveReads(text, read => (read.template ? undefined : constantOf(vars, read.name)));
 }
 
 /** A trailing `INTO <name>` — uppercase, at the very end of the line: anywhere else it is prose. */
@@ -102,14 +102,14 @@ const BY_RE = new RegExp(`^(.*?)\\s+BY\\s+(${NAME}(?::${NAME})?)\\s*$`);
 
 /** A line's text and the agent it names, when it ends with `BY <name>` — else null. */
 export function splitBy(text: string): { text: string; name: string } | null {
-  const m = BY_RE.exec(text);
-  return m ? { text: m[1].trim(), name: m[2] } : null;
+  const match = BY_RE.exec(text);
+  return match ? { text: match[1].trim(), name: match[2] } : null;
 }
 
 /** A line's text and the variable it assigns, when it ends with `INTO <name>` — else null. */
 export function splitInto(text: string): { text: string; name: string } | null {
-  const m = INTO_RE.exec(text);
-  return m ? { text: m[1].trim(), name: m[2] } : null;
+  const match = INTO_RE.exec(text);
+  return match ? { text: match[1].trim(), name: match[2] } : null;
 }
 
 /** A declaration, as its `VAR` line writes it. */
@@ -167,12 +167,12 @@ export function parseEachHead(rest: string): EachHead | { error: string } | null
   const head = EACH_HEAD_RE.exec(text);
   if (!head) return null;
   const [, item, after] = head;
-  const m = EACH_LIST_RE.exec(after.trim());
-  if (!m) {
+  const match = EACH_LIST_RE.exec(after.trim());
+  if (!match) {
     const bare = /^(\S+)/.exec(after.trim())?.[1] ?? '<list>';
     return { error: `\`EACH ${text}\`: the list is read like any variable — \`EACH ${item} IN {{${bare.replace(/^\{\{|\}\}$/g, '')}}} MAX <n>:\`` };
   }
-  const [, list, max] = m;
+  const [, list, max] = match;
   if (max === undefined) return { error: `\`EACH ${text}\`: write the bound — \`EACH ${item} IN {{${list}}} MAX <n>:\`` };
   if (!/^[1-9]\d*$/.test(max)) return { error: `\`EACH ${text}\`: MAX takes a whole number of runs, at least 1` };
   if (item === list) return { error: `\`EACH ${text}\`: the element needs a name of its own, not the list's` };
@@ -212,8 +212,8 @@ export function parseVarLine(keyword: string, rest: string): VarDecl | { error: 
  * `VAR x:` block assigns while the agent works, so it is never exported.
  */
 export function parseExportedVar(rest: string): VarDecl | { error: string } | null {
-  const m = /^(\S+)\s*(.*)$/.exec(rest.trim());
-  const decl = m ? parseVarLine(m[1], m[2]) : null;
+  const match = /^(\S+)\s*(.*)$/.exec(rest.trim());
+  const decl = match ? parseVarLine(match[1], match[2]) : null;
   if (decl && 'form' in decl && decl.form === 'variable' && decl.block) {
     return { error: `\`EXPORT ${rest.trim()}\`: a module declares a variable, never assigns it — drop the ':' and assign it in a body` };
   }
@@ -243,11 +243,11 @@ function parseVarDecl(rest: string, scope: VarScope): VarDecl | { error: string 
   return error ? { error } : { form: 'variable', scope, name, type: type ?? null, block: colon !== undefined };
 }
 
-function stripQuotes(s: string): string {
-  if (s.length >= 2) {
-    const first = s[0];
-    const last = s[s.length - 1];
-    if ((first === '"' && last === '"') || (first === "'" && last === "'")) return s.slice(1, -1);
+function stripQuotes(text: string): string {
+  if (text.length >= 2) {
+    const first = text[0];
+    const last = text[text.length - 1];
+    if ((first === '"' && last === '"') || (first === "'" && last === "'")) return text.slice(1, -1);
   }
-  return s;
+  return text;
 }

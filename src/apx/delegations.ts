@@ -22,9 +22,13 @@
  */
 import { RecordTable } from './recordTable.js';
 import { delegationsStore, engineStore } from './engineStores.js';
+import { FORMULAS, fill } from '../formulas.js';
 
 export const DELEGATION_STATES = ['marked', 'running', 'delivered', 'merged', 'blocked', 'ended'] as const;
 export type DelegationState = typeof DELEGATION_STATES[number];
+
+/** Every state by its name — the one place a state is spelled: `STATE.running`. */
+export const STATE = Object.fromEntries(DELEGATION_STATES.map(state => [state, state])) as { readonly [S in DelegationState]: S };
 
 /** The states a WAIT returns on: the piece will not move without the lead. */
 export const SETTLED_STATES: readonly DelegationState[] = ['delivered', 'merged', 'blocked', 'ended'];
@@ -77,14 +81,14 @@ export const DELEGATION_ID_RE = /^dlg-[0-9a-f]{8}(?:-[1-9]\d*)?$/;
 
 /** A piece id's background delegation, and its run inside an EACH — null when it is none. */
 export function pieceOf(id: string): { work: string; run: number | null } {
-  const m = /^(dlg-[0-9a-f]{8})(?:-([1-9]\d*))?$/.exec(id);
-  return m ? { work: m[1], run: m[2] ? Number(m[2]) : null } : { work: id, run: null };
+  const match = /^(dlg-[0-9a-f]{8})(?:-([1-9]\d*))?$/.exec(id);
+  return match ? { work: match[1], run: match[2] ? Number(match[2]) : null } : { work: id, run: null };
 }
 
 /** The records of one background delegation: the piece itself, or every run of it an EACH started. */
 export function runsOf(all: readonly DelegationRecord[], work: string): DelegationRecord[] {
-  return all.filter(r => r.dlg === work || pieceOf(r.dlg).work === work && pieceOf(r.dlg).run !== null)
-    .sort((a, b) => (pieceOf(a.dlg).run ?? 0) - (pieceOf(b.dlg).run ?? 0));
+  return all.filter(record => record.dlg === work || pieceOf(record.dlg).work === work && pieceOf(record.dlg).run !== null)
+    .sort((left, right) => (pieceOf(left.dlg).run ?? 0) - (pieceOf(right.dlg).run ?? 0));
 }
 /** The id of a contract. */
 export const CONTRACT_ID_RE = /^ctr-[0-9a-f]{8}$/;
@@ -92,14 +96,45 @@ export const CONTRACT_ID_RE = /^ctr-[0-9a-f]{8}$/;
 export const MARK_ID_RE = /^mrk-[0-9a-f]{8}$/;
 
 /** Why a piece that ran on another harness needs `--answer` to be delivered (D66). */
-export function answerFlag(r: { dlg: string; harness: string }, cmd: string): string {
-  return `${r.dlg} ran on ${r.harness}: its answer is the file its command wrote — ${cmd} delegate deliver ${r.dlg} --answer`;
+export function answerFlag(record: { dlg: string; harness: string }, command: string): string {
+  return fill(FORMULAS.apx.registry.answer, { id: record.dlg, harness: record.harness, cmd: command });
 }
+
+/** A record that answers about itself: what state it is in, where it runs. */
+export class Piece {
+  constructor(readonly record: DelegationRecord) {}
+
+  /** Its id: `dlg-…` or `ctr-…`. */
+  get id(): string {
+    return this.record.dlg;
+  }
+
+  get state(): DelegationState {
+    return this.record.state;
+  }
+
+  isRunning(): boolean {
+    return this.record.state === STATE.running;
+  }
+
+  /** Whether it runs on another harness (D66): it works in a copy, and its answer is the file its command wrote. */
+  isElsewhere(): boolean {
+    return this.record.harness !== '';
+  }
+
+  /** Where it runs: in this harness, or on another one — the one value a switch on its place reads. */
+  where(): PiecePlace {
+    return this.isElsewhere() ? 'elsewhere' : 'here';
+  }
+}
+
+/** Where a piece runs: in this harness, or on another one (D66). */
+export type PiecePlace = 'here' | 'elsewhere';
 
 /** A fresh record: every field empty but those given. */
 export function pieceRecord(fields: Partial<DelegationRecord> & Pick<DelegationRecord, 'dlg' | 'state'>): DelegationRecord {
-  const out = Object.fromEntries(FIELDS.map(f => [f, ''])) as unknown as DelegationRecord;
-  return { ...out, ...fields };
+  const blank = Object.fromEntries(FIELDS.map(field => [field, ''])) as unknown as DelegationRecord;
+  return { ...blank, ...fields };
 }
 
 export class DelegationTable extends RecordTable<DelegationRecord> {
@@ -110,8 +145,8 @@ export class DelegationTable extends RecordTable<DelegationRecord> {
 
   /** The contracts of a MARK the latest DELEGATE of it started — or, before any started, none. */
   batchOf(mark: string): DelegationRecord[] {
-    const started = this.all().filter(r => r.mark === mark && r.state !== 'marked');
-    const latest = started.reduce((max, r) => (r.started_at > max ? r.started_at : max), '');
-    return started.filter(r => r.started_at === latest);
+    const started = this.all().filter(record => record.mark === mark && record.state !== STATE.marked);
+    const latest = started.reduce((newest, record) => (record.started_at > newest ? record.started_at : newest), '');
+    return started.filter(record => record.started_at === latest);
   }
 }

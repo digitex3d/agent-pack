@@ -26,7 +26,7 @@ import { addressName, shortId } from './apdoc/ids.js';
 import { namesMatching } from './services/fs.js';
 import { resolve } from 'node:path';
 import { DISTILLED_DIR } from './apx/paths.js';
-import { isDelegationVerb, FORK_VERB } from './delegation.js';
+import { isDelegationVerb, ASK_VERB, DELEGATE_VERB, FORK_VERB } from './delegation.js';
 
 /** The ranks of the executors — a line or a head may raise its enclosing one, never lower it. */
 export const AGENT = 0, DELEGATE = 1, PROGRAM = 2;
@@ -37,8 +37,8 @@ export const AGENT = 0, DELEGATE = 1, PROGRAM = 2;
  * mark every header parser shares (lexer, parseBlocks, inline headers, lint).
  */
 export function splitExecutorMark(word: string): { word: string; executor: number } {
-  const m = word.match(/^(.*?)(\*{1,2})$/);
-  return m ? { word: m[1], executor: m[2].length } : { word, executor: 0 };
+  const match = word.match(/^(.*?)(\*{1,2})$/);
+  return match ? { word: match[1], executor: match[2].length } : { word, executor: 0 };
 }
 
 /**
@@ -62,7 +62,7 @@ export const COMPUTE_SECTIONS = ['REQUIRE', 'RETURN', 'ENSURE'] as const;
  */
 export function scriptRuleLines(block: ApBlock): Set<number> {
   if (!block.require) return new Set();
-  return new Set(block.body.slice(0, block.shapePos ?? 0).flatMap(n => (n.type === 'directive' && n.pos?.line ? [n.pos.line] : [])));
+  return new Set(block.body.slice(0, block.shapePos ?? 0).flatMap(node => (node.type === 'directive' && node.pos?.line ? [node.pos.line] : [])));
 }
 
 /** The template a COMPUTE block's `RETURN AS <template>:` head names (given what follows RETURN) — null when it names none. */
@@ -90,11 +90,11 @@ export interface AgentIndexEntry {
  */
 export function delegateTargetErrors(
   doc: ApDocument, index: readonly AgentIndexEntry[], ownTeam: string | null,
-  harnessProblem: (harness: string) => string | null = h => `no harness is called \`${h}\``,
+  harnessProblem: (harness: string) => string | null = harnessName => `no harness is called \`${harnessName}\``,
   /** A warning on the model the agent runs on there — its tier mapped to none. */
   modelProblem: (harness: string, agent: AgentIndexEntry | undefined) => string | null = () => null,
 ): LintError[] {
-  const teams = new Set(index.map(a => a.team).filter((t): t is string => t !== null));
+  const teams = new Set(index.map(entry => entry.team).filter((team): team is string => team !== null));
   const errors: LintError[] = [];
   for (const { node, block } of doc.nodes()) {
     if (node.type !== 'directive' || !isDelegationVerb(node.keyword) || !node.by) continue;
@@ -105,16 +105,16 @@ export function delegateTargetErrors(
       const at = { file: block.source?.file ?? '', line: node.pos?.line ?? 0 };
       const message = verb === FORK_VERB
         ? `FORK … BY ${node.harness}:${name}: a fork takes this conversation, and a conversation does not cross harnesses — DELEGATE it to ${node.harness}:${name}`
-        : harnessProblem(node.harness) ?? (index.some(a => a.name === name) ? null
+        : harnessProblem(node.harness) ?? (index.some(entry => entry.name === name) ? null
           : `BY ${node.harness}:${name}: unknown agent \`${name}\` — another harness runs an agent of this project, compiled for it`);
       if (message) errors.push({ ...at, message });
-      const warning = message ? null : modelProblem(node.harness, index.find(a => a.name === name));
+      const warning = message ? null : modelProblem(node.harness, index.find(entry => entry.name === name));
       if (warning) errors.push({ ...at, message: warning, severity: 'warning' });
       continue;
     }
     // A fork is an agent on the conversation itself: a team has no conversation to take.
     if (teams.has(name) && verb !== FORK_VERB) continue;
-    const agent = index.find(a => a.name === name);
+    const agent = index.find(entry => entry.name === name);
     const message = teams.has(name)
       ? `FORK … BY ${name}: \`${name}\` is a team — a fork is one agent on this conversation: name an agent, or DELEGATE to the team`
       : !agent
@@ -129,8 +129,8 @@ export function delegateTargetErrors(
 
 /** The mark on a `PROCEDURE* <name>:` header line a legacy module keeps in its body — 0 when none. */
 export function headerExecutorOf(body: string, name: string): number {
-  for (const t of lex(body)) {
-    if (t.kind === 'keyword' && t.keyword === 'PROCEDURE' && t.rest.replace(/:$/, '').trim() === name) return t.executor ?? 0;
+  for (const token of lex(body)) {
+    if (token.kind === 'keyword' && token.keyword === 'PROCEDURE' && token.rest.replace(/:$/, '').trim() === name) return token.executor ?? 0;
   }
   return 0;
 }
@@ -148,6 +148,32 @@ export function executorMark(rank: number): string {
 /** A rank as the key of its formulas (`EXECUTOR` in formulas.json): `1` a delegate, `2` a program. */
 export function executorKey(rank: number): '1' | '2' {
   return rank === PROGRAM ? '2' : '1';
+}
+
+/** The blocks whose lines hand work over — a flow's steps, a unit's routing: DELEGATE and FORK are theirs, ASK an agent's. */
+const HANDS_WORK_OVER: ReadonlySet<string> = new Set(['flow', 'team', 'main']);
+
+/**
+ * Where a question and a delegation stand: an ASK is an agent's — its body, its
+ * procedures — and takes its INTO, the answer shaped by that variable's
+ * template, never an AS; a DELEGATE is a flow's or a unit's routing (a FORK's
+ * place is the lint's: a flow STEP).
+ */
+export function delegationSiteErrors(doc: ApDocument): LintError[] {
+  const errors: LintError[] = [];
+  for (const { node, block } of doc.nodes()) {
+    if (node.type !== 'directive') continue;
+    const err = (message: string) => errors.push({ file: block.source?.file ?? '', line: node.pos?.line ?? 0, message });
+    const handsOver = HANDS_WORK_OVER.has(block.kind);
+    if (node.keyword === ASK_VERB) {
+      if (handsOver) err(`ASK is an agent's question — in a ${block.kind}, hand the work over with \`DELEGATE <task> BY <agent>\``);
+      if (!node.into) err('ASK needs its INTO — `ASK <question> INTO <name> [BY <agent>]`: the answer takes the template of that variable');
+      if (node.as) err('ASK takes no AS — the answer takes the template of its INTO variable: declare it `VAR <name> AS <template>`');
+    } else if (node.keyword === DELEGATE_VERB && !handsOver) {
+      err('DELEGATE hands work over, a flow\'s or a unit\'s routing — write it in a FLOW of a team or of the main; to ask an agent a question here, write `ASK <question> INTO <name> [BY <agent>]`');
+    }
+  }
+  return errors;
 }
 
 /**
@@ -244,13 +270,13 @@ export function executorSpecs(
     return { vars: checkedVars(text, name => constantOf(constants, name) !== undefined), constants: known };
   };
   const varTemplate = (name: string) => {
-    const type = (doc.byKind('var').find(b => b.name === name) as (ApBlock & { type?: { target: string } | null }) | undefined)?.type;
+    const type = (doc.byKind('var').find(declaration => declaration.name === name) as (ApBlock & { type?: { target: string } | null }) | undefined)?.type;
     return type ? addressName(type.target) : undefined;
   };
   const add = (block: ApBlock, spec: ApExecutorSpec, texts: string[], mark: { exe?: string }) => {
     const id = shortId('exe', `${agent}\n${block.address}\n${spec.site}\n${spec.text}`);
     if (spec.executor === PROGRAM) {
-      const templates = [spec.input.in, spec.output.template].filter((t): t is string => !!t).flatMap(templateSources);
+      const templates = [spec.input.in, spec.output.template].filter((templateName): templateName is string => !!templateName).flatMap(templateSources);
       spec.program = shortId('dst', [spec.site, ...texts, JSON.stringify(spec.input), JSON.stringify(spec.output), ...templates].join('\n\u0000\n'));
     }
     specs[id] = spec;
@@ -270,9 +296,8 @@ export function executorSpecs(
     const own = node.type === 'directive' ? verbRank(node.keyword) : node.type === 'if' || node.type === 'until' ? node.executor ?? null : null;
     if (!own || (block.executor ?? AGENT) >= own) continue;   // the procedure's own work
     if (node.type === 'directive') {
-      // A flow's delegation is the flow runner's, with the context its form says; a fork takes the conversation, never an input.
-      // So is a delegation to another harness: it is launched from outside, in a copy, and kept by the registry (D66).
-      if (block.kind === 'flow' || node.keyword === FORK_VERB || node.harness) continue;
+      // A DELEGATE or a FORK hands the work over with the context its form says: no contract — an ASK and a COMPUTE have one.
+      if (node.keyword === DELEGATE_VERB || node.keyword === FORK_VERB) continue;
       const into = node.into ? addressName(node.into.target) : undefined;
       const template = into ? varTemplate(into) : undefined;
       add(block, {
@@ -293,11 +318,11 @@ export function executorSpecs(
 /** Every line and condition of a body, at any depth, as written — its keyword with it, under its section. */
 function* walkTexts(nodes: ApNode[], section = ''): Generator<string> {
   const at = section ? `${section} ` : '';
-  for (const n of nodes) {
-    if (n.type === 'directive') { yield `${at}${n.keyword} ${n.text}`; yield* walkTexts(n.body ?? [], section); }
-    else if (n.type === 'if') { yield `${at}IF ${n.condition}`; yield* walkTexts(n.then, section); if (n.else.length) { yield `${at}ELSE`; yield* walkTexts(n.else, section); } }
-    else if (n.type === 'until') { yield `${at}UNTIL ${n.condition}`; yield* walkTexts(n.body, section); }
-    else if ('body' in n && Array.isArray(n.body)) yield* walkTexts(n.body as ApNode[], section);
+  for (const node of nodes) {
+    if (node.type === 'directive') { yield `${at}${node.keyword} ${node.text}`; yield* walkTexts(node.body ?? [], section); }
+    else if (node.type === 'if') { yield `${at}IF ${node.condition}`; yield* walkTexts(node.then, section); if (node.else.length) { yield `${at}ELSE`; yield* walkTexts(node.else, section); } }
+    else if (node.type === 'until') { yield `${at}UNTIL ${node.condition}`; yield* walkTexts(node.body, section); }
+    else if ('body' in node && Array.isArray(node.body)) yield* walkTexts(node.body as ApNode[], section);
   }
 }
 
@@ -332,16 +357,16 @@ export const WRITE_PROGRAM = 'write-program';
 
 /** Whether a text holds a line a program carries out — a COMPUTE line or block, a `**` head — as the lexer reads it. */
 function holdsProgram(text: string): boolean {
-  return lex(text).some(t => {
-    if (t.kind !== 'keyword' && t.kind !== 'blockOpener') return false;
-    if (t.kind === 'keyword' && (t.keyword === 'COMPUTE' || t.executor === PROGRAM)) return true;
+  return lex(text).some(token => {
+    if (token.kind !== 'keyword' && token.kind !== 'blockOpener') return false;
+    if (token.kind === 'keyword' && (token.keyword === 'COMPUTE' || token.executor === PROGRAM)) return true;
     // `EXPORT COMPUTE …:` / `EXPORT PROCEDURE** …:` — the modifier wraps the head.
-    const head = (t.kind === 'keyword' ? String(t.keyword) : t.key) === EXPORT_MODIFIER ? splitExecutorMark(t.rest.split(/\s/)[0] ?? '') : null;
+    const head = (token.kind === 'keyword' ? String(token.keyword) : token.key) === EXPORT_MODIFIER ? splitExecutorMark(token.rest.split(/\s/)[0] ?? '') : null;
     return !!head && (head.word === 'COMPUTE' || head.executor === PROGRAM);
   });
 }
 
 /** Whether a program carries out some of an agent's work: its body's lines, or a procedure it uses. */
 export function usesPrograms(agentBody: string, procedures: readonly { body: string; executor?: number }[]): boolean {
-  return holdsProgram(agentBody) || procedures.some(p => p.executor === PROGRAM || holdsProgram(p.body));
+  return holdsProgram(agentBody) || procedures.some(procedure => procedure.executor === PROGRAM || holdsProgram(procedure.body));
 }

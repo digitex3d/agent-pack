@@ -74,7 +74,7 @@ const DECORATORS: DecoratorSpec[] = [WITH_DECORATOR, WITHIN_DECORATOR];
 
 /** Make a decorator known — one entry per key. */
 export function registerDecorator(spec: DecoratorSpec): void {
-  const at = DECORATORS.findIndex(d => d.key === spec.key);
+  const at = DECORATORS.findIndex(decorator => decorator.key === spec.key);
   if (at >= 0) DECORATORS[at] = spec;
   else DECORATORS.push(spec);
 }
@@ -82,7 +82,7 @@ export function registerDecorator(spec: DecoratorSpec): void {
 /** The decorator of a key (`WITH`, with or without its mark), or null. */
 export function decoratorOf(key: string): DecoratorSpec | null {
   const bare = key.startsWith(DECORATOR_MARK) ? key.slice(DECORATOR_MARK.length) : key;
-  return DECORATORS.find(d => d.key === bare) ?? null;
+  return DECORATORS.find(decorator => decorator.key === bare) ?? null;
 }
 
 /** Every decorator, in the order they were registered. */
@@ -92,7 +92,7 @@ export function decorators(): readonly DecoratorSpec[] {
 
 /** `@WITHN`: what the lint says of a key no decorator has. */
 export function unknownDecoratorMessage(key: string): string {
-  const known = DECORATORS.map(d => `${DECORATOR_MARK}${d.key}`).join(', ') || 'none';
+  const known = DECORATORS.map(decorator => `${DECORATOR_MARK}${decorator.key}`).join(', ') || 'none';
   return `\`${DECORATOR_MARK}${key}\`: no decorator has that name — the decorators: ${known}`;
 }
 
@@ -127,8 +127,8 @@ export function workless(key: string, block: string): string {
 
 /** A nested decorator that narrows, naming blocks the one around it does not: an error, never a silent intersection. */
 export function escapeMessage(spec: DecoratorSpec, outside: readonly DecoratorUse[], outer: readonly DecoratorUse[]): string {
-  const names = (us: readonly DecoratorUse[]) => us.map(u => `\`${u.name}\``).join(', ');
-  return `\`${DECORATOR_MARK}${spec.key} ${outside.map(u => u.name).join(', ')}\`: the ${DECORATOR_MARK}${spec.key} around it names ${names(outer) || 'nothing'} — a nested ${DECORATOR_MARK}${spec.key} names only what that one does`;
+  const names = (us: readonly DecoratorUse[]) => us.map(use => `\`${use.name}\``).join(', ');
+  return `\`${DECORATOR_MARK}${spec.key} ${outside.map(use => use.name).join(', ')}\`: the ${DECORATOR_MARK}${spec.key} around it names ${names(outer) || 'nothing'} — a nested ${DECORATOR_MARK}${spec.key} names only what that one does`;
 }
 
 /** `@WITH pdf:` with nothing nested below it: it opens a block that holds no line. */
@@ -143,8 +143,8 @@ const NAME_RE = /^[a-z0-9][\w:-]*$/;
 
 /** A decorator line's rest as items, and the template its `AS` names — null when there is none. */
 export function splitDecoratorRest(rest: string): { items: string[]; template: string | null } {
-  const m = rest.trim().match(/^(.*?)(?:\s+AS\s+(\S+))?$/);
-  return { items: splitList(m?.[1] ?? ''), template: m?.[2] ?? null };
+  const match = rest.trim().match(/^(.*?)(?:\s+AS\s+(\S+))?$/);
+  return { items: splitList(match?.[1] ?? ''), template: match?.[2] ?? null };
 }
 
 /** What is wrong with an item's form, before anything resolves — null when it is well formed. */
@@ -169,19 +169,19 @@ export type DecoratorLookup = (kind: string) => readonly { name: string; tags: r
 export function resolveDecorator(spec: DecoratorSpec, items: readonly string[], lookup: DecoratorLookup, template: string | null = null): { uses: DecoratorUse[]; problems: string[] } {
   const uses: DecoratorUse[] = [];
   const problems: string[] = [];
-  const add = (u: DecoratorUse) => { if (!uses.some(x => x.kind === u.kind && x.name === u.name)) uses.push(u); };
+  const add = (use: DecoratorUse) => { if (!uses.some(existing => existing.kind === use.kind && existing.name === use.name)) uses.push(use); };
   for (const item of items) {
     const malformed = decoratorItemError(spec, item);
     if (malformed) { problems.push(malformed); continue; }
     const tag = TAG_RE.exec(item);
     if (tag) {
       const kinds = tag[1] ? [tag[1]] : spec.names;
-      const found = kinds.flatMap(kind => lookup(kind).filter(b => b.tags.some(t => t.replace(/^#/, '') === tag[2])).map(b => ({ kind, name: b.name })));
+      const found = kinds.flatMap(kind => lookup(kind).filter(definition => definition.tags.some(blockTag => blockTag.replace(/^#/, '') === tag[2])).map(definition => ({ kind, name: definition.name })));
       if (found.length === 0) problems.push(`\`${DECORATOR_MARK}${spec.key} ${item}\`: no imported ${orList(kinds)} has #${tag[2]}`);
       found.forEach(add);
       continue;
     }
-    const kind = spec.names.find(k => lookup(k).some(b => b.name === item));
+    const kind = spec.names.find(candidateKind => lookup(candidateKind).some(definition => definition.name === item));
     if (kind) add({ kind, name: item });
     else problems.push(`\`${DECORATOR_MARK}${spec.key} ${item}\`: no imported ${orList(spec.names)} is called \`${item}\` — IMPORT it, or declare it here`);
   }
@@ -198,7 +198,7 @@ function orList(words: readonly string[]): string {
 function shapeProblems(spec: DecoratorSpec, uses: readonly DecoratorUse[], template: string, lookup: DecoratorLookup): string[] {
   if (!spec.shape) return [`\`${DECORATOR_MARK}${spec.key} … AS ${template}\`: ${DECORATOR_MARK}${spec.key} shapes no answer — drop the AS`];
   const problems: string[] = [];
-  if (!lookup('template').some(t => t.name === template)) problems.push(`\`AS ${template}\`: no imported template is called \`${template}\` — IMPORT it FROM @main.templates`);
+  if (!lookup('template').some(definition => definition.name === template)) problems.push(`\`AS ${template}\`: no imported template is called \`${template}\` — IMPORT it FROM @main.templates`);
   if (!(uses.length === 1 && uses[0].kind === spec.shape)) {
     const named = uses.length === 1 ? `the ${uses[0].kind} \`${uses[0].name}\`` : `${uses.length} blocks`;
     problems.push(`\`AS ${template}\` shapes the answer of one ${spec.shape} — this ${DECORATOR_MARK}${spec.key} names ${named}`);
@@ -225,18 +225,18 @@ export class DecoratorScope {
   enter(spec: DecoratorSpec, uses: readonly DecoratorUse[]): DecoratorScope {
     const outer = this.by.get(spec.key);
     const combined = !outer ? [...uses]
-      : spec.combine === 'union' ? [...outer, ...uses.filter(u => !outer.some(o => same(o, u)))]
-        : outer.filter(o => uses.some(u => same(o, u)));
+      : spec.combine === 'union' ? [...outer, ...uses.filter(use => !outer.some(outerUse => same(outerUse, use)))]
+        : outer.filter(outerUse => uses.some(use => same(outerUse, use)));
     return new DecoratorScope(new Map([...this.by, [spec.key, combined]]));
   }
 
   /** What a narrowing decorator names that the enclosing one of its key does not — empty when nothing encloses it, or it adds up. */
   outside(spec: DecoratorSpec, uses: readonly DecoratorUse[]): DecoratorUse[] {
     const outer = this.by.get(spec.key);
-    return spec.combine === 'intersection' && outer ? uses.filter(u => !outer.some(o => same(o, u))) : [];
+    return spec.combine === 'intersection' && outer ? uses.filter(use => !outer.some(outerUse => same(outerUse, use))) : [];
   }
 }
 
-function same(a: DecoratorUse, b: DecoratorUse): boolean {
-  return a.kind === b.kind && a.name === b.name;
+function same(left: DecoratorUse, right: DecoratorUse): boolean {
+  return left.kind === right.kind && left.name === right.name;
 }

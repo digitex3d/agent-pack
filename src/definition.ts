@@ -69,8 +69,8 @@ export interface DefinitionStrategy {
   legendEnum?: string;
 }
 
-function capitalize(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 /**
@@ -126,7 +126,7 @@ export const STRATEGIES: DefinitionStrategy[] = [
   // those inline blocks; `stripHeaderKeyword` is a no-op on the import path,
   // whose body is already resolved to indent 0.
   { ...defaults('role'),      headerKeyword: 'ROLE', sectionTitle: 'Roles' },
-  { ...defaults('template'),  renderBody: (e, ctx) => renderTemplate(e.body, e.name, ctx.templates), afterEmit: propagateRefId },
+  { ...defaults('template'),  renderBody: (entry, ctx) => renderTemplate(entry.body, entry.name, ctx.templates), afterEmit: propagateRefId },
   { ...defaults('procedure'), runnable: true, afterEmit: propagateRefId },
   { ...defaults('flow'),      runnable: true, afterEmit: propagateRefId },
   // A store is a named working table, not a callable routine: NOT runnable. It
@@ -162,15 +162,15 @@ export const STRATEGIES: DefinitionStrategy[] = [
 
 /** Lookup strategy by kind. */
 export function strategyFor(kind: string): DefinitionStrategy | null {
-  return STRATEGIES.find(s => s.kind === kind) ?? null;
+  return STRATEGIES.find(strategy => strategy.kind === kind) ?? null;
 }
 
 /** All definitions across all `runnable: true` kinds. */
 export function allRunnables(ctx: BundleContext): Definition[] {
-  return STRATEGIES.filter(s => s.runnable).flatMap(s => s.getEntries(ctx));
+  return STRATEGIES.filter(strategy => strategy.runnable).flatMap(strategy => strategy.getEntries(ctx));
 }
 
 /** Resolve a `RUN <name>` reference. Returns null if no imported definition matches. */
 export function resolveRunTarget(name: string, ctx: BundleContext): Definition | null {
-  return allRunnables(ctx).find(d => d.name === name) ?? null;
+  return allRunnables(ctx).find(definition => definition.name === name) ?? null;
 }

@@ -61,8 +61,8 @@ function lock(path: string): () => void {
     try {
       closeSync(openSync(lockPath, 'wx'));
       return () => rmSync(lockPath, { force: true });
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
       const held = statSync(lockPath, { throwIfNoEntry: false });
       if (held && Date.now() - held.mtimeMs > LOCK_STALE_MS) rmSync(lockPath, { force: true });
       else if (Date.now() > deadline) throw new Error(`${path}: another writer holds the store's lock — try again`);
@@ -86,7 +86,7 @@ function write<T>(path: string, change: (data: FileData) => T): T {
 
 /** A record as the API sees it: without the driver's own `_seq`. */
 function plain(doc: Doc): Doc {
-  const { _seq: _, ...rest } = doc;
+  const { _seq: _unusedSeq, ...rest } = doc;
   return rest;
 }
 
@@ -97,15 +97,15 @@ interface Store {
 }
 
 /** Where the record `k` sits in the file's list, or -1. */
-const indexOf = (s: Store, data: FileData, k: string): number =>
-  data.docs.findIndex(d => String(s.key ? d[s.key] : d.id) === k);
+const indexOf = (store: Store, data: FileData, recordKey: string): number =>
+  data.docs.findIndex(doc => String(store.key ? doc[store.key] : doc.id) === recordKey);
 
 /** A record as written: its fields, the id it keeps, and the write's seq. */
 const stamp = (data: FileData, doc: Doc): Doc => ({ ...doc, _seq: ++data.seq });
 
-function put(s: Store, doc: Doc): { id: string; updated: boolean } {
-  return write(s.path, data => {
-    const at = s.key && doc[s.key] !== undefined ? indexOf(s, data, String(doc[s.key])) : -1;
+function put(store: Store, doc: Doc): { id: string; updated: boolean } {
+  return write(store.path, data => {
+    const at = store.key && doc[store.key] !== undefined ? indexOf(store, data, String(doc[store.key])) : -1;
     if (at >= 0) {
       const id = String(data.docs[at].id);
       data.docs[at] = stamp(data, { ...doc, id });
@@ -117,20 +117,20 @@ function put(s: Store, doc: Doc): { id: string; updated: boolean } {
   });
 }
 
-function get(s: Store, k: string): Doc | null {
-  const data = load(s.path);
-  const at = indexOf(s, data, k);
+function get(store: Store, recordKey: string): Doc | null {
+  const data = load(store.path);
+  const at = indexOf(store, data, recordKey);
   return at >= 0 ? plain(data.docs[at]) : null;
 }
 
-function find(s: Store, filters: Filter[], limit?: number): Doc[] {
-  const found = load(s.path).docs.filter(d => holds(d, filters)).map(plain);
+function find(store: Store, filters: Filter[], limit?: number): Doc[] {
+  const found = load(store.path).docs.filter(doc => holds(doc, filters)).map(plain);
   return limit ? found.slice(0, limit) : found;
 }
 
-function set(s: Store, k: string, fields: Doc, guard: Filter[] = []): 'set' | 'missing' | 'stale' {
-  return write(s.path, data => {
-    const at = indexOf(s, data, k);
+function set(store: Store, recordKey: string, fields: Doc, guard: Filter[] = []): 'set' | 'missing' | 'stale' {
+  return write(store.path, data => {
+    const at = indexOf(store, data, recordKey);
     if (at < 0) return 'missing';
     if (!holds(data.docs[at], guard)) return 'stale';
     data.docs[at] = stamp(data, { ...data.docs[at], ...fields, id: data.docs[at].id });
@@ -138,9 +138,9 @@ function set(s: Store, k: string, fields: Doc, guard: Filter[] = []): 'set' | 'm
   });
 }
 
-function remove(s: Store, k: string): boolean {
-  return write(s.path, data => {
-    const at = indexOf(s, data, k);
+function remove(store: Store, recordKey: string): boolean {
+  return write(store.path, data => {
+    const at = indexOf(store, data, recordKey);
     if (at < 0) return false;
     data.docs.splice(at, 1);
     data.seq++;
@@ -148,18 +148,18 @@ function remove(s: Store, k: string): boolean {
   });
 }
 
-function take(s: Store, filters: Filter[], fields: Doc): Doc | null {
-  return write(s.path, data => {
-    const at = data.docs.findIndex(d => holds(d, filters));
+function take(store: Store, filters: Filter[], fields: Doc): Doc | null {
+  return write(store.path, data => {
+    const at = data.docs.findIndex(doc => holds(doc, filters));
     if (at < 0) return null;
     data.docs[at] = stamp(data, { ...data.docs[at], ...fields, id: data.docs[at].id });
     return plain(data.docs[at]);
   });
 }
 
-function since(s: Store, mark: string): Doc[] | null {
+function since(store: Store, mark: string): Doc[] | null {
   if (!/^\d+$/.test(mark)) return null;
-  return load(s.path).docs.filter(d => Number(d._seq) > Number(mark)).map(plain);
+  return load(store.path).docs.filter(doc => Number(doc._seq) > Number(mark)).map(plain);
 }
 
 /**
@@ -168,16 +168,16 @@ function since(s: Store, mark: string): Doc[] | null {
  * the same format, the same lock, reached by `key` (else by id).
  */
 export function fileCollection(path: string, key: string | null): Collection {
-  const s: Store = { path, key };
+  const store: Store = { path, key };
   return {
-    put: doc => put(s, doc),
-    get: k => get(s, k),
-    find: (filters, limit) => find(s, filters, limit),
-    set: (k, fields, guard) => set(s, k, fields, guard),
-    remove: k => remove(s, k),
-    take: (filters, fields) => take(s, filters, fields),
-    mark: () => String(load(s.path).seq),
-    since: mark => since(s, mark),
+    put: doc => put(store, doc),
+    get: recordKey => get(store, recordKey),
+    find: (filters, limit) => find(store, filters, limit),
+    set: (recordKey, fields, guard) => set(store, recordKey, fields, guard),
+    remove: recordKey => remove(store, recordKey),
+    take: (filters, fields) => take(store, filters, fields),
+    mark: () => String(load(store.path).seq),
+    since: mark => since(store, mark),
   };
 }
 
@@ -196,9 +196,9 @@ const filesDriver: StoreDriver = {
   },
 
   rejects(slot: ApSlot) {
-    const t = slot.type;
-    if (t.kind === 'shape' || t.kind === 'list') {
-      return `slot "${slot.name}" holds ${t.kind === 'list' ? 'a list of ' : 'another shape, '}<${t.ref.target}>, and a files record is flat — ` +
+    const slotType = slot.type;
+    if (slotType.kind === 'shape' || slotType.kind === 'list') {
+      return `slot "${slot.name}" holds ${slotType.kind === 'list' ? 'a list of ' : 'another shape, '}<${slotType.ref.target}>, and a files record is flat — ` +
         'give that shape its own STORE, with a slot naming the record it belongs to';
     }
     return null;

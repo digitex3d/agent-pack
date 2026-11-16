@@ -59,7 +59,7 @@ export const FORCE_LEVEL_ALIASES: AliasRule[] = getAliasNames().map(name => ({
 }));
 
 const ALL_ALIASES = new Map<string, AliasRule['to']>(
-  [...STATIC_ALIASES, ...FORCE_LEVEL_ALIASES].map(r => [r.from, r.to]),
+  [...STATIC_ALIASES, ...FORCE_LEVEL_ALIASES].map(rule => [rule.from, rule.to]),
 );
 
 /**
@@ -71,18 +71,18 @@ const ALL_ALIASES = new Map<string, AliasRule['to']>(
  * preserving `kind`, `raw`, `line`, `col`, and `indent` from the source token.
  */
 export function desugar(tokens: Token[]): Token[] {
-  return checkedTriggers(tokens).map(t => {
-    if (t.kind !== 'keyword') return t;
-    const target = ALL_ALIASES.get(t.keyword as string);
-    if (!target) return t;
+  return checkedTriggers(tokens).map(token => {
+    if (token.kind !== 'keyword') return token;
+    const target = ALL_ALIASES.get(token.keyword as string);
+    if (!target) return token;
     // When the alias overrides the rest (lifecycle hooks), re-append the block
     // colon the lexer carried in the source rest, so `ON-X:` → `WHEN <phase>:`
     // (block opener) and bare `ON-X` → `WHEN <phase>` (prose line).
     const rest = target.rest === undefined
-      ? t.rest                                                 // preserve source rest
-      : target.rest + (t.rest.trimEnd().endsWith(':') ? ':' : '');
+      ? token.rest                                                 // preserve source rest
+      : target.rest + (token.rest.trimEnd().endsWith(':') ? ':' : '');
     return {
-      ...t,
+      ...token,
       keyword: target.keyword as Keyword,
       rest,
     };
@@ -108,23 +108,23 @@ export function desugar(tokens: Token[]): Token[] {
  * condition could not sit in a prose head.
  */
 function checkedTriggers(tokens: Token[]): Token[] {
-  const isSugar = (t: Token): t is Token & { kind: 'keyword' } => t.kind === 'keyword' && t.keyword === 'WHEN' && t.level === 1;
+  const isSugar = (token: Token): token is Token & { kind: 'keyword' } => token.kind === 'keyword' && token.keyword === 'WHEN' && token.level === 1;
   if (!tokens.some(isSugar)) return tokens;
   const out: Token[] = [];
   const shifts: { above: number; by: number }[] = [];   // open rewrites: a line deeper than `above` moves by `by`
-  const moved = <T extends Token>(t: T, by: number): T =>
-    by && t.kind !== 'blank' && 'raw' in t ? { ...t, indent: t.indent + by, raw: ' '.repeat(by) + t.raw } : t;
-  tokens.forEach((t, i) => {
-    if (t.kind !== 'blank') while (shifts.length && t.indent <= shifts[shifts.length - 1].above) shifts.pop();
-    const by = shifts.reduce((n, s) => n + s.by, 0);
-    if (!isSugar(t)) { out.push(moved(t, by)); return; }
-    const body = tokens.slice(i + 1).find(n => n.kind !== 'blank');
-    const step = body && body.indent > t.indent ? body.indent - t.indent : 4;
-    const { level: _level, ...plain } = t;
-    const line = (keyword: string, indent: number) => `${' '.repeat(indent)}${keyword} ${t.rest}`;
-    out.push({ ...plain, indent: t.indent + by, raw: line('WHEN', t.indent + by) });
-    out.push({ ...plain, keyword: 'IF' as Keyword, level: 1, indent: t.indent + by + step, raw: line('IF!', t.indent + by + step) });
-    shifts.push({ above: t.indent, by: step });
+  const moved = <T extends Token>(token: T, by: number): T =>
+    by && token.kind !== 'blank' && 'raw' in token ? { ...token, indent: token.indent + by, raw: ' '.repeat(by) + token.raw } : token;
+  tokens.forEach((token, index) => {
+    if (token.kind !== 'blank') while (shifts.length && token.indent <= shifts[shifts.length - 1].above) shifts.pop();
+    const by = shifts.reduce((total, shift) => total + shift.by, 0);
+    if (!isSugar(token)) { out.push(moved(token, by)); return; }
+    const body = tokens.slice(index + 1).find(following => following.kind !== 'blank');
+    const step = body && body.indent > token.indent ? body.indent - token.indent : 4;
+    const { level: _level, ...plain } = token;
+    const line = (keyword: string, indent: number) => `${' '.repeat(indent)}${keyword} ${token.rest}`;
+    out.push({ ...plain, indent: token.indent + by, raw: line('WHEN', token.indent + by) });
+    out.push({ ...plain, keyword: 'IF' as Keyword, level: 1, indent: token.indent + by + step, raw: line('IF!', token.indent + by + step) });
+    shifts.push({ above: token.indent, by: step });
   });
   return out;
 }

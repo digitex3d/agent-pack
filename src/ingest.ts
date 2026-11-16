@@ -138,8 +138,8 @@ const H1_RE = /^#\s+(.+)$/m;
  */
 export function kindFromDir(filePath: string): IngestKind {
   const segments = resolve(filePath).split(sep);
-  for (let i = segments.length - 1; i >= 0; i--) {
-    const kind = DIR_TO_KIND[segments[i]];
+  for (let index = segments.length - 1; index >= 0; index--) {
+    const kind = DIR_TO_KIND[segments[index]];
     if (kind) return kind;
   }
   return 'generic';
@@ -163,9 +163,9 @@ export function kindFromDir(filePath: string): IngestKind {
  */
 export function unitKindOf(filePath: string, body: string): IngestKind {
   const blocks = parseBlocks(body).blocks;
-  if (blocks.some(b => b.key.toLowerCase() === 'agent')) return 'agent';
-  for (const b of blocks) {
-    const key = b.key.toLowerCase();
+  if (blocks.some(block => block.key.toLowerCase() === 'agent')) return 'agent';
+  for (const block of blocks) {
+    const key = block.key.toLowerCase();
     if (BLOCK_KINDS.has(key)) return key as IngestKind;
   }
   return kindFromDir(filePath);
@@ -198,8 +198,8 @@ function extractName(body: string, kind: IngestKind, filePath: string): string {
 
   const re = STRUCTURAL_KEYWORD[kind];
   if (re) {
-    const m = body.match(re);
-    if (m) return m[1].trim();
+    const match = body.match(re);
+    if (match) return match[1].trim();
   }
   const h1 = body.match(H1_RE);
   if (h1) return h1[1].trim();
@@ -249,7 +249,7 @@ function fileFacets(
  * procedure body `AS <template>` is the output contract and `LENS-IN
  * <template>` the input contract — content, never metadata.
  */
-const UNIT_METADATA_KEYWORDS = AGENT_METADATA_KEYWORDS.filter(k => k !== 'AS' && k !== 'LENS-IN');
+const UNIT_METADATA_KEYWORDS = AGENT_METADATA_KEYWORDS.filter(keyword => keyword !== 'AS' && keyword !== 'LENS-IN');
 
 /**
  * Lift a unit's ABOUT/APPLIES and strip its metadata keywords (ABOUT, MANDATE,

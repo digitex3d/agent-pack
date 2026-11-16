@@ -29,8 +29,8 @@ const EXCLUDED_KEYS = new Set([
 ]);
 
 /** A Ref-shaped object: pure address, skipped wholesale. */
-function isRef(v: object): boolean {
-  return 'target' in v && 'kind' in v;
+function isRef(value: object): boolean {
+  return 'target' in value && 'kind' in value;
 }
 
 /**
@@ -43,14 +43,14 @@ export function measure(value: unknown, key?: string): number {
     return key === 'when' && value === 'always' ? 0 : value.length;
   }
   if (Array.isArray(value)) {
-    return value.reduce((n: number, v) => n + measure(v), 0);
+    return value.reduce((total: number, item) => total + measure(item), 0);
   }
   if (value !== null && typeof value === 'object') {
     if (isRef(value)) return 0;
-    let n = 0;
-    for (const [k, v] of Object.entries(value)) n += measure(v, k);
-    if ('chars' in value) (value as { chars: number }).chars = n;
-    return n;
+    let total = 0;
+    for (const [fieldKey, fieldValue] of Object.entries(value)) total += measure(fieldValue, fieldKey);
+    if ('chars' in value) (value as { chars: number }).chars = total;
+    return total;
   }
   return 0;
 }

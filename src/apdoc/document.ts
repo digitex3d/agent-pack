@@ -17,7 +17,7 @@
  * consumer ever needs `instanceof` (duck-typing survives module realms).
  */
 import { resolve as resolvePath } from 'node:path';
-import type { ApDocumentMeta, ApMdMeta, ApOutlineItem, ApOutlinePart, ApRef, ApNode, ApLine } from './types.js';
+import type { ApBlockData, ApDocumentMeta, ApMdMeta, ApOutlineItem, ApOutlinePart, ApRef, ApNode, ApLine } from './types.js';
 import { walk, type LineHead } from './nodes.js';
 import { DISTILLED_DIR } from '../apx/paths.js';
 import type { ApBlock } from './block.js';
@@ -37,12 +37,14 @@ import { assignLeafNodes, buildTagRenderTree, type TagRenderNode } from '../bund
  * not enter toJSON/contentHash). The md layout reads it: only 'definition'
  * blocks form the chapters.
  */
-export type BlockProvenance = 'definition' | 'team' | 'agent';
+export type BlockProvenance = 'definition' | 'agent';
 
 export class ApDocument {
   readonly schemaVersion = 1 as const;
   private blocks = new Map<string, ApBlock>();
   private provenance = new Map<string, BlockProvenance>();
+  /** Where a block this document only refers to is found by its id — the store of the pack it is served from; none at compile time. */
+  private store: ((id: string) => ApBlock | null) | null = null;
 
   constructor(private readonly docMeta: ApDocumentMeta) {}
 
@@ -61,22 +63,26 @@ export class ApDocument {
   static fromJson(text: string): ApDocument {
     const data = JSON.parse(text) as {
       meta: ApDocumentMeta;
-      blocks: Record<string, import('./types.js').ApBlockData>;
+      blocks: Record<string, ApBlockData>;
     };
     const doc = new ApDocument(data.meta);
     // The plugins its blocks belong to: kinds of this process before any block is revived.
     for (const spec of Object.values(data.meta.plugins ?? {})) { registerPlugin(spec); installPluginKind(spec); }
     const md = data.meta.md;
     for (const [address, blockData] of Object.entries(data.blocks)) {
-      const strategy = strategyOf(blockData.kind);
-      if (!strategy) continue;
-      const block = strategy.revive(blockData);
+      const block = ApDocument.reviveBlock(blockData);
+      if (!block) continue;
       const provenance = (md?.provenance[address] ?? 'definition') as BlockProvenance;
       doc.add(block, provenance);
       const pos = md?.shapePos[address];
       if (pos !== undefined) block.shapePos = pos;
     }
     return doc;
+  }
+
+  /** One block from its serialized data, as its typed class — null for a kind this process does not know. */
+  static reviveBlock(data: ApBlockData): ApBlock | null {
+    return strategyOf(data.kind)?.revive(data) ?? null;
   }
 
   // ------------------------------------------------------------ construction
@@ -118,6 +124,15 @@ export class ApDocument {
     return this.blocks.get(ref.target) ?? null;
   }
 
+  /** Read the blocks it only refers to from a store: one id, one block, wherever it is held. */
+  readsFrom(store: (id: string) => ApBlock | null): void {
+    this.store = store;
+  }
+
+  /** Follow a Ref to its block — in this document, else in the store it reads from (a unit's member, the main's team). */
+  reach(ref: ApRef): ApBlock | null {
+    return this.resolve(ref) ?? (ref.id ? this.store?.(ref.id) : null) ?? null;
+  }
 
   /**
    * Every node of each block's body, at any depth, with its block and the nodes
@@ -126,7 +141,7 @@ export class ApDocument {
    */
   nodes(): { node: ApNode; block: ApBlock; containers: ApNode[] }[] {
     // A COMPUTE block's REQUIRE and ENSURE sections are body nodes too: their lines are judged and listed.
-    return this.all().flatMap(block => [...walk([...(block.require ?? []), ...block.body, ...(block.ensure ?? [])])].map(w => ({ ...w, block })));
+    return this.all().flatMap(block => [...walk([...(block.require ?? []), ...block.body, ...(block.ensure ?? [])])].map(entry => ({ ...entry, block })));
   }
 
   /**
@@ -136,10 +151,10 @@ export class ApDocument {
    * A store an `IN` names too is the agent's, and shows as ever.
    */
   agentStores(): ApBlock[] {
-    const ofDimensions = new Set((this.byKind('dimension') as DimensionBlock[]).flatMap(d => (d.store ? [d.store.target] : [])));
+    const ofDimensions = new Set((this.byKind('dimension') as DimensionBlock[]).flatMap(dimension => (dimension.store ? [dimension.store.target] : [])));
     if (ofDimensions.size === 0) return this.byKind('store');
     const inUse = new Set(this.nodes().flatMap(({ node }) => (node.type === 'in' ? [node.store.target] : [])));
-    return this.byKind('store').filter(s => !ofDimensions.has(s.address) || inUse.has(s.address));
+    return this.byKind('store').filter(store => !ofDimensions.has(store.address) || inUse.has(store.address));
   }
 
   /**
@@ -170,7 +185,7 @@ export class ApDocument {
   /** The line written at `file:line`, or null. */
   lineAt(file: string, line: number): ApLine | null {
     const path = resolvePath(file);
-    return this.lines().find(l => l.file === path && l.line === line) ?? null;
+    return this.lines().find(record => record.file === path && record.line === line) ?? null;
   }
 
   /** The slots of the template a Ref points at — null when it is no template of this document. */
@@ -181,7 +196,7 @@ export class ApDocument {
 
   /** A template of the document, by name — or null. */
   templateNamed(name: string): TemplateBlock | null {
-    return (this.byKind('template').find(b => b.name === name) as TemplateBlock | undefined) ?? null;
+    return (this.byKind('template').find(block => block.name === name) as TemplateBlock | undefined) ?? null;
   }
 
   /** The document's templates by name — how nested `<template>` slots resolve. */
@@ -202,7 +217,7 @@ export class ApDocument {
     let found: ApBlock[] | null = null;
     while (body.length === 1 && body[0].type === 'directive' && body[0].keyword.startsWith(DECORATOR_MARK)) {
       const node = body[0];
-      if (node.keyword === `${DECORATOR_MARK}${key}`) found = [...(found ?? []), ...(node.uses ?? []).map(r => this.resolve(r)).filter((b): b is ApBlock => b !== null)];
+      if (node.keyword === `${DECORATOR_MARK}${key}`) found = [...(found ?? []), ...(node.uses ?? []).map(ref => this.resolve(ref)).filter((resolved): resolved is ApBlock => resolved !== null)];
       body = node.body ?? [];
     }
     return found;
@@ -225,21 +240,21 @@ export class ApDocument {
   perimeter(): PerimeterGlobs | null {
     const domains = this.domains();
     if (!domains) return null;
-    const programs = Object.values(this.meta.executors ?? {}).some(e => e.program) ? [`${DISTILLED_DIR}/**`] : [];
+    const programs = Object.values(this.meta.executors ?? {}).some(executor => executor.program) ? [`${DISTILLED_DIR}/**`] : [];
     const side = (keyword: 'WRITES' | 'READS') => {
-      const parts = domains.map(d => d.side(keyword));
-      const uncertain: Record<string, number> = Object.assign({}, ...parts.map(p => p.uncertain));
-      const globs = parts.flatMap(p => p.globs);
+      const parts = domains.map(domain => domain.side(keyword));
+      const uncertain: Record<string, number> = Object.assign({}, ...parts.map(part => part.uncertain));
+      const globs = parts.flatMap(part => part.globs);
       return {
         globs,
-        all: [...globs, ...[...parts.flatMap(p => p.within), ...Object.keys(uncertain)].map(literalGlob)],
-        judged: { formulas: domains.flatMap(d => d.formulas.filter(f => f.keyword === keyword).map(f => f.formula)), uncertain },
+        all: [...globs, ...[...parts.flatMap(part => part.within), ...Object.keys(uncertain)].map(literalGlob)],
+        judged: { formulas: domains.flatMap(domain => domain.formulas.filter(domainFormula => domainFormula.keyword === keyword).map(domainFormula => domainFormula.formula)), uncertain },
       };
     };
     const writes = side('WRITES');
     const reads = side('READS');
-    const perimeter: PerimeterGlobs = { writes: [...writes.all, ...programs], reads: domains.some(d => d.declares('READS')) ? reads.all : null };
-    if (domains.some(d => d.formulas.length > 0)) {
+    const perimeter: PerimeterGlobs = { writes: [...writes.all, ...programs], reads: domains.some(domain => domain.declares('READS')) ? reads.all : null };
+    if (domains.some(domain => domain.formulas.length > 0)) {
       perimeter.judged = { writes: writes.judged, reads: reads.judged };
       perimeter.shown = { writes: [...writes.globs, ...programs], reads: reads.globs };
     }
@@ -252,12 +267,12 @@ export class ApDocument {
   }
 
   byKind(kind: string): ApBlock[] {
-    return [...this.blocks.values()].filter(b => b.kind === kind);
+    return [...this.blocks.values()].filter(block => block.kind === kind);
   }
 
   /** Blocks of one provenance, in insertion (production) order. */
-  byProvenance(p: BlockProvenance): ApBlock[] {
-    return [...this.blocks.values()].filter(b => this.provenance.get(b.address) === p);
+  byProvenance(provenance: BlockProvenance): ApBlock[] {
+    return [...this.blocks.values()].filter(block => this.provenance.get(block.address) === provenance);
   }
 
   // ------------------------------------------------------------ projections
@@ -291,15 +306,15 @@ export class ApDocument {
 
     // The bound role is IN the document (it is the agent's identity) but the
     // Roles chapter excludes it — identity fused into the Identity block.
-    const boundRoles = new Set(((this.root() as AgentBlock | null)?.roles ?? []).map(r => r.target));
+    const boundRoles = new Set(((this.root() as AgentBlock | null)?.roles ?? []).map(role => role.target));
 
     // A store only a dimension names is the dimension's: its chapter shows the dimension, never the store.
-    const stores = new Set(this.agentStores().map(s => s.address));
+    const stores = new Set(this.agentStores().map(store => store.address));
     const partBlocks = this.byProvenance(provenance);
     for (const strategy of KIND_STRATEGIES) {
       if (!strategy.entries) continue; // chapter kinds only
       const entries = partBlocks.filter(
-        b => b.kind === strategy.kind && !boundRoles.has(b.address) && (b.kind !== 'store' || stores.has(b.address)),
+        block => block.kind === strategy.kind && !boundRoles.has(block.address) && (block.kind !== 'store' || stores.has(block.address)),
       );
       if (entries.length === 0) continue;
       visitor.chapter?.(strategy.chapterTitle ?? strategy.kind, strategy.kind);
@@ -322,9 +337,9 @@ export class ApDocument {
       entry: (block, depth) => items.push({ type: 'entry', part, depth, address: block.address }),
     });
 
-    const D = FORMULAS.document;
+    const documentFormulas = FORMULAS.document;
     const rows = this.crossReferenceRows(items);
-    if (rows.length > 0) items.push({ type: 'crossReferences', title: D.crossReferences.chapter, rows });
+    if (rows.length > 0) items.push({ type: 'crossReferences', title: documentFormulas.crossReferences.chapter, rows });
     return items;
   }
 
@@ -340,8 +355,8 @@ export class ApDocument {
     const byTag = new Map<string, { id: string; name: string }[]>();
     for (const block of this.byProvenance('definition')) {
       if (!listed.has(block.address)) continue;
-      for (const t of block.tags) {
-        const tag = `#${t}`;
+      for (const tagName of block.tags) {
+        const tag = `#${tagName}`;
         const bucket = byTag.get(tag) ?? [];
         bucket.push({ id: block.id, name: block.name });
         byTag.set(tag, bucket);
@@ -349,7 +364,7 @@ export class ApDocument {
     }
     return [...byTag.entries()]
       .filter(([, entries]) => entries.length >= 2)
-      .sort(([a], [b]) => a.localeCompare(b))
+      .sort(([left], [right]) => left.localeCompare(right))
       .map(([tag, entries]) => ({ tag, entries }));
   }
 
@@ -383,13 +398,13 @@ function keyOf(block: ApBlock): string {
 function walkEntries(entries: ApBlock[], visitor: ChapterVisitor): void {
   const emitEntry = (block: ApBlock, depth: number): void => visitor.entry?.(block, depth);
 
-  const hasTags = entries.some(b => b.tags.length > 0);
+  const hasTags = entries.some(block => block.tags.length > 0);
   if (!hasTags) {
     for (const block of entries) emitEntry(block, 2);
     return;
   }
 
-  for (const block of entries.filter(b => b.tags.length === 0)) emitEntry(block, 2);
+  for (const block of entries.filter(candidate => candidate.tags.length === 0)) emitEntry(block, 2);
 
   const byTag = new Map<string, Set<string>>();
   const byKey = new Map<string, ApBlock>();

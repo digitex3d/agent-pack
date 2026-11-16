@@ -1,0 +1,20 @@
+# improve-static-analysis — turns a problem into a lint rule that fails on it, on the user's approval
+IMPORT run-quality-check FROM @main.procedures
+
+EXPORT PROCEDURE improve-static-analysis:
+    ABOUT  turn a problem into a check that fails on it, a Biome rule first, then an ESLint one
+    DO  take the problem it is asked for: a rule the user states, or a zone found by judgment and not by the quality check
+    DO  ask whether the linter the quality check runs could fail on it: a Biome rule first, else an ESLint rule
+    IF it could:
+        DO  write the exact rule in the config that linter reads, with a comment saying why
+        RUN  run-quality-check
+        DO  list what the new rule reports on the code as it is
+    DO  show the user each rule and what it reports, and add only the rules they approve
+    RUN  run-quality-check
+    DO  report what it printed
+    IF the user asked for the tests:
+        DO  run `npm test`, and report what it printed
+    IF the linter could not fail on it:
+        DO  say so, and add nothing
+    NEVER  weaken, disable or add an exception to an existing rule to make a new one pass
+    NEVER  add a rule that only restates one the project already has

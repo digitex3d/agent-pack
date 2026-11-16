@@ -12,8 +12,8 @@ import { exportedBlockBodies, nonExportedSource, type ExportedBlockBody } from '
 const WHEN_RE = /^WHEN\s+(.+)$/m;
 
 function extractWhen(body: string): string | null {
-  const m = body.match(WHEN_RE);
-  return m ? m[1].trim() : null;
+  const match = body.match(WHEN_RE);
+  return match ? match[1].trim() : null;
 }
 
 /**
@@ -55,7 +55,7 @@ async function resolveExportBlock(imp: LoadRequest, ctx: BundleContext): Promise
   if (ctx.importedPaths.has(blockKey)) return '';
   ctx.importedPaths.add(blockKey);
 
-  const block = (await exportBlocksOf(path, ctx)).find(b => b.name === blockName);
+  const block = (await exportBlocksOf(path, ctx)).find(exported => exported.name === blockName);
   if (!block) return ''; // the resolver matched this block; defensive only
 
   const unit = ingestExportBlock(block, path, allLibraryRoots(ctx), ctx.libraries);

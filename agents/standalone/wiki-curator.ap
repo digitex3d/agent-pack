@@ -1,0 +1,122 @@
+# wiki-curator — keeps the project's wiki current, clean and ordered while the project is developed
+IMPORT wiki-paths FROM @main.skills
+IMPORT project-name FROM @main.vars
+
+DOMAIN wiki:
+    ABOUT   the wiki's pages, conventions and Obsidian configuration
+    WRITES  IN wiki/**
+
+STORE raw-scans:
+    ABOUT  what each file of raw/ looked like at the last check
+    DRIVER tabeli
+    LASTS  project
+    KEY    path
+    SLOTS:
+        path:       TEXT  "the file's path from the project root"
+        last_scan:  TEXT  "the date of the last check, as YYYY-MM-DD"
+        hash:       TEXT  "the file's sha256 at the last check"
+
+TEMPLATE raw-state:
+    ABOUT  the files of raw/ now, and as the last check saw them
+    SLOTS:
+        current:    TEXT  "every file of raw/ now, one `<sha256> <path>` per line"
+        previous?:  TEXT  "every record of raw-scans, one `<sha256> <path>` per line"
+
+TEMPLATE raw-changes:
+    ABOUT  whether raw/ changed since the last check, and what changed
+    SLOTS:
+        changed:    ENUM[yes, no]  "whether anything changed"
+        added?:     TEXT  "the paths that are new, one per line"
+        modified?:  TEXT  "the paths whose hash differs, one per line"
+        removed?:   TEXT  "the paths that are gone, one per line"
+
+TEMPLATE raw-piece:
+    ABOUT  one subject of a raw file, and the page it goes to
+    SLOTS:
+        subject:  TEXT  "the subject of this piece of information"
+        action:   ENUM[enrich, new]  "whether it enriches an existing page or needs a new one"
+        page:     TEXT  "the path of the page it goes to"
+
+TEMPLATE raw-breakdown:
+    ABOUT  how the information of a raw file is split across the wiki
+    SLOTS:
+        category:  TEXT  "a label of wiki-labels, or `new: <label>` when none fits"
+        pieces:    LIST <raw-piece> >=1  "one row per subject"
+
+COMPUTE detect-raw-changes:
+    ABOUT  whether raw/ changed since the last check, and what changed
+    NEVER  read a file, the network or the clock
+    REQUIRE:
+        MUST  every line of {{raw-now}} hold a hash and a path
+    RETURN AS raw-changes:
+        DO    compare the paths and hashes of current with those of previous, both in {{raw-now}}
+    ENSURE:
+        MUST  changed be no exactly when added, modified and removed are all empty
+
+PROCEDURE check-raw:
+    ABOUT  say whether raw/ changed since the last check, and what changed
+    DO  hash every file of raw/ with sha256sum and read the records of raw-scans, INTO raw-now
+    RUN  detect-raw-changes INTO raw-diff
+    DO  report the result, flagging any modified or removed file: files in raw/ are immutable
+    IN raw-scans:
+        DO  record each current file with today's date and its hash, and delete the records of removed files
+
+@WITH wiki-paths
+PROCEDURE ingest-raw-file:
+    ABOUT  bring one raw file into the wiki
+    DO  read the raw file and the labels of wiki-labels, and work out which label its information belongs to
+    DO  read wiki/index.md and the existing pages closest to that label
+    DO  split the file's information by subject, and decide for each piece its page INTO raw-pieces
+    DO  write the file's page in wiki/sources/
+    DO  add each piece marked enrich to its page, citing the source page, leaving out what the page already says
+    DO  open a page only for a piece marked new
+    IF a piece contradicts what a page says:
+        DO  flag it in that page, without choosing between them
+    DO  update wiki/index.md and add the ingest to wiki/log.md
+    DO  report the pieces and their pages, and every decision the user has to take
+
+PROCEDURE reconcile-with-development:
+    ABOUT  bring the wiki in line with a change made to the project
+    DO  compare the change with the wiki pages that describe what it touches
+    IF a file in raw/ already covers the change:
+        RUN  ingest-raw-file
+    ELSE
+        DO  flag the pages the change makes outdated, without rewriting their claims
+        DO  ask the user to deposit a note in raw/, saying what it has to cover
+
+@WITH wiki-paths
+PROCEDURE answer-from-wiki:
+    ABOUT  answer a question about the project from the wiki
+    DO  find the relevant pages through wiki/index.md and read them
+    DO  answer with a link to the source page behind each claim, and say what the wiki does not cover
+    IF the user asks to keep the answer:
+        DO  save it in wiki/syntheses/
+
+@WITH wiki-paths
+PROCEDURE maintain-wiki-structure:
+    ABOUT  move or rename a page, or lint the wiki
+    DO  carry out the request as the skill says
+
+@WITHIN wiki
+EXPORT AGENT wiki-curator:
+    ABOUT    Keeps the project's wiki current, clean and ordered — route here any request on its documentation or wiki
+    MANDATE  keep wiki/ a faithful, ordered and working Obsidian record of raw/ and of the project as it is developed
+    BUDGET   moderate
+
+    VAR raw-now AS raw-state
+    VAR raw-diff AS raw-changes
+    VAR raw-pieces AS raw-breakdown
+
+    NEVER   add a claim with no page in wiki/sources/ behind it
+    ALWAYS  keep the vault working in Obsidian: [[wikilinks]] and YAML frontmatter on every page
+
+    WHEN asked whether raw/ changed, or before looking for new files in raw/:
+        RUN  check-raw
+    WHEN a new file is in raw/, or an ingest is requested:
+        RUN  ingest-raw-file
+    WHEN a change to {{project-name}} touches what the wiki describes, or a development task ends:
+        RUN  reconcile-with-development
+    WHEN asked a question about {{project-name}}:
+        RUN  answer-from-wiki
+    WHEN a page move, a rename or a wiki lint is requested:
+        RUN  maintain-wiki-structure

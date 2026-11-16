@@ -64,25 +64,25 @@ export interface Node {
   children: Node[];
 }
 
-export function rawOf(t: Token): string {
-  if (t.kind === 'blank') return '';
-  return 'raw' in t ? t.raw : '';
+export function rawOf(token: Token): string {
+  if (token.kind === 'blank') return '';
+  return 'raw' in token ? token.raw : '';
 }
 
 
 /** Leading-space count of a rendered line. */
 function leadingSpaces(line: string): number {
-  const m = line.match(/^ */);
-  return m ? m[0].length : 0;
+  const match = line.match(/^ */);
+  return match ? match[0].length : 0;
 }
 
 export function stripTrailingColon(rest: string): string {
-  const r = rest.trimEnd();
-  return r.endsWith(':') ? r.slice(0, -1).trimEnd() : r;
+  const trimmed = rest.trimEnd();
+  return trimmed.endsWith(':') ? trimmed.slice(0, -1).trimEnd() : trimmed;
 }
 
-export function restOf(t: Token): string {
-  return 'rest' in t ? t.rest.trim() : '';
+export function restOf(token: Token): string {
+  return 'rest' in token ? token.rest.trim() : '';
 }
 
 /**
@@ -98,20 +98,20 @@ export function splitArgs(blockKeyword: string, children: Node[]): { signature: 
   if (specs.length === 0) return { signature: '', body: children, args: argValue };
 
   const body: Node[] = [];
-  for (const c of children) {
-    const kw = c.token.kind === 'keyword' ? (c.token.keyword as string) : null;
-    const spec = kw ? specs.find(s => s.keyword === kw) : undefined;
-    if (kw && spec && c.children.length === 0 && !argValue.has(kw)) {
-      const { value, line } = spec.split ? spec.split(restOf(c.token)) : { value: restOf(c.token), line: null };
+  for (const child of children) {
+    const kw = child.token.kind === 'keyword' ? (child.token.keyword as string) : null;
+    const spec = kw ? specs.find(candidate => candidate.keyword === kw) : undefined;
+    if (kw && spec && child.children.length === 0 && !argValue.has(kw)) {
+      const { value, line } = spec.split ? spec.split(restOf(child.token)) : { value: restOf(child.token), line: null };
       argValue.set(kw, value);
       // The line the argument also stands for joins the body where it was written.
-      if (line) body.push({ token: { ...lex(`${' '.repeat(c.token.indent)}${line}`)[0], line: c.token.line }, children: [] });
+      if (line) body.push({ token: { ...lex(`${' '.repeat(child.token.indent)}${line}`)[0], line: child.token.line }, children: [] });
     } else {
-      body.push(c);
+      body.push(child);
     }
   }
 
-  const frags = specs.filter(s => argValue.has(s.keyword)).map(s => s.inline(argValue.get(s.keyword)!));
+  const frags = specs.filter(spec => argValue.has(spec.keyword)).map(spec => spec.inline(argValue.get(spec.keyword)!));
   return { signature: frags.length ? ` — ${frags.join(', ')}` : '', body, args: argValue };
 }
 
@@ -125,20 +125,20 @@ export function splitArgs(blockKeyword: string, children: Node[]): { signature: 
 export function buildTree(tokens: Token[]): Node[] {
   const eff = new Array<number>(tokens.length);
   let nextIndent = 0;
-  for (let i = tokens.length - 1; i >= 0; i--) {
-    if (tokens[i].kind === 'blank') eff[i] = nextIndent;
-    else { eff[i] = tokens[i].indent; nextIndent = tokens[i].indent; }
+  for (let index = tokens.length - 1; index >= 0; index--) {
+    if (tokens[index].kind === 'blank') eff[index] = nextIndent;
+    else { eff[index] = tokens[index].indent; nextIndent = tokens[index].indent; }
   }
 
   const root: Node = { token: null as unknown as Token, children: [] };
   const stack: { node: Node; indent: number }[] = [{ node: root, indent: -1 }];
 
-  tokens.forEach((t, i) => {
-    const ind = eff[i];
+  tokens.forEach((token, index) => {
+    const ind = eff[index];
     while (stack.length > 1 && stack[stack.length - 1].indent >= ind) stack.pop();
-    const node: Node = { token: t, children: [] };
+    const node: Node = { token, children: [] };
     stack[stack.length - 1].node.children.push(node);
-    if (t.kind !== 'blank') stack.push({ node, indent: ind });
+    if (token.kind !== 'blank') stack.push({ node, indent: ind });
   });
 
   return root.children;
@@ -148,22 +148,22 @@ export function buildTree(tokens: Token[]): Node[] {
 function reindent(lines: string[], from: number, to: number): string[] {
   const delta = to - from;
   if (delta === 0) return lines;
-  return lines.map(l => {
-    if (l.trim() === '') return '';
-    if (delta > 0) return ' '.repeat(delta) + l;
-    return l.slice(Math.min(-delta, leadingSpaces(l)));
+  return lines.map(line => {
+    if (line.trim() === '') return '';
+    if (delta > 0) return ' '.repeat(delta) + line;
+    return line.slice(Math.min(-delta, leadingSpaces(line)));
   });
 }
 
 /** Min indentation among non-blank lines (0 when none). */
 function minIndent(lines: string[]): number {
-  const indents = lines.filter(l => l.trim() !== '').map(leadingSpaces);
+  const indents = lines.filter(line => line.trim() !== '').map(leadingSpaces);
   return indents.length ? Math.min(...indents) : 0;
 }
 
 /** Render a maximal run of leaf nodes through the existing flat primitive passes. */
 function renderLeafRun(nodes: Node[], ctx?: BundleContext): string[] {
-  const text = nodes.map(n => delegationLine(n.token, ctx) ?? rawOf(n.token)).join('\n');
+  const text = nodes.map(node => delegationLine(node.token, ctx) ?? rawOf(node.token)).join('\n');
   const rendered = applyEnumPrimitives(applyForceLevels(text, ctx), ctx);
   return rendered.split('\n');
 }
@@ -173,138 +173,138 @@ function renderLeafRun(nodes: Node[], ctx?: BundleContext): string[] {
  * context, the way the document says it (src/delegation.ts); null for any
  * other line. Its keyword stays, for the group's intro; a block's colon too.
  */
-function delegationLine(t: Token, ctx?: BundleContext): string | null {
-  if (t.kind !== 'keyword') return null;
-  const keyword = t.keyword as string;
-  const indent = ' '.repeat(t.indent);
-  if (keyword === WAIT_VERB || keyword === MARK_VERB) return `${indent}${keyword} ${delegationText({ keyword, text: t.rest })}`;
+function delegationLine(token: Token, ctx?: BundleContext): string | null {
+  if (token.kind !== 'keyword') return null;
+  const keyword = token.keyword as string;
+  const indent = ' '.repeat(token.indent);
+  if (keyword === WAIT_VERB || keyword === MARK_VERB) return `${indent}${keyword} ${delegationText({ keyword, text: token.rest })}`;
   if (!isDelegationVerb(keyword)) return null;
-  const d = parseDelegation(keyword, t.rest);
-  const template = d.as ? ctx?.templates.find(tp => tp.name === d.as!.name.replace(/`/g, '')) : undefined;
-  const shaped = d.as ? { name: d.as.name.replace(/`/g, '').replace(/\s+\(.*\)$/, ''), ref: template ? refSuffix(template.refId) : '' } : undefined;
+  const delegation = parseDelegation(keyword, token.rest);
+  const template = delegation.as ? ctx?.templates.find(tp => tp.name === delegation.as!.name.replace(/`/g, '')) : undefined;
+  const shaped = delegation.as ? { name: delegation.as.name.replace(/`/g, '').replace(/\s+\(.*\)$/, ''), ref: template ? refSuffix(template.refId) : '' } : undefined;
   // Its INTO stays as written: no store line follows it here.
-  const other = d.by ? splitHarness(d.by) : null;
-  const text = delegationText({ keyword, text: d.into ? `${d.task} INTO ${d.into}` : d.task, agent: other?.agent ?? d.by ?? undefined, harness: other?.harness, async: t.async, shaped,
-    phrases: ctx?.renderings, ...(keyword === 'FORK' && d.by ? { definition: `\`${apxCommand(d.by, 'scope')}\`` } : {}) });
-  return `${indent}${keyword} ${text}${d.opens ? ':' : ''}`;
+  const other = delegation.by ? splitHarness(delegation.by) : null;
+  const text = delegationText({ keyword, text: delegation.into ? `${delegation.task} INTO ${delegation.into}` : delegation.task, agent: other?.agent ?? delegation.by ?? undefined, harness: other?.harness, async: token.async, shaped,
+    phrases: ctx?.renderings, ...(keyword === 'FORK' && delegation.by ? { definition: `\`${apxCommand(delegation.by, 'scope')}\`` } : {}) });
+  return `${indent}${keyword} ${text}${delegation.opens ? ':' : ''}`;
 }
 
 /** A decorator line as rendered — its sentence, each block it names with its id (src/decoratorUse.ts, shared with the builder). */
-function decoratorLine(t: Token & { kind: 'decorator' }, ctx?: BundleContext): string {
-  const read = ctx ? readDecorator(t, ctx) : null;
+function decoratorLine(token: Token & { kind: 'decorator' }, ctx?: BundleContext): string {
+  const read = ctx ? readDecorator(token, ctx) : null;
   const phrase = read
-    ? decoratorPhrase(read.spec, read.uses.map(d => ({ kind: d.kind, name: d.name, ref: refSuffix(d.refId) })),
+    ? decoratorPhrase(read.spec, read.uses.map(use => ({ kind: use.kind, name: use.name, ref: refSuffix(use.refId) })),
       read.template ? { name: read.template.name, ref: refSuffix(read.template.refId) } : undefined)
-    : t.raw.trim().replace(/:$/, '');
-  return `${' '.repeat(t.indent)}${phrase}:`;
+    : token.raw.trim().replace(/:$/, '');
+  return `${' '.repeat(token.indent)}${phrase}:`;
 }
 
-export function isStructural(t: Token, hasChildren: boolean): boolean {
+export function isStructural(token: Token, hasChildren: boolean): boolean {
   // Any node with an indented body is structural — even prose or an `unknown`
   // token (e.g. `ON-INVOKE:` which the lexer classifies as
   // unknown): its children must be recursed, not dropped.
   if (hasChildren) return true;
   // A decorator stands for the block below it, never in a run of lines (src/decorators.ts).
-  if (t.kind === 'decorator') return true;
-  if (t.kind !== 'keyword') return false;
-  const kw = t.keyword as string;
-  return !!sequencePrimitiveFor(kw) || (kw === 'EACH' && !!eachHeadOf(t.rest)) || !!CONTROL_HEADS[kw];
+  if (token.kind === 'decorator') return true;
+  if (token.kind !== 'keyword') return false;
+  const kw = token.keyword as string;
+  return !!sequencePrimitiveFor(kw) || (kw === 'EACH' && !!eachHeadOf(token.rest)) || !!CONTROL_HEADS[kw];
 }
 
 /** `by`: the agent of the DELEGATE block being rendered — who checks a checked condition in it. */
 function renderNodes(nodes: Node[], ctx: BundleContext | undefined, ordered: boolean, by?: string): string[] {
   const out: string[] = [];
-  let i = 0;
+  let index = 0;
 
-  while (i < nodes.length) {
-    const n = nodes[i];
-    const t = n.token;
+  while (index < nodes.length) {
+    const node = nodes[index];
+    const token = node.token;
 
     // Non-structural leaf or prose: gather the maximal run and flat-render it,
     // so consecutive same-keyword grouping is identical to the prior pipeline.
-    if (!isStructural(t, n.children.length > 0)) {
+    if (!isStructural(token, node.children.length > 0)) {
       const run: Node[] = [];
-      while (i < nodes.length && !isStructural(nodes[i].token, nodes[i].children.length > 0)) {
-        run.push(nodes[i]); i++;
+      while (index < nodes.length && !isStructural(nodes[index].token, nodes[index].children.length > 0)) {
+        run.push(nodes[index]); index++;
       }
       out.push(...renderLeafRun(run, ctx));
       continue;
     }
 
     // A decorator: its sentence, then the lines it opens — above a block, the block follows as written.
-    if (t.kind === 'decorator') {
-      out.push(decoratorLine(t, ctx));
-      out.push(...renderNodes(n.children, ctx, ordered, by));
-      i++;
+    if (token.kind === 'decorator') {
+      out.push(decoratorLine(token, ctx));
+      out.push(...renderNodes(node.children, ctx, ordered, by));
+      index++;
       continue;
     }
 
     // Non-keyword node that is structural only because it has a body (prose or
     // `unknown` token): emit its head verbatim, then recurse the body at its
-    // own indent. The remaining branches need `t` narrowed to a keyword token.
-    if (t.kind !== 'keyword') {
-      out.push(rawOf(t));
-      out.push(...renderNodes(n.children, ctx, ordered, by));
-      i++;
+    // own indent. The remaining branches need `token` narrowed to a keyword token.
+    if (token.kind !== 'keyword') {
+      out.push(rawOf(token));
+      out.push(...renderNodes(node.children, ctx, ordered, by));
+      index++;
       continue;
     }
-    const kw = t.keyword as string;
-    const S = t.indent;
+    const kw = token.keyword as string;
+    const baseIndent = token.indent;
 
     // Sequence block (STEP): collapse consecutive siblings into a list.
     const seq = sequencePrimitiveFor(kw);
     if (seq) {
       const run: Node[] = [];
-      while (i < nodes.length && nodes[i].token.kind === 'keyword' && (nodes[i].token as { keyword: string }).keyword === kw) {
-        run.push(nodes[i]); i++;
+      while (index < nodes.length && nodes[index].token.kind === 'keyword' && (nodes[index].token as { keyword: string }).keyword === kw) {
+        run.push(nodes[index]); index++;
       }
-      out.push(`${' '.repeat(S)}${seq.header}:`);
+      out.push(`${' '.repeat(baseIndent)}${seq.header}:`);
       run.forEach((item, idx) => {
         const marker = ordered ? `${idx + 1}. ` : '- ';
         const label = stripTrailingColon('rest' in item.token ? item.token.rest : '');
-        out.push(`${' '.repeat(S)}${marker}${label}`);
+        out.push(`${' '.repeat(baseIndent)}${marker}${label}`);
         if (item.children.length) {
           const lines = renderNodes(item.children, ctx, true);
-          out.push(...reindent(lines, minIndent(lines), S + marker.length));
+          out.push(...reindent(lines, minIndent(lines), baseIndent + marker.length));
         }
       });
       continue;
     }
 
     // EACH block: its head says how the runs go; its delegation lines render as any. The list's read resolves with the flow's reads.
-    const each = kw === 'EACH' ? eachHeadOf(t.rest) : null;
+    const each = kw === 'EACH' ? eachHeadOf(token.rest) : null;
     if (each) {
-      const waited = n.children.some(c => c.token.kind === 'keyword' && isDelegationVerb(c.token.keyword as string) && !c.token.async);
-      out.push(`${' '.repeat(S)}${eachHead(each, waited)}`);
-      out.push(...renderNodes(n.children, ctx, ordered, by));
-      i++;
+      const waited = node.children.some(child => child.token.kind === 'keyword' && isDelegationVerb(child.token.keyword as string) && !child.token.async);
+      out.push(`${' '.repeat(baseIndent)}${eachHead(each, waited)}`);
+      out.push(...renderNodes(node.children, ctx, ordered, by));
+      index++;
       continue;
     }
 
     // Control head (IF/ELSE/UNTIL): render head, recurse body at its own indent.
     if (CONTROL_HEADS[kw]) {
-      out.push(`${' '.repeat(S)}${renderControlHead(kw, t.rest, t.level ?? 0, by, ctx, t.executor ?? 0)}:`);
-      out.push(...renderNodes(n.children, ctx, ordered, by));
-      i++;
+      out.push(`${' '.repeat(baseIndent)}${renderControlHead(kw, token.rest, token.level ?? 0, by, ctx, token.executor ?? 0)}:`);
+      out.push(...renderNodes(node.children, ctx, ordered, by));
+      index++;
       continue;
     }
 
     // `MEM <event>` with an `AS <template>` line beneath: one line, the
     // memory's shape folded in — the AS is the memory's, never the answer's.
-    const memLine = memWithShape(t, n.children);
+    const memLine = memWithShape(token, node.children);
     if (memLine !== null) {
       out.push(...applyEnumPrimitives(applyForceLevels(memLine, ctx), ctx).split('\n'));
-      i++;
+      index++;
       continue;
     }
 
     // Block-bearing leaf keyword (e.g. WHEN with an indented body): render its
     // head as a one-line leaf group, then recurse the body at its own indent —
     // a DELEGATE block's under the agent it goes to, who checks its conditions.
-    out.push(...renderLeafRun([{ token: t, children: [] }], ctx));
-    const delegated = isDelegationVerb(kw) ? parseDelegation(kw, t.rest).by ?? undefined : by;
-    out.push(...renderNodes(n.children, ctx, ordered, delegated));
-    i++;
+    out.push(...renderLeafRun([{ token, children: [] }], ctx));
+    const delegated = isDelegationVerb(kw) ? parseDelegation(kw, token.rest).by ?? undefined : by;
+    out.push(...renderNodes(node.children, ctx, ordered, delegated));
+    index++;
   }
 
   return out;
@@ -315,15 +315,15 @@ function renderNodes(nodes: Node[], ctx: BundleContext | undefined, ordered: boo
  * the shape folded into its text — the same formula the document renderer
  * uses. The AS line arrives already resolved to `` `name` (id) ``.
  */
-function memWithShape(t: Token & { kind: 'keyword' }, children: Node[]): string | null {
-  const kw = t.keyword as string;
+function memWithShape(token: Token & { kind: 'keyword' }, children: Node[]): string | null {
+  const kw = token.keyword as string;
   if (forceLevelBaseOf(kw) !== 'MEM') return null;
-  const as = children.find(c => c.token.kind === 'keyword' && forceLevelBaseOf(c.token.keyword as string) === 'AS');
+  const as = children.find(child => child.token.kind === 'keyword' && forceLevelBaseOf(child.token.keyword as string) === 'AS');
   if (!as || as.token.kind !== 'keyword') return null;
   const target = as.token.rest.trim();
-  const m = /^`([^`]+)`(.*)$/.exec(target);
-  const text = fill(FORMULAS.keywords.AS.shaped, { text: stripTrailingColon(t.rest).trim(), name: m ? m[1] : target, ref: m ? m[2] : '' });
-  return `${' '.repeat(t.indent)}${kw}  ${text}`;
+  const match = /^`([^`]+)`(.*)$/.exec(target);
+  const text = fill(FORMULAS.keywords.AS.shaped, { text: stripTrailingColon(token.rest).trim(), name: match ? match[1] : target, ref: match ? match[2] : '' });
+  return `${' '.repeat(token.indent)}${kw}  ${text}`;
 }
 
 /**

@@ -92,18 +92,18 @@ function collectRows(config: Awaited<ReturnType<typeof loadConfig>>): AgentRow[]
   const fromRoots = agentEntries(buildMetadataIndex(deriveAgentConfig(config)).exports).map(rowFromAgentRoots);
   const fromLibrary = agentEntries(buildMetadataIndex(config).exports).map(rowFromLibrary);
   return [...fromRoots, ...fromLibrary].sort(
-    (a, b) =>
-      DOMAINS.indexOf(a.domain) - DOMAINS.indexOf(b.domain) ||
-      a.scope.localeCompare(b.scope) ||
-      a.name.localeCompare(b.name),
+    (left, right) =>
+      DOMAINS.indexOf(left.domain) - DOMAINS.indexOf(right.domain) ||
+      left.scope.localeCompare(right.scope) ||
+      left.name.localeCompare(right.name),
   );
 }
 
 function renderTable(rows: AgentRow[]): string {
   const lines: string[] = [];
   let domain: Domain | null = null;
-  const scopeWidth = Math.max(...rows.map(r => r.scope.length));
-  const nameWidth = Math.max(...rows.map(r => r.name.length));
+  const scopeWidth = Math.max(...rows.map(row => row.scope.length));
+  const nameWidth = Math.max(...rows.map(row => row.name.length));
   for (const row of rows) {
     if (row.domain !== domain) {
       if (domain !== null) lines.push('');
@@ -124,17 +124,17 @@ export async function agents(args: string[]): Promise<void> {
   let domain: Domain | null = null;
   let json = false;
 
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--domain' && args[i + 1]) {
-      const value = args[++i];
+  for (let index = 0; index < args.length; index++) {
+    if (args[index] === '--domain' && args[index + 1]) {
+      const value = args[++index];
       if (!(DOMAINS as readonly string[]).includes(value)) {
         console.error(`Unknown domain: ${value}. Expected one of: ${DOMAINS.join(', ')}.`);
         process.exit(1);
       }
       domain = value as Domain;
-    } else if (args[i] === '--json') json = true;
-    else if (args[i] === '--config') i++;
-    else if (!args[i].startsWith('--') && !sub) sub = args[i];
+    } else if (args[index] === '--json') json = true;
+    else if (args[index] === '--config') index++;
+    else if (!args[index].startsWith('--') && !sub) sub = args[index];
   }
 
   if (sub !== 'list') {

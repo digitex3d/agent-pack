@@ -78,34 +78,34 @@ function validateTriggerContent(content: string): string | null {
       return 'AND must join non-empty conditions on both sides';
     }
     const parts = trimmed.split(/\s+AND\s+/);
-    if (parts.length < 2 || parts.some(p => !p.trim())) {
+    if (parts.length < 2 || parts.some(part => !part.trim())) {
       return 'AND must join non-empty conditions on both sides';
     }
   }
   return null;
 }
 
-function quoteRaw(t: Token): string {
-  if (t.kind === 'blank') return '';
-  return ('raw' in t ? t.raw : '').trim().slice(0, 60);
+function quoteRaw(token: Token): string {
+  if (token.kind === 'blank') return '';
+  return ('raw' in token ? token.raw : '').trim().slice(0, 60);
 }
 
 function lengthErrors(file: string, tokens: Token[], maxLen: number): LintError[] {
   const errors: LintError[] = [];
-  for (const t of tokens) {
-    const raw = 'raw' in t ? t.raw : '';
+  for (const token of tokens) {
+    const raw = 'raw' in token ? token.raw : '';
     if (raw.length > maxLen) {
-      errors.push({ file, line: t.line, message: `line exceeds max length of ${maxLen} (${raw.length} chars)` });
+      errors.push({ file, line: token.line, message: `line exceeds max length of ${maxLen} (${raw.length} chars)` });
     }
   }
   return errors;
 }
 
 function nextSubstantive(tokens: Token[], from: number): number {
-  for (let j = from; j < tokens.length; j++) {
-    const t = tokens[j];
-    if (t.kind === 'blank' || t.kind === 'comment' || t.kind === 'rawLine') continue;
-    return j;
+  for (let tokenIndex = from; tokenIndex < tokens.length; tokenIndex++) {
+    const token = tokens[tokenIndex];
+    if (token.kind === 'blank' || token.kind === 'comment' || token.kind === 'rawLine') continue;
+    return tokenIndex;
   }
   return -1;
 }
@@ -170,11 +170,11 @@ function buildExportModel(file: string, body: string, tokens: Token[]): ExportMo
 
   // A metadata keyword at indent 0 cannot be a block child (children indent
   // further than their block opener), so it is necessarily a file-top stray.
-  for (const t of tokens) {
-    if (t.kind === 'keyword' && t.indent === 0 && METADATA_KEYWORDS.has(t.keyword)) {
+  for (const token of tokens) {
+    if (token.kind === 'keyword' && token.indent === 0 && METADATA_KEYWORDS.has(token.keyword)) {
       errors.push({
-        file, line: t.line,
-        message: `${t.keyword} at file-top is not allowed in a file using EXPORT blocks — move it inside the block`,
+        file, line: token.line,
+        message: `${token.keyword} at file-top is not allowed in a file using EXPORT blocks — move it inside the block`,
       });
     }
   }
@@ -256,40 +256,40 @@ function runLint(spec: LintSpec, file: string, body: string, options: LintOption
   const state: State = {};
   const ctx: LintCtx = {
     file, spec, tokens, errors, state, index: 0,
-    unexpected: t => errors.push({ file, line: t.line, message: spec.unexpected(t) }),
+    unexpected: token => errors.push({ file, line: token.line, message: spec.unexpected(token) }),
   };
 
-  for (let i = 0; i < tokens.length; i++) {
-    const t = tokens[i];
-    if (t.kind === 'blank' || t.kind === 'comment' || t.kind === 'rawLine') continue;
+  for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex++) {
+    const token = tokens[tokenIndex];
+    if (token.kind === 'blank' || token.kind === 'comment' || token.kind === 'rawLine') continue;
     if (ex.usesExport) {
       // The `EXPORT <KIND> <name>:` opener lexes as a blockOpener; in an EXPORT
       // file it is the unit header, not an unexpected line.
-      if (t.kind === 'blockOpener') continue;
+      if (token.kind === 'blockOpener') continue;
       // A `topLevelOnly` spec validates only unit-body statements, never nested
       // sub-block bodies (SLOTS, IF/ELSE). The unit body now lives one level
       // deeper inside the EXPORT block, so scope to its direct children.
-      if (spec.topLevelOnly && !ex.unitBodyLines.has(t.line)) continue;
-    } else if (spec.topLevelOnly && t.indent >= 2) {
+      if (spec.topLevelOnly && !ex.unitBodyLines.has(token.line)) continue;
+    } else if (spec.topLevelOnly && token.indent >= 2) {
       continue;
     }
 
     // Inline block openers (e.g. `ROLE <role>:`) are unit headers, not body
     // statements: their bodies are validated by the inline-block path. Accept
     // them when the spec opts in, regardless of indent skipping above.
-    if (spec.acceptBlockOpeners && t.kind === 'blockOpener') continue;
+    if (spec.acceptBlockOpeners && token.kind === 'blockOpener') continue;
 
-    ctx.index = i;
+    ctx.index = tokenIndex;
 
-    if (t.kind === 'keyword') {
-      const handler = handlerFor(spec, t.keyword);
-      if (handler) { handler(t, ctx); continue; }
-    } else if (t.kind === 'procRef' && spec.procRef) {
-      spec.procRef(t, ctx);
+    if (token.kind === 'keyword') {
+      const handler = handlerFor(spec, token.keyword);
+      if (handler) { handler(token, ctx); continue; }
+    } else if (token.kind === 'procRef' && spec.procRef) {
+      spec.procRef(token, ctx);
       continue;
     }
 
-    ctx.unexpected(t);
+    ctx.unexpected(token);
   }
 
   if (ex.usesExport) {
@@ -314,8 +314,8 @@ function runLint(spec: LintSpec, file: string, body: string, options: LintOption
 const passthrough: KeywordHandler = () => { /* metadata; accept silently */ };
 
 /** ABOUT handler: require non-empty rest and flag state.hasAbout. */
-const aboutHandler: KeywordHandler = (t, ctx) => {
-  if (!t.rest) { ctx.unexpected(t); return; }
+const aboutHandler: KeywordHandler = (token, ctx) => {
+  if (!token.rest) { ctx.unexpected(token); return; }
   ctx.state.hasAbout = true;
 };
 
@@ -325,34 +325,34 @@ function checkAbout(state: State, errors: LintError[], file: string): void {
 }
 
 /** APPLIES: validate its hashtag / perimeter payload, accept silently when valid. */
-const appliesHandler: KeywordHandler = (t, ctx) => {
-  const err = validateAppliesPayload(t.rest);
-  if (err) ctx.errors.push({ file: ctx.file, line: t.line, message: err });
+const appliesHandler: KeywordHandler = (token, ctx) => {
+  const err = validateAppliesPayload(token.rest);
+  if (err) ctx.errors.push({ file: ctx.file, line: token.line, message: err });
 };
 
 /** Keyword is allowed iff `rest` is non-empty. Empty rest → unexpected. No state effect. */
-const accept: KeywordHandler = (t, ctx) => {
-  if (!t.rest) ctx.unexpected(t);
+const accept: KeywordHandler = (token, ctx) => {
+  if (!token.rest) ctx.unexpected(token);
 };
 
 /** Same as `accept` but bumps a counter on `state[key]` when rest is present. */
-const counts = (key: string): KeywordHandler => (t, ctx) => {
-  if (!t.rest) { ctx.unexpected(t); return; }
+const counts = (key: string): KeywordHandler => (token, ctx) => {
+  if (!token.rest) { ctx.unexpected(token); return; }
   ctx.state[key] = ((ctx.state[key] as number | undefined) ?? 0) + 1;
 };
 
 /** Same as `accept` but sets `state[key] = true` when rest is present. */
-const flags = (key: string): KeywordHandler => (t, ctx) => {
-  if (!t.rest) { ctx.unexpected(t); return; }
+const flags = (key: string): KeywordHandler => (token, ctx) => {
+  if (!token.rest) { ctx.unexpected(token); return; }
   ctx.state[key] = true;
 };
 
 /** WHEN/IF-style trigger: validate content, prefix label in errors, optional state effect. */
 function triggerHandler(label: 'WHEN' | 'IF', onAccept?: (state: State) => void): KeywordHandler {
-  return (t, ctx) => {
+  return (token, ctx) => {
     onAccept?.(ctx.state);
-    const err = validateTriggerContent(t.rest);
-    if (err) ctx.errors.push({ file: ctx.file, line: t.line, message: `${label} trigger: ${err}` });
+    const err = validateTriggerContent(token.rest);
+    if (err) ctx.errors.push({ file: ctx.file, line: token.line, message: `${label} trigger: ${err}` });
   };
 }
 
@@ -360,58 +360,58 @@ function triggerHandler(label: 'WHEN' | 'IF', onAccept?: (state: State) => void)
  * IF/ELSE/UNTIL line at `index`: its IF or UNTIL condition is valid, an ELSE
  * comes right after an IF in the same body, and its body is indented ≥ 2 deeper.
  */
-function ifElseErrors(t: KeywordToken, tokens: Token[], index: number, file: string): LintError[] {
+function ifElseErrors(token: KeywordToken, tokens: Token[], index: number, file: string): LintError[] {
   const errors: LintError[] = [];
-  if (t.keyword === 'IF' || t.keyword === 'UNTIL') {
-    const err = validateTriggerContent(t.rest);
-    if (err) errors.push({ file, line: t.line, message: `${t.keyword} trigger: ${err}` });
+  if (token.keyword === 'IF' || token.keyword === 'UNTIL') {
+    const err = validateTriggerContent(token.rest);
+    if (err) errors.push({ file, line: token.line, message: `${token.keyword} trigger: ${err}` });
   }
-  if (t.keyword === 'ELSE') {
+  if (token.keyword === 'ELSE') {
     // An ELSE is the second branch of an IF before it in the same body (the document
     // builder binds it to the last one) — never a line of its own.
     let hasIf = false;
-    for (let j = index - 1; j >= 0 && !hasIf; j--) {
-      const p = tokens[j];
-      if (p.kind === 'blank' || p.kind === 'comment' || p.kind === 'rawLine' || p.indent > t.indent) continue;
-      if (p.indent < t.indent) break;
-      hasIf = p.kind === 'keyword' && p.keyword === 'IF';
+    for (let previousIndex = index - 1; previousIndex >= 0 && !hasIf; previousIndex--) {
+      const previous = tokens[previousIndex];
+      if (previous.kind === 'blank' || previous.kind === 'comment' || previous.kind === 'rawLine' || previous.indent > token.indent) continue;
+      if (previous.indent < token.indent) break;
+      hasIf = previous.kind === 'keyword' && previous.keyword === 'IF';
     }
-    if (!hasIf) errors.push({ file, line: t.line, message: 'ELSE must follow an IF in the same body' });
+    if (!hasIf) errors.push({ file, line: token.line, message: 'ELSE must follow an IF in the same body' });
   }
   const next = nextSubstantive(tokens, index + 1);
-  if (next === -1 || tokens[next].indent < t.indent + 2) {
-    const head = t.keyword === 'UNTIL' ? 'UNTIL' : 'IF/ELSE';
-    errors.push({ file, line: t.line, message: `${head} block body must be indented (Python-style): "${quoteRaw(t)}"` });
+  if (next === -1 || tokens[next].indent < token.indent + 2) {
+    const head = token.keyword === 'UNTIL' ? 'UNTIL' : 'IF/ELSE';
+    errors.push({ file, line: token.line, message: `${head} block body must be indented (Python-style): "${quoteRaw(token)}"` });
   }
   return errors;
 }
 
 /** IF/ELSE block: validate IF trigger and require ≥ 2-deeper indent on the body. */
-const ifElseHandler: KeywordHandler = (t, ctx) => {
-  ctx.errors.push(...ifElseErrors(t, ctx.tokens, ctx.index, ctx.file));
+const ifElseHandler: KeywordHandler = (token, ctx) => {
+  ctx.errors.push(...ifElseErrors(token, ctx.tokens, ctx.index, ctx.file));
 };
 
 /** Header keyword (PROCEDURE, TEMPLATE): bump counter on `state[key]`, optional first-time capture. */
 function headerHandler(stateKey: string, onFirst?: (t: KeywordToken, state: State) => void): KeywordHandler {
-  return (t, ctx) => {
-    if (!t.rest) { ctx.unexpected(t); return; }
+  return (token, ctx) => {
+    if (!token.rest) { ctx.unexpected(token); return; }
     const prior = (ctx.state[stateKey] as number | undefined) ?? 0;
     ctx.state[stateKey] = prior + 1;
-    if (prior === 0) onFirst?.(t, ctx.state);
+    if (prior === 0) onFirst?.(token, ctx.state);
   };
 }
 
 /** Compose two handlers: run both when keyword matches. */
 function compose(...hs: KeywordHandler[]): KeywordHandler {
-  return (t, ctx) => { for (const h of hs) h(t, ctx); };
+  return (token, ctx) => { for (const handler of hs) handler(token, ctx); };
 }
 
 /** Standard "no header / too many headers" finalizer. */
 function checkHeaderCount(stateKey: string, name: string) {
   return (state: State, errors: LintError[], file: string) => {
-    const n = (state[stateKey] as number | undefined) ?? 0;
-    if (n === 0) errors.push({ file, line: 1, message: `${name} has no ${stateKey} header` });
-    if (n > 1)  errors.push({ file, line: 1, message: `${name} has ${n} ${stateKey} headers (expected 1)` });
+    const count = (state[stateKey] as number | undefined) ?? 0;
+    if (count === 0) errors.push({ file, line: 1, message: `${name} has no ${stateKey} header` });
+    if (count > 1)  errors.push({ file, line: 1, message: `${name} has ${count} ${stateKey} headers (expected 1)` });
   };
 }
 
@@ -425,8 +425,8 @@ function checkHeaderCount(stateKey: string, name: string) {
 
 /** A keyword→handler that rejects the keyword with `message`, pointing home. */
 function makeRejectHandler(keyword: Keyword, message: string): readonly [Keyword, KeywordHandler] {
-  return [keyword, (t, ctx) => {
-    ctx.errors.push({ file: ctx.file, line: t.line, message });
+  return [keyword, (token, ctx) => {
+    ctx.errors.push({ file: ctx.file, line: token.line, message });
   }] as const;
 }
 
@@ -517,7 +517,7 @@ const POLICY_SPEC: LintSpec = {
     ...roleIdentityEntries,
     ...flowOnlyEntries,
   ]),
-  unexpected: t => `unexpected line in a policy (expected ALWAYS/NEVER or metadata): "${quoteRaw(t)}"`,
+  unexpected: token => `unexpected line in a policy (expected ALWAYS/NEVER or metadata): "${quoteRaw(token)}"`,
   finalize: (state, errors, file) => {
     if (!state.hasAssertion) errors.push({ file, line: 1, message: 'policy has no ALWAYS or NEVER assertion' });
   },
@@ -545,7 +545,7 @@ const PROCEDURE_SPEC: LintSpec = {
     ...flowOnlyEntries,
   ]),
   procRef: () => { /* allowed, no count */ },
-  unexpected: t => `unexpected line in a procedure: "${quoteRaw(t)}"`,
+  unexpected: token => `unexpected line in a procedure: "${quoteRaw(token)}"`,
   finalize: checkHeaderCount('PROCEDURE', 'procedure'),
 };
 
@@ -568,7 +568,7 @@ const ROLE_SPEC: LintSpec = {
     ['ROLE',      headerHandler('roleCount')],
     ['EXPERTISE', counts('expertiseCount')],
     ['EXTENDS',   counts('extendsCount')],
-    ['WHEN',      triggerHandler('WHEN', s => { s.hasRule = true; })],
+    ['WHEN',      triggerHandler('WHEN', state => { state.hasRule = true; })],
     ...ROLE_RULE_KEYWORDS.map(kw => [kw, compose(accept, flags('hasRule'))] as const),
     // IF/ELSE heads take the shared branch check: a bare `ELSE` has no rest, so
     // the generic rule-line handler above would reject it. Listed after the
@@ -578,7 +578,7 @@ const ROLE_SPEC: LintSpec = {
     ...agentOnlyEntries,
     ...flowOnlyEntries,
   ]),
-  unexpected: t => `unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): "${quoteRaw(t)}"`,
+  unexpected: token => `unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): "${quoteRaw(token)}"`,
   finalize: (state, errors, file) => {
     if (!state.hasRule) errors.push({ file, line: 1, message: 'role has no rules (ALWAYS/NEVER/WHEN/DO)' });
     const ext = (state.extendsCount as number | undefined) ?? 0;
@@ -595,16 +595,16 @@ const TEMPLATE_SPEC: LintSpec = {
     // Templates compose other templates: `IMPORT <tpl> FROM @lib.templates`
     // brings the shapes referenced by `<tpl>` / `LIST <tpl>` slots into scope.
     ['IMPORT',   accept],
-    ['TEMPLATE', headerHandler('TEMPLATE', (t, state) => {
+    ['TEMPLATE', headerHandler('TEMPLATE', (token, state) => {
       // Tolerate a trailing colon (`TEMPLATE name:` block-opener form).
-      const m = t.rest.match(/^([^\s:]+)/);
-      if (m) { state.templateName = m[1]; state.templateNameLine = t.line; }
+      const match = token.rest.match(/^([^\s:]+)/);
+      if (match) { state.templateName = match[1]; state.templateNameLine = token.line; }
     })],
     ...agentOnlyEntries,
     ...roleIdentityEntries,
     ...flowOnlyEntries,
   ]),
-  unexpected: t => `unexpected top-level line in a template (expected TEMPLATE header or metadata): "${quoteRaw(t)}"`,
+  unexpected: token => `unexpected top-level line in a template (expected TEMPLATE header or metadata): "${quoteRaw(token)}"`,
   finalize: (state, errors, file) => {
     checkHeaderCount('TEMPLATE', 'template')(state, errors, file);
     const name = state.templateName as string | undefined;
@@ -780,45 +780,45 @@ export function validateBlockContracts(
     }
   };
 
-  for (const [index, t] of tokens.entries()) {
+  for (const [index, token] of tokens.entries()) {
     // A block opener the contracts do not name (`EXPORT DIMENSION d:`, `SLOTS:`) still ends the blocks it is no deeper than.
-    if (t.kind === 'blockOpener') popClosedBlocks(t.indent);
-    if (t.kind !== 'keyword') continue;
-    popClosedBlocks(t.indent);
+    if (token.kind === 'blockOpener') popClosedBlocks(token.indent);
+    if (token.kind !== 'keyword') continue;
+    popClosedBlocks(token.indent);
 
     const parent = stack[stack.length - 1];
     // A keyword the language no longer has is the vocabulary check's to name, once.
-    if (REMOVED_KEYWORDS[t.keyword as string]) continue;
+    if (REMOVED_KEYWORDS[token.keyword as string]) continue;
     if (parent) {
-      const c = parent.contract;
-      const allowed = isAllowedChild(c, t.keyword);
+      const contract = parent.contract;
+      const allowed = isAllowedChild(contract, token.keyword);
       if (!allowed) {
-        errors.push({ file, line: t.line, message: notAllowed(t.keyword, parent.keyword, c) });
+        errors.push({ file, line: token.line, message: notAllowed(token.keyword, parent.keyword, contract) });
       }
       // A branch is transparent: the lines it admits are its host block's lines too.
-      for (const b of parent.host && allowed ? [parent, parent.host] : [parent]) {
-        b.children.set(t.keyword, (b.children.get(t.keyword) ?? 0) + 1);
+      for (const entry of parent.host && allowed ? [parent, parent.host] : [parent]) {
+        entry.children.set(token.keyword, (entry.children.get(token.keyword) ?? 0) + 1);
       }
     }
 
-    if (parent && isBranch(parent.contract, t.keyword)) {
+    if (parent && isBranch(parent.contract, token.keyword)) {
       // The branch is an IF/ELSE/UNTIL like anywhere else: same trigger and body
       // checks. It holds its block's branch lines — and, when the block's
       // branches nest, further branches, all hosted by that same block.
-      errors.push(...ifElseErrors(t, tokens, index, file));
+      errors.push(...ifElseErrors(token, tokens, index, file));
       const branches = parent.contract.branches!;
       stack.push({
-        keyword: t.keyword, line: t.line, indent: t.indent, children: new Map(),
+        keyword: token.keyword, line: token.line, indent: token.indent, children: new Map(),
         contract: { allows: branches.allows, excluded: parent.contract.excluded, branches: branches.nests ? branches : undefined },
         host: parent.host ?? parent,
       });
-    } else if (t.keyword === 'EACH' && contracts[EACH_BLOCK] && parseEachHead(t.rest)) {
+    } else if (token.keyword === 'EACH' && contracts[EACH_BLOCK] && parseEachHead(token.rest)) {
       // `EACH <item> IN {{<list>}} MAX <n>:` holds its delegations; a malformed head is the vocabulary check's to name.
-      const head = parseEachHead(t.rest)!;
-      if ('error' in head) errors.push({ file, line: t.line, message: head.error });
-      stack.push({ keyword: 'EACH', line: t.line, indent: t.indent, children: new Map(), contract: contracts[EACH_BLOCK] });
-    } else if (contracts[t.keyword]) {
-      stack.push({ keyword: t.keyword, line: t.line, indent: t.indent, children: new Map(), contract: contracts[t.keyword] });
+      const head = parseEachHead(token.rest)!;
+      if ('error' in head) errors.push({ file, line: token.line, message: head.error });
+      stack.push({ keyword: 'EACH', line: token.line, indent: token.indent, children: new Map(), contract: contracts[EACH_BLOCK] });
+    } else if (contracts[token.keyword]) {
+      stack.push({ keyword: token.keyword, line: token.line, indent: token.indent, children: new Map(), contract: contracts[token.keyword] });
     }
   }
 
@@ -844,16 +844,16 @@ function cardinalityErrors(
   counts: ReadonlyMap<string, number>, skip: readonly string[] = [],
 ): LintError[] {
   const errors: LintError[] = [];
-  const count = (k: string): number => counts.get(k) ?? 0;
+  const count = (keyword: string): number => counts.get(keyword) ?? 0;
   for (const required of contract.requiresAll ?? []) {
     if (!skip.includes(required) && count(required) === 0) errors.push({ file, line, message: `${key} block requires at least one ${required}` });
   }
   const anyOf = contract.requiresAnyOf ?? [];
-  if (anyOf.length > 0 && !anyOf.some(k => count(k) > 0)) {
+  if (anyOf.length > 0 && !anyOf.some(keyword => count(keyword) > 0)) {
     errors.push({ file, line, message: `${key} block requires at least one of: ${anyOf.join(', ')}` });
   }
-  for (const u of contract.unique ?? []) {
-    if (!skip.includes(u) && count(u) > 1) errors.push({ file, line, message: `${key} block has ${count(u)} occurrences of ${u} (expected at most 1)` });
+  for (const unique of contract.unique ?? []) {
+    if (!skip.includes(unique) && count(unique) > 1) errors.push({ file, line, message: `${key} block has ${count(unique)} occurrences of ${unique} (expected at most 1)` });
   }
   return errors;
 }
@@ -881,7 +881,7 @@ export function lintFlow(file: string, body: string, options: LintOptions = {}):
   }
 
   // Exactly one FLOW block; name must match filename slug
-  const flowTokens = tokens.filter(t => t.kind === 'keyword' && t.keyword === 'FLOW');
+  const flowTokens = tokens.filter(token => token.kind === 'keyword' && token.keyword === 'FLOW');
   if (flowTokens.length === 0) {
     errors.push({ file, line: 1, message: 'flow has no FLOW block' });
   } else if (flowTokens.length > 1) {
@@ -981,12 +981,12 @@ export function dimensionBlockErrors(file: string, blocks: readonly Block[]): Li
  * globs read from the project root; a formula, an error until a judge decides one.
  */
 export function domainBlockErrors(file: string, blocks: readonly Block[]): LintError[] {
-  return coveringBlockErrors(file, blocks, 'DOMAIN', DOMAIN_LINES, c => {
-    const t = lex(c.raw)[0];
-    const parts = parseDomainLine(c.rest);
-    const issue = domainLineIssue(c.keyword as DomainLine, t?.kind === 'keyword' ? t.level ?? 0 : 0, parts);
-    const spaced = spacedListError(`${c.keyword} IN`, c.rest.replace(/^.*?\bIN\s+/, ''));
-    return { globs: parts.globs, issues: [issue, parts.globs.length ? spaced : null].filter((m): m is string => m !== null) };
+  return coveringBlockErrors(file, blocks, 'DOMAIN', DOMAIN_LINES, line => {
+    const token = lex(line.raw)[0];
+    const parts = parseDomainLine(line.rest);
+    const issue = domainLineIssue(line.keyword as DomainLine, token?.kind === 'keyword' ? token.level ?? 0 : 0, parts);
+    const spaced = spacedListError(`${line.keyword} IN`, line.rest.replace(/^.*?\bIN\s+/, ''));
+    return { globs: parts.globs, issues: [issue, parts.globs.length ? spaced : null].filter((message): message is string => message !== null) };
   });
 }
 
@@ -996,16 +996,16 @@ export function domainBlockErrors(file: string, blocks: readonly Block[]): LintE
  * in the project.
  */
 function coveringBlockErrors(file: string, blocks: readonly Block[], key: string, lines: readonly string[],
-  read: (c: Line) => { globs: string[]; issues: string[] } = c => ({ globs: splitList(c.rest), issues: [] })): LintError[] {
-  const found = blocks.flatMap(b => (b.key === key ? [b] : agentNestedBlocks([b], key).map(n => n.block)));
-  return found.flatMap(b => [
-    ...checkBlockContract(file, b, key),
-    ...b.children.flatMap((c): LintError[] => {
-      if (c.type !== 'line' || !lines.includes(c.keyword)) return [];
-      const { globs, issues } = read(c);
+  read: (c: Line) => { globs: string[]; issues: string[] } = line => ({ globs: splitList(line.rest), issues: [] })): LintError[] {
+  const found = blocks.flatMap(block => (block.key === key ? [block] : agentNestedBlocks([block], key).map(nested => nested.block)));
+  return found.flatMap(block => [
+    ...checkBlockContract(file, block, key),
+    ...block.children.flatMap((child): LintError[] => {
+      if (child.type !== 'line' || !lines.includes(child.keyword)) return [];
+      const { globs, issues } = read(child);
       return [
-        ...issues.map(message => ({ file, line: c.line, message })),
-        ...globs.filter(leavesRoot).map(glob => ({ file, line: c.line, message: `${c.keyword} \`${glob}\`: a glob is read from the project root — no absolute path, no \`..\`` })),
+        ...issues.map(message => ({ file, line: child.line, message })),
+        ...globs.filter(leavesRoot).map(glob => ({ file, line: child.line, message: `${child.keyword} \`${glob}\`: a glob is read from the project root — no absolute path, no \`..\`` })),
       ];
     }),
   ]);
@@ -1018,12 +1018,12 @@ function coveringBlockErrors(file: string, blocks: readonly Block[], key: string
  */
 export function pluginBlockErrors(file: string, blocks: readonly Block[]): LintError[] {
   return plugins().flatMap(spec => {
-    const found = blocks.flatMap(b => (b.key === spec.key ? [b] : agentNestedBlocks([b], spec.key).map(n => n.block)));
-    return found.flatMap(b => {
-      const contract = checkBlockContract(file, b, spec.key);
-      const lines = b.children.flatMap(c => (c.type === 'line' && c.keyword ? [{ key: String(c.keyword), rest: c.rest }] : []));
+    const found = blocks.flatMap(block => (block.key === spec.key ? [block] : agentNestedBlocks([block], spec.key).map(nested => nested.block)));
+    return found.flatMap(block => {
+      const contract = checkBlockContract(file, block, spec.key);
+      const lines = block.children.flatMap(child => (child.type === 'line' && child.keyword ? [{ key: String(child.keyword), rest: child.rest }] : []));
       const issues = contract.length > 0 ? null : lineIssues(spec, recordOfLines(spec, lines));
-      return issues ? [...contract, { file, line: b.startLine, message: `${spec.key} ${b.name}: ${issues}` }] : contract;
+      return issues ? [...contract, { file, line: block.startLine, message: `${spec.key} ${block.name}: ${issues}` }] : contract;
     });
   });
 }
@@ -1035,11 +1035,11 @@ export function pluginBlockErrors(file: string, blocks: readonly Block[]): LintE
  * file, exported, at the top: a second one, or one indented, is an error here.
  */
 export function teamBlockErrors(file: string, blocks: readonly Block[]): LintError[] {
-  const teams = blocks.filter(b => b.key === TEAM_KEY);
-  const errors = teams.flatMap(b => [
-    ...(b.exported ? [] : [{ file, line: b.startLine, message: `TEAM ${b.name ?? ''}: a team is exported — write \`EXPORT TEAM ${b.name ?? '<name>'}:\`` }]),
-    ...checkBlockContract(file, b, TEAM_KEY),
-    ...memberErrors(file, b),
+  const teams = blocks.filter(block => block.key === TEAM_KEY);
+  const errors = teams.flatMap(team => [
+    ...(team.exported ? [] : [{ file, line: team.startLine, message: `TEAM ${team.name ?? ''}: a team is exported — write \`EXPORT TEAM ${team.name ?? '<name>'}:\`` }]),
+    ...checkBlockContract(file, team, TEAM_KEY),
+    ...memberErrors(file, team),
   ]);
   if (teams.length > 1) errors.push({ file, line: teams[1].startLine, message: `a file declares one team — found ${teams.length} TEAM blocks` });
   return errors;
@@ -1071,7 +1071,7 @@ export function mainBlockErrors(file: string, block: Block): LintError[] {
       at(child.line, `VERSION is a semver — \`0.1.0\`, \`1.2.3-beta.1\` — found \`${child.rest.trim()}\``);
     }
   }
-  if (!block.children.some(c => c.type === 'line' && (c.keyword === 'TEAMS' || c.keyword === 'MEMBER'))) {
+  if (!block.children.some(child => child.type === 'line' && (child.keyword === 'TEAMS' || child.keyword === 'MEMBER'))) {
     at(block.startLine, 'MAIN holds the teams and agents of the project: write at least one TEAMS or MEMBER line');
   }
   return errors;
@@ -1082,7 +1082,7 @@ const SEMVER_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
 /** A team names its members: at least one MEMBER line. */
 function memberErrors(file: string, team: Block): LintError[] {
-  return team.children.some(c => c.type === 'line' && c.keyword === 'MEMBER') ? [] : [{ file, line: team.startLine, message: 'TEAM block requires at least one MEMBER' }];
+  return team.children.some(child => child.type === 'line' && child.keyword === 'MEMBER') ? [] : [{ file, line: team.startLine, message: 'TEAM block requires at least one MEMBER' }];
 }
 
 /**
@@ -1099,7 +1099,7 @@ function lintSingleBlockKind(
 
   errors.push(...lengthErrors(file, desugar(lex(body)), options.maxLineLength ?? DEFAULT_MAX_LINE_LENGTH));
 
-  const blocks = parseBlocks(body).blocks.filter(b => b.key === key);
+  const blocks = parseBlocks(body).blocks.filter(parsed => parsed.key === key);
   if (blocks.length === 0) {
     errors.push({ file, line: 1, message: `${kind} has no ${key} block` });
     return errors;
@@ -1181,7 +1181,7 @@ function isAgentOrOrchestration(file: string, body: string): boolean {
   const base = file.split(/[/\\]/).pop() ?? '';
   if (ORCHESTRATION_BASENAMES.has(base)) return true;
   if (/^AS\s+\S/m.test(body)) return true;
-  return parseBlocks(body).blocks.some(b => AGENT_KEYS.has(b.key.toUpperCase()) || b.key.toUpperCase() === TEAM_KEY);
+  return parseBlocks(body).blocks.some(block => AGENT_KEYS.has(block.key.toUpperCase()) || block.key.toUpperCase() === TEAM_KEY);
 }
 
 // ---------------------------------------------------------------------------
@@ -1200,9 +1200,9 @@ const WITHIN_HINT = 'an agent works within a domain by its decorator — write `
 
 /** The lines only some blocks hold, and what each is of them: a COMPUTE's sections, a DIMENSION's FOR and EACH, a DOMAIN's WRITES and READS. */
 const LINE_OWNERS = new Map<string, LineOwner>([
-  ...COMPUTE_SECTIONS.map((s): [string, LineOwner] => [s, { owners: ['COMPUTE'], what: 'a section' }]),
+  ...COMPUTE_SECTIONS.map((section): [string, LineOwner] => [section, { owners: ['COMPUTE'], what: 'a section' }]),
   [GLOBS_LINE, { owners: ['DIMENSION'], what: 'a line' }],
-  ...DOMAIN_LINES.map((l): [string, LineOwner] => [l, { owners: ['DOMAIN'], what: 'a line', hints: { AGENT: WITHIN_HINT } }]),
+  ...DOMAIN_LINES.map((line): [string, LineOwner] => [line, { owners: ['DOMAIN'], what: 'a line', hints: { AGENT: WITHIN_HINT } }]),
   ['EACH', { owners: ['DIMENSION'], what: 'a line' }],
   ['MEMBER', { owners: [TEAM_KEY, MAIN_KEY], what: 'a line' }],
   ['TEAMS', { owners: [MAIN_KEY], what: 'a line' }],
@@ -1211,9 +1211,9 @@ const LINE_OWNERS = new Map<string, LineOwner>([
 
 /** A plugin's manifest against its contracts: the PLUGIN block, and each OPERATION block in it. */
 export function pluginManifestErrors(file: string, blocks: readonly Block[]): LintError[] {
-  return blocks.filter(b => b.key === PLUGIN_KEY).flatMap(plugin => [
+  return blocks.filter(block => block.key === PLUGIN_KEY).flatMap(plugin => [
     ...checkBlockContract(file, plugin, PLUGIN_KEY),
-    ...plugin.children.flatMap(c => (c.type === 'block' && c.key === OPERATION_KEY ? checkBlockContract(file, c, OPERATION_KEY) : [])),
+    ...plugin.children.flatMap(child => (child.type === 'block' && child.key === OPERATION_KEY ? checkBlockContract(file, child, OPERATION_KEY) : [])),
   ]);
 }
 
@@ -1280,15 +1280,15 @@ const DISTILL_RE = /^!?DISTILL!{0,2}$/;
 const DISTILL_SUFFIX_RE = /\s!?DISTILL!{0,2}:?$/;
 
 /** Edits between two words — a swap of two neighbours counts as one (STPE → STEP). */
-function editDistance(a: string, b: string): number {
-  const d = Array.from({ length: a.length + 1 }, (_, i) => Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
-  for (let i = 1; i <= a.length; i++) {
-    for (let j = 1; j <= b.length; j++) {
-      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+function editDistance(first: string, second: string): number {
+  const distances = Array.from({ length: first.length + 1 }, (_unusedRow, rowIndex) => Array.from({ length: second.length + 1 }, (_unusedCell, columnIndex) => (rowIndex === 0 ? columnIndex : columnIndex === 0 ? rowIndex : 0)));
+  for (let rowIndex = 1; rowIndex <= first.length; rowIndex++) {
+    for (let columnIndex = 1; columnIndex <= second.length; columnIndex++) {
+      distances[rowIndex][columnIndex] = Math.min(distances[rowIndex - 1][columnIndex] + 1, distances[rowIndex][columnIndex - 1] + 1, distances[rowIndex - 1][columnIndex - 1] + (first[rowIndex - 1] === second[columnIndex - 1] ? 0 : 1));
+      if (rowIndex > 1 && columnIndex > 1 && first[rowIndex - 1] === second[columnIndex - 2] && first[rowIndex - 2] === second[columnIndex - 1]) distances[rowIndex][columnIndex] = Math.min(distances[rowIndex][columnIndex], distances[rowIndex - 2][columnIndex - 2] + 1);
     }
   }
-  return d[a.length][b.length];
+  return distances[first.length][second.length];
 }
 
 /** Every word a line may open with: keywords, aliases, hooks, block kinds, template regions. */
@@ -1298,7 +1298,7 @@ function vocabulary(): string[] {
 
 /** ` — did you mean \`x\`?` when a word is one or two edits from a known one. */
 function didYouMean(word: string, known: readonly string[]): string {
-  const near = known.filter(w => editDistance(word, w) <= 2).sort((a, b) => editDistance(word, a) - editDistance(word, b));
+  const near = known.filter(candidate => editDistance(word, candidate) <= 2).sort((left, right) => editDistance(word, left) - editDistance(word, right));
   return near.length ? ` — did you mean \`${near[0]}\`?` : '';
 }
 
@@ -1311,21 +1311,21 @@ const SLOT_TYPES = ['TEXT', 'NUMBER', 'ENUM[a, b]', '<template>', 'LIST <templat
 
 /** A SLOTS line (`name[?]: TYPE … "description"`) whose TYPE is none of the language's. */
 function slotTypeError(raw: string): string | null {
-  const m = raw.trim().match(SLOT_LINE_RE);
-  if (!m) return null;
-  const type = m[3].replace(/\s*".*$/, '').trim();
+  const match = raw.trim().match(SLOT_LINE_RE);
+  if (!match) return null;
+  const type = match[3].replace(/\s*".*$/, '').trim();
   const values = type.match(/^ENUM\[(.*)\]$/i);
-  if (values) { const spaced = spacedListError('ENUM[', values[1], ']'); if (spaced) return `slot \`${m[1]}\`: ${spaced}`; }
+  if (values) { const spaced = spacedListError('ENUM[', values[1], ']'); if (spaced) return `slot \`${match[1]}\`: ${spaced}`; }
   if (parseTypeSpec(type).kind !== 'any') return null;
   const word = type.split(/[\s[<]/)[0].toUpperCase();
-  return `slot \`${m[1]}\`: unknown type \`${type}\`${didYouMean(word, ['TEXT', 'NUMBER', 'ENUM', 'LIST'])} (types: ${SLOT_TYPES.join(', ')})`;
+  return `slot \`${match[1]}\`: unknown type \`${type}\`${didYouMean(word, ['TEXT', 'NUMBER', 'ENUM', 'LIST'])} (types: ${SLOT_TYPES.join(', ')})`;
 }
 
 /** `MEM!!!` → the forms MEM really has, from its declared levels. */
 function unknownLevel(word: string, base: string): string {
-  const family = forceLevelFamilies().find(f => f.name === base)!;
-  const forms = Object.keys(family.levels).map(Number).sort((a, b) => a - b)
-    .map(l => (l < 0 ? '!'.repeat(-l) + base : base + '!'.repeat(l)));
+  const family = forceLevelFamilies().find(candidate => candidate.name === base)!;
+  const forms = Object.keys(family.levels).map(Number).sort((left, right) => left - right)
+    .map(level => (level < 0 ? '!'.repeat(-level) + base : base + '!'.repeat(level)));
   return `\`${word}\` is not a level of ${base} — use ${forms.join(', ')}`;
 }
 
@@ -1335,7 +1335,7 @@ function unknownLevel(word: string, base: string): string {
  * else, at a legacy file's top level, the kind of the file (by its folder).
  */
 function ownerOf(ancestors: string[], file: string): string {
-  return [...ancestors].reverse().find(k => blockTypeOf(k) !== null || k === 'STEP') ?? kindFromDir(file).toUpperCase();
+  return [...ancestors].reverse().find(key => blockTypeOf(key) !== null || key === 'STEP') ?? kindFromDir(file).toUpperCase();
 }
 
 /** The lines each body admits — a VAR stands in those whose list holds it. */
@@ -1345,7 +1345,7 @@ const BODY_KEYWORDS: Record<string, readonly Keyword[]> = {
   ROLE: ROLE_RULE_KEYWORDS,
   PROCEDURE: PROCEDURE_FLOW_KEYWORDS,
 };
-const VAR_HOMES = new Set(Object.keys(BODY_KEYWORDS).filter(k => BODY_KEYWORDS[k].includes('VAR')));
+const VAR_HOMES = new Set(Object.keys(BODY_KEYWORDS).filter(key => BODY_KEYWORDS[key].includes('VAR')));
 
 /**
  * What is wrong with a `VAR` line of a body: its form, its place, and the block
@@ -1353,11 +1353,11 @@ const VAR_HOMES = new Set(Object.keys(BODY_KEYWORDS).filter(k => BODY_KEYWORDS[k
  * first; `deeper` says whether indented lines follow it. A module's `EXPORT VAR`
  * is no body's: parseBlocks checks it.
  */
-function varLineErrors(t: Extract<Token, { kind: 'keyword' }>, ancestors: string[], deeper: boolean, file: string): string[] {
-  const decl = parseVarLine(t.keyword as string, t.rest);
+function varLineErrors(token: Extract<Token, { kind: 'keyword' }>, ancestors: string[], deeper: boolean, file: string): string[] {
+  const decl = parseVarLine(token.keyword as string, token.rest);
   if (!decl) return [];
   if ('error' in decl) return [decl.error];
-  const written = t.raw.trim();
+  const written = token.raw.trim();
   const errors: string[] = [];
   const owner = ownerOf(ancestors, file);
   if (ancestors.includes('VAR')) {
@@ -1380,11 +1380,11 @@ function varLineErrors(t: Extract<Token, { kind: 'keyword' }>, ancestors: string
 }
 
 /** What is wrong with a line's trailing `INTO <name>`: only an action line takes one. */
-function intoError(t: Extract<Token, { kind: 'keyword' }>): string | null {
-  const into = splitInto(t.rest);
-  if (!into || isVarKeyword(t.keyword as string)) return null;
-  if (takesInto(t.keyword)) return null;
-  return `INTO ends only a DO, DELEGATE, FORK, COMPUTE or RUN line — \`${t.raw.trim().split(/\s/)[0]}\` takes none`;
+function intoError(token: Extract<Token, { kind: 'keyword' }>): string | null {
+  const into = splitInto(token.rest);
+  if (!into || isVarKeyword(token.keyword as string)) return null;
+  if (takesInto(token.keyword)) return null;
+  return `INTO ends only a DO, DELEGATE, FORK, COMPUTE or RUN line — \`${token.raw.trim().split(/\s/)[0]}\` takes none`;
 }
 
 /** What an old `WITH x:` line is told: it is a decorator now. */
@@ -1398,7 +1398,6 @@ const WITH_REWRITE = 'WITH became a decorator — write `@WITH <names>` right ab
 /** The rewrite every retired word of the contracts model points to (D16–18, D46). */
 const CONTRACTS_REWRITE = 'a flow marks the zones and hands them out itself — in a STEP, `MARK <criterion> INTO <list> AS <spec>`, then `DELEGATE <list> BY <agent>`';
 const REMOVED_KEYWORDS: Record<string, string> = {
-  ASK: 'ASK became DELEGATE — write `DELEGATE <task> INTO <name> BY <agent>`',
   STRATEGY: `STRATEGY was removed — a team runs by its own flows: ${CONTRACTS_REWRITE}`,
   LEAD: `LEAD was removed — whoever runs a flow leads it: ${CONTRACTS_REWRITE}`,
   CONTRACT: `CONTRACT blocks were removed — a contract is what a MARK makes: ${CONTRACTS_REWRITE}`,
@@ -1439,147 +1438,147 @@ export function checkVocabulary(file: string, body: string): LintError[] {
   let region = -1;
   let regionKey = '';
 
-  for (const [index, t] of tokens.entries()) {
-    if (t.kind === 'blank' || t.kind === 'comment' || t.kind === 'rawLine') continue;
+  for (const [index, token] of tokens.entries()) {
+    if (token.kind === 'blank' || token.kind === 'comment' || token.kind === 'rawLine') continue;
     if (region >= 0) {
-      if (t.indent > region) {
-        const typeError = regionKey === 'SLOTS' && 'raw' in t ? slotTypeError(t.raw) : null;
-        if (typeError) err(t.line, typeError);
-        if (regionKey !== 'SLOTS' && 'raw' in t && readsOf(t.raw).length > 0) {
-          err(t.line, `a template's ${regionKey} is literal text — no \`{{…}}\` is read there`);
+      if (token.indent > region) {
+        const typeError = regionKey === 'SLOTS' && 'raw' in token ? slotTypeError(token.raw) : null;
+        if (typeError) err(token.line, typeError);
+        if (regionKey !== 'SLOTS' && 'raw' in token && readsOf(token.raw).length > 0) {
+          err(token.line, `a template's ${regionKey} is literal text — no \`{{…}}\` is read there`);
         }
         continue;
       }
       region = -1;
     }
-    while (stack.length && stack[stack.length - 1].indent >= t.indent) stack.pop();
+    while (stack.length && stack[stack.length - 1].indent >= token.indent) stack.pop();
     const parent = stack[stack.length - 1];
-    for (const { read, name, field, as, template } of readsOf('raw' in t ? t.raw : '')) {
-      if (field) err(t.line, `\`${read}\`: reading a field of a variable is not supported yet — read \`{{${name}}}\``);
-      if (as && as !== 'AS') err(t.line, `\`${read}\`: the AS of a read is a shape and takes no force level — write \`{{${name} AS ${template}}}\``);
+    for (const { read, name, field, as, template } of readsOf('raw' in token ? token.raw : '')) {
+      if (field) err(token.line, `\`${read}\`: reading a field of a variable is not supported yet — read \`{{${name}}}\``);
+      if (as && as !== 'AS') err(token.line, `\`${read}\`: the AS of a read is a shape and takes no force level — write \`{{${name} AS ${template}}}\``);
     }
 
     // A decorator: its key and its items, then, opening a block, transparent — what it holds stands in its parent.
-    if (t.kind === 'decorator') {
-      for (const message of decoratorLineErrors(t.key, t.rest)) err(t.line, message);
-      if (t.opens) stack.push({ indent: t.indent, key: parent?.key ?? '', line: t.line });
+    if (token.kind === 'decorator') {
+      for (const message of decoratorLineErrors(token.key, token.rest)) err(token.line, message);
+      if (token.opens) stack.push({ indent: token.indent, key: parent?.key ?? '', line: token.line });
       continue;
     }
 
     let key = '';
-    if (t.kind === 'blockOpener') {
-      key = t.key === EXPORT_MODIFIER ? t.rest.split(/\s+/)[0] : t.key;
+    if (token.kind === 'blockOpener') {
+      key = token.key === EXPORT_MODIFIER ? token.rest.split(/\s+/)[0] : token.key;
       // `EXPORT PROCEDURE** name:` — the stars are the head's executor mark; only a PROCEDURE takes one.
       const mark = splitExecutorMark(key);
       if (mark.executor) {
         key = mark.word;
-        if (key !== 'PROCEDURE') err(t.line, `\`${key}${executorMark(mark.executor)}\`: only a PROCEDURE head takes an executor mark — a delegate (*) or a program (**) carries its body out`);
+        if (key !== 'PROCEDURE') err(token.line, `\`${key}${executorMark(mark.executor)}\`: only a PROCEDURE head takes an executor mark — a delegate (*) or a program (**) carries its body out`);
       }
-      if (VERBATIM_REGIONS.includes(key)) { region = t.indent; regionKey = key; continue; }
-      if (!LINE_OWNERS.has(key) && !blockTypeOf(key)) err(t.line, unknownKeyword(key));
-    } else if (t.kind === 'keyword') {
-      key = t.keyword as string;
+      if (VERBATIM_REGIONS.includes(key)) { region = token.indent; regionKey = key; continue; }
+      if (!LINE_OWNERS.has(key) && !blockTypeOf(key)) err(token.line, unknownKeyword(key));
+    } else if (token.kind === 'keyword') {
+      key = token.keyword as string;
       // `!IF` / `!UNTIL` mean nothing: the `!`s after the keyword say who decides the condition.
       // `WHEN!` is sugar for WHEN + IF! (desugared before this check); `WHEN!!` has no moment the agent could see.
-      const trigger = triggerLevelError(key, t.level ?? 0);
-      if (trigger) err(t.line, `${trigger}: "${quoteRaw(t)}"`);
-      else if ((t.level ?? 0) < 0) err(t.line, `\`!${key}\` is not allowed — write ${key}, ${key}! (a judge decides) or ${key}!! (a sealed gate): "${quoteRaw(t)}"`);
+      const trigger = triggerLevelError(key, token.level ?? 0);
+      if (trigger) err(token.line, `${trigger}: "${quoteRaw(token)}"`);
+      else if ((token.level ?? 0) < 0) err(token.line, `\`!${key}\` is not allowed — write ${key}, ${key}! (a judge decides) or ${key}!! (a sealed gate): "${quoteRaw(token)}"`);
       // The stars say who carries the condition out, the `!`s who judges it: a condition has one judge.
-      if (t.executor && (t.level ?? 0) > 0) {
-        err(t.line, `\`${t.raw.trim().split(/\s/)[0]}\` is not allowed — a condition has one judge: write ${key}! / ${key}!! (a judge decides) or ${key}* / ${key}** (a delegate or a program decides): "${quoteRaw(t)}"`);
+      if (token.executor && (token.level ?? 0) > 0) {
+        err(token.line, `\`${token.raw.trim().split(/\s/)[0]}\` is not allowed — a condition has one judge: write ${key}! / ${key}!! (a judge decides) or ${key}* / ${key}** (a delegate or a program decides): "${quoteRaw(token)}"`);
       }
-      if (key === 'COMPUTE' && splitBy(t.rest)) err(t.line, 'BY ends only a DELEGATE or a FORK line — COMPUTE is carried out by a program');
+      if (key === 'COMPUTE' && splitBy(token.rest)) err(token.line, 'BY ends only an ASK, a DELEGATE or a FORK line — COMPUTE is carried out by a program');
       // A delegation's parts, in their order (src/delegation.ts).
-      if (isDelegationVerb(key)) for (const message of delegationLineErrors(key, t.rest)) err(t.line, message);
-      if (key === WAIT_VERB) for (const message of waitLineErrors(t.rest)) err(t.line, message);
-      if (key === MARK_VERB) for (const message of markLineErrors(t.rest)) err(t.line, message);
+      if (isDelegationVerb(key)) for (const message of delegationLineErrors(key, token.rest)) err(token.line, message);
+      if (key === WAIT_VERB) for (const message of waitLineErrors(token.rest)) err(token.line, message);
+      if (key === MARK_VERB) for (const message of markLineErrors(token.rest)) err(token.line, message);
       const removed = REMOVED_KEYWORDS[key];
-      if (removed) err(t.line, `${removed}: "${quoteRaw(t)}"`);
+      if (removed) err(token.line, `${removed}: "${quoteRaw(token)}"`);
       const base = forceLevelBaseOf(key);
-      if (base && getIntroByKeyword(key) === null) err(t.line, unknownLevel(key, base));
+      if (base && getIntroByKeyword(key) === null) err(token.line, unknownLevel(key, base));
       // Every list of the language is comma-separated (src/lists.ts).
-      const spaced = WORD_LIST_LINES.includes(key) ? spacedListError(key, t.rest) : null;
-      if (spaced) err(t.line, spaced);
+      const spaced = WORD_LIST_LINES.includes(key) ? spacedListError(key, token.rest) : null;
+      if (spaced) err(token.line, spaced);
       // A perimeter says where a policy or a skill holds with no WITH: any other block has none to say.
-      if (key === 'APPLIES' && parseApplies([t.rest]).scopes.length > 0) {
-        const owner = ownerOf(stack.map(s => s.key), file);
-        if (!PERIMETER_KINDS.includes(owner.toLowerCase())) err(t.line, `APPLIES: a perimeter (${PERIMETER_FORMS}) goes on a POLICY or a SKILL — found on ${owner}`);
+      if (key === 'APPLIES' && parseApplies([token.rest]).scopes.length > 0) {
+        const owner = ownerOf(stack.map(entry => entry.key), file);
+        if (!PERIMETER_KINDS.includes(owner.toLowerCase())) err(token.line, `APPLIES: a perimeter (${PERIMETER_FORMS}) goes on a POLICY or a SKILL — found on ${owner}`);
       }
       const prim = enumPrimitiveFor(key);
-      const value = t.rest.trim().replace(/:$/, '');
+      const value = token.rest.trim().replace(/:$/, '');
       if (prim && value && !prim.values[value]) {
-        err(t.line, `${key}: unknown value \`${value}\` (allowed: ${Object.keys(prim.values).join(', ')})`);
+        err(token.line, `${key}: unknown value \`${value}\` (allowed: ${Object.keys(prim.values).join(', ')})`);
       }
       if (key === 'LASTS' && !(STORE_LIFETIMES as readonly string[]).includes(value)) {
-        err(t.line, `LASTS: unknown value \`${value}\`${didYouMean(value, STORE_LIFETIMES)} (allowed: ${STORE_LIFETIMES.join(', ')})`);
+        err(token.line, `LASTS: unknown value \`${value}\`${didYouMean(value, STORE_LIFETIMES)} (allowed: ${STORE_LIFETIMES.join(', ')})`);
       }
       // DISTILL (D22) was removed: a program carries out a PROCEDURE** or a COMPUTE block.
-      if (DISTILL_RE.test(key) || DISTILL_SUFFIX_RE.test(t.rest.trim())) {
-        err(t.line, `DISTILL was removed — mark the procedure PROCEDURE** or write a COMPUTE block: "${quoteRaw(t)}"`);
+      if (DISTILL_RE.test(key) || DISTILL_SUFFIX_RE.test(token.rest.trim())) {
+        err(token.line, `DISTILL was removed — mark the procedure PROCEDURE** or write a COMPUTE block: "${quoteRaw(token)}"`);
       }
       // DOMAINS was removed: a contract's DOMAIN names a DOMAIN block its BY agent works within (D44).
       if (key === 'DOMAINS') {
-        err(t.line, `DOMAINS was removed — the files of a domain are its \`EXPORT DOMAIN <name>:\` block's WRITES and READS, and a CONTRACT's \`DOMAIN <name>\` goes to an agent within it (\`@WITHIN <name>\`): "${quoteRaw(t)}"`);
+        err(token.line, `DOMAINS was removed — the files of a domain are its \`EXPORT DOMAIN <name>:\` block's WRITES and READS, and a CONTRACT's \`DOMAIN <name>\` goes to an agent within it (\`@WITHIN <name>\`): "${quoteRaw(token)}"`);
       }
       // WITH became a decorator (src/decorators.ts).
-      if (key === 'WITH') err(t.line, `${WITH_REWRITE}: "${quoteRaw(t)}"`);
+      if (key === 'WITH') err(token.line, `${WITH_REWRITE}: "${quoteRaw(token)}"`);
       // OWNS was removed: work is put within a domain by `@WITHIN` (D44).
       if (key === 'OWNS') {
-        err(t.line, `OWNS was removed — declare the files as \`EXPORT DOMAIN <name>:\` with \`WRITES IN ${splitList(t.rest).join(', ')}\`, and write \`@WITHIN <name>\` above the agent: "${quoteRaw(t)}"`);
+        err(token.line, `OWNS was removed — declare the files as \`EXPORT DOMAIN <name>:\` with \`WRITES IN ${splitList(token.rest).join(', ')}\`, and write \`@WITHIN <name>\` above the agent: "${quoteRaw(token)}"`);
       }
-      if (!isVarKeyword(key) && stack.some(a => a.key === 'VAR') && !isAllowedChild(VAR_BLOCK, key as Keyword)) {
-        err(t.line, notAllowed(key as Keyword, 'VAR', VAR_BLOCK));
+      if (!isVarKeyword(key) && stack.some(entry => entry.key === 'VAR') && !isAllowedChild(VAR_BLOCK, key as Keyword)) {
+        err(token.line, notAllowed(key as Keyword, 'VAR', VAR_BLOCK));
       }
-      const exported = exportedVar(t);
+      const exported = exportedVar(token);
       if (exported) {
         const decl = readExportedVar(exported);
-        if ('error' in decl) err(t.line, decl.error);
+        if ('error' in decl) err(token.line, decl.error);
         else if (exportsNoVariable ??= ownsNoVariable(file, body)) {
-          err(t.line, `\`EXPORT ${exported.rest}\`: a library module exports variables — an agent's file or a team's file declares one in a body (\`VAR ${decl.name}\`), or IMPORTs it`);
+          err(token.line, `\`EXPORT ${exported.rest}\`: a library module exports variables — an agent's file or a team's file declares one in a body (\`VAR ${decl.name}\`), or IMPORTs it`);
         } else {
           const first = exportedVars.get(decl.name);
-          if (first !== undefined) err(t.line, `\`${decl.name}\` is exported twice in this module — first at line ${first}`);
-          else exportedVars.set(decl.name, t.line);
+          if (first !== undefined) err(token.line, `\`${decl.name}\` is exported twice in this module — first at line ${first}`);
+          else exportedVars.set(decl.name, token.line);
           const next = nextSubstantive(tokens, index + 1);
-          if (next !== -1 && tokens[next].indent > t.indent) err(tokens[next].line, `\`EXPORT ${exported.rest}\` is one line — an exported variable has no body`);
+          if (next !== -1 && tokens[next].indent > token.indent) err(tokens[next].line, `\`EXPORT ${exported.rest}\` is one line — an exported variable has no body`);
         }
       }
       if (isVarKeyword(key)) {
         const next = nextSubstantive(tokens, index + 1);
-        const deeper = next !== -1 && tokens[next].indent > t.indent;
-        for (const message of varLineErrors(t, stack.map(a => a.key), deeper, file)) err(t.line, message);
+        const deeper = next !== -1 && tokens[next].indent > token.indent;
+        for (const message of varLineErrors(token, stack.map(entry => entry.key), deeper, file)) err(token.line, message);
       }
-      const into = intoError(t);
-      if (into) err(t.line, into);
-    } else if (t.kind === 'unknown' && /^\s*!WITH\b/.test(t.raw)) {
-      err(t.line, `!WITH was removed — a policy says where it holds with its APPLIES line: to keep lines out of one, narrow its perimeter: "${t.raw.trim()}"`);
-    } else if (t.kind === 'unknown') {
-      const word = t.raw.match(KEYWORD_LIKE_RE)?.[1];
-      const starred = starredTrigger(t.raw);
+      const into = intoError(token);
+      if (into) err(token.line, into);
+    } else if (token.kind === 'unknown' && /^\s*!WITH\b/.test(token.raw)) {
+      err(token.line, `!WITH was removed — a policy says where it holds with its APPLIES line: to keep lines out of one, narrow its perimeter: "${token.raw.trim()}"`);
+    } else if (token.kind === 'unknown') {
+      const word = token.raw.match(KEYWORD_LIKE_RE)?.[1];
+      const starred = starredTrigger(token.raw);
       if (starred) {
-        err(t.line, `${triggerLevelError(starred.key, starred.level, starred.stars)}: "${t.raw.trim()}"`);
+        err(token.line, `${triggerLevelError(starred.key, starred.level, starred.stars)}: "${token.raw.trim()}"`);
       } else if (word) {
         const base = forceLevelBaseOf(word);
         // A keyword alone on its line — `FOR`, `EACH`, `MUST` — lacks what it says.
         // A retired word alone on its line (`PARALLEL:`, `STRATEGY`) is told its rewrite, not what it lacks.
         const retired = REMOVED_KEYWORDS[word];
-        if (retired) err(t.line, `${retired}: "${t.raw.trim()}"`);
-        else if (KEYWORDS.includes(word) || (base && getIntroByKeyword(word) !== null)) err(t.line, `${word} needs ${BARE_NEEDS[base ?? word] ?? 'its text on the same line'}`);
-        else err(t.line, base ? unknownLevel(word, base) : unknownKeyword(word));
+        if (retired) err(token.line, `${retired}: "${token.raw.trim()}"`);
+        else if (KEYWORDS.includes(word) || (base && getIntroByKeyword(word) !== null)) err(token.line, `${word} needs ${BARE_NEEDS[base ?? word] ?? 'its text on the same line'}`);
+        else err(token.line, base ? unknownLevel(word, base) : unknownKeyword(word));
       }
     }
     // `EACH <item> IN {{<list>}}` opens a flow's block, no DIMENSION line (src/vars.ts parseEachHead).
-    const eachBlock = key === 'EACH' && t.kind === 'keyword' && parseEachHead(t.rest) !== null;
-    const placed = eachBlock ? null : placementError(key, parent?.key, t.kind === 'blockOpener' || opensBlock(t));
-    if (placed) err(t.line, placed);
-    stack.push({ indent: t.indent, key, line: t.line });
+    const eachBlock = key === 'EACH' && token.kind === 'keyword' && parseEachHead(token.rest) !== null;
+    const placed = eachBlock ? null : placementError(key, parent?.key, token.kind === 'blockOpener' || opensBlock(token));
+    if (placed) err(token.line, placed);
+    stack.push({ indent: token.indent, key, line: token.line });
   }
 
   errors.push(...computeBlockErrors(file, body));
   // A decorator decorating no block: the parser's to see (src/parseBlocks.ts), the lint's to report.
-  errors.push(...parseBlocks(body).errors.filter(e => e.decorator).map(e => ({ file, line: e.line, message: e.message })));
+  errors.push(...parseBlocks(body).errors.filter(error => error.decorator).map(error => ({ file, line: error.line, message: error.message })));
   // What a `~` starts is waited for in its own block, and read after its WAIT (src/delegation.ts).
-  errors.push(...concurrencyErrors(buildTree(tokens)).map(e => ({ file, ...e })));
+  errors.push(...concurrencyErrors(buildTree(tokens)).map(error => ({ file, ...error })));
   return errors;
 }
 
@@ -1596,53 +1595,53 @@ function computeBlockErrors(file: string, body: string): LintError[] {
   const RETURN_LINES = new Set(['DO', 'COMPUTE']);
   const RETURN_BLOCKS = new Set(['IF', 'ELSE', 'UNTIL']);
   const check = (nodes: Node[], section: string, name: string): void => {
-    for (const c of nodes) {
-      const kw = c.type === 'line' ? c.keyword : c.key;
+    for (const child of nodes) {
+      const kw = child.type === 'line' ? child.keyword : child.key;
       const allowed = section === 'RETURN'
-        ? isRule(kw) || kw === 'ELSE' || (c.type === 'line' ? RETURN_LINES.has(kw) : RETURN_BLOCKS.has(kw))
-        : isRule(kw) || kw === 'ELSE' || (c.type === 'block' && kw === 'IF');
-      const line = c.type === 'line' ? c.line : c.startLine;
+        ? isRule(kw) || kw === 'ELSE' || (child.type === 'line' ? RETURN_LINES.has(kw) : RETURN_BLOCKS.has(kw))
+        : isRule(kw) || kw === 'ELSE' || (child.type === 'block' && kw === 'IF');
+      const line = child.type === 'line' ? child.line : child.startLine;
       if (!allowed) {
         err(line, section === 'RETURN'
           ? `${kw} is not allowed in RETURN of COMPUTE \`${name}\` — a program carries it out: DO, COMPUTE, IF, UNTIL and rules only`
           : `${kw} is not allowed in ${section} of COMPUTE \`${name}\` — it holds only rules (MUST, NEVER, …) and IF`);
         continue;
       }
-      if (c.type === 'block') check(c.children, section, name);
+      if (child.type === 'block') check(child.children, section, name);
     }
   };
   const visit = (blocks: Node[]): void => {
-    for (const b of blocks) {
-      if (b.type !== 'block') continue;
-      if (!b.computed) { visit(b.children); continue; }
-      const name = b.name ?? '';
+    for (const block of blocks) {
+      if (block.type !== 'block') continue;
+      if (!block.computed) { visit(block.children); continue; }
+      const name = block.name ?? '';
       const seen: string[] = [];
-      for (const c of b.children) {
-        if (c.type === 'line') {
-          if (c.keyword !== 'ABOUT' && c.keyword !== 'APPLIES' && !isRule(c.keyword)) {
-            err(c.line, `${c.keyword} is not allowed on top of COMPUTE \`${name}\` — ABOUT and rules on how the script is written, then REQUIRE:, RETURN AS <template>: and ENSURE:`);
+      for (const child of block.children) {
+        if (child.type === 'line') {
+          if (child.keyword !== 'ABOUT' && child.keyword !== 'APPLIES' && !isRule(child.keyword)) {
+            err(child.line, `${child.keyword} is not allowed on top of COMPUTE \`${name}\` — ABOUT and rules on how the script is written, then REQUIRE:, RETURN AS <template>: and ENSURE:`);
           }
           continue;
         }
-        if (!(COMPUTE_SECTIONS as readonly string[]).includes(c.key)) {
-          err(c.startLine, `${c.key} is not allowed on top of COMPUTE \`${name}\` — its sections are REQUIRE:, RETURN AS <template>: and ENSURE:`);
+        if (!(COMPUTE_SECTIONS as readonly string[]).includes(child.key)) {
+          err(child.startLine, `${child.key} is not allowed on top of COMPUTE \`${name}\` — its sections are REQUIRE:, RETURN AS <template>: and ENSURE:`);
           continue;
         }
         const expected = COMPUTE_SECTIONS[seen.length];
-        if (seen.includes(c.key) || c.key !== expected) {
-          err(c.startLine, `${c.key} in COMPUTE \`${name}\` is out of order or repeated — REQUIRE:, RETURN AS <template>:, ENSURE:, once each`);
+        if (seen.includes(child.key) || child.key !== expected) {
+          err(child.startLine, `${child.key} in COMPUTE \`${name}\` is out of order or repeated — REQUIRE:, RETURN AS <template>:, ENSURE:, once each`);
         }
-        seen.push(c.key);
-        if (c.key === 'RETURN') {
-          const head = `${c.name ?? ''} ${c.rest}`.trim();   // the parser splits `AS <template>` into name and rest
-          if (/^AS!+\s/.test(head)) err(c.startLine, 'RETURN AS takes no force level — the program\'s result is always checked against its template');
-          else if (!returnShape(head)) err(c.startLine, `RETURN in COMPUTE \`${name}\` needs its result shape — write \`RETURN AS <template>:\``);
+        seen.push(child.key);
+        if (child.key === 'RETURN') {
+          const head = `${child.name ?? ''} ${child.rest}`.trim();   // the parser splits `AS <template>` into name and rest
+          if (/^AS!+\s/.test(head)) err(child.startLine, 'RETURN AS takes no force level — the program\'s result is always checked against its template');
+          else if (!returnShape(head)) err(child.startLine, `RETURN in COMPUTE \`${name}\` needs its result shape — write \`RETURN AS <template>:\``);
         }
-        if (c.children.length === 0) err(c.startLine, `${c.key} in COMPUTE \`${name}\` holds no line — write at least one`);
-        check(c.children, c.key, name);
+        if (child.children.length === 0) err(child.startLine, `${child.key} in COMPUTE \`${name}\` holds no line — write at least one`);
+        check(child.children, child.key, name);
       }
       for (const section of COMPUTE_SECTIONS) {
-        if (!seen.includes(section)) err(b.startLine, `COMPUTE \`${name}\` needs its ${section} section — REQUIRE:, RETURN AS <template>: and ENSURE:, in this order`);
+        if (!seen.includes(section)) err(block.startLine, `COMPUTE \`${name}\` needs its ${section} section — REQUIRE:, RETURN AS <template>: and ENSURE:, in this order`);
       }
     }
   };
@@ -1653,15 +1652,15 @@ function computeBlockErrors(file: string, body: string): LintError[] {
 export function lintFile(file: string, body: string, options: LintOptions = {}): LintError[] {
   // Both checks read a list's form (the vocabulary's, and APPLIES's own payload check): one error per line and message.
   const seen = new Set<string>();
-  return [...checkVocabulary(file, body), ...lintByKind(file, body, options)].filter(e => {
-    const key = `${e.line}\0${e.message}`;
+  return [...checkVocabulary(file, body), ...lintByKind(file, body, options)].filter(error => {
+    const key = `${error.line}\0${error.message}`;
     return !seen.has(key) && !!seen.add(key);
   });
 }
 
 /** An agent's file or a team's file: a variable exported there would be no one's — library modules export them. */
 function ownsNoVariable(_file: string, body: string): boolean {
-  return parseBlocks(body).blocks.some(b => AGENT_KEYS.has(b.key) || b.key === TEAM_KEY);
+  return parseBlocks(body).blocks.some(block => AGENT_KEYS.has(block.key) || block.key === TEAM_KEY);
 }
 
 /**
@@ -1671,11 +1670,11 @@ function ownsNoVariable(_file: string, body: string): boolean {
 function withoutExportedVars(body: string): { body: string; onlyVars: boolean } {
   const lines = body.split(/\r?\n/);
   const tokens = lex(body);
-  const exported = tokens.filter(t => exportedVar(t)?.indent === 0).map(t => t.line);
+  const exported = tokens.filter(token => exportedVar(token)?.indent === 0).map(token => token.line);
   if (exported.length === 0) return { body, onlyVars: false };
   for (const line of exported) lines[line - 1] = '';
-  const rest = tokens.filter(t => t.kind !== 'blank' && t.kind !== 'comment' && !exported.includes(t.line)
-    && !(t.kind === 'keyword' && t.keyword === 'IMPORT'));
+  const rest = tokens.filter(token => token.kind !== 'blank' && token.kind !== 'comment' && !exported.includes(token.line)
+    && !(token.kind === 'keyword' && token.keyword === 'IMPORT'));
   return { body: lines.join('\n'), onlyVars: rest.length === 0 };
 }
 
@@ -1735,16 +1734,16 @@ export function lineOfName(path: string, name: string, on: 'use' | 'import' = 'u
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const re = new RegExp(`(^|[\\s\`(,])${escaped}($|[\\s:\`),])`);
   const lines = readFileSync(path, 'utf-8').split(/\r?\n/);
-  const i = lines.findIndex(l => /^\s*IMPORT\s/.test(l) === (on === 'import') && re.test(l));
-  return i + 1 || 1;
+  const lineIndex = lines.findIndex(line => /^\s*IMPORT\s/.test(line) === (on === 'import') && re.test(line));
+  return lineIndex + 1 || 1;
 }
 
 export function formatErrors(errors: LintError[]): string {
-  return errors.map(e => {
-    const tag = e.severity === 'warning' ? 'warning' : 'error';
-    const col = e.col !== undefined ? `:${e.col}` : '';
-    const code = e.code ? `[${e.code}] ` : '';
-    return `${tag}  ${e.file}:${e.line}${col}  ${code}${e.message}`;
+  return errors.map(error => {
+    const tag = error.severity === 'warning' ? 'warning' : 'error';
+    const col = error.col !== undefined ? `:${error.col}` : '';
+    const code = error.code ? `[${error.code}] ` : '';
+    return `${tag}  ${error.file}:${error.line}${col}  ${code}${error.message}`;
   }).join('\n');
 }
 
@@ -1760,33 +1759,33 @@ export function checkedHeadIssues(
   file: string, source: string, checks: object | null | undefined, agentOf?: (by: string) => string | null,
 ): LintError[] {
   const issues: LintError[] = [];
-  const keyOf = (n: TreeNode): string => (n.token.kind === 'keyword' ? n.token.keyword as string : n.token.kind === 'blockOpener' ? n.token.key : '');
+  const keyOf = (node: TreeNode): string => (node.token.kind === 'keyword' ? node.token.keyword as string : node.token.kind === 'blockOpener' ? node.token.key : '');
   const visit = (nodes: TreeNode[], site: CheckSite, parent: { keyword: string; condition: string } | null = null): void => {
-    const first = nodes.find(c => c.token.kind !== 'blank');
-    for (const n of nodes) {
-      const t = n.token;
-      const key = keyOf(n);
-      if (t.kind === 'keyword' && (key === 'IF' || key === 'UNTIL')) {
-        const split = splitMax(stripTrailingColon(t.rest));
+    const first = nodes.find(node => node.token.kind !== 'blank');
+    for (const node of nodes) {
+      const token = node.token;
+      const key = keyOf(node);
+      if (token.kind === 'keyword' && (key === 'IF' || key === 'UNTIL')) {
+        const split = splitMax(stripTrailingColon(token.rest));
         const { condition } = split;
         // The IF! of a desugared WHEN! reports as WHEN! — the head the author wrote.
-        const head = sugaredHead(parent, n === first, t.level ?? 0, condition) ?? checkedKeyword(key as CheckKind, t.level ?? 0);
+        const head = sugaredHead(parent, node === first, token.level ?? 0, condition) ?? checkedKeyword(key as CheckKind, token.level ?? 0);
         // A loop a judge, a delegate or a program ends writes its MAX (src/check.ts maxIssue).
-        const bounded = (t.level ?? 0) > 0 || (t.executor ?? 0) > 0;
-        const max = maxIssue(key as CheckKind, `${head}${executorMark(t.executor ?? 0)}`, bounded, split);
-        if (max) issues.push({ file, line: t.line, message: max });
-        const { issue } = condCheckOf(key as CheckKind, t.level ?? 0, condition, site, checks, head, split.max);
-        if (issue) issues.push({ file, line: t.line, ...issue });
+        const bounded = (token.level ?? 0) > 0 || (token.executor ?? 0) > 0;
+        const max = maxIssue(key as CheckKind, `${head}${executorMark(token.executor ?? 0)}`, bounded, split);
+        if (max) issues.push({ file, line: token.line, message: max });
+        const { issue } = condCheckOf(key as CheckKind, token.level ?? 0, condition, site, checks, head, split.max);
+        if (issue) issues.push({ file, line: token.line, ...issue });
       }
       let inner = site;
       if (agentOf && key === 'FLOW') inner = { at: 'flow' };
       // In a flow, a DELEGATE block's agent checks the conditions among its lines; whoever runs the flow checks none yet.
       if (agentOf && key === 'STEP') inner = { at: 'flow' };
-      if (agentOf && t.kind === 'keyword' && isDelegationVerb(key) && site.at !== 'none') {
-        const by = parseDelegation(key, t.rest).by;
+      if (agentOf && token.kind === 'keyword' && isDelegationVerb(key) && site.at !== 'none') {
+        const by = parseDelegation(key, token.rest).by;
         inner = { at: 'step', agent: by ? agentOf(by) : null };
       }
-      visit(n.children, inner, t.kind === 'keyword' && key === 'WHEN' ? { keyword: 'WHEN', condition: stripTrailingColon(t.rest) } : null);
+      visit(node.children, inner, token.kind === 'keyword' && key === 'WHEN' ? { keyword: 'WHEN', condition: stripTrailingColon(token.rest) } : null);
     }
   };
   visit(buildTree(lex(source)), { at: 'none' });

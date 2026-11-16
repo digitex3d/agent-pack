@@ -8,7 +8,6 @@
  * as agent-pack always printed — for CI, pipes and tests.
  */
 import { formatErrors, type LintError } from './lint.js';
-import { errorMessage } from './errors.js';
 
 /** A diagnostic of the compiler: where, how bad, what — and the rule or check that said it. */
 export type Diagnostic = LintError;
@@ -48,13 +47,15 @@ export interface Reporter {
   done(summary: BuildSummary): void;
 }
 
+const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
 /** One line each, as agent-pack always printed them. */
 export const plainReporter: Reporter = {
   diagnostics: list => { if (list.length > 0) console.error(formatErrors(list)); },
   info: message => console.error(`[agent-pack] ${message}`),
   note: message => console.error(message),
   written: path => console.log(path),
-  failed: (error, subject) => console.error(subject ? `[agent-pack] failed ${subject}: ${errorMessage(error)}` : errorMessage(error)),
+  failed: (error, subject) => console.error(subject ? `[agent-pack] failed ${subject}: ${messageOf(error)}` : messageOf(error)),
   done: ({ agents, adapters, files, failures }) => {
     const suffix = failures > 0 ? ` (${failures} error(s))` : '';
     console.error(`[agent-pack] bundled ${agents} agent(s) × ${adapters} adapter(s) → ${files} file(s)${suffix}`);

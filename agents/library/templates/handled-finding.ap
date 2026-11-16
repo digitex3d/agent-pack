@@ -1,0 +1,10 @@
+# handled-finding
+
+EXPORT TEMPLATE handled-finding:
+    ABOUT  one review finding — a quality result or a duplicate — and how it ended
+    SLOTS:
+        kind:      ENUM[quality, duplicate]  "quality for a result of the quality check, duplicate for one of the DRY review"
+        finding:   TEXT MAX_WORDS 25  "the quality result or the duplicate"
+        handling:  ENUM[fixed, accepted, open]  "fixed, accepted by the user, or still open"
+    BODY:
+        - [{handling}] {kind}: {finding}

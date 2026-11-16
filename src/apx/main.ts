@@ -17,9 +17,10 @@ import { relative } from 'node:path';
 import { ApDocument } from '../apdoc/document.js';
 import { ApxEngine } from './engine.js';
 import { Pack } from './pack.js';
-import { heldNames, packPayload, packHolds, viewHolding, parsePayload, MIN_NODE_MAJOR, UNIT_SECTION, type ApxPayload, type UnitSection } from './payload.js';
-import { LS_VERB, START_VERB, isUnitVerb, runUnitVerb, throughUnit } from './unit.js';
-import { announceIdentity } from '../../adapters/acp/events.js';
+import { heldNames, packPayload, packHolds, viewHolding, parsePayload, packBlock, MIN_NODE_MAJOR, UNIT_SECTION, type ApxPayload, type UnitSection } from './payload.js';
+import type { ApBlockData } from '../apdoc/types.js';
+import type { ApBlock } from '../apdoc/block.js';
+import { LS_VERB, isUnitVerb, runUnitVerb, throughUnit } from './unit.js';
 import { JSON_FLAG, listingOf } from './listing.js';
 
 /** The data lines a compiled binary carries — undefined when this engine heads an `.apx` file. */
@@ -59,9 +60,24 @@ if (unit) {
   out = line => plain(through(line));
 }
 
+/** A pack's store as a document reads it: each block revived once, by its id. */
+function storeOf(from: Pack): (id: string) => ApBlock | null {
+  const revived = new Map<string, ApBlock | null>();
+  return id => {
+    if (!revived.has(id)) {
+      const data = packBlock<ApBlockData>(from, id);
+      revived.set(id, data ? ApDocument.reviveBlock(data) : null);
+    }
+    return revived.get(id) ?? null;
+  };
+}
+
 /** Serve one agent: the one this apx is, or — `inUnit` — the one a unit's first word names. */
 function serve(payload: ApxPayload, inUnit: string | null, args: string[]): void {
-  const engine = new ApxEngine(ApDocument.fromJson(payload.document), payload.build, exe, out, undefined, undefined, inUnit);
+  const doc = ApDocument.fromJson(payload.document);
+  // One id, one block: a block the document only refers to — a member, a team — is read from the pack's store.
+  if (pack) doc.readsFrom(storeOf(pack));
+  const engine = new ApxEngine(doc, payload.build, exe, out, undefined, undefined, inUnit);
   void Promise.resolve(engine.run(args)).then(code => { process.exitCode = code; });
 }
 
@@ -70,12 +86,18 @@ const own = unit !== null && pack && packHolds(pack) ? packPayload(pack) : null;
 
 if (unit !== null && pack !== null && argv[0] === LS_VERB && argv[1] === JSON_FLAG) {
   // A unit's listing: every document it holds, its own first.
-  const docs = heldNames(pack).map(holder => ({ doc: ApDocument.fromJson(packPayload(pack, holder).document), holder }));
+  const store = storeOf(pack);
+  const docs = heldNames(pack).map(holder => {
+    const doc = ApDocument.fromJson(packPayload(pack, holder).document);
+    doc.readsFrom(store);
+    return { doc, holder };
+  });
   out(JSON.stringify(listingOf(docs, { kind: unit.kind, name: unit.name })));
 } else if (pack === null) serve(parsePayload(text ?? ''), null, argv);
 else if (unit === null) serve(packPayload(pack), null, argv);
+// A unit starts as an agent does: its own document — who it is, what it holds, its routing and flows.
+else if ((argv[0] === undefined || argv[0] === 'start') && own) serve(own, null, argv);
 else if (isUnitVerb(argv[0]) && !(argv[0] === 'ls' && argv.length > 1 && own)) {
-  if ((argv[0] ?? START_VERB) === START_VERB) announceIdentity(unit.name, unit.kind);
   runUnitVerb(argv[0], { unit, cmd, out, built: pack.header.built });
   // `ls` alone: what the unit holds, then its own blocks.
   if (argv[0] === 'ls' && own) serve(own, null, ['ls']);

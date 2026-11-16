@@ -21,7 +21,7 @@ import { filtersOn } from '../storeDrivers/filters.js';
 import { installDriver, storeDriverNames, storeDriverOf, useTabeliEngine, type DriverEntry } from '../storeDrivers/registry.js';
 import type { Collection, Doc, DriverCapability, Filter, MaybePromise, StoreDecl, StoreDriver, StoreLifetime, StoreRef } from '../storeDrivers/types.js';
 import { CACHE_DIR, STATE_DIR } from './paths.js';
-import type { ApxHost } from './service.js';
+import type { ApxContext } from './service.js';
 
 /**
  * What a store declares, wherever it is declared: a `STORE` block is one
@@ -68,10 +68,10 @@ export class StoreRefusal extends Error {
 let driversReady: Promise<void> | null = null;
 
 /** Install, once per run, the drivers the apx's bundle recorded: the tabeli engine, then the config's own drivers. */
-export function installRecorded(host: ApxHost): Promise<void> {
+export function installRecorded(host: ApxContext): Promise<void> {
   driversReady ??= (async () => {
     useTabeliEngine(host.build.tabeli);
-    for (const d of (host.build.drivers ?? []) as DriverEntry[]) await installDriver(d.module, d.options);
+    for (const driver of (host.build.drivers ?? []) as DriverEntry[]) await installDriver(driver.module, driver.options);
   })();
   return driversReady;
 }
@@ -103,7 +103,7 @@ function placeOf(spec: StoreSpec, agent: string, place: StorePlace, own: string)
 }
 
 /** The agent's stores, each with its driver and its data's place. */
-export async function storesOf(host: ApxHost): Promise<OpenStore[]> {
+export async function storesOf(host: ApxContext): Promise<OpenStore[]> {
   await installRecorded(host);
   return (host.doc.agentStores() as StoreBlock[]).map(block => resolveStore(block, host.projectRoot, host.root.name, { kind: 'agent' }));
 }
@@ -118,10 +118,10 @@ export function requireCapability(store: OpenStore, capability: DriverCapability
 /** An operation beyond the base ones, open — refused when the driver does not keep it, or declares it and lacks it. */
 export async function optionalOp<K extends 'take' | 'mark' | 'since'>(store: OpenStore, op: K, capability: DriverCapability): Promise<NonNullable<Collection[K]>> {
   requireCapability(store, capability, op);
-  const c = await open(store);
-  const fn = c[op];
+  const collection = await open(store);
+  const fn = collection[op];
   if (!fn) throw new StoreRefusal(STORE_EXIT.usage, `${store.spec.name}: the ${store.driver.name} driver declares ${capability} and has no ${op}`);
-  return fn.bind(c) as NonNullable<Collection[K]>;
+  return fn.bind(collection) as NonNullable<Collection[K]>;
 }
 
 /** `field=value` arguments as a record, numbers read as numbers where the slot says so. */
@@ -146,7 +146,7 @@ export function checkWrite(store: OpenStore, doc: Doc, whole: boolean): void {
 
 /** `<field><op><value>` arguments as filters, every field one of the store's (or `id`). */
 export function filtersOf(store: OpenStore, args: readonly string[]): Filter[] {
-  const filters = filtersOn(args, store.spec.slots.map(s => s.name), 'id');
+  const filters = filtersOn(args, store.spec.slots.map(slot => slot.name), 'id');
   if (typeof filters === 'string') throw new StoreRefusal(STORE_EXIT.usage, `${store.spec.name}: ${filters}`);
   return filters;
 }
@@ -158,13 +158,13 @@ export function open(store: OpenStore): MaybePromise<Collection> {
 
 /** A value as one shell word: bare when it is one, else in single quotes. */
 function word(value: string | number): string {
-  const s = String(value);
-  return /^[^\s'"\\]+$/.test(s) ? s : `'${s.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/'/g, "\\'")}'`;
+  const text = String(value);
+  return /^[^\s'"\\]+$/.test(text) ? text : `'${text.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/'/g, "\\'")}'`;
 }
 
 /** Fields as one line: `<field>=<value> …`, a value with spaces or quotes in single quotes. */
 export function fieldsText(fields: Record<string, unknown>): string {
-  return Object.entries(fields).map(([f, v]) => `${f}=${word(v as string | number)}`).join(' ');
+  return Object.entries(fields).map(([field, value]) => `${field}=${word(value as string | number)}`).join(' ');
 }
 
 /** A record as one line: `id=<id>` first, then its fields. */
@@ -174,4 +174,4 @@ export function recordLine(doc: Doc): string {
 }
 
 /** How many records, in the words every answer ends with. */
-export const countLine = (n: number): string => `# ${n} record${n === 1 ? '' : 's'}`;
+export const countLine = (count: number): string => `# ${count} record${count === 1 ? '' : 's'}`;

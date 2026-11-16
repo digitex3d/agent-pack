@@ -40,7 +40,7 @@ export function fromBuiltins<T>(
     const make = builtins[name];
     if (!make) throw new Error(`Unknown ${kind} "${name}" — built-in ${kind}s: ${Object.keys(builtins).join(', ')}`);
     if (typeof entry === 'string') return make();
-    const { name: _, ...opts } = entry as BuiltinEntry;
+    const { name: _unusedName, ...opts } = entry as BuiltinEntry;
     check(name, opts);
     return make(opts);
   };

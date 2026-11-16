@@ -94,12 +94,12 @@ function sha256(input: Buffer | string): string {
   return createHash('sha256').update(input).digest('hex');
 }
 
-function checkSection(s: Section): void {
-  if (!s.type || !NAME_RE.test(s.type)) throw new Error(`pack: section type "${s.type}" is not a name`);
-  if (!NAME_RE.test(s.name)) throw new Error(`pack: section name "${s.name}" is not a name`);
-  if (!ENCODINGS.includes(s.encoding)) throw new Error(`pack: section encoding "${s.encoding}" is unknown`);
-  if (/[\r\n]/.test(s.data)) throw new Error(`pack: section ${s.type}:${s.name} holds a line break`);
-  if (s.type === 'header' || s.type === 'end') throw new Error(`pack: "${s.type}" is the pack's own line, not a section`);
+function checkSection(section: Section): void {
+  if (!section.type || !NAME_RE.test(section.type)) throw new Error(`pack: section type "${section.type}" is not a name`);
+  if (!NAME_RE.test(section.name)) throw new Error(`pack: section name "${section.name}" is not a name`);
+  if (!ENCODINGS.includes(section.encoding)) throw new Error(`pack: section encoding "${section.encoding}" is unknown`);
+  if (/[\r\n]/.test(section.data)) throw new Error(`pack: section ${section.type}:${section.name} holds a line break`);
+  if (section.type === 'header' || section.type === 'end') throw new Error(`pack: "${section.type}" is the pack's own line, not a section`);
 }
 
 /**
@@ -108,20 +108,20 @@ function checkSection(s: Section): void {
  * same hash whatever the engine.
  */
 export function packFile(engine: string, identity: PackIdentity, sections: Section[]): string {
-  for (const s of sections) checkSection(s);
+  for (const section of sections) checkSection(section);
   const engineText = `${engine.trimEnd()}\n`;
   const entries: SectionEntry[] = [];
   const lines: string[] = [];
   let offset = 0;
-  for (const s of sections) {
-    const prefix = `${MARK}${s.type}:${s.name}:${s.encoding}:`;
-    const bytes = Buffer.byteLength(s.data, 'utf-8');
-    entries.push({ type: s.type, name: s.name, encoding: s.encoding, offset: offset + Buffer.byteLength(prefix, 'utf-8'), bytes, sha256: sha256(s.data) });
-    const line = `${prefix}${s.data}\n`;
+  for (const section of sections) {
+    const prefix = `${MARK}${section.type}:${section.name}:${section.encoding}:`;
+    const bytes = Buffer.byteLength(section.data, 'utf-8');
+    entries.push({ type: section.type, name: section.name, encoding: section.encoding, offset: offset + Buffer.byteLength(prefix, 'utf-8'), bytes, sha256: sha256(section.data) });
+    const line = `${prefix}${section.data}\n`;
     lines.push(line);
     offset += Buffer.byteLength(line, 'utf-8');
   }
-  const hash = `sha256:${sha256(entries.map(e => e.sha256).join(''))}`;
+  const hash = `sha256:${sha256(entries.map(entry => entry.sha256).join(''))}`;
   const header: PackHeader = {
     format: PACK_FORMAT,
     name: identity.name ?? '',
@@ -150,9 +150,9 @@ function fileSource(path: string): Source {
       const buf = Buffer.alloc(length);
       let got = 0;
       while (got < length) {
-        const n = readSync(fd, buf, got, length - got, position + got);
-        if (n === 0) break;
-        got += n;
+        const bytesRead = readSync(fd, buf, got, length - got, position + got);
+        if (bytesRead === 0) break;
+        got += bytesRead;
       }
       return got === length ? buf : buf.subarray(0, got);
     },
@@ -161,7 +161,7 @@ function fileSource(path: string): Source {
 }
 
 function bufferSource(buf: Buffer): Source {
-  return { size: buf.length, read: (p, l) => buf.subarray(p, p + l), close: () => {} };
+  return { size: buf.length, read: (offset, length) => buf.subarray(offset, offset + length), close: () => {} };
 }
 
 const TAIL = 4096;
@@ -222,7 +222,7 @@ export class Pack {
   static fromData(data: string, where = 'this pack'): Pack {
     const buf = Buffer.from(data, 'utf-8');
     const base = endOf(bufferSource(buf), where).header;
-    return Pack.open({ size: base + buf.length, read: (p, l) => buf.subarray(p - base, p - base + l), close: () => {} }, where);
+    return Pack.open({ size: base + buf.length, read: (offset, length) => buf.subarray(offset - base, offset - base + length), close: () => {} }, where);
   }
 
   private static open(source: Source, where: string): Pack {
@@ -246,21 +246,21 @@ export class Pack {
 
   /** The entries of one type, in file order. */
   entries(type: string): SectionEntry[] {
-    return this.header.sections.filter(e => e.type === type);
+    return this.header.sections.filter(entry => entry.type === type);
   }
 
   /** The entry of a section, or null when the pack has none. */
   entry(type: string, name = ''): SectionEntry | null {
-    return this.header.sections.find(e => e.type === type && e.name === name) ?? null;
+    return this.header.sections.find(entry => entry.type === type && entry.name === name) ?? null;
   }
 
   /** A section as it is written — null when the pack has none; an error when the bytes are not the header's. */
   raw(type: string, name = ''): Section | null {
-    const e = this.entry(type, name);
-    if (!e) return null;
-    const data = this.source.read(this.dataStart + e.offset, e.bytes);
-    if (data.length !== e.bytes || sha256(data) !== e.sha256) throw new Error(`section ${type}:${name} is damaged — its bytes are not the header's`);
-    return { type, name, encoding: e.encoding, data: data.toString('utf-8') };
+    const entry = this.entry(type, name);
+    if (!entry) return null;
+    const data = this.source.read(this.dataStart + entry.offset, entry.bytes);
+    if (data.length !== entry.bytes || sha256(data) !== entry.sha256) throw new Error(`section ${type}:${name} is damaged — its bytes are not the header's`);
+    return { type, name, encoding: entry.encoding, data: data.toString('utf-8') };
   }
 
   /** The content of a section — null when the pack has none; an error when the bytes are not the header's. */

@@ -1,0 +1,9 @@
+# simplify — what the steps of the simplify flow hand each other
+IMPORT cleanup-review FROM @main.templates
+
+EXPORT SESSION VAR change
+EXPORT SESSION VAR reuse-review AS cleanup-review
+EXPORT SESSION VAR simplification-review AS cleanup-review
+EXPORT SESSION VAR efficiency-review AS cleanup-review
+EXPORT SESSION VAR altitude-review AS cleanup-review
+EXPORT SESSION VAR cleanups

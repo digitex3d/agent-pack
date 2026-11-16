@@ -17,7 +17,7 @@ import type { Definition } from './definition.js';
  * which the apx serves all the same.
  */
 export function unappliedBlocks(blocks: Definition[], named: ReadonlySet<string>): Definition[] {
-  return blocks.filter(b => SCOPED_KINDS.includes(b.kind) && b.scopes.length === 0 && !named.has(b.name));
+  return blocks.filter(block => SCOPED_KINDS.includes(block.kind) && block.scopes.length === 0 && !named.has(block.name));
 }
 
 /** What an unapplied block is told, and how loud: a policy or a skill an error; a dimension — no perimeter to give, served all the same — a warning. */
@@ -29,11 +29,11 @@ export function unappliedIssue(block: { kind: string; name: string }): { message
 
 /** The line that says where a policy, a skill or a dimension applies — its perimeter, or only where `@WITH` names it. */
 export function scopeLine(scopes: readonly string[]): string {
-  const S = FORMULAS.keywords.APPLIES.scope;
-  if (scopes.length === 0) return S.with;
+  const scopeFormulas = FORMULAS.keywords.APPLIES.scope;
+  if (scopes.length === 0) return scopeFormulas.with;
   return scopes.map(token => {
     const { kind, name } = perimeterOf(token);
-    return fill(S[kind], { name });
+    return fill(scopeFormulas[kind], { name });
   }).join(' ');
 }
 

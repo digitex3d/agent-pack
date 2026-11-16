@@ -1,0 +1,72 @@
+# team — feature-delivery
+IMPORT feature-diff, feature-brief FROM @main.templates
+IMPORT clarify-task FROM @main.procedures
+IMPORT brief, design, build, review-findings, fix-report, decision, tests, closing, test-rules FROM @main.vars
+IMPORT change, reuse-review, simplification-review, efficiency-review, altitude-review, cleanups FROM @main.vars
+
+EXPORT TEAM feature-delivery:
+    ABOUT  Takes a feature from functional design to tested code; also takes a lone code change or code review
+    MEMBER pm, typescript-implementer, code-reviewer
+
+    WHEN asked to develop a feature:
+        RUN develop-feature
+    WHEN asked to simplify a change, or to clean it up:
+        RUN simplify
+    WHEN asked to change TypeScript code, outside a feature:
+        DELEGATE implement the requested change BY typescript-implementer
+    WHEN asked for a code review or a DRY review of a change, a code scope or a diff:
+        DELEGATE review the requested change, code scope or diff BY code-reviewer
+
+    FLOW develop-feature:
+        STEP make the task clear:
+            RUN clarify-task
+            IF the task is still unclear:
+                DO end the flow, and report what is still unclear
+
+        STEP design the feature:
+            DELEGATE write the functional design of {{brief}} INTO design BY pm AS feature-brief
+            IF {{design}} has a status other than ready:
+                DO end the flow, and report why
+
+        STEP implement the feature:
+            DELEGATE implement {{design}} INTO build BY typescript-implementer
+
+        UNTIL the round's review lists no quality finding of scope change and no duplicate — four rounds at most:
+            STEP review and fix:
+                DELEGATE review this diff INTO review-findings BY code-reviewer AS feature-diff
+                IF {{review-findings}} lists a quality finding of scope change or a duplicate, and this is not the fourth round:
+                    DELEGATE fix each quality finding of scope change and each duplicate of {{review-findings}} INTO fix-report BY typescript-implementer
+
+        IF the fourth round ended with findings:
+            STEP ask the user how to proceed:
+                FORK ask the user how to proceed on the open findings of {{review-findings}} INTO decision
+                IF {{decision}} says stop:
+                    DO end the flow, and report the rounds run and the open findings
+
+        STEP test the feature:
+            DELEGATE test {{design}}: {{test-rules}} INTO tests BY typescript-implementer AS test-report
+
+        STEP close:
+            DO write what was built, the rounds run, each finding's end and {{tests}} INTO closing
+            DO report {{closing}} to the user
+
+    FLOW simplify:
+        STEP take the change:
+            DO take the diff the request names, else `git diff HEAD` with the untracked files INTO change
+
+        STEP review it from four angles:
+            DELEGATE~ review {{change}} for reuse — name the existing helper each new piece of code should call INTO reuse-review BY code-reviewer
+            DELEGATE~ review {{change}} for simplification — redundant state, near copies, deep nesting, dead code: name a simpler form INTO simplification-review BY code-reviewer
+            DELEGATE~ review {{change}} for efficiency — repeated work or I/O, blocking work on a hot path: name the cheaper way INTO efficiency-review BY code-reviewer
+            DELEGATE~ review {{change}} for altitude — a symptom patched where the code beneath should change: name the deeper change INTO altitude-review BY code-reviewer
+            WAIT reuse-review, simplification-review, efficiency-review, altitude-review
+
+        STEP apply the cleanups:
+            DELEGATE apply the findings of {{reuse-review}}, {{simplification-review}}, {{efficiency-review}} and {{altitude-review}} INTO cleanups BY typescript-implementer:
+                DO  merge them into one list, keeping one finding per line or mechanism
+                DO  apply each finding of that list
+                IF a finding would change intended behaviour, need changes well outside {{change}}, or is a false positive:
+                    DO  skip it, and note why
+
+        STEP close:
+            DO report each finding fixed and each one skipped, with its reason, from {{cleanups}}

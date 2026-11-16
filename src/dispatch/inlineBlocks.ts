@@ -56,21 +56,21 @@ interface InlineHeader {
  */
 function findInlineHeaders(rawBody: string): InlineHeader[] {
   const headers: InlineHeader[] = [];
-  for (const t of lex(rawBody)) {
-    if (!('indent' in t) || t.indent !== 0) continue;
+  for (const token of lex(rawBody)) {
+    if (!('indent' in token) || token.indent !== 0) continue;
     let key: string | null = null;
     let rest = '';
-    let executor = t.kind === 'keyword' ? t.executor ?? 0 : 0;
-    if (t.kind === 'blockOpener') {
-      key = t.key;
-      rest = t.rest;
-    } else if (t.kind === 'keyword') {
+    let executor = token.kind === 'keyword' ? token.executor ?? 0 : 0;
+    if (token.kind === 'blockOpener') {
+      key = token.key;
+      rest = token.rest;
+    } else if (token.kind === 'keyword') {
       // Legacy keyword block openers. The trailing colon is optional: PROCEDURE
       // and TEMPLATE write `KIND name:`, but FLOW writes `FLOW name` (no colon).
       // Non-strategy keywords (WHEN/IF/STEP/…) are filtered out below.
-      key = String(t.keyword);
-      const r = t.rest.trimEnd();
-      rest = r.endsWith(':') ? r.slice(0, -1).trim() : r;
+      key = String(token.keyword);
+      const trimmed = token.rest.trimEnd();
+      rest = trimmed.endsWith(':') ? trimmed.slice(0, -1).trim() : trimmed;
     }
     if (key === null) continue;
 
@@ -92,13 +92,13 @@ function findInlineHeaders(rawBody: string): InlineHeader[] {
     // `COMPUTE <name>:` is a procedure a program carries out — src/executor.ts. Without
     // its colon, `COMPUTE …` is a line a program carries out, never a block.
     const compute = key !== null ? computeHead(key) : null;
-    if (compute && t.kind === 'keyword' && !opensBlock(t)) continue;
+    if (compute && token.kind === 'keyword' && !opensBlock(token)) continue;
     if (compute) ({ key, executor } = compute);
-    const strat = STRATEGIES.find(s => s.headerKeyword === key);
+    const strat = STRATEGIES.find(strategy => strategy.headerKeyword === key);
     if (!strat) continue;
     const name = rest.split(/\s+/)[0] ?? '';
     if (!name) continue;
-    headers.push({ startLine: t.line, indent: 0, name, strat, ...(executor ? { executor } : {}) });
+    headers.push({ startLine: token.line, indent: 0, name, strat, ...(executor ? { executor } : {}) });
   }
   return headers;
 }
@@ -109,11 +109,11 @@ function findInlineHeaders(rawBody: string): InlineHeader[] {
  * exists (block extends to EOF).
  */
 function findBlockEndLine(rawBody: string, startLine: number, totalLines: number): number {
-  for (const t of lex(rawBody)) {
-    if (!('indent' in t)) continue;
-    if (t.kind === 'blank' || t.kind === 'comment') continue;
-    if (t.indent !== 0) continue;
-    if (t.line > startLine) return t.line;
+  for (const token of lex(rawBody)) {
+    if (!('indent' in token)) continue;
+    if (token.kind === 'blank' || token.kind === 'comment') continue;
+    if (token.indent !== 0) continue;
+    if (token.line > startLine) return token.line;
   }
   return totalLines + 1;
 }
@@ -121,16 +121,16 @@ function findBlockEndLine(rawBody: string, startLine: number, totalLines: number
 /** Dedent every line in `lines` by the smallest common leading-whitespace prefix. */
 function dedent(lines: string[]): string {
   let minIndent = Infinity;
-  for (const l of lines) {
-    if (l.trim() === '') continue;
-    const m = l.match(/^[ \t]*/);
-    if (m && m[0].length < minIndent) minIndent = m[0].length;
+  for (const line of lines) {
+    if (line.trim() === '') continue;
+    const match = line.match(/^[ \t]*/);
+    if (match && match[0].length < minIndent) minIndent = match[0].length;
   }
   if (minIndent === Infinity || minIndent === 0) {
     return lines.join('\n').trimEnd();
   }
   return lines
-    .map(l => (l.length >= minIndent ? l.slice(minIndent) : l))
+    .map(line => (line.length >= minIndent ? line.slice(minIndent) : line))
     .join('\n')
     .trimEnd();
 }
@@ -151,7 +151,7 @@ function collectInlineDefinition(
   executor?: number,
 ): boolean {
   const collection = strat.getEntries(ctx);
-  const existing = collection.find(e => e.name === name);
+  const existing = collection.find(entry => entry.name === name);
   if (existing) {
     ctx.lintErrors.push({
       file: sourcePath,
@@ -200,8 +200,8 @@ function collectInlineDefinition(
  */
 /** A decorator line written above a block at the top of the body — `@WITH pdf`, never one that opens a block. */
 function decoratesBelow(line: string): boolean {
-  const t = lex(line)[0];
-  return t?.kind === 'decorator' && !t.opens && t.indent === 0;
+  const token = lex(line)[0];
+  return token?.kind === 'decorator' && !token.opens && token.indent === 0;
 }
 
 export function extractInlineDefinitions(
@@ -216,23 +216,23 @@ export function extractInlineDefinitions(
   const totalLines = lines.length;
   const linesToRemove = new Set<number>();
 
-  for (const h of headers) {
-    const endLine = findBlockEndLine(rawBody, h.startLine, totalLines);
+  for (const header of headers) {
+    const endLine = findBlockEndLine(rawBody, header.startLine, totalLines);
     // Body lines: between header (exclusive) and end (exclusive).
     // lines[] is 0-indexed; startLine/endLine are 1-based.
-    const bodyLines = lines.slice(h.startLine, endLine - 1);
+    const bodyLines = lines.slice(header.startLine, endLine - 1);
     const body = dedent(bodyLines);
-    collectInlineDefinition(h.strat, h.name, body, sourcePath, h.startLine, ctx, h.executor);
-    for (let l = h.startLine; l < endLine; l++) linesToRemove.add(l);
+    collectInlineDefinition(header.strat, header.name, body, sourcePath, header.startLine, ctx, header.executor);
+    for (let lineNumber = header.startLine; lineNumber < endLine; lineNumber++) linesToRemove.add(lineNumber);
     // The decorators right above it are its own (src/decorators.ts): they leave with it.
-    for (let l = h.startLine - 1; l >= 1 && (lines[l - 1].trim() === '' || decoratesBelow(lines[l - 1])); l--) {
-      if (lines[l - 1].trim() !== '') linesToRemove.add(l);
+    for (let lineNumber = header.startLine - 1; lineNumber >= 1 && (lines[lineNumber - 1].trim() === '' || decoratesBelow(lines[lineNumber - 1])); lineNumber--) {
+      if (lines[lineNumber - 1].trim() !== '') linesToRemove.add(lineNumber);
     }
   }
 
   const remaining: string[] = [];
-  for (let l = 1; l <= totalLines; l++) {
-    if (!linesToRemove.has(l)) remaining.push(lines[l - 1]);
+  for (let lineNumber = 1; lineNumber <= totalLines; lineNumber++) {
+    if (!linesToRemove.has(lineNumber)) remaining.push(lines[lineNumber - 1]);
   }
   return remaining.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd();
 }

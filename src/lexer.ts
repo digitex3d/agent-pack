@@ -65,9 +65,9 @@ const STATIC_KEYWORDS = [
   'RUN', 'VAR', 'IF',
   ...ACTION_VERBS,
   // FORK hands work to a copy of whoever runs it, WAIT takes back what a `~` started, MARK binds
-  // zones to contracts (src/delegation.ts). ASK became DELEGATE, a step's CONTEXT its DELEGATE's form,
+  // zones to contracts (src/delegation.ts). A step's CONTEXT became its DELEGATE's form,
   // STRATEGY, LEAD and CONTRACT MARK + DELEGATE, PARALLEL `~` + WAIT or EACH: still lexed, so the lint names the rewrite.
-  'FORK', 'WAIT', 'MARK', 'ASK', 'CONTRACT',
+  'FORK', 'WAIT', 'MARK', 'CONTRACT',
   // A variable's scope, right before VAR (`SESSION VAR plan`) — vars.ts parses it.
   ...VAR_SCOPE_WORDS,
   'ROLE', 'EXPERTISE', 'MANDATE', 'BUDGET', 'LENS-OUT', 'LENS-IN',
@@ -131,8 +131,8 @@ export function addPluginLineKeywords(words: readonly string[]): void {
 }
 
 /** Escape a string for safe inclusion as a literal inside a RegExp source. */
-export function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+export function escapeRegex(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 // Build the keyword alternation regex.
@@ -203,8 +203,8 @@ const DOMAIN_LINE_ALT = `(?:${DOMAIN_LINES.join('|')})!{1,2}`;
 
 /** `WRITES!!` → `{ keyword: 'WRITES', level: 2 }`; any other word → null. */
 export function splitDomainLine(keyword: string): { keyword: DomainLine; level: number } | null {
-  const m = /^(WRITES|READS)(!{0,2})$/.exec(keyword);
-  return m ? { keyword: m[1] as DomainLine, level: m[2].length } : null;
+  const match = /^(WRITES|READS)(!{0,2})$/.exec(keyword);
+  return match ? { keyword: match[1] as DomainLine, level: match[2].length } : null;
 }
 
 // A delegation verb with the mark that starts it without waiting: `DELEGATE~`, `FORK~` (src/delegation.ts).
@@ -274,8 +274,8 @@ export type Token =
   | (Position & { kind: 'unknown'; raw: string });
 
 function indentOf(line: string): number {
-  const m = line.match(/^[ \t]*/);
-  return m ? m[0].length : 0;
+  const match = line.match(/^[ \t]*/);
+  return match ? match[0].length : 0;
 }
 
 /** `PROCEDURE**` → its word and stars; any other keyword → null. */
@@ -293,9 +293,9 @@ export function lexRaw(source: string): Token[] {
   const out: Token[] = [];
   const lines = source.split(/\r?\n/);
   let inRaw = false;
-  for (let i = 0; i < lines.length; i++) {
-    const raw = lines[i];
-    const line = i + 1;
+  for (let index = 0; index < lines.length; index++) {
+    const raw = lines[index];
+    const line = index + 1;
 
     // RAW: ... :RAW block — verbatim passthrough. Delimiter lines emit no
     // token; inner lines become rawLine tokens.
@@ -425,6 +425,6 @@ export function lex(source: string): Token[] {
 }
 
 /** A keyword line written as a block head — its rest ends with the block colon (`WHEN x:`, `WITH a:`). */
-export function opensBlock(t: Token | undefined): boolean {
-  return t?.kind === 'keyword' && t.rest.trimEnd().endsWith(':');
+export function opensBlock(token: Token | undefined): boolean {
+  return token?.kind === 'keyword' && token.rest.trimEnd().endsWith(':');
 }

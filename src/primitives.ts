@@ -122,7 +122,7 @@ export const MandatePrimitive: PrimitiveStrategy = {
  */
 export const LensOutPrimitive: PrimitiveStrategy = {
   keyword: 'LENS-OUT',
-  renderNeutral: values => values.length === 0 ? '' : `${values.map(v => `AS! ${v.trim()}`).join('\n')}\n\n`,
+  renderNeutral: values => values.length === 0 ? '' : `${values.map(value => `AS! ${value.trim()}`).join('\n')}\n\n`,
   contributesFrontmatter: () => null,
 };
 
@@ -138,7 +138,7 @@ export const LensOutPrimitive: PrimitiveStrategy = {
 export const LensInPrimitive: PrimitiveStrategy = {
   keyword: 'LENS-IN',
   renderNeutral: values => values.length === 0 ? '' :
-    `${values.map(v => `You must read every request through the template @shape(${v.trim()}) — it is the shape your input arrives in.`).join('\n')}\n\n`,
+    `${values.map(value => `You must read every request through the template @shape(${value.trim()}) — it is the shape your input arrives in.`).join('\n')}\n\n`,
   contributesFrontmatter: () => null,
 };
 
@@ -166,20 +166,20 @@ export function renderIdentityBlock(
   roleBehaviours = '',
 ): string {
   // One line per bound role; ROLE, ROLE-ABOUT and EXPERTISE align by position.
-  const roles = (metadata.get('ROLE') ?? []).map(r => r.trim());
+  const roles = (metadata.get('ROLE') ?? []).map(role => role.trim());
   const abouts = metadata.get('ROLE-ABOUT') ?? [];
   const expertises = metadata.get('EXPERTISE') ?? [];
   const mandateRaw = metadata.get('MANDATE')?.[0]?.trim() ?? '';
 
   if (roles.length === 0 && !mandateRaw) return '';
 
-  const A = FORMULAS.blocks.agent;
-  const lines: string[] = [A.identity, ''];
+  const agentFormulas = FORMULAS.blocks.agent;
+  const lines: string[] = [agentFormulas.identity, ''];
 
-  roles.forEach((role, k) => {
-    const about = abouts[k]?.trim() ?? '';
-    const expertise = splitList(expertises[k]?.trim() ?? '').map(item => fill(A.expertise, { item })).join(', ');
-    const formula = expertise ? (about ? A.roleAboutExpertise : A.roleExpertise) : (about ? A.roleAbout : A.role);
+  roles.forEach((role, index) => {
+    const about = abouts[index]?.trim() ?? '';
+    const expertise = splitList(expertises[index]?.trim() ?? '').map(item => fill(agentFormulas.expertise, { item })).join(', ');
+    const formula = expertise ? (about ? agentFormulas.roleAboutExpertise : agentFormulas.roleExpertise) : (about ? agentFormulas.roleAbout : agentFormulas.role);
     lines.push(fill(formula, { role, about, expertise }));
   });
 
@@ -225,23 +225,23 @@ export interface PerimeterGlobs {
 
 /** The files the agent decides, as a line lists them: `src/a.ts` (p=0.55), … */
 export function renderUncertain(uncertain: Record<string, number>): string {
-  return Object.entries(uncertain).map(([file, p]) => `${fill(FORMULAS.keywords.FOR.glob, { glob: file })} (p=${p.toFixed(2)})`).join(', ');
+  return Object.entries(uncertain).map(([file, probability]) => `${fill(FORMULAS.keywords.FOR.glob, { glob: file })} (p=${probability.toFixed(2)})`).join(', ');
 }
 
 /** The scope warning at the top of an agent's definition — the WRITES and READS globs of the domains it works within. */
-export function renderPerimeter(p: PerimeterGlobs): string {
-  const W = FORMULAS.keywords.WRITES;
-  const R = FORMULAS.keywords.READS;
+export function renderPerimeter(perimeter: PerimeterGlobs): string {
+  const writesFormulas = FORMULAS.keywords.WRITES;
+  const readsFormulas = FORMULAS.keywords.READS;
   const named = (globs: string[], side?: JudgedSide) => [
     ...(globs.length ? [renderGlobs(globs)] : []),
-    ...(side?.formulas ?? []).map(formula => fill(W.formula, { formula })),
+    ...(side?.formulas ?? []).map(formula => fill(writesFormulas.formula, { formula })),
   ].join(', ');
-  const writeNames = named(p.shown?.writes ?? p.writes, p.judged?.writes);
-  const writes = writeNames ? W.fence.map(line => fill(line, { globs: writeNames })) : [W.fence[0], W.none];
-  const readNames = p.reads ? named(p.shown?.reads ?? p.reads, p.judged?.reads) : '';
-  const reads = p.reads ? fill(R.only, { globs: readNames }) : R.all;
-  const uncertain = { ...p.judged?.reads.uncertain, ...p.judged?.writes.uncertain };
-  const decide = Object.keys(uncertain).length ? [fill(W.uncertain, { files: renderUncertain(uncertain) })] : [];
+  const writeNames = named(perimeter.shown?.writes ?? perimeter.writes, perimeter.judged?.writes);
+  const writes = writeNames ? writesFormulas.fence.map(line => fill(line, { globs: writeNames })) : [writesFormulas.fence[0], writesFormulas.none];
+  const readNames = perimeter.reads ? named(perimeter.shown?.reads ?? perimeter.reads, perimeter.judged?.reads) : '';
+  const reads = perimeter.reads ? fill(readsFormulas.only, { globs: readNames }) : readsFormulas.all;
+  const uncertain = { ...perimeter.judged?.reads.uncertain, ...perimeter.judged?.writes.uncertain };
+  const decide = Object.keys(uncertain).length ? [fill(writesFormulas.uncertain, { files: renderUncertain(uncertain) })] : [];
   return [...writes, reads, ...decide, '', ''].join('\n');
 }
 
@@ -258,19 +258,19 @@ export function stripHeaderKeyword(rawBody: string, keyword: Keyword, name: stri
   // role already resolved to indent 0 by the import path — must pass through
   // untouched, or the 2-space dedent would chop real content.
   const opensWithHeader = tokens.some(
-    t => t.kind === 'keyword' && t.keyword === keyword && t.rest === name,
+    token => token.kind === 'keyword' && token.keyword === keyword && token.rest === name,
   );
   if (!opensWithHeader) return rawBody.trim();
 
   const out: string[] = [];
   let stripped = false;
-  for (const t of tokens) {
-    if (!stripped && t.kind === 'keyword' && t.keyword === keyword && t.rest === name) {
+  for (const token of tokens) {
+    if (!stripped && token.kind === 'keyword' && token.keyword === keyword && token.rest === name) {
       stripped = true;
       continue;
     }
-    if (t.kind === 'blank') { out.push(''); continue; }
-    const raw = 'raw' in t ? t.raw : '';
+    if (token.kind === 'blank') { out.push(''); continue; }
+    const raw = 'raw' in token ? token.raw : '';
     out.push(raw.startsWith('  ') ? raw.slice(2) : raw);
   }
   return out.join('\n').trim();
@@ -303,7 +303,7 @@ export function applyBodySubstitutions(text: string, ctx: SubstitutionContext): 
   const shapes = ctx.templates;
   // AS first: a constant's value never becomes an AS line.
   const shaped = text.replace(/^([ \t]*)(!?AS!*)[ \t]+(\S+)[ \t]*$/gm, (_m, asIndent: string, asKeyword: string, asSlug: string) => {
-    const shape = shapes.find(s => s.name === asSlug);
+    const shape = shapes.find(candidate => candidate.name === asSlug);
     if (!shape) {
       throw new Error(`AS: unknown shape "${asSlug}" (no TEMPLATE with this name is imported)`);
     }
@@ -379,10 +379,10 @@ export const WhenPrimitive = createBulletGroupPrimitive({
  */
 /** `Run \`x\`` for one name, `Run \`a\`, \`b\` (in order)` for several — the context-free form. */
 function bareRun(values: string[]): string {
-  const R = FORMULAS.keywords.RUN;
+  const runFormulas = FORMULAS.keywords.RUN;
   return values.length === 1
-    ? fill(R.bare, { name: values[0] })
-    : fill(R.sequence, { names: values.map(name => fill(R.name, { name })).join(', ') });
+    ? fill(runFormulas.bare, { name: values[0] })
+    : fill(runFormulas.sequence, { names: values.map(name => fill(runFormulas.name, { name })).join(', ') });
 }
 
 export const RunPrimitive: BulletGroupPrimitive = {
@@ -393,14 +393,14 @@ export const RunPrimitive: BulletGroupPrimitive = {
     if (values.length === 0) return '';
     // No context: fallback rendering (lint pass, pre-bundle processing).
     if (!ctx) return `${bareRun(values)}\n\n`;
-    const R = FORMULAS.keywords.RUN;
+    const runFormulas = FORMULAS.keywords.RUN;
     const rendered = values.map(name => {
       const target = resolveRunTarget(name, ctx);
-      if (!target) return fill(R.unresolved, { target: name });
+      if (!target) return fill(runFormulas.unresolved, { target: name });
       if (target.kind === 'flow' && target.refId && ctx.flowCommand) {
-        return fill(R.flow, { name, ref: refSuffix(target.refId), command: ctx.flowCommand(target.refId) });
+        return fill(runFormulas.flow, { name, ref: refSuffix(target.refId), command: ctx.flowCommand(target.refId) });
       }
-      return fill(R.line, { kind: target.kind, name, ref: refSuffix(target.refId) });
+      return fill(runFormulas.line, { kind: target.kind, name, ref: refSuffix(target.refId) });
     });
     if (rendered.length === 1) return `${rendered[0]}\n\n`;
     return `${rendered.join('\n')}\n\n`;
@@ -422,6 +422,12 @@ export const DoPrimitive = createBulletGroupPrimitive({
 export const DelegatePrimitive = createBulletGroupPrimitive({
   keyword: 'DELEGATE',
   intro: FORMULAS.keywords.DELEGATE.intro,
+});
+
+/** `ASK <question>` — an agent's question to a delegate (src/delegation.ts); grouped like DO. */
+const AskPrimitive = createBulletGroupPrimitive({
+  keyword: 'ASK',
+  intro: FORMULAS.keywords.ASK.intro,
 });
 
 /** `FORK <task>` — work handed to a fork, on the conversation itself (src/delegation.ts); grouped like DO. */
@@ -478,6 +484,7 @@ export const FORCE_LEVEL_PRIMITIVES: BulletGroupPrimitive[] = [
   WhenPrimitive,
   RunPrimitive,
   DoPrimitive,
+  AskPrimitive,
   DelegatePrimitive,
   ForkPrimitive,
   WaitPrimitive,
@@ -546,7 +553,7 @@ export const ENUM_PRIMITIVES: EnumPrimitive[] = [
 ];
 
 export function enumPrimitiveFor(keyword: string): EnumPrimitive | null {
-  return ENUM_PRIMITIVES.find(p => p.keyword === keyword) ?? null;
+  return ENUM_PRIMITIVES.find(primitive => primitive.keyword === keyword) ?? null;
 }
 
 /** Registry: every primitive whose metadata can flow into adapter frontmatter. */
@@ -569,10 +576,10 @@ export function collectFrontmatter(
   adapterName: string,
 ): FrontmatterField[] {
   const out: FrontmatterField[] = [];
-  for (const p of FRONTMATTER_PRIMITIVES) {
-    const values = metadata.get(p.keyword);
+  for (const primitive of FRONTMATTER_PRIMITIVES) {
+    const values = metadata.get(primitive.keyword);
     if (!values || values.length === 0) continue;
-    const fields = p.contributesFrontmatter(adapterName, values as never);
+    const fields = primitive.contributesFrontmatter(adapterName, values as never);
     if (fields) out.push(...fields);
   }
   return out;
@@ -597,12 +604,12 @@ export function injectNeutralIfUnclaimed<V>(
 /** Render frontmatter fields as a YAML block (with `---` delimiters). */
 export function serializeFrontmatter(fields: FrontmatterField[]): string {
   const lines: string[] = ['---'];
-  for (const f of fields) {
-    if (Array.isArray(f.value)) {
-      lines.push(`${f.key}: |`);
-      for (const v of f.value) lines.push(`  - ${v}`);
+  for (const field of fields) {
+    if (Array.isArray(field.value)) {
+      lines.push(`${field.key}: |`);
+      for (const item of field.value) lines.push(`  - ${item}`);
     } else {
-      lines.push(`${f.key}: ${f.value}`);
+      lines.push(`${field.key}: ${field.value}`);
     }
   }
   lines.push('---', '');

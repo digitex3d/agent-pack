@@ -23,7 +23,6 @@ import { unitApxFiles, unitPayload, apxChecks } from '../apx/write.js';
 import { unitAgents } from '../apx/unit.js';
 import type { UnitSection } from '../apx/payload.js';
 import { buildExecutable, bunInstalled } from './executable.js';
-import { errorMessage } from '../errors.js';
 
 /**
  * CLI command: parse args, build a bundle (agent or skill), optionally
@@ -40,18 +39,18 @@ export async function bundle(args: string[]): Promise<void> {
   let executable = false;
   let target: string | null = null;
 
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--adapter' && args[i + 1]) adapterName = args[++i];
-    else if (args[i] === '--executable') executable = true;
-    else if (args[i] === '--target' && args[i + 1]) target = args[++i];
-    else if (args[i] === '--out' && args[i + 1]) outputDir = args[++i];
-    else if (args[i] === '--watch') watch = true;
-    else if (args[i] === '--apx-compress') config.bundle.apxCompress = true;
-    else if (args[i] === '--no-apx-compress') config.bundle.apxCompress = false;
-    else if (args[i] === '--no-judge') config.judge = null;
-    else if (args[i] === '--judge-strict') { if (config.judge) config.judge.offline = 'error'; }
-    else if (args[i] === '--config') i++;
-    else if (!args[i].startsWith('--') && !source) source = args[i];
+  for (let index = 0; index < args.length; index++) {
+    if (args[index] === '--adapter' && args[index + 1]) adapterName = args[++index];
+    else if (args[index] === '--executable') executable = true;
+    else if (args[index] === '--target' && args[index + 1]) target = args[++index];
+    else if (args[index] === '--out' && args[index + 1]) outputDir = args[++index];
+    else if (args[index] === '--watch') watch = true;
+    else if (args[index] === '--apx-compress') config.bundle.apxCompress = true;
+    else if (args[index] === '--no-apx-compress') config.bundle.apxCompress = false;
+    else if (args[index] === '--no-judge') config.judge = null;
+    else if (args[index] === '--judge-strict') { if (config.judge) config.judge.offline = 'error'; }
+    else if (args[index] === '--config') index++;
+    else if (!args[index].startsWith('--') && !source) source = args[index];
   }
   useReporter(chooseReporter(args));
   const report = reporter();
@@ -186,7 +185,7 @@ export async function bundleAllOnce(
   try {
     judge = openJudgeRun(config, ctx.projectRoot);
   } catch (err) {
-    report.info(`judge: ${errorMessage(err)}`);
+    report.info(`judge: ${err instanceof Error ? err.message : err}`);
     return false;
   }
   const programIds = new Set<string>();
@@ -205,8 +204,8 @@ export async function bundleAllOnce(
   const failed = new Set<string>();
   // The default delegate joins the build when some agent hands it work and the project has none of that name.
   const queue = [...agents];
-  for (let k = 0; k < queue.length; k++) {
-    const agent = queue[k];
+  for (let queueIndex = 0; queueIndex < queue.length; queueIndex++) {
+    const agent = queue[queueIndex];
     for (const adapter of adapters) {
       try {
         const { bundle, files } = await bundleAndEmit(agent.name, config, adapter, ctx, { judge });
@@ -215,17 +214,17 @@ export async function bundleAllOnce(
         const meta = bundle.structure?.meta;
         if (bundle.structure && (bundle.structure.perimeter() || meta?.background || meta?.marks)) guarded = true;
         const delegate = bundle.structure?.meta.delegate;
-        if (delegate && !queue.some(a => a.name === delegate)) queue.push({ name: delegate });
-        for (const f of files) {
-          const prior = written.get(f.path);
-          if (prior?.content === f.content || (prior && f.path.startsWith(shared))) continue;
+        if (delegate && !queue.some(queued => queued.name === delegate)) queue.push({ name: delegate });
+        for (const file of files) {
+          const prior = written.get(file.path);
+          if (prior?.content === file.content || (prior && file.path.startsWith(shared))) continue;
           if (prior && prior.adapter !== adapter.name) {
-            report.info(`adapters ${prior.adapter} and ${adapter.name} both write ${f.path} — keep only one of them in the config`);
+            report.info(`adapters ${prior.adapter} and ${adapter.name} both write ${file.path} — keep only one of them in the config`);
             totalErrors++;
             continue;
           }
-          written.set(f.path, { adapter: adapter.name, content: f.content });
-          writeFiles([f]);
+          written.set(file.path, { adapter: adapter.name, content: file.content });
+          writeFiles([file]);
         }
       } catch (err) {
         report.failed(err, `agent ${agent.name} on ${adapter.name}`);
@@ -291,8 +290,8 @@ export async function bundleAllOnce(
     };
     for (const name of teamNamesUnder(config.teamsDir)) {
       const team = await buildOrchestrationContent({ ...opts, team: name });
-      const t = team.held.teams[0];
-      if (t) teamUnits.push({ kind: 'team', name: t.name, about: t.about, version: '', teams: [t], members: [], text: `${team.content}\n` });
+      const heldTeam = team.held.teams[0];
+      if (heldTeam) teamUnits.push({ kind: 'team', name: heldTeam.name, about: heldTeam.about, version: '', teams: [heldTeam], members: [], text: `${team.content}\n` });
     }
     if (project) {
       // With a main, the orchestration is the main's: its apx prints it, AGENTS.md no longer holds it.
@@ -317,12 +316,12 @@ export async function bundleAllOnce(
     const { main } = project;
     units.push({ kind: 'main', name: main.name, about: main.about, version: main.version, ...held.held, text: `${project.content.trim()}\n\n${held.content.trim()}\n` });
   }
-  const agentNames = new Set(queue.map(a => a.name));
+  const agentNames = new Set(queue.map(queued => queued.name));
   const limits = { waitMax: config.wait?.max ?? null, markMax: config.mark?.max ?? null, drivers: config.drivers ?? null };
   for (const section of units) {
     try {
       if (agentNames.has(section.name)) throw new Error(`the ${section.kind} ${section.name} is called like an agent — both would be ${apxPath(section.name)}: rename one`);
-      for (const agent of unitAgents(section).filter(a => failed.has(a))) {
+      for (const agent of unitAgents(section).filter(agentName => failed.has(agentName))) {
         report.info(`${agent} failed to build: the ${section.kind} ${section.name} carries it as its last apx has it`);
       }
       // A team's own document — its flows, by the one compiler — is its apx's own image.
@@ -339,7 +338,7 @@ export async function bundleAllOnce(
       totalErrors++;
     }
   }
-  if (executable && !units.some(u => u.name === executable.name)) {
+  if (executable && !units.some(unit => unit.name === executable.name)) {
     report.info(`no ${executable.kind} ${executable.name} was built — its executable was not made`);
     totalErrors++;
   }
@@ -381,22 +380,22 @@ async function runWatchLoop(
   const watchPaths: string[] = [
     config.agentsDir,
     ...config.libraryRoot ? [config.libraryRoot] : [],
-    ...(config.sharedLibraries ?? []).filter(l => l.watch).map(l => l.path),
+    ...(config.sharedLibraries ?? []).filter(library => library.watch).map(library => library.path),
     // The main's file sits at the project root, under a name of its own: every root .ap is watched.
-    ...readdirSync(ctx.projectRoot).filter(f => f.endsWith('.ap')).map(f => resolve(ctx.projectRoot, f)),
+    ...readdirSync(ctx.projectRoot).filter(name => name.endsWith('.ap')).map(name => resolve(ctx.projectRoot, name)),
     BUILTIN_LIBRARY_ROOT,
   ];
   const watcher = chokidar.watch(watchPaths, {
     ignoreInitial: true,
-    ignored: (p: string) => /\.agent-pack\/|node_modules|\.git\//.test(p),
+    ignored: (watchedPath: string) => /\.agent-pack\/|node_modules|\.git\//.test(watchedPath),
     awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 },
   });
 
   let timer: NodeJS.Timeout | null = null;
   let running = false;
-  const triggerRebuild = (event: string, p: string) => {
-    if (!p.endsWith('.ap') && !p.endsWith('.yml')) return;
-    reporter().note(`[watch] ${event} ${p}`);
+  const triggerRebuild = (event: string, filePath: string) => {
+    if (!filePath.endsWith('.ap') && !filePath.endsWith('.yml')) return;
+    reporter().note(`[watch] ${event} ${filePath}`);
     if (timer) clearTimeout(timer);
     timer = setTimeout(async () => {
       if (running) return;
@@ -404,15 +403,15 @@ async function runWatchLoop(
       try {
         await bundleAllOnce(config, adapters, ctx);
       } catch (err) {
-        reporter().note(`[watch] error: ${errorMessage(err)}`);
+        reporter().note(`[watch] error: ${err instanceof Error ? err.message : err}`);
       } finally {
         running = false;
       }
     }, 200);
   };
-  watcher.on('add', (p: string) => triggerRebuild('add', p));
-  watcher.on('change', (p: string) => triggerRebuild('change', p));
-  watcher.on('unlink', (p: string) => triggerRebuild('unlink', p));
+  watcher.on('add', (filePath: string) => triggerRebuild('add', filePath));
+  watcher.on('change', (filePath: string) => triggerRebuild('change', filePath));
+  watcher.on('unlink', (filePath: string) => triggerRebuild('unlink', filePath));
 
   reporter().note('[watch] watching for .ap changes (Ctrl+C to stop)');
   process.on('SIGINT', () => {
@@ -422,10 +421,10 @@ async function runWatchLoop(
 }
 
 function writeFiles(files: EmittedFile[]): void {
-  for (const f of files) {
-    mkdirSync(dirname(f.path), { recursive: true });
-    writeFileSync(f.path, f.content, 'utf-8');
-    reporter().written(f.path);
+  for (const file of files) {
+    mkdirSync(dirname(file.path), { recursive: true });
+    writeFileSync(file.path, file.content, 'utf-8');
+    reporter().written(file.path);
   }
 }
 

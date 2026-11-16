@@ -1,0 +1,10 @@
+# run-project-checks — the project checks and the quality check every implementer runs before handing back
+IMPORT run-quality-check FROM @main.procedures
+
+EXPORT PROCEDURE run-project-checks:
+    ABOUT  run the test suite and the quality check, and fix what they report
+    DO  run `npm test` from the project root: it builds dist/, then runs every test
+    RUN  run-quality-check
+    UNTIL both report no failure and no finding in the files the change touches:
+        DO  fix each such failure or finding in the code, and run both again
+    DO  report every finding left in a file the change does not touch, with its tool, rule and file

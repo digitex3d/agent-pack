@@ -1818,7 +1818,7 @@
   "expected": [
    [
     6,
-    "FORK hands work to a fork of whoever runs a flow — it stands in a flow STEP; here, write DELEGATE",
+    "FORK hands work to a fork of whoever runs a flow — it stands in a flow STEP; an agent asks a question with ASK",
     null,
     "agents/library/roles/r.ap"
    ],
@@ -1845,7 +1845,7 @@
   "expected": [
    [
     6,
-    "FORK hands work to a fork of whoever runs a flow — it stands in a flow STEP; here, write DELEGATE",
+    "FORK hands work to a fork of whoever runs a flow — it stands in a flow STEP; an agent asks a question with ASK",
     null,
     "agents/library/procedures/p.ap"
    ],
@@ -2157,14 +2157,7 @@
    "DO thing",
    "ASK something"
   ],
-  "expected": [
-   [
-    4,
-    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"ASK something\"",
-    null,
-    "r.role.ap"
-   ]
-  ]
+  "expected": []
  },
  {
   "name": "role block: ASK",
@@ -2177,14 +2170,7 @@
    "  DO thing",
    "  ASK something"
   ],
-  "expected": [
-   [
-    5,
-    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"ASK something\"",
-    null,
-    "r.role.ap"
-   ]
-  ]
+  "expected": []
  },
  {
   "name": "procedure: ASK",
@@ -2197,14 +2183,7 @@
    "DO thing",
    "ASK something"
   ],
-  "expected": [
-   [
-    5,
-    "unexpected line in a procedure: \"ASK something\"",
-    null,
-    "p.procedure.ap"
-   ]
-  ]
+  "expected": []
  },
  {
   "name": "procedure block: ASK",
@@ -2217,14 +2196,7 @@
    "  DO thing",
    "  ASK something"
   ],
-  "expected": [
-   [
-    5,
-    "unexpected line in a procedure: \"ASK something\"",
-    null,
-    "p.procedure.ap"
-   ]
-  ]
+  "expected": []
  },
  {
   "name": "lintFile role: ASK",
@@ -2238,20 +2210,7 @@
    "  DO thing",
    "  ASK something"
   ],
-  "expected": [
-   [
-    6,
-    "ASK became DELEGATE — write `DELEGATE <task> INTO <name> BY <agent>`: \"ASK something\"",
-    null,
-    "agents/library/roles/r.ap"
-   ],
-   [
-    6,
-    "unexpected line in a role (expected EXPERTISE/ALWAYS/NEVER/WHEN/DO, EXTENDS, or metadata): \"ASK something\"",
-    null,
-    "agents/library/roles/r.ap"
-   ]
-  ]
+  "expected": []
  },
  {
   "name": "lintFile procedure: ASK",
@@ -2265,20 +2224,7 @@
    "  DO thing",
    "  ASK something"
   ],
-  "expected": [
-   [
-    6,
-    "ASK became DELEGATE — write `DELEGATE <task> INTO <name> BY <agent>`: \"ASK something\"",
-    null,
-    "agents/library/procedures/p.ap"
-   ],
-   [
-    6,
-    "unexpected line in a procedure: \"ASK something\"",
-    null,
-    "agents/library/procedures/p.ap"
-   ]
-  ]
+  "expected": []
  },
  {
   "name": "role flat: CONTRACT",

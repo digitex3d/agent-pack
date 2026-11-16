@@ -27,12 +27,11 @@ import type { LintError } from '../lint.js';
 import { reporter } from '../report.js';
 import { judgeState, loadJudgeRules, severityOf } from './rules.js';
 import { AGENT, DELEGATE, PROGRAM, executorOf, scriptRuleLines } from '../executor.js';
-import { FORK_VERB } from '../delegation.js';
+import { DELEGATE_VERB, FORK_VERB } from '../delegation.js';
 import { JudgeLock, verdictKey, questionKey } from './lock.js';
 import { DEFAULT_DOMAIN_THRESHOLDS, type DomainThresholds } from '../domains.js';
 import { sha256, UnitStore, type Unit, type UnitDiagnostic } from './units.js';
 import { JudgeError, isDirect, type JudgeCheck, type JudgeConfig, type JudgeQuestion, type JudgeRule } from './types.js';
-import { errorMessage } from '../errors.js';
 
 /** One check's verdict on one line text: the one that counts, and the judge's own when known. */
 interface CheckVerdict {
@@ -113,11 +112,11 @@ export class JudgeRun {
       judge: this.lock.judge,
       model: this.lock.model,
       threshold: this.options.threshold,
-      decisions: Object.entries(this.lock.decisions).sort(([a], [b]) => a < b ? -1 : 1),
-      rules: this.rules.map(r => ({
-        id: r.id,
-        checks: r.checks.map(c => ({ id: c.id, statement: c.statement, force: c.force, criteria: c.criteria })),
-        ...(r.examples.length ? { examples: r.examples, role: r.role } : {}),
+      decisions: Object.entries(this.lock.decisions).sort(([leftKey], [rightKey]) => leftKey < rightKey ? -1 : 1),
+      rules: this.rules.map(rule => ({
+        id: rule.id,
+        checks: rule.checks.map(check => ({ id: check.id, statement: check.statement, force: check.force, criteria: check.criteria })),
+        ...(rule.examples.length ? { examples: rule.examples, role: rule.role } : {}),
       })),
     }));
   }
@@ -154,17 +153,17 @@ export class JudgeRun {
 
   private async judgeText(rule: JudgeRule, text: string): Promise<CheckVerdict[] | NotJudged> {
     const state = judgeState(rule, text);
-    const keys = rule.checks.map(c => verdictKey(c, state));
-    const known = keys.map(k => ({ decision: this.lock.decision(k)?.p, machine: this.units.verdict(k) }));
-    if (known.every(v => v.decision !== undefined || v.machine !== undefined)) {
+    const keys = rule.checks.map(check => verdictKey(check, state));
+    const known = keys.map(key => ({ decision: this.lock.decision(key)?.p, machine: this.units.verdict(key) }));
+    if (known.every(entry => entry.decision !== undefined || entry.machine !== undefined)) {
       this.stats.cached++;
-      return rule.checks.map((check, i) => ({ check, p: known[i].decision ?? known[i].machine!, key: keys[i], machine: known[i].machine }));
+      return rule.checks.map((check, index) => ({ check, p: known[index].decision ?? known[index].machine!, key: keys[index], machine: known[index].machine }));
     }
     const answers = await this.ask(state, rule.checks);
     if (!(answers instanceof Map)) return answers;
-    return rule.checks.map((check, i) => {
+    return rule.checks.map((check, index) => {
       const machine = answers.get(check.id)!;
-      return { check, p: known[i].decision ?? machine, key: keys[i], machine };
+      return { check, p: known[index].decision ?? machine, key: keys[index], machine };
     });
   }
 
@@ -183,11 +182,11 @@ export class JudgeRun {
     try {
       answer = await this.limit(() => this.offlineReason ? Promise.resolve(null) : judge.ask(state, checks, this.lock.model ?? undefined));
       for (const check of checks) {
-        const p = answer?.answers[check.id];
-        if (answer && (typeof p !== 'number' || !(p >= 0 && p <= 1))) throw new JudgeError('line', `${judge.name} gave no probability for ${check.id}`);
+        const probability = answer?.answers[check.id];
+        if (answer && (typeof probability !== 'number' || !(probability >= 0 && probability <= 1))) throw new JudgeError('line', `${judge.name} gave no probability for ${check.id}`);
       }
     } catch (err) {
-      const message = errorMessage(err);
+      const message = err instanceof Error ? err.message : String(err);
       if ((err as Partial<JudgeError> | null)?.kind === 'line') {
         this.stats.notJudged++;
         return { reason: `${judge.name} failed on this line: ${message}` };
@@ -199,7 +198,7 @@ export class JudgeRun {
     this.stats.asked++;
     this.lock.pin(answer.model);
     // Each answer is a probability (checked above).
-    return new Map(checks.map(c => [c.id, answer!.answers[c.id] as number]));
+    return new Map(checks.map(check => [check.id, answer!.answers[check.id] as number]));
   }
 
   /**
@@ -279,8 +278,8 @@ function shipped(file: string | null): boolean {
 function inScope(scope: NonNullable<JudgeRule['scope']>, line: ApLine): boolean {
   if (scope === 'agent') return executorOf(line) === AGENT;
   if (line.primitive === 'RUN' || (line.line !== null && scriptRuleLines(line.block).has(line.line))) return false;
-  // A flow's delegation and a fork hand over context, never an input contract (src/executor.ts): not executed pieces.
-  if (line.block.kind === 'flow' || line.primitive === FORK_VERB) return false;
+  // A DELEGATE and a FORK hand the work over with its context, never an input contract (src/executor.ts): not executed pieces.
+  if (line.primitive === DELEGATE_VERB || line.primitive === FORK_VERB) return false;
   return executorOf(line) >= (scope === 'program' ? PROGRAM : DELEGATE);
 }
 
@@ -303,7 +302,7 @@ interface Judged {
  */
 export async function judgeDocument(doc: ApDocument, run: JudgeRun, sources: SourceRegistry): Promise<LintError[]> {
   const errors: LintError[] = [];
-  const report = (d: LintError): void => { if (d.severity === 'error') errors.push(d); else run.warn(d); };
+  const report = (lintError: LintError): void => { if (lintError.severity === 'error') errors.push(lintError); else run.warn(lintError); };
   const byFile = new Map<string | null, Judged[]>();
   for (const rule of run.rules) {
     for (const line of doc.lines()) {
@@ -319,18 +318,18 @@ export async function judgeDocument(doc: ApDocument, run: JudgeRun, sources: Sou
   const rules = run.rulesHash();
   for (const [file, judged] of byFile) {
     const unit = file ? run.file(file, sources) : null;
-    const keys = new Set(judged.flatMap(({ rule, line }) => rule.checks.map(c => verdictKey(c, judgeState(rule, line.text)))));
+    const keys = new Set(judged.flatMap(({ rule, line }) => rule.checks.map(check => verdictKey(check, judgeState(rule, line.text)))));
     for (const key of keys) run.usedKeys.add(key);
     const prior = unit?.prior;
     if (unit && prior && prior.hash === unit.hash && prior.rules === rules && prior.model === run.lock.model
-      && [...keys].every(k => k in prior.verdicts || run.lock.decision(k) !== null)) {
+      && [...keys].every(key => key in prior.verdicts || run.lock.decision(key) !== null)) {
       // Unchanged: the unit's diagnostics on these lines, as they are.
-      const lines = new Set(judged.map(j => j.line.line ?? 0));
+      const lines = new Set(judged.map(entry => entry.line.line ?? 0));
       for (const key of keys) if (key in prior.verdicts) unit.verdicts.set(key, prior.verdicts[key].p);
-      for (const d of prior.diagnostics) {
-        if (!lines.has(d.line) || !keys.has(d.data.key)) continue;
-        unit.diagnostics.set(diagnosticId(d), d);
-        report({ file: file!, ...d });
+      for (const priorDiagnostic of prior.diagnostics) {
+        if (!lines.has(priorDiagnostic.line) || !keys.has(priorDiagnostic.data.key)) continue;
+        unit.diagnostics.set(diagnosticId(priorDiagnostic), priorDiagnostic);
+        report({ file: file!, ...priorDiagnostic });
       }
       continue;
     }
@@ -349,12 +348,12 @@ export async function judgeDocument(doc: ApDocument, run: JudgeRun, sources: Sou
       for (const { check, p, key, machine } of result) {
         if (machine !== undefined) unit?.verdicts.set(key, machine);
         if (p >= run.options.threshold) continue;
-        const d: UnitDiagnostic = {
+        const unitDiagnostic: UnitDiagnostic = {
           ...diagnostic(line, check, severityOf(check)!, `${writtenKeyword(line.primitive, line.force ?? 0)} line breaks the rule "${negation(check)}${check.statement}" (p=${p.toFixed(2)})`),
           data: { p, key },
         };
-        unit?.diagnostics.set(diagnosticId(d), d);
-        report({ file: where, ...d });
+        unit?.diagnostics.set(diagnosticId(unitDiagnostic), unitDiagnostic);
+        report({ file: where, ...unitDiagnostic });
       }
     }
   }
@@ -362,8 +361,8 @@ export async function judgeDocument(doc: ApDocument, run: JudgeRun, sources: Sou
 }
 
 /** A diagnostic's identity within its unit. */
-function diagnosticId(d: UnitDiagnostic): string {
-  return `${d.line}:${d.col}:${d.code}:${d.data.key}`;
+function diagnosticId(unitDiagnostic: UnitDiagnostic): string {
+  return `${unitDiagnostic.line}:${unitDiagnostic.col}:${unitDiagnostic.code}:${unitDiagnostic.data.key}`;
 }
 
 /**
@@ -376,9 +375,9 @@ function unitOf(run: JudgeRun, file: string, judged: FileJudgement, rules: strin
   const diagnostics = new Map(judged.diagnostics);
   const prior = judged.prior;
   if (keepPrior && prior) {
-    for (const [key, v] of Object.entries(prior.verdicts)) if (!verdicts.has(key)) verdicts.set(key, v.p);
+    for (const [key, verdict] of Object.entries(prior.verdicts)) if (!verdicts.has(key)) verdicts.set(key, verdict.p);
     if (prior.hash === judged.hash && prior.rules === rules) {
-      for (const d of prior.diagnostics) if (!diagnostics.has(diagnosticId(d))) diagnostics.set(diagnosticId(d), d);
+      for (const priorDiagnostic of prior.diagnostics) if (!diagnostics.has(diagnosticId(priorDiagnostic))) diagnostics.set(diagnosticId(priorDiagnostic), priorDiagnostic);
     }
   }
   return {
@@ -387,9 +386,9 @@ function unitOf(run: JudgeRun, file: string, judged: FileJudgement, rules: strin
     model,
     hash: judged.hash,
     rules,
-    verdicts: Object.fromEntries([...verdicts.keys()].sort().map(k => [k, { p: verdicts.get(k)! }])),
-    diagnostics: [...diagnostics.values()].sort((a, b) =>
-      a.line - b.line || (a.col ?? 0) - (b.col ?? 0) || (a.code < b.code ? -1 : a.code > b.code ? 1 : 0) || (a.data.key < b.data.key ? -1 : 1)),
+    verdicts: Object.fromEntries([...verdicts.keys()].sort().map(key => [key, { p: verdicts.get(key)! }])),
+    diagnostics: [...diagnostics.values()].sort((left, right) =>
+      left.line - right.line || (left.col ?? 0) - (right.col ?? 0) || (left.code < right.code ? -1 : left.code > right.code ? 1 : 0) || (left.data.key < right.data.key ? -1 : 1)),
   };
 }
 
@@ -408,18 +407,18 @@ export function finishJudgeRun(run: JudgeRun, opts: { prune: boolean }): void {
   report.diagnostics(warnings);
   if (run.offlineReason) report.info(`judge ${run.options.adapter.name} unavailable: ${run.offlineReason}`);
   // A #executed / #program rule names no keyword: its lines are counted, not named.
-  const primitives = [...new Set(run.rules.flatMap(r => r.primitives))].join('/');
+  const primitives = [...new Set(run.rules.flatMap(rule => rule.primitives))].join('/');
   const { lines, pairs, cached, asked, notJudged } = run.stats;
   const files = [...run.files.values()];
-  const rejudged = files.filter(f => f.rejudged).length;
+  const rejudged = files.filter(judgement => judgement.rejudged).length;
   report.note(`judge: ${warnings.length} warnings — ${files.length} files, ${files.length - rejudged} unchanged; ${lines} ${primitives} lines, ${pairs} rule×line checks: ${cached} from saved verdicts, ${asked} asked, ${notJudged} not judged (${run.lock.model ?? 'no model yet'})`);
   try {
     run.lock.save();
   } catch (err) {
-    report.info(`judge: could not save the lock — ${errorMessage(err)}`);
+    report.info(`judge: could not save the lock — ${err instanceof Error ? err.message : String(err)}`);
   }
   if (opts.prune) {
-    const orphans = Object.keys(run.lock.decisions).filter(k => !run.usedKeys.has(k)).sort();
+    const orphans = Object.keys(run.lock.decisions).filter(key => !run.usedKeys.has(key)).sort();
     if (orphans.length > 0) {
       report.info(`judge: ${orphans.length} decision(s) in the lock match no line any more (rule or line edited or removed) — review them: ${orphans.join(', ')}`);
     }
@@ -432,6 +431,6 @@ export function finishJudgeRun(run: JudgeRun, opts: { prune: boolean }): void {
     }
     if (opts.prune) run.units.prune(run.files.keys());
   } catch (err) {
-    report.info(`judge: could not save the units — ${errorMessage(err)}`);
+    report.info(`judge: could not save the units — ${err instanceof Error ? err.message : String(err)}`);
   }
 }

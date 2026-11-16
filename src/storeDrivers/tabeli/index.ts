@@ -38,9 +38,9 @@ const EXIT = { ok: 0, none: 1, usage: 2, stale: 4 };
 
 /** Run the table, throwing with its own words when it fails for a reason that is not an answer. */
 function run(path: string, args: string[], answers: number[] = [EXIT.ok]): { status: number; out: string } {
-  const r = runTable(path, args);
-  const status = r.status ?? EXIT.usage;
-  const out = `${r.stdout ?? ''}${r.stderr ?? ''}`;
+  const result = runTable(path, args);
+  const status = result.status ?? EXIT.usage;
+  const out = `${result.stdout ?? ''}${result.stderr ?? ''}`;
   if (!answers.includes(status)) throw new Error(out.trim() || `tabeli exited ${status}`);
   return { status, out };
 }
@@ -55,67 +55,67 @@ interface Table {
 }
 
 /** The table's record id for a key — null when there is none. */
-function idOf(t: Table, k: string): string | null {
-  if (!t.key) return /^\d+$/.test(k) ? k : null;
-  return queryTable(t.path, [`${t.key}=${k}`])[0]?.id.toString() ?? null;
+function idOf(table: Table, recordKey: string): string | null {
+  if (!table.key) return /^\d+$/.test(recordKey) ? recordKey : null;
+  return queryTable(table.path, [`${table.key}=${recordKey}`])[0]?.id.toString() ?? null;
 }
 
 /** The record with this id, as a store record. */
-const byId = (t: Table, id: string): Doc | null => queryTable(t.path, [`id=${id}`]).map(recordOf)[0] ?? null;
+const byId = (table: Table, id: string): Doc | null => queryTable(table.path, [`id=${id}`]).map(recordOf)[0] ?? null;
 
-function put(t: Table, doc: Doc): { id: string; updated: boolean } {
-  const existing = t.key && doc[t.key] !== undefined ? idOf(t, String(doc[t.key])) : null;
+function put(table: Table, doc: Doc): { id: string; updated: boolean } {
+  const existing = table.key && doc[table.key] !== undefined ? idOf(table, String(doc[table.key])) : null;
   if (existing) {
-    run(t.path, ['s', existing, ...fieldArgs(doc)]);
+    run(table.path, ['s', existing, ...fieldArgs(doc)]);
     return { id: existing, updated: true };
   }
-  return { id: idIn(run(t.path, ['a', ...fieldArgs(doc)]).out), updated: false };
+  return { id: idIn(run(table.path, ['a', ...fieldArgs(doc)]).out), updated: false };
 }
 
-function set(t: Table, k: string, fields: Doc, guard: Filter[] = []): 'set' | 'missing' | 'stale' {
-  const id = idOf(t, k);
+function set(table: Table, recordKey: string, fields: Doc, guard: Filter[] = []): 'set' | 'missing' | 'stale' {
+  const id = idOf(table, recordKey);
   if (!id) return 'missing';
-  const r = run(t.path, ['s', id, ...fieldArgs(fields), ...(guard.length ? ['if', ...guard.map(filterText)] : [])], [EXIT.ok, EXIT.stale]);
-  return r.status === EXIT.stale ? 'stale' : 'set';
+  const result = run(table.path, ['s', id, ...fieldArgs(fields), ...(guard.length ? ['if', ...guard.map(filterText)] : [])], [EXIT.ok, EXIT.stale]);
+  return result.status === EXIT.stale ? 'stale' : 'set';
 }
 
-function remove(t: Table, k: string): boolean {
-  const id = idOf(t, k);
+function remove(table: Table, recordKey: string): boolean {
+  const id = idOf(table, recordKey);
   if (!id) return false;
-  run(t.path, ['d', id]);
+  run(table.path, ['d', id]);
   return true;
 }
 
-function take(t: Table, filters: Filter[], fields: Doc): Doc | null {
-  const r = run(t.path, ['next', ...filters.map(filterText), 'set', ...fieldArgs(fields)], [EXIT.ok, EXIT.none]);
-  return r.status === EXIT.none ? null : byId(t, idIn(r.out));
+function take(table: Table, filters: Filter[], fields: Doc): Doc | null {
+  const result = run(table.path, ['next', ...filters.map(filterText), 'set', ...fieldArgs(fields)], [EXIT.ok, EXIT.none]);
+  return result.status === EXIT.none ? null : byId(table, idIn(result.out));
 }
 
-function since(t: Table, mark: string): Doc[] | null {
-  const r = run(t.path, ['diff', mark], [EXIT.ok, EXIT.usage]);
-  if (r.status === EXIT.usage) return null;
-  return [...r.out.matchAll(/^id=(\d+)/gm)].map(m => byId(t, m[1])).filter((d): d is Doc => d !== null);
+function since(table: Table, mark: string): Doc[] | null {
+  const result = run(table.path, ['diff', mark], [EXIT.ok, EXIT.usage]);
+  if (result.status === EXIT.usage) return null;
+  return [...result.out.matchAll(/^id=(\d+)/gm)].map(match => byId(table, match[1])).filter((doc): doc is Doc => doc !== null);
 }
 
 function collection(store: StoreRef, engine: string | undefined): Collection {
   const unopened = openTable(store.path, engine);
   if (unopened) throw new Error(unopened);
-  const t: Table = { path: store.path, key: store.key };
+  const table: Table = { path: store.path, key: store.key };
   return {
-    put: doc => put(t, doc),
-    get: k => {
-      const id = idOf(t, k);
-      return id ? byId(t, id) : null;
+    put: doc => put(table, doc),
+    get: recordKey => {
+      const id = idOf(table, recordKey);
+      return id ? byId(table, id) : null;
     },
     find: (filters, limit) => {
-      const found = queryTable(t.path, filters.map(filterText)).map(recordOf);
+      const found = queryTable(table.path, filters.map(filterText)).map(recordOf);
       return limit ? found.slice(0, limit) : found;
     },
-    set: (k, fields, guard) => set(t, k, fields, guard),
-    remove: k => remove(t, k),
-    take: (filters, fields) => take(t, filters, fields),
-    mark: () => /# cursor=(\S+)/.exec(run(t.path, ['cursor']).out)?.[1] ?? '',
-    since: mark => since(t, mark),
+    set: (recordKey, fields, guard) => set(table, recordKey, fields, guard),
+    remove: recordKey => remove(table, recordKey),
+    take: (filters, fields) => take(table, filters, fields),
+    mark: () => /# cursor=(\S+)/.exec(run(table.path, ['cursor']).out)?.[1] ?? '',
+    since: mark => since(table, mark),
   };
 }
 
@@ -132,13 +132,13 @@ export function tabeliDriver(engine?: string): StoreDriver {
     },
 
     rejects(slot: ApSlot) {
-      const t = slot.type;
-      if (t.kind === 'shape') {
-        return `slot "${slot.name}" holds another shape (<${t.ref.target}>), and a tabeli record is flat key=value — ` +
+      const slotType = slot.type;
+      if (slotType.kind === 'shape') {
+        return `slot "${slot.name}" holds another shape (<${slotType.ref.target}>), and a tabeli record is flat key=value — ` +
           'give the nested shape its own STORE and point at it by key';
       }
-      if (t.kind === 'list') {
-        return `slot "${slot.name}" holds a list of <${t.ref.target}>, and a tabeli record is flat key=value — ` +
+      if (slotType.kind === 'list') {
+        return `slot "${slot.name}" holds a list of <${slotType.ref.target}>, and a tabeli record is flat key=value — ` +
           'give the listed shape its own STORE, with a slot naming the record it belongs to';
       }
       return null;

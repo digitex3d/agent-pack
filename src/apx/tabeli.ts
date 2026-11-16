@@ -45,7 +45,7 @@ export function openTable(path: string, engine: string | undefined): string | nu
 
 /** Fields as the engine's command line takes them: one `field=value` argument each. */
 export function fieldArgs(fields: Record<string, unknown>): string[] {
-  return Object.entries(fields).map(([f, v]) => `${f}=${String(v)}`);
+  return Object.entries(fields).map(([field, value]) => `${field}=${String(value)}`);
 }
 
 /** Run a table with a verb and its arguments. */
@@ -55,9 +55,9 @@ export function runTable(table: string, args: string[]): SpawnSyncReturns<string
 
 /** The records matching `filters` (`field=value` …), as tabeli answers them in JSON — byte for byte. Throws on a failure. */
 export function queryTable(table: string, filters: string[]): ({ id: number } & Record<string, string>)[] {
-  const q = runTable(table, ['q', ...filters, 'json', 'limit=0']);
-  if (q.status !== 0) throw new Error(`${q.error?.message ?? `${q.stderr}${q.stdout}`}`.trim());
-  return JSON.parse(q.stdout) as ({ id: number } & Record<string, string>)[];
+  const result = runTable(table, ['q', ...filters, 'json', 'limit=0']);
+  if (result.status !== 0) throw new Error(`${result.error?.message ?? `${result.stderr}${result.stdout}`}`.trim());
+  return JSON.parse(result.stdout) as ({ id: number } & Record<string, string>)[];
 }
 
 /**

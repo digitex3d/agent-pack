@@ -1,0 +1,8 @@
+# acceptance-criterion
+
+EXPORT TEMPLATE acceptance-criterion:
+    ABOUT  one testable condition a feature must meet
+    SLOTS:
+        criterion:  TEXT MAX_WORDS 25  "the condition, stated so that a test can check it"
+    BODY:
+        - {criterion}

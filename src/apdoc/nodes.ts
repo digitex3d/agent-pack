@@ -106,24 +106,24 @@ export class DirectiveNode extends NodeBase implements ApDirectiveNode {
     };
   }
 
-  static fromData(n: ApDirectiveNode): DirectiveNode {
-    const node = new DirectiveNode(n.keyword, n.force, n.text, n.indent, n.body ? reviveNodes(n.body) : undefined);
-    if (n.shape) node.shape = n.shape;
-    if (n.into) node.into = n.into;
-    if (n.uses) node.uses = n.uses;
-    if (n.by) node.by = n.by;
-    if (n.harness) node.harness = n.harness;
-    if (n.as) node.as = n.as;
-    if (n.async) node.async = n.async;
-    if (n.exe) node.exe = n.exe;
-    if (n.work) node.work = n.work;
-    if (n.element) node.element = n.element;
-    if (n.waits) node.waits = n.waits;
-    if (n.mark) node.mark = n.mark;
-    if (n.list) node.list = n.list;
-    if (n.max) node.max = n.max;
-    if (n.within) node.within = n.within;
-    node.chars = n.chars;
+  static fromData(data: ApDirectiveNode): DirectiveNode {
+    const node = new DirectiveNode(data.keyword, data.force, data.text, data.indent, data.body ? reviveNodes(data.body) : undefined);
+    if (data.shape) node.shape = data.shape;
+    if (data.into) node.into = data.into;
+    if (data.uses) node.uses = data.uses;
+    if (data.by) node.by = data.by;
+    if (data.harness) node.harness = data.harness;
+    if (data.as) node.as = data.as;
+    if (data.async) node.async = data.async;
+    if (data.exe) node.exe = data.exe;
+    if (data.work) node.work = data.work;
+    if (data.element) node.element = data.element;
+    if (data.waits) node.waits = data.waits;
+    if (data.mark) node.mark = data.mark;
+    if (data.list) node.list = data.list;
+    if (data.max) node.max = data.max;
+    if (data.within) node.within = data.within;
+    node.chars = data.chars;
     return node;
   }
 
@@ -162,11 +162,11 @@ export class RunNode extends NodeBase implements ApRunNode {
     super(indent);
   }
 
-  static fromData(n: ApRunNode): RunNode {
-    const node = new RunNode(n.ref, n.indent);
-    if (n.into) node.into = n.into;
-    if (n.shape) node.shape = n.shape;
-    node.chars = n.chars;
+  static fromData(data: ApRunNode): RunNode {
+    const node = new RunNode(data.ref, data.indent);
+    if (data.into) node.into = data.into;
+    if (data.shape) node.shape = data.shape;
+    node.chars = data.chars;
     return node;
   }
 
@@ -199,9 +199,9 @@ export class TextNode extends NodeBase implements ApTextNode {
     super();
   }
 
-  static fromData(n: ApTextNode): TextNode {
-    const node = new TextNode(n.raw);
-    node.chars = n.chars;
+  static fromData(data: ApTextNode): TextNode {
+    const node = new TextNode(data.raw);
+    node.chars = data.chars;
     return node;
   }
 
@@ -223,15 +223,15 @@ export class TextNode extends NodeBase implements ApTextNode {
  * The head line of an IF/UNTIL: `If <condition>` — or, checked, the condition
  * (unless sealed) and the command of the apx whose answer decides it.
  */
-function conditionHead(kind: CheckKind, n: { condition: string; check?: ApCondCheck; executor?: number; exe?: string }, env: MdEnv): string {
-  if (n.executor) {
-    const rounds = n.exe ? env.roundsOf?.(n.exe) : undefined;
-    return executorHead(`${controlHead(kind)} ${env.substitute(n.condition)}`, n.executor) + executorHow(env, n.exe, n.executor)
+function conditionHead(kind: CheckKind, node: { condition: string; check?: ApCondCheck; executor?: number; exe?: string }, env: MdEnv): string {
+  if (node.executor) {
+    const rounds = node.exe ? env.roundsOf?.(node.exe) : undefined;
+    return executorHead(`${controlHead(kind)} ${env.substitute(node.condition)}`, node.executor) + executorHow(env, node.exe, node.executor)
       + (rounds ? executorRounds(rounds) : '');
   }
-  if (!n.check) return `${controlHead(kind)} ${env.substitute(n.condition)}`;
+  if (!node.check) return `${controlHead(kind)} ${env.substitute(node.condition)}`;
   // A checked condition is a block of the document that holds it — an agent's body, or a unit's flow: reached by its id there.
-  return checkHead(kind, n.check, env.substitute(n.condition), env.apxOf(null));
+  return checkHead(kind, node.check, env.substitute(node.condition), env.apxOf(null));
 }
 
 export class IfNode extends NodeBase implements ApIfNode {
@@ -246,14 +246,14 @@ export class IfNode extends NodeBase implements ApIfNode {
     super(indent);
   }
 
-  static fromData(n: ApIfNode): IfNode {
-    const node = new IfNode(n.condition, n.indent);
-    if (n.check) node.check = n.check;
-    if (n.executor) node.executor = n.executor;
-    if (n.exe) node.exe = n.exe;
-    node.then = reviveNodes(n.then);
-    node.else = reviveNodes(n.else);
-    node.chars = n.chars;
+  static fromData(data: ApIfNode): IfNode {
+    const node = new IfNode(data.condition, data.indent);
+    if (data.check) node.check = data.check;
+    if (data.executor) node.executor = data.executor;
+    if (data.exe) node.exe = data.exe;
+    node.then = reviveNodes(data.then);
+    node.else = reviveNodes(data.else);
+    node.chars = data.chars;
     return node;
   }
 
@@ -299,13 +299,13 @@ export class UntilNode extends NodeBase implements ApUntilNode {
     if (max) this.max = max;
   }
 
-  static fromData(n: ApUntilNode): UntilNode {
-    const node = new UntilNode(n.condition, n.indent, n.max);
-    if (n.check) node.check = n.check;
-    if (n.executor) node.executor = n.executor;
-    if (n.exe) node.exe = n.exe;
-    node.body = reviveNodes(n.body);
-    node.chars = n.chars;
+  static fromData(data: ApUntilNode): UntilNode {
+    const node = new UntilNode(data.condition, data.indent, data.max);
+    if (data.check) node.check = data.check;
+    if (data.executor) node.executor = data.executor;
+    if (data.exe) node.exe = data.exe;
+    node.body = reviveNodes(data.body);
+    node.chars = data.chars;
     return node;
   }
 
@@ -351,11 +351,11 @@ export class VarNode extends NodeBase implements ApVarNode {
     this.var = ref;
   }
 
-  static fromData(n: ApVarNode): VarNode {
-    const node = new VarNode(n.var, n.indent);
-    if (n.shape) node.shape = n.shape;
-    node.body = reviveNodes(n.body);
-    node.chars = n.chars;
+  static fromData(data: ApVarNode): VarNode {
+    const node = new VarNode(data.var, data.indent);
+    if (data.shape) node.shape = data.shape;
+    node.body = reviveNodes(data.body);
+    node.chars = data.chars;
     return node;
   }
 
@@ -370,7 +370,7 @@ export class VarNode extends NodeBase implements ApVarNode {
 
   asMdLines(env: MdEnv, ordered: boolean): string[] {
     // The added lines sit with the body's own: at its first node's indent.
-    const inner = (this.body.find(n => 'indent' in n) as { indent?: number } | undefined)?.indent ?? (this.indent ?? 0) + 2;
+    const inner = (this.body.find(child => 'indent' in child) as { indent?: number } | undefined)?.indent ?? (this.indent ?? 0) + 2;
     // A lone RUN of a procedure a delegate or a program carries out: `answer` / `run` stores the value itself.
     const [only] = this.body;
     if (this.body.length === 1 && only.type === 'run' && !only.into && only.ref.resolved !== false && env.exeOf?.(only.ref.target)) {
@@ -402,12 +402,12 @@ export class WhenNode extends NodeBase implements ApWhenNode {
     super(indent);
   }
 
-  static fromData(n: ApWhenNode): WhenNode {
-    const node = new WhenNode(n.condition, n.indent);
-    if (n.shape) node.shape = n.shape;
-    if (n.input) node.input = n.input;
-    node.body = reviveNodes(n.body);
-    node.chars = n.chars;
+  static fromData(data: ApWhenNode): WhenNode {
+    const node = new WhenNode(data.condition, data.indent);
+    if (data.shape) node.shape = data.shape;
+    if (data.input) node.input = data.input;
+    node.body = reviveNodes(data.body);
+    node.chars = data.chars;
     return node;
   }
 
@@ -424,7 +424,7 @@ export class WhenNode extends NodeBase implements ApWhenNode {
   asMdLines(env: MdEnv, ordered: boolean): string[] {
     const body = renderNodes(env, this.body, ordered);
     // The input and shape lines open the body, at the body's own indent.
-    const inner = body.find(l => l.trim() !== '')?.match(/^ */)?.[0].length ?? (this.indent ?? 0) + 4;
+    const inner = body.find(line => line.trim() !== '')?.match(/^ */)?.[0].length ?? (this.indent ?? 0) + 4;
     return [
       ...indentLines([`${controlHead('WHEN')} ${env.substitute(this.condition)}:`], this.indent ?? 0),
       ...(this.input ? indentLines([fill(FORMULAS.keywords.WHEN.handed, { name: refName(this.input), ref: env.refOf(this.input.target) })], inner) : []),
@@ -446,10 +446,10 @@ export class StepNode extends NodeBase implements ApStepNode {
     super();
   }
 
-  static fromData(n: ApStepNode): StepNode {
-    const node = new StepNode(n.title);
-    node.body = reviveNodes(n.body);
-    node.chars = n.chars;
+  static fromData(data: ApStepNode): StepNode {
+    const node = new StepNode(data.title);
+    node.body = reviveNodes(data.body);
+    node.chars = data.chars;
     return node;
   }
 
@@ -497,10 +497,10 @@ export class InNode extends NodeBase implements ApInNode {
     super(indent);
   }
 
-  static fromData(n: ApInNode): InNode {
-    const node = new InNode(n.store, n.indent);
-    node.body = reviveNodes(n.body);
-    node.chars = n.chars;
+  static fromData(data: ApInNode): InNode {
+    const node = new InNode(data.store, data.indent);
+    node.body = reviveNodes(data.body);
+    node.chars = data.chars;
     return node;
   }
 
@@ -532,10 +532,10 @@ export class EachNode extends NodeBase implements ApEachNode {
     super(indent);
   }
 
-  static fromData(n: ApEachNode): EachNode {
-    const node = new EachNode(n.each, n.indent);
-    node.body = reviveNodes(n.body);
-    node.chars = n.chars;
+  static fromData(data: ApEachNode): EachNode {
+    const node = new EachNode(data.each, data.indent);
+    node.body = reviveNodes(data.body);
+    node.chars = data.chars;
     return node;
   }
 
@@ -544,9 +544,9 @@ export class EachNode extends NodeBase implements ApEachNode {
   }
 
   asMdLines(env: MdEnv, ordered: boolean): string[] {
-    const waited = this.body.some(n => n.type === 'directive' && !n.async);
+    const waited = this.body.some(child => child.type === 'directive' && !child.async);
     return [
-      ...indentLines([eachHead({ ...this.each, list: refName(this.each.list) }, waited, t => env.substitute(t))], this.indent ?? 0),
+      ...indentLines([eachHead({ ...this.each, list: refName(this.each.list) }, waited, text => env.substitute(text))], this.indent ?? 0),
       ...renderNodes(env, this.body, ordered),
     ];
   }
@@ -564,23 +564,23 @@ type Reviver = (data: ApNode) => ApNode;
 
 /** One reviver per node type — pointers to the classes' own `fromData`. */
 const REVIVERS: Record<string, Reviver> = {
-  directive: d => DirectiveNode.fromData(d as ApDirectiveNode),
-  run:       d => RunNode.fromData(d as ApRunNode),
-  text:      d => TextNode.fromData(d as ApTextNode),
-  if:        d => IfNode.fromData(d as ApIfNode),
-  until:     d => UntilNode.fromData(d as ApUntilNode),
-  when:      d => WhenNode.fromData(d as ApWhenNode),
-  step:      d => StepNode.fromData(d as ApStepNode),
-  each:      d => EachNode.fromData(d as ApEachNode),
-  in:        d => InNode.fromData(d as ApInNode),
-  var:       d => VarNode.fromData(d as ApVarNode),
+  directive: data => DirectiveNode.fromData(data as ApDirectiveNode),
+  run:       data => RunNode.fromData(data as ApRunNode),
+  text:      data => TextNode.fromData(data as ApTextNode),
+  if:        data => IfNode.fromData(data as ApIfNode),
+  until:     data => UntilNode.fromData(data as ApUntilNode),
+  when:      data => WhenNode.fromData(data as ApWhenNode),
+  step:      data => StepNode.fromData(data as ApStepNode),
+  each:      data => EachNode.fromData(data as ApEachNode),
+  in:        data => InNode.fromData(data as ApInNode),
+  var:       data => VarNode.fromData(data as ApVarNode),
 };
 
 /** Lines shifted left by their common indentation. */
 export function dedentLines(lines: string[]): string[] {
-  const indents = lines.filter(l => l.trim() !== '').map(l => l.length - l.trimStart().length);
+  const indents = lines.filter(line => line.trim() !== '').map(line => line.length - line.trimStart().length);
   const base = indents.length ? Math.min(...indents) : 0;
-  return base ? lines.map(l => l.slice(Math.min(base, l.length - l.trimStart().length))) : lines;
+  return base ? lines.map(line => line.slice(Math.min(base, line.length - line.trimStart().length))) : lines;
 }
 
 
@@ -593,9 +593,9 @@ export function dedentLines(lines: string[]): string[] {
 export function* walk(nodes: readonly ApNode[], containers: readonly ApNode[] = []): Generator<{ node: ApNode; containers: ApNode[] }> {
   for (const node of nodes) {
     yield { node, containers: [...containers] };
-    for (const v of Object.values(node)) {
-      if (Array.isArray(v) && v.length > 0 && typeof v[0] === 'object' && v[0] !== null && 'type' in v[0]) {
-        yield* walk(v as ApNode[], [...containers, node]);
+    for (const field of Object.values(node)) {
+      if (Array.isArray(field) && field.length > 0 && typeof field[0] === 'object' && field[0] !== null && 'type' in field[0]) {
+        yield* walk(field as ApNode[], [...containers, node]);
       }
     }
   }
@@ -609,5 +609,5 @@ export function someNode(nodes: readonly ApNode[], pred: (n: ApNode) => boolean)
 
 /** Revive an array of serialized nodes into typed node instances. */
 export function reviveNodes<T extends ApNode>(data: T[]): T[] {
-  return data.map(d => (REVIVERS[d.type]?.(d) ?? d) as T);
+  return data.map(item => (REVIVERS[item.type]?.(item) ?? item) as T);
 }

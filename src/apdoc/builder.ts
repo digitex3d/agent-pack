@@ -71,8 +71,8 @@ function parseForce(keyword: string): { base: string; force: number | null } {
 }
 
 /** Trimmed form of stripTrailingColon — for names/titles read from rests. */
-function stripColon(s: string): string {
-  return stripTrailingColon(s).trim();
+function stripColon(text: string): string {
+  return stripTrailingColon(text).trim();
 }
 import type { ApBlock, ApBlockInit } from './block.js';
 import {
@@ -86,7 +86,7 @@ import { parseTemplate, type Slot } from '../shapeCompiler.js';
 
 
 /** Bullet-group keywords (DO, BY, WHEN, LOG, …) that group like force levels. */
-const BULLET_KEYWORDS = new Set(FORCE_LEVEL_PRIMITIVES.map(p => p.keyword));
+const BULLET_KEYWORDS = new Set(FORCE_LEVEL_PRIMITIVES.map(primitive => primitive.keyword));
 
 interface IndexedBlock {
   kind: string;
@@ -221,21 +221,21 @@ export class DocumentBuilder implements BlockCx {
     this.definitionDecorators = null;
     const text = decorators.length ? wrapped(decorators, body) : body;
     this.bodyLines = this.span ? align(text.split(/\r?\n/), this.span) : null;
-    decorators.forEach((d, k) => { if (this.bodyLines) this.bodyLines[k] = d.line; });
+    decorators.forEach((decorator, index) => { if (this.bodyLines) this.bodyLines[index] = decorator.line; });
     this.visit(buildTree(lex(text)), sink, host ?? null, []);
     this.bodyLines = null;
   }
 
   /** Stamp where a node was written: the file line its body line came from. */
-  private at<T extends ApNode>(node: T, t: Token): T {
-    const line = this.fileLine(t);
+  private at<T extends ApNode>(node: T, token: Token): T {
+    const line = this.fileLine(token);
     if (line !== null) node.pos = positionOf(this.span!, line);
     return node;
   }
 
   /** The file line a body token came from — null when the block has no positions. */
-  private fileLine(t: Token): number | null {
-    return this.span && this.bodyLines ? this.bodyLines[t.line - 1] ?? this.span.line : null;
+  private fileLine(token: Token): number | null {
+    return this.span && this.bodyLines ? this.bodyLines[token.line - 1] ?? this.span.line : null;
   }
 
   /**
@@ -248,7 +248,7 @@ export class DocumentBuilder implements BlockCx {
     this.definitionDecorators = decorators.length ? [...decorators] : null;
     const block = build();
     // A definition whose build walked no body has no work for the decorators above it.
-    for (const d of this.definitionDecorators ?? []) this.decoratorProblems.push({ path: this.sourcePath, line: d.line, message: workless(d.key, block.kind.toUpperCase()) });
+    for (const decorator of this.definitionDecorators ?? []) this.decoratorProblems.push({ path: this.sourcePath, line: decorator.line, message: workless(decorator.key, block.kind.toUpperCase()) });
     this.definitionDecorators = null;
     if (this.span) block.source = { file: this.span.file, line: this.span.line, col: positionOf(this.span, this.span.line).col };
     this.span = null;
@@ -256,17 +256,17 @@ export class DocumentBuilder implements BlockCx {
   }
 
   private visit(nodes: WalkNode[], sink: ApNode[], host: ApBlock | null, steps: ApStepNode[]): void {
-    let i = 0;
-    while (i < nodes.length) {
-      const n = nodes[i];
-      const t = n.token;
+    let index = 0;
+    while (index < nodes.length) {
+      const walkNode = nodes[index];
+      const token = walkNode.token;
 
       // Maximal run of non-structural leaves — grouped exactly like the flat pass.
-      if (!isStructural(t, n.children.length > 0)) {
+      if (!isStructural(token, walkNode.children.length > 0)) {
         const run: Token[] = [];
-        while (i < nodes.length && !isStructural(nodes[i].token, nodes[i].children.length > 0)) {
-          run.push(nodes[i].token);
-          i++;
+        while (index < nodes.length && !isStructural(nodes[index].token, nodes[index].children.length > 0)) {
+          run.push(nodes[index].token);
+          index++;
         }
         this.leafRun(run, sink, host, steps);
         continue;
@@ -274,52 +274,52 @@ export class DocumentBuilder implements BlockCx {
 
       // A COMPUTE block's sections: REQUIRE and ENSURE land on the block, RETURN AS <template>
       // is its result's shape and its body the computation (src/executor.ts).
-      if (t.kind === 'blockOpener' && host && (COMPUTE_SECTIONS as readonly string[]).includes(t.key)) {
-        if (t.key === 'RETURN') {
-          const as = returnShape(t.rest);
+      if (token.kind === 'blockOpener' && host && (COMPUTE_SECTIONS as readonly string[]).includes(token.key)) {
+        if (token.key === 'RETURN') {
+          const as = returnShape(token.rest);
           if (as) host.shape = { force: 0, ref: this.templateRef(as) };
           // Where RETURN starts — the AS line renders there, and the computation after it.
           host.shapePos = sink === host.body ? host.body.length : null;
-          this.visit(n.children, sink, host, steps);
+          this.visit(walkNode.children, sink, host, steps);
         } else {
-          this.visit(n.children, t.key === 'REQUIRE' ? (host.require ??= []) : (host.ensure ??= []), host, steps);
+          this.visit(walkNode.children, token.key === 'REQUIRE' ? (host.require ??= []) : (host.ensure ??= []), host, steps);
         }
-        i++;
+        index++;
         continue;
       }
 
       // A decorator: opening a block, it decorates its own lines; above one, the block that
       // follows — through any decorators stacked between them.
-      if (t.kind === 'decorator') {
-        let end = i;
-        if (!t.opens) {
-          end = i + 1;
+      if (token.kind === 'decorator') {
+        let end = index;
+        if (!token.opens) {
+          end = index + 1;
           while (end < nodes.length && (nodes[end].token.kind === 'blank' || (nodes[end].token.kind === 'decorator' && !(nodes[end].token as { opens: boolean }).opens))) end++;
         }
-        this.decorate(t, t.opens ? n.children : nodes.slice(i + 1, end + 1), sink, host, steps);
-        i = t.opens ? i + 1 : end + 1;
+        this.decorate(token, token.opens ? walkNode.children : nodes.slice(index + 1, end + 1), sink, host, steps);
+        index = token.opens ? index + 1 : end + 1;
         continue;
       }
 
-      if (t.kind !== 'keyword') {
+      if (token.kind !== 'keyword') {
         // Prose (or unknown token) with an indented body: verbatim head, children flattened.
-        this.pushText(sink, t);
-        this.visit(n.children, sink, host, steps);
-        i++;
+        this.pushText(sink, token);
+        this.visit(walkNode.children, sink, host, steps);
+        index++;
         continue;
       }
 
-      const kw = t.keyword as string;
+      const kw = token.keyword as string;
 
       // Sequence block (STEP): consecutive siblings, each a label over the lines whoever runs the flow carries out.
       if (sequencePrimitiveFor(kw)) {
-        while (i < nodes.length) {
-          const item = nodes[i];
+        while (index < nodes.length) {
+          const item = nodes[index];
           if (item.token.kind !== 'keyword' || (item.token.keyword as string) !== kw) break;
           const step = this.at(new StepNode(stripColon(restOf(item.token))), item.token);
           sink.push(step);
           this.visit(item.children, step.body, host, [...steps, step]);
-          i++;
+          index++;
         }
         continue;
       }
@@ -328,107 +328,107 @@ export class DocumentBuilder implements BlockCx {
       // to a Ref against the declared stores, so an unknown one is caught here
       // rather than reading as prose.
       if (kw === 'IN') {
-        const name = stripTrailingColon(t.rest).trim();
-        const node = this.at(new InNode(this.storeRef(name), t.indent), t);
+        const name = stripTrailingColon(token.rest).trim();
+        const node = this.at(new InNode(this.storeRef(name), token.indent), token);
         sink.push(node);
-        this.visit(n.children, node.body, host, steps);
-        i++;
+        this.visit(walkNode.children, node.body, host, steps);
+        index++;
         continue;
       }
 
       if (kw === 'EACH') {
         // `EACH <item> IN {{<list>}} MAX <n>:` — a malformed head is the lint's to report; a DIMENSION's EACH line is no block.
-        const each = eachHeadOf(t.rest);
+        const each = eachHeadOf(token.rest);
         if (each) {
-          const node = this.at(new EachNode({ item: each.item, list: VarBlock.ref(each.list), max: each.max }, t.indent), t);
+          const node = this.at(new EachNode({ item: each.item, list: VarBlock.ref(each.list), max: each.max }, token.indent), token);
           this.eachLists.push({ name: each.list, node, path: this.sourcePath });
           sink.push(node);
           this.eachDepth++;
-          this.visit(n.children, node.body, host, steps);
+          this.visit(walkNode.children, node.body, host, steps);
           this.eachDepth--;
-          i++;
+          index++;
           continue;
         }
       }
 
       if (kw === 'IF') {
-        const split = splitMax(stripTrailingColon(t.rest));
-        const node = this.at(new IfNode(split.condition, t.indent), t);
-        const bounded = this.executed('IF', node, t, host) || this.checked('IF', node, t, host, steps);
-        this.roundsIssue('IF', node.condition, t, bounded, split);
+        const split = splitMax(stripTrailingColon(token.rest));
+        const node = this.at(new IfNode(split.condition, token.indent), token);
+        const bounded = this.executed('IF', node, token, host) || this.checked('IF', node, token, host, steps);
+        this.roundsIssue('IF', node.condition, token, bounded, split);
         sink.push(node);
         // The IF! a `WHEN!` was desugared into: its lines are the trigger's.
-        if (t === this.sugared?.token) this.when?.bodies.push(node.then);
-        this.visit(n.children, node.then, host, steps);
-        i++;
+        if (token === this.sugared?.token) this.when?.bodies.push(node.then);
+        this.visit(walkNode.children, node.then, host, steps);
+        index++;
         continue;
       }
       if (kw === 'ELSE') {
         // ELSE is the second branch of the preceding IF, not a node of its own.
-        const prior = [...sink].reverse().find((x): x is ApIfNode => x.type === 'if');
-        this.visit(n.children, prior ? prior.else : sink, host, steps);
-        i++;
+        const prior = [...sink].reverse().find((candidate): candidate is ApIfNode => candidate.type === 'if');
+        this.visit(walkNode.children, prior ? prior.else : sink, host, steps);
+        index++;
         continue;
       }
       if (kw === 'UNTIL') {
-        const split = splitMax(stripTrailingColon(t.rest));
-        const node = this.at(new UntilNode(split.condition, t.indent, split.max), t);
-        const bounded = this.executed('UNTIL', node, t, host) || this.checked('UNTIL', node, t, host, steps);
-        this.roundsIssue('UNTIL', node.condition, t, bounded, split);
+        const split = splitMax(stripTrailingColon(token.rest));
+        const node = this.at(new UntilNode(split.condition, token.indent, split.max), token);
+        const bounded = this.executed('UNTIL', node, token, host) || this.checked('UNTIL', node, token, host, steps);
+        this.roundsIssue('UNTIL', node.condition, token, bounded, split);
         sink.push(node);
-        this.visit(n.children, node.body, host, steps);
-        i++;
+        this.visit(walkNode.children, node.body, host, steps);
+        index++;
         continue;
       }
       if (kw === 'VAR') {
-        this.variable(t, n.children, sink, host, steps);
-        i++;
+        this.variable(token, walkNode.children, sink, host, steps);
+        index++;
         continue;
       }
 
       // Bodied leaf keyword head (e.g. `WHEN <trigger>:`): open its container.
       const { base, force } = parseForce(kw);
-      const rest = stripColon(t.rest);
+      const rest = stripColon(token.rest);
       // `MEM <event>` with an `AS <template>` line beneath: the memory's shape.
       if (base === 'MEM') {
-        const node = this.at(new DirectiveNode(base, force, rest, t.indent), t);
-        for (const c of n.children) {
-          if (c.token.kind !== 'keyword') continue;
-          const as = parseForce(c.token.keyword as string);
-          if (as.base === 'AS') node.shape = { force: as.force ?? 0, ref: this.templateRef(stripColon(c.token.rest)) };
+        const node = this.at(new DirectiveNode(base, force, rest, token.indent), token);
+        for (const child of walkNode.children) {
+          if (child.token.kind !== 'keyword') continue;
+          const as = parseForce(child.token.keyword as string);
+          if (as.base === 'AS') node.shape = { force: as.force ?? 0, ref: this.templateRef(stripColon(child.token.rest)) };
         }
         sink.push(node);
-        i++;
+        index++;
         continue;
       }
       if (base === 'WHEN') {
-        const node = this.at(new WhenNode(rest, t.indent), t);
+        const node = this.at(new WhenNode(rest, token.indent), token);
         sink.push(node);
-        const first = n.children.find(c => c.token.kind !== 'blank')?.token;
+        const first = walkNode.children.find(child => child.token.kind !== 'blank')?.token;
         const prior = this.sugared;
         const priorWhen = this.when;
         const head = first?.kind === 'keyword' && first.keyword === 'IF'
           ? sugaredHead({ keyword: 'WHEN', condition: rest }, true, first.level ?? 0, stripTrailingColon(first.rest)) : null;
         this.sugared = head && first ? { token: first, head } : null;
         this.when = { node, bodies: [node.body] };
-        this.visit(n.children, node.body, host, steps);
+        this.visit(walkNode.children, node.body, host, steps);
         this.sugared = prior;
         this.when = priorWhen;
       } else if (isDelegationVerb(base)) {
         // `DELEGATE … BY x:` — its DO lines are what the one it goes to is told; a checked condition among them is its.
-        const node = this.at(this.directive(base, force, t.rest, t.indent, t, host), t);
+        const node = this.at(this.directive(base, force, token.rest, token.indent, token, host), token);
         node.body = [];
         sink.push(node);
         const prior = this.delegatedTo;
         this.delegatedTo = node.by ?? null;
-        this.visit(n.children, node.body, host, steps);
+        this.visit(walkNode.children, node.body, host, steps);
         this.delegatedTo = prior;
       } else {
-        const node = this.at(new DirectiveNode(base, force, rest, t.indent, []), t);
+        const node = this.at(new DirectiveNode(base, force, rest, token.indent, []), token);
         sink.push(node);
-        this.visit(n.children, node.body!, host, steps);
+        this.visit(walkNode.children, node.body!, host, steps);
       }
-      i++;
+      index++;
     }
   }
 
@@ -437,13 +437,13 @@ export class DocumentBuilder implements BlockCx {
    * condition, which reads at least one variable — its only input. A star with a
    * `!` is the vocabulary check's error: the head is never also checked.
    */
-  private executed(kind: CheckKind, node: IfNode | UntilNode, t: Token & { kind: 'keyword' }, host: ApBlock | null): boolean {
+  private executed(kind: CheckKind, node: IfNode | UntilNode, token: Token & { kind: 'keyword' }, host: ApBlock | null): boolean {
     // Unmarked inside a PROCEDURE* / PROCEDURE**, the condition is its executor's too (src/executor.ts).
-    const executor = t.executor ?? ((t.level ?? 0) === 0 ? host?.executor ?? 0 : 0);
+    const executor = token.executor ?? ((token.level ?? 0) === 0 ? host?.executor ?? 0 : 0);
     if (!executor) return false;
     node.executor = executor;
     if (readsOf(node.condition).length === 0) {
-      this.checkIssues.push({ path: this.sourcePath, name: node.condition, line: this.fileLine(t),
+      this.checkIssues.push({ path: this.sourcePath, name: node.condition, line: this.fileLine(token),
         message: `${kind}${executorMark(executor)}: a condition a delegate or a program decides reads at least one variable — \`{{name}}\`: it is the only input they receive` });
     }
     return true;
@@ -456,12 +456,12 @@ export class DocumentBuilder implements BlockCx {
    * the apx's `meta.checks` keeps it). Where it stands is the builder's to say;
    * what follows from it — the id, a warning, an error — is `condCheckOf`'s.
    */
-  private checked(kind: CheckKind, node: IfNode | UntilNode, t: Token & { kind: 'keyword' }, host: ApBlock | null, steps: ApStepNode[]): boolean {
-    const judged = (t.level ?? 0) > 0;
+  private checked(kind: CheckKind, node: IfNode | UntilNode, token: Token & { kind: 'keyword' }, host: ApBlock | null, steps: ApStepNode[]): boolean {
+    const judged = (token.level ?? 0) > 0;
     // Inside a PROCEDURE* / PROCEDURE** its executor decides the conditions: a judge cannot stand there.
     if (host?.executor && judged) {
-      this.checkIssues.push({ path: this.sourcePath, name: node.condition, line: this.fileLine(t),
-        message: `${kind}${'!'.repeat(t.level!)} is not allowed under PROCEDURE${executorMark(host.executor)} \`${host.name}\` — its executor decides its conditions: write ${kind} or ${kind}${executorMark(host.executor)}` });
+      this.checkIssues.push({ path: this.sourcePath, name: node.condition, line: this.fileLine(token),
+        message: `${kind}${'!'.repeat(token.level!)} is not allowed under PROCEDURE${executorMark(host.executor)} \`${host.name}\` — its executor decides its conditions: write ${kind} or ${kind}${executorMark(host.executor)}` });
       return judged;
     }
     // In a flow, the one a DELEGATE block goes to checks the conditions among its lines; whoever runs the flow checks none yet.
@@ -471,10 +471,10 @@ export class DocumentBuilder implements BlockCx {
     const agent = by ? (this.roles && resolveRole(this.roles, by)?.name) ?? by : null;
     const site: CheckSite = agent && host?.kind === 'flow' ? { at: 'step', agent: this.agents.has(agent) ? agent : null }
       : host?.kind === 'flow' ? { at: 'flow' } : { at: 'agent', agent: this.ctx!.agentName };
-    const head = t === this.sugared?.token ? this.sugared.head : checkedKeyword(kind, t.level ?? 0);
+    const head = token === this.sugared?.token ? this.sugared.head : checkedKeyword(kind, token.level ?? 0);
     const rounds = node.type === 'until' ? node.max : undefined;
-    const { check, issue } = condCheckOf(kind, t.level ?? 0, node.condition, site, this.ctx?.checks, head, rounds);
-    const at = { path: this.sourcePath, name: node.condition, line: this.fileLine(t) };
+    const { check, issue } = condCheckOf(kind, token.level ?? 0, node.condition, site, this.ctx?.checks, head, rounds);
+    const at = { path: this.sourcePath, name: node.condition, line: this.fileLine(token) };
     if (issue) this.checkIssues.push({ ...at, ...issue });
     if (!check) return judged;
     node.check = check;
@@ -485,10 +485,10 @@ export class DocumentBuilder implements BlockCx {
   }
 
   /** The MAX of an IF/UNTIL head judged where it stands (src/check.ts maxIssue): `bounded` when someone other than the agent ends the loop. */
-  private roundsIssue(kind: CheckKind, condition: string, t: Token & { kind: 'keyword' }, bounded: boolean, split: { max?: number; bad?: string }): void {
-    const head = `${kind}${'!'.repeat(Math.max(t.level ?? 0, 0))}${executorMark(t.executor ?? 0)}`;
+  private roundsIssue(kind: CheckKind, condition: string, token: Token & { kind: 'keyword' }, bounded: boolean, split: { max?: number; bad?: string }): void {
+    const head = `${kind}${'!'.repeat(Math.max(token.level ?? 0, 0))}${executorMark(token.executor ?? 0)}`;
     const message = maxIssue(kind, head, bounded, split);
-    if (message) this.checkIssues.push({ path: this.sourcePath, name: condition, line: this.fileLine(t), message });
+    if (message) this.checkIssues.push({ path: this.sourcePath, name: condition, line: this.fileLine(token), message });
   }
 
   /**
@@ -498,7 +498,7 @@ export class DocumentBuilder implements BlockCx {
    * constant's value written in, a shaped read's template fields as guidance.
    */
   private checkSpecs(doc: ApDocument, constants: Record<string, string>): void {
-    const visible = new Set(doc.byKind('var').map(b => b.name));
+    const visible = new Set(doc.byKind('var').map(block => block.name));
     const isConstant = (name: string) => constantOf(constants, name) !== undefined;
     const fields = (template: string) => doc.templateNamed(template)?.slots
       ?.map(slot => ({ name: slot.name, ...(slot.description ? { description: slot.description } : {}) })) ?? null;
@@ -507,9 +507,9 @@ export class DocumentBuilder implements BlockCx {
       const issue = (message: string) => { this.checkIssues.push({ path: site.path, name: site.condition, line: site.line, message }); };
       const { head } = site;
       const vars = checkedVars(site.condition, isConstant);
-      const unseen = vars.filter(v => !visible.has(v));
+      const unseen = vars.filter(variable => !visible.has(variable));
       // A step's reads are checked here: a flow file's reads are no other check's.
-      if (site.inStep) for (const v of unseen) issue(`${head}: \`{{${v}}}\` is no variable the team sees — export it as a SESSION VAR and IMPORT it in the team's file`);
+      if (site.inStep) for (const variable of unseen) issue(`${head}: \`{{${variable}}}\` is no variable the team sees — export it as a SESSION VAR and IMPORT it in the team's file`);
       if (unseen.length === 0 && vars.length === 0) {
         issue(`${head}: a checked condition reads at least one variable — \`{{name}}\`: the judge decides on the state the variables hold, never on the agent's word`);
       }
@@ -520,32 +520,32 @@ export class DocumentBuilder implements BlockCx {
 
   /** A leaf run: group consecutive same-keyword lines, emit typed nodes. */
   private leafRun(tokens: Token[], sink: ApNode[], host: ApBlock | null, steps: ApStepNode[]): void {
-    let i = 0;
-    while (i < tokens.length) {
-      const t = tokens[i];
-      if (t.kind !== 'keyword') {
-        if (t.kind !== 'blank' && t.kind !== 'comment') this.pushText(sink, t);
-        i++;
+    let index = 0;
+    while (index < tokens.length) {
+      const token = tokens[index];
+      if (token.kind !== 'keyword') {
+        if (token.kind !== 'blank' && token.kind !== 'comment') this.pushText(sink, token);
+        index++;
         continue;
       }
-      const keyword = t.keyword as string;
-      const indent = t.indent;
-      const actions: string[] = [t.rest];
-      let j = i + 1;
-      while (j < tokens.length) {
-        const tt = tokens[j];
+      const keyword = token.keyword as string;
+      const indent = token.indent;
+      const actions: string[] = [token.rest];
+      let end = index + 1;
+      while (end < tokens.length) {
+        const tt = tokens[end];
         if (tt.kind !== 'keyword' || (tt.keyword as string) !== keyword || tt.indent !== indent) break;
         actions.push(tt.rest);
-        j++;
+        end++;
       }
 
       const { base, force } = parseForce(keyword);
       if (base === 'RUN') {
         // The Ref resolves on the builder's own symbol table.
-        actions.forEach((raw, k) => {
+        actions.forEach((raw, offset) => {
           const into = splitInto(raw.trim());
           const name = into ? into.text : raw.trim();
-          const node = this.at(new RunNode(this.ref(this.runnables.get(name), name, 'procedure'), indent), tokens[i + k]);
+          const node = this.at(new RunNode(this.ref(this.runnables.get(name), name, 'procedure'), indent), tokens[index + offset]);
           if (into) {
             node.into = VarBlock.ref(into.name);
             this.varWrites.push({ name: into.name, node, path: this.sourcePath });
@@ -553,7 +553,7 @@ export class DocumentBuilder implements BlockCx {
           sink.push(node);
         });
       } else if (base === 'VAR') {
-        for (let k = i; k < j; k++) this.variable(tokens[k] as Token & { kind: 'keyword' }, [], sink, host, steps);
+        for (let position = index; position < end; position++) this.variable(tokens[position] as Token & { kind: 'keyword' }, [], sink, host, steps);
       } else if (base === 'AS') {
         this.applyShape(force ?? 0, actions[0] ?? '', sink, host, steps);
       } else if (base === 'LENS-IN' && host?.kind === 'procedure') {
@@ -564,12 +564,12 @@ export class DocumentBuilder implements BlockCx {
       } else if (getIntroByKeyword(keyword) !== null || BULLET_KEYWORDS.has(keyword)) {
         // Plain grouped lines: text travels VERBATIM (a trailing colon may be
         // legitimate prose); the source indent is presentation, recorded apart.
-        actions.forEach((a, k) => sink.push(this.at(this.directive(base, force, a, indent, tokens[i + k], host), tokens[i + k])));
+        actions.forEach((action, offset) => sink.push(this.at(this.directive(base, force, action, indent, tokens[index + offset], host), tokens[index + offset])));
       } else {
         // Unclaimed keyword lines pass through verbatim (the legacy raw path).
-        for (let k = i; k < j; k++) this.pushText(sink, tokens[k]);
+        for (let position = index; position < end; position++) this.pushText(sink, tokens[position]);
       }
-      i = j;
+      index = end;
     }
   }
 
@@ -582,31 +582,31 @@ export class DocumentBuilder implements BlockCx {
   private directive(base: string, force: number | null, text: string, indent: number, token?: Token, host?: ApBlock | null): DirectiveNode {
     if (base === MARK_VERB) return this.mark(force, text, indent, token);
     if (isDelegationVerb(base)) {
-      const d = parseDelegation(base, text);
-      const node = new DirectiveNode(base, force, d.task, indent);
+      const delegation = parseDelegation(base, text);
+      const node = new DirectiveNode(base, force, delegation.task, indent);
       // In a flow, BY names a member, a role bound to one, or a team — resolved as the flow's own reference, which it uses.
       // `BY <harness>:<agent>`: an agent of the project as another harness runs it — no member, role or team of this one (D66).
-      const other = d.by ? splitHarness(d.by) : null;
+      const other = delegation.by ? splitHarness(delegation.by) : null;
       if (other) {
         node.harness = other.harness;
         node.by = other.agent;
-      } else if (d.by && host?.kind === 'flow') {
-        const ref = this.byRef(d.by);
+      } else if (delegation.by && host?.kind === 'flow') {
+        const ref = this.byRef(delegation.by);
         node.by = refName(ref);
         node.uses = [ref];
-      } else if (d.by) node.by = d.by;
-      if (d.as) node.as = { force: d.as.force, ref: this.templateRef(d.as.name) };
+      } else if (delegation.by) node.by = delegation.by;
+      if (delegation.as) node.as = { force: delegation.as.force, ref: this.templateRef(delegation.as.name) };
       if (token?.kind === 'keyword' && token.async) node.async = true;
       // `DELEGATE <list> BY <agent>`: the contracts a MARK of this flow filled the list with.
-      const list = host?.kind === 'flow' && base === 'DELEGATE' ? contractListOf(d.task) : null;
+      const list = host?.kind === 'flow' && base === 'DELEGATE' ? contractListOf(delegation.task) : null;
       if (list && this.markedLists.has(list)) node.list = list;
       else if (list) this.bareDelegations.push({ name: list, path: this.sourcePath, line: token ? this.fileLine(token) : null });
-      if (d.into) {
-        node.into = VarBlock.ref(d.into);
-        this.varWrites.push({ name: d.into, node, path: this.sourcePath });
-        if (this.eachDepth > 0) this.eachInto.push({ name: d.into, node, path: this.sourcePath });
+      if (delegation.into) {
+        node.into = VarBlock.ref(delegation.into);
+        this.varWrites.push({ name: delegation.into, node, path: this.sourcePath });
+        if (this.eachDepth > 0) this.eachInto.push({ name: delegation.into, node, path: this.sourcePath });
       }
-      if (d.by && !other) this.delegationScopes.push({ by: d.by, scope: this.scope, path: this.sourcePath, line: token ? this.fileLine(token) : null });
+      if (delegation.by && !other) this.delegationScopes.push({ by: delegation.by, scope: this.scope, path: this.sourcePath, line: token ? this.fileLine(token) : null });
       return node;
     }
     const into = takesInto(base) ? splitInto(text) : null;
@@ -625,23 +625,23 @@ export class DocumentBuilder implements BlockCx {
    * Its form is the lint's.
    */
   private mark(force: number | null, text: string, indent: number, token?: Token): DirectiveNode {
-    const m = parseMark(text);
+    const parsed = parseMark(text);
     const node = new DirectiveNode(MARK_VERB, force, text, indent);
-    if (m.spec) node.as = { force: 0, ref: this.templateRef(m.spec) };
-    if (m.max) node.max = m.max;
-    if (m.into) {
-      node.into = VarBlock.ref(m.into);
-      this.varWrites.push({ name: m.into, node, path: this.sourcePath });
-      this.markedLists.add(m.into);
+    if (parsed.spec) node.as = { force: 0, ref: this.templateRef(parsed.spec) };
+    if (parsed.max) node.max = parsed.max;
+    if (parsed.into) {
+      node.into = VarBlock.ref(parsed.into);
+      this.varWrites.push({ name: parsed.into, node, path: this.sourcePath });
+      this.markedLists.add(parsed.into);
     }
-    if (m.within) {
-      node.within = m.within;
+    if (parsed.within) {
+      node.within = parsed.within;
       const line = token ? this.fileLine(token) : null;
-      const known = this.ctx ? lookupIn(this.ctx)('domain').some(d => d.name === m.within) : true;
+      const known = this.ctx ? lookupIn(this.ctx)('domain').some(domain => domain.name === parsed.within) : true;
       const enclosing = this.scope.get('WITHIN');
-      if (!known) this.decoratorProblems.push({ path: this.sourcePath, line, message: `MARK … WITHIN ${m.within}: no imported domain is called \`${m.within}\` — IMPORT it, or declare it here` });
-      else if (enclosing && !enclosing.some(u => u.name === m.within)) {
-        this.decoratorProblems.push({ path: this.sourcePath, line, message: `MARK … WITHIN ${m.within}: the work here is within ${enclosing.map(u => `\`${u.name}\``).join(', ')} — a contract's domain stays inside it` });
+      if (!known) this.decoratorProblems.push({ path: this.sourcePath, line, message: `MARK … WITHIN ${parsed.within}: no imported domain is called \`${parsed.within}\` — IMPORT it, or declare it here` });
+      else if (enclosing && !enclosing.some(use => use.name === parsed.within)) {
+        this.decoratorProblems.push({ path: this.sourcePath, line, message: `MARK … WITHIN ${parsed.within}: the work here is within ${enclosing.map(use => `\`${use.name}\``).join(', ')} — a contract's domain stays inside it` });
       }
     }
     return node;
@@ -654,24 +654,24 @@ export class DocumentBuilder implements BlockCx {
    * does not hold is reported with its line; a key no decorator has is the
    * lint's, and its work is walked undecorated.
    */
-  private decorate(t: Token & { kind: 'decorator' }, decorated: WalkNode[], sink: ApNode[], host: ApBlock | null, steps: ApStepNode[]): void {
-    const read = this.ctx ? readDecorator(t, this.ctx) : null;
+  private decorate(token: Token & { kind: 'decorator' }, decorated: WalkNode[], sink: ApNode[], host: ApBlock | null, steps: ApStepNode[]): void {
+    const read = this.ctx ? readDecorator(token, this.ctx) : null;
     if (!read) { this.visit(decorated, sink, host, steps); return; }
     const outside = this.scope.outside(read.spec, read.uses);
     const problems = outside.length ? [...read.problems, escapeMessage(read.spec, outside, this.scope.get(read.spec.key) ?? [])] : read.problems;
-    for (const message of problems) this.decoratorProblems.push({ path: this.sourcePath, line: this.fileLine(t), message });
-    const refs = read.uses.map(d => this.ref({ kind: d.kind, name: d.name, namespace: this.nsOf(d) }, d.name, d.kind));
+    for (const message of problems) this.decoratorProblems.push({ path: this.sourcePath, line: this.fileLine(token), message });
+    const refs = read.uses.map(use => this.ref({ kind: use.kind, name: use.name, namespace: this.nsOf(use) }, use.name, use.kind));
     const shape = read.template ? { force: 0, ref: this.templateRef(read.template.name, false) } : null;
-    const phrase = decoratorPhrase(read.spec, read.uses.map((d, k) => ({ kind: d.kind, name: d.name, ref: refSuffix(refs[k].id) })),
+    const phrase = decoratorPhrase(read.spec, read.uses.map((use, index) => ({ kind: use.kind, name: use.name, ref: refSuffix(refs[index].id) })),
       shape ? { name: read.template!.name, ref: refSuffix(shape.ref.id) } : undefined);
-    const node = this.at(new DirectiveNode(`${DECORATOR_MARK}${read.spec.key}`, null, phrase, t.indent, []), t);
+    const node = this.at(new DirectiveNode(`${DECORATOR_MARK}${read.spec.key}`, null, phrase, token.indent, []), token);
     node.uses = refs;
     if (shape) node.shape = shape;
-    for (const d of read.uses) this.decoratorNamed.add(d.name);
+    for (const use of read.uses) this.decoratorNamed.add(use.name);
     sink.push(node);
     const prior = this.scope;
-    this.scope = prior.enter(read.spec, read.uses.map(d => ({ kind: d.kind, name: d.name })));
-    this.decoratorTrail.push({ path: this.sourcePath, line: this.fileLine(t), key: read.spec.key, names: (this.scope.get(read.spec.key) ?? []).map(u => u.name) });
+    this.scope = prior.enter(read.spec, read.uses.map(use => ({ kind: use.kind, name: use.name })));
+    this.decoratorTrail.push({ path: this.sourcePath, line: this.fileLine(token), key: read.spec.key, names: (this.scope.get(read.spec.key) ?? []).map(use => use.name) });
     this.visit(decorated, node.body!, host, steps);
     this.scope = prior;
   }
@@ -682,13 +682,13 @@ export class DocumentBuilder implements BlockCx {
    * block; a block naming a variable the agent imports only assigns it. A
    * malformed line, a constant or a scope word is the lint's to report.
    */
-  private variable(t: Token & { kind: 'keyword' }, children: WalkNode[], sink: ApNode[], host: ApBlock | null, steps: ApStepNode[]): void {
-    const decl = parseVarLine(t.keyword as string, t.rest);
+  private variable(token: Token & { kind: 'keyword' }, children: WalkNode[], sink: ApNode[], host: ApBlock | null, steps: ApStepNode[]): void {
+    const decl = parseVarLine(token.keyword as string, token.rest);
     if (!decl || 'error' in decl || decl.form === 'constant') return;
     const where = host ? `${host.kind} ${host.name}` : basename(this.sourcePath);
-    this.varSites.push({ name: decl.name, scope: decl.scope, type: decl.type, block: decl.block, where, path: this.sourcePath, line: this.fileLine(t), inBody: true });
+    this.varSites.push({ name: decl.name, scope: decl.scope, type: decl.type, block: decl.block, where, path: this.sourcePath, line: this.fileLine(token), inBody: true });
     if (!decl.block) return;
-    const node = this.at(new VarNode(VarBlock.ref(decl.name), t.indent), t);
+    const node = this.at(new VarNode(VarBlock.ref(decl.name), token.indent), token);
     sink.push(node);
     this.visit(children, node.body, host, steps);
     this.varWrites.push({ name: decl.name, node, path: this.sourcePath });
@@ -696,8 +696,8 @@ export class DocumentBuilder implements BlockCx {
 
   private pushText(sink: ApNode[], token: Token): void {
     const raw = rawOf(token);
-    const t = raw.trim();
-    if (t === '' || t.startsWith('#')) return;
+    const trimmed = raw.trim();
+    if (trimmed === '' || trimmed.startsWith('#')) return;
     // Keep the line as written (indentation included) — it is verbatim text.
     sink.push(this.at(new TextNode(raw.replace(/\s+$/, '')), token));
   }
@@ -731,27 +731,27 @@ export class DocumentBuilder implements BlockCx {
     const spec = parseTypeSpec(rawType);
     switch (spec.kind) {
       case 'text': {
-        const t: ApSlotType = { kind: 'text' };
-        if (spec.minWords !== undefined) t.minWords = spec.minWords;
-        if (spec.maxWords !== undefined) t.maxWords = spec.maxWords;
-        if (spec.regex) t.regex = spec.regex.source;
-        return t;
+        const type: ApSlotType = { kind: 'text' };
+        if (spec.minWords !== undefined) type.minWords = spec.minWords;
+        if (spec.maxWords !== undefined) type.maxWords = spec.maxWords;
+        if (spec.regex) type.regex = spec.regex.source;
+        return type;
       }
       case 'number': {
-        const t: ApSlotType = { kind: 'number' };
-        if (spec.min !== undefined) t.min = spec.min;
-        if (spec.max !== undefined) t.max = spec.max;
-        return t;
+        const type: ApSlotType = { kind: 'number' };
+        if (spec.min !== undefined) type.min = spec.min;
+        if (spec.max !== undefined) type.max = spec.max;
+        return type;
       }
       case 'enum':
         return { kind: 'enum', values: spec.values };
       case 'shape':
         return { kind: 'shape', ref: this.templateRef(spec.ref) };
       case 'list': {
-        const t: ApSlotType = { kind: 'list', ref: this.templateRef(spec.ref) };
-        if (spec.min !== undefined) t.min = spec.min;
-        if (spec.max !== undefined) t.max = spec.max;
-        return t;
+        const type: ApSlotType = { kind: 'list', ref: this.templateRef(spec.ref) };
+        if (spec.min !== undefined) type.min = spec.min;
+        if (spec.max !== undefined) type.max = spec.max;
+        return type;
       }
       case 'any':
         return { kind: 'any', raw: spec.raw };
@@ -762,7 +762,7 @@ export class DocumentBuilder implements BlockCx {
 
   private ref(entry: IndexedBlock | undefined, rawName: string, expectedKind: string, report = true): ApRef {
     if (!entry) {
-      if (report && !this.unresolved.some(u => u.path === this.sourcePath && u.name === rawName)) {
+      if (report && !this.unresolved.some(unresolvedEntry => unresolvedEntry.path === this.sourcePath && unresolvedEntry.name === rawName)) {
         this.unresolved.push({ path: this.sourcePath, name: rawName, kind: expectedKind });
       }
       return { id: null, target: rawName, kind: expectedKind, resolved: false };
@@ -796,24 +796,20 @@ export class DocumentBuilder implements BlockCx {
 
   /** The SLOTS of a template the compilation holds, read with the template grammar — null when it holds no such template. */
   templateSlots(name: string): Slot[] | null {
-    const def = this.ctx?.templates.find(t => t.name === name);
+    const def = this.ctx?.templates.find(template => template.name === name);
     return def ? parseTemplate(def.body)?.slots ?? [] : null;
   }
 
   /** A flow delegation's BY: an agent, a role bound to one — or a team, which takes the work by its own routing. */
   private byRef(name: string): ApRef {
     const agent = (this.roles && resolveRole(this.roles, name)?.name) ?? name;
-    const team = this.agents.has(agent) ? undefined : this.projectTeams.find(t => t === name);
+    const team = this.agents.has(agent) ? undefined : this.projectTeams.find(teamName => teamName === name);
     if (team) return this.ref({ kind: 'team', name: team, namespace: TeamBlock.NAMESPACE }, name, 'team');
     return this.ref(this.agents.get(agent), agent, 'agent');
   }
 
   agentRef(name: string): ApRef {
     return this.ref(this.agents.get(name), name, 'agent');
-  }
-
-  runnableRef(name: string): ApRef {
-    return this.ref(this.runnables.get(name), name, 'flow');
   }
 
   /** Namespace of a library file path, or null when outside every root. */
@@ -831,7 +827,7 @@ export class DocumentBuilder implements BlockCx {
       name: def.name,
       namespace: this.nsOf(def),
       about: def.about,
-      tags: def.tags.map(t => t.replace(/^#/, '')),
+      tags: def.tags.map(tag => tag.replace(/^#/, '')),
       scopes: def.scopes,
       when: extractPrimitive(def.body, 'WHEN') ?? 'always',
     };
@@ -866,13 +862,13 @@ export class DocumentBuilder implements BlockCx {
    */
   private indexImportLines(source: string): void {
     for (const line of source.split(/\r?\n/)) {
-      const m = line.match(/^IMPORT\s+(.+?)\s+FROM\s+(\S+)\s*$/);
-      if (!m) continue;
-      const ns = m[2];
+      const match = line.match(/^IMPORT\s+(.+?)\s+FROM\s+(\S+)\s*$/);
+      if (!match) continue;
+      const ns = match[2];
       const kind = kindOfFolder(ns.split('.')[1] ?? '');
       const ref = kind ? strategyOf(kind)?.ref : null;
       if (!kind || !ref) continue;
-      for (const name of splitList(m[1])) {
+      for (const name of splitList(match[1])) {
         this.refIndex(ref).set(name, { kind, name, namespace: ns });
       }
     }
@@ -884,14 +880,14 @@ export class DocumentBuilder implements BlockCx {
     if (!sources) return null;
     if (opts.unit === 'main') {
       const main = readMainFile(dirname(opts.agentFilePath), sources);
-      return main ? unitScan(sources, { kind: 'main', root: dirname(main.path), file: main, members: main.members.map(m => m.name), teams: main.teams.map(t => t.name), memberFiles: opts.memberFiles ?? [] }) : null;
+      return main ? unitScan(sources, { kind: 'main', root: dirname(main.path), file: main, members: main.members.map(member => member.name), teams: main.teams.map(team => team.name), memberFiles: opts.memberFiles ?? [] }) : null;
     }
     const root = teamRootForAgentFile(opts.agentFilePath);
     const file = root ? readTeamFile(root, sources) : null;
     if (!root || !file) return null;
-    const members = file.members.map(m => m.name);
+    const members = file.members.map(member => member.name);
     const files = findAgentFiles(root);
-    const memberFiles = members.flatMap(name => files.filter(f => agentNameOf(f) === name));
+    const memberFiles = members.flatMap(name => files.filter(agentFile => agentNameOf(agentFile) === name));
     return unitScan(sources, { kind: 'team', root, file, members, teams: [], memberFiles });
   }
 
@@ -902,18 +898,18 @@ export class DocumentBuilder implements BlockCx {
     if (opts.unit !== 'team') this.agents.set(ctx.agentName, { kind: 'agent', name: ctx.agentName, namespace: AgentBlock.NAMESPACE });
 
     if (this.team) {
-      const members = this.team.memberFiles.map(f => readAgentFile(f, ctx.sources).info);
+      const members = this.team.memberFiles.map(memberFile => readAgentFile(memberFile, ctx.sources).info);
       for (const member of members) {
         this.agents.set(member.name, { kind: 'agent', name: member.name, namespace: AgentBlock.NAMESPACE });
       }
       // The same role index the orchestration resolves `BY <role>` with: the team's inline blocks and its members' bindings.
       this.roles = buildRoleIndex({ blocks: this.team.blocks, anchor: 'directory' },
-        { bindings: members.filter(m => m.roles.length > 0).map(m => ({ name: m.name, roles: m.roles })), anchor: 'directory' });
+        { bindings: members.filter(member => member.roles.length > 0).map(member => ({ name: member.name, roles: member.roles })), anchor: 'directory' });
       // The flows, and what the unit's file imports for them, are the unit's own document's.
       if (opts.unit) {
         this.indexImportLines(this.team.file.source);
-        for (const f of this.team.flows) {
-          this.runnables.set(f.name, { kind: 'flow', name: f.name, namespace: TeamBlock.flowsNamespace(this.team.name) });
+        for (const flow of this.team.flows) {
+          this.runnables.set(flow.name, { kind: 'flow', name: flow.name, namespace: TeamBlock.flowsNamespace(this.team.name) });
         }
       }
     }
@@ -958,9 +954,9 @@ export class DocumentBuilder implements BlockCx {
     // The decorators above the team decorate its work — its flows, each inside them, then in its own.
     const around = team.file.block.decorators ?? [];
     return [
-      ...team.flows.map(f => {
-        const span = f.block ? sources.nestedSpan(path, team.file.block, f.block) : null;
-        return this.fromSource(span, () => RuleBlock.fromBody('flow', { name: f.name, namespace: flowsNs }, f.body, this), [...around, ...(span?.decorators ?? [])]);
+      ...team.flows.map(flow => {
+        const span = flow.block ? sources.nestedSpan(path, team.file.block, flow.block) : null;
+        return this.fromSource(span, () => RuleBlock.fromBody('flow', { name: flow.name, namespace: flowsNs }, flow.body, this), [...around, ...(span?.decorators ?? [])]);
       }),
       // The unit is its block: EXPORT TEAM, or MAIN.
       this.fromSource(sources.blockSpan(path, team.file.block), () => (team.kind === 'main' ? MainBlock.fromScan(team, this) : TeamBlock.fromScan(team, this)), []),
@@ -990,7 +986,7 @@ export class DocumentBuilder implements BlockCx {
   private variableBlocks(doc: ApDocument, opts: RecorderFinishOpts): ApBlock[] {
     const fail = (path: string, name: string, line: number | null, message: string) => this.varErrors.push({ path, name, line, message });
     const table = new Map<string, VarSite>();
-    const sites: VarSite[] = [...opts.declaredVars.map(v => ({ ...v, block: false, path: v.file, inBody: false })), ...this.varSites];
+    const sites: VarSite[] = [...opts.declaredVars.map(declaration => ({ ...declaration, block: false, path: declaration.file, inBody: false })), ...this.varSites];
     for (const site of sites) {
       const first = table.get(site.name);
       if (constantOf(opts.vars, site.name) !== undefined) {
@@ -1004,36 +1000,36 @@ export class DocumentBuilder implements BlockCx {
           : `variable \`${site.name}\` is declared twice — first in ${first.where}; assign it with \`VAR ${site.name}:\` or \`DO … INTO ${site.name}\`, never redeclare it`);
       }
     }
-    for (const w of this.varWrites) {
-      if (table.has(w.name)) continue;
-      fail(w.path, w.name, w.node.pos?.line ?? null, constantOf(opts.vars, w.name) !== undefined
-        ? `INTO ${w.name}: \`${w.name}\` is a constant — only a variable takes a value while the agent works`
-        : `INTO ${w.name}: no variable \`${w.name}\` — declare it with \`VAR ${w.name}\` in the agent's body, or IMPORT the module that exports it`);
+    for (const write of this.varWrites) {
+      if (table.has(write.name)) continue;
+      fail(write.path, write.name, write.node.pos?.line ?? null, constantOf(opts.vars, write.name) !== undefined
+        ? `INTO ${write.name}: \`${write.name}\` is a constant — only a variable takes a value while the agent works`
+        : `INTO ${write.name}: no variable \`${write.name}\` — declare it with \`VAR ${write.name}\` in the agent's body, or IMPORT the module that exports it`);
     }
     const types = new Map<string, ApRef | null>();
     const blocks = [...table.values()].map(site => {
-      const writes = this.varWrites.filter(w => w.name === site.name);
+      const writes = this.varWrites.filter(write => write.name === site.name);
       this.sourcePath = site.path;
       // A shared declaration nobody here fills needs no template here; one this agent fills, or declares, does.
       let type = site.type ? this.templateRef(site.type, site.inBody || writes.length > 0) : null;
-      for (const w of writes) {
-        if (w.node.type === 'directive') continue;
-        const line = w.node.pos?.line ?? null;
-        const yielded = this.yieldOf(w.node.type === 'var' ? w.node.body : [w.node], doc, (a, b) =>
-          fail(w.path, site.name, line, `\`${site.name}\`: the IF and ELSE branches yield different types — \`${refName(a)}\` and \`${refName(b)}\``));
+      for (const write of writes) {
+        if (write.node.type === 'directive') continue;
+        const line = write.node.pos?.line ?? null;
+        const yielded = this.yieldOf(write.node.type === 'var' ? write.node.body : [write.node], doc, (thenType, elseType) =>
+          fail(write.path, site.name, line, `\`${site.name}\`: the IF and ELSE branches yield different types — \`${refName(thenType)}\` and \`${refName(elseType)}\``));
         if (!yielded) continue;
         if (!type) type = yielded;
         else if (yielded.target !== type.target) {
-          fail(w.path, site.name, line, `\`${site.name}\` is a \`${refName(type)}\`, but this ${w.node.type === 'var' ? 'block' : 'procedure'} yields a \`${refName(yielded)}\` — a variable keeps one type for its whole life`);
+          fail(write.path, site.name, line, `\`${site.name}\` is a \`${refName(type)}\`, but this ${write.node.type === 'var' ? 'block' : 'procedure'} yields a \`${refName(yielded)}\` — a variable keeps one type for its whole life`);
         }
       }
       // A run of an EACH answers one element, not the list its INTO collects.
-      if (type) for (const w of writes) if (!this.eachInto.some(e => e.node === w.node)) w.node.shape = { force: 1, ref: type };
+      if (type) for (const write of writes) if (!this.eachInto.some(entry => entry.node === write.node)) write.node.shape = { force: 1, ref: type };
       types.set(site.name, type);
       return VarBlock.fromDeclaration(site.name, site.scope, type, site.where);
     });
     // `EACH … IN {{<list>}}`: the list is a variable whose template holds one LIST slot — the elements.
-    const oneList = (type: ApRef) => (doc.slotsOf(type) ?? []).filter(s => s.spec.kind === 'list').length;
+    const oneList = (type: ApRef) => (doc.slotsOf(type) ?? []).filter(slot => slot.spec.kind === 'list').length;
     for (const { name, node, path } of this.eachLists) {
       const at = (message: string) => fail(path, name, node.pos?.line ?? null, `EACH ${node.each.item} IN {{${name}}}: ${message}`);
       const type = types.get(name);
@@ -1061,10 +1057,10 @@ export class DocumentBuilder implements BlockCx {
     switch (last?.type) {
       case 'run': return doc.resolve(last.ref)?.shape?.ref ?? null;
       case 'if': {
-        const a = this.yieldOf(last.then, doc, conflict);
-        const b = this.yieldOf(last.else, doc, conflict);
-        if (a && b && a.target !== b.target) conflict(a, b);
-        return a ?? b;
+        const thenType = this.yieldOf(last.then, doc, conflict);
+        const elseType = this.yieldOf(last.else, doc, conflict);
+        if (thenType && elseType && thenType.target !== elseType.target) conflict(thenType, elseType);
+        return thenType ?? elseType;
       }
       case 'until':
       case 'in': return this.yieldOf(last.body, doc, conflict);
@@ -1077,12 +1073,12 @@ export class DocumentBuilder implements BlockCx {
   private buildMeta(ctx: BundleContext, root: string | null): ApDocumentMeta {
     // Each family's phrases, with the active adapter's renderings over them.
     const forceLevels: Record<string, Record<string, string>> = {};
-    for (const f of forceLevelFamilies()) forceLevels[f.name] = { ...f.levels, ...ctx.renderings?.[f.name] };
+    for (const family of forceLevelFamilies()) forceLevels[family.name] = { ...family.levels, ...ctx.renderings?.[family.name] };
 
     const enums: Record<string, Record<string, string>> = {};
     for (const prim of ENUM_PRIMITIVES) {
       enums[prim.keyword] = Object.fromEntries(
-        Object.entries(prim.values).map(([k, fn]) => [k, ctx.renderings?.[prim.keyword]?.[k] ?? fn()]),
+        Object.entries(prim.values).map(([valueName, fn]) => [valueName, ctx.renderings?.[prim.keyword]?.[valueName] ?? fn()]),
       );
     }
 
@@ -1118,13 +1114,13 @@ export class DocumentBuilder implements BlockCx {
     // Intros: every kind this document holds — the md opens its chapters
     // with them, the apx serves them to whoever misses that kind's quiz.
     const intros: Record<string, string> = {};
-    for (const kind of new Set(doc.all().map(b => b.kind))) {
+    for (const kind of new Set(doc.all().map(block => block.kind))) {
       const text = renderedIntro(kind) || (pluginOf(kind)?.about ?? '');
       if (text) intros[kind] = text;
     }
 
     const shapePos: Record<string, number> = {};
-    for (const prov of ['definition', 'team', 'agent'] as const) {
+    for (const prov of ['definition', 'agent'] as const) {
       for (const block of doc.byProvenance(prov)) {
         if (block.shapePos !== null && block.shape) shapePos[block.address] = block.shapePos;
       }
@@ -1132,7 +1128,7 @@ export class DocumentBuilder implements BlockCx {
 
     return {
       // RAW block delimiters are lexer syntax — cleaned at the source.
-      bootstrap: opts.bootstrap.split('\n').filter(l => !/^\s*(RAW:|:RAW)\s*$/.test(l)).join('\n'),
+      bootstrap: opts.bootstrap.split('\n').filter(line => !/^\s*(RAW:|:RAW)\s*$/.test(line)).join('\n'),
       intros,
       vars: opts.vars,
       agentBodyLead: (/^\n*/.exec(opts.agentBody)?.[0].length ?? 0) || 1,
@@ -1159,7 +1155,8 @@ export class DocumentBuilder implements BlockCx {
     const doc = new ApDocument(this.buildMeta(ctx, unit ? `${unit.kind === 'main' ? MainBlock.NAMESPACE : TeamBlock.NAMESPACE}/${unit.name}` : null));
     const producers: [BlockProvenance, () => ApBlock[]][] = [
       ['definition', () => this.definitionBlocks(ctx, opts)],
-      ['team',       () => this.teamBlocks(unit !== null)],
+      // A unit's flows are its own definition — a chapter of its document, as an agent's procedures are of its own.
+      ['definition', () => this.teamBlocks(unit !== null)],
       // A unit's document has no agent: its root is the TEAM block.
       ['agent',      () => (unit ? [] : [this.agentBlock(ctx, opts)])],
       // Last: a variable's type may come from any procedure the others hold.
@@ -1174,9 +1171,9 @@ export class DocumentBuilder implements BlockCx {
     }
     this.checkSpecs(doc, opts.vars);
     // A DELEGATE of a variable hands out contracts only when a MARK above it filled that variable.
-    const variables = new Set(doc.byKind('var').map(b => b.name));
-    for (const d of this.bareDelegations.filter(d => variables.has(d.name))) {
-      this.varErrors.push({ path: d.path, name: d.name, line: d.line, message: `DELEGATE ${d.name}: \`${d.name}\` is a variable no MARK above it fills — a DELEGATE of a variable hands out the contracts a MARK made; MARK it first, or say the task in words` });
+    const variables = new Set(doc.byKind('var').map(block => block.name));
+    for (const delegation of this.bareDelegations.filter(candidate => variables.has(candidate.name))) {
+      this.varErrors.push({ path: delegation.path, name: delegation.name, line: delegation.line, message: `DELEGATE ${delegation.name}: \`${delegation.name}\` is a variable no MARK above it fills — a DELEGATE of a variable hands out the contracts a MARK made; MARK it first, or say the task in words` });
     }
     const executors = executorSpecs(doc, opts.vars ?? {}, this.ctx!.agentName, name => templateClosure(name, this.ctx?.templates ?? []));
     if (Object.keys(executors).length > 0) doc.meta.executors = executors;
@@ -1184,17 +1181,17 @@ export class DocumentBuilder implements BlockCx {
     // And what their MARKs bind: an id for each, the list it fills, its spec, its limit and its domain.
     const marks: Record<string, ApMark> = {};
     const markOf = (node: { text?: string; as?: ApShape; max?: number; within?: string }, step: string, flow: string): ApMark | null => {
-      const m = parseMark(node.text ?? '');
-      return m.into && node.as ? { flow, step, list: m.into, spec: refName(node.as.ref), max: node.max ?? 0, within: node.within ?? null } : null;
+      const parsed = parseMark(node.text ?? '');
+      return parsed.into && node.as ? { flow, step, list: parsed.into, spec: refName(node.as.ref), max: node.max ?? 0, within: node.within ?? null } : null;
     };
     // The agent's own body too: a delegation to another harness there is a piece of the registry (D66).
     const root = doc.root();
     const bodies = [...doc.byKind('flow'), ...(root ? [root] : [])];
-    const background = Object.assign({}, ...bodies.map(f => bindBackgroundWork(f as unknown as { address: string; name: string; body: unknown[] },
-      (text, prefix) => shortId(prefix, text), marks, (node, step) => markOf(node, step, f.name))));
+    const background = Object.assign({}, ...bodies.map(block => bindBackgroundWork(block as unknown as { address: string; name: string; body: unknown[] },
+      (text, prefix) => shortId(prefix, text), marks, (node, step) => markOf(node, step, block.name))));
     if (Object.keys(background).length > 0) doc.meta.background = background;
     if (Object.keys(marks).length > 0) doc.meta.marks = marks;
-    const used = Object.fromEntries(plugins().filter(p => doc.byKind(p.name).length > 0).map(p => [p.name, p]));
+    const used = Object.fromEntries(plugins().filter(plugin => doc.byKind(plugin.name).length > 0).map(plugin => [plugin.name, plugin]));
     if (Object.keys(used).length > 0) doc.meta.plugins = used;
     doc.seal();
     const md = this.buildMdMeta(doc, opts, provenanceMap);
@@ -1212,18 +1209,20 @@ export class DocumentBuilder implements BlockCx {
  * sibling in the block (a WHEN can sit between two FLOWs), de-indented by the
  * block's indent: the text a flow file would hold.
  */
-function unitScan(sources: SourceRegistry, unit: Omit<TeamScan, 'name' | 'blocks' | 'flows'>): TeamScan {
+function unitScan(sources: SourceRegistry, unit: Omit<TeamScan, 'name' | 'blocks' | 'flows' | 'routing'>): TeamScan {
   const { file } = unit;
-  const written = file.block.children.filter((c): c is Block => c.type === 'block');
+  const written = file.block.children.filter((child): child is Block => child.type === 'block');
+  const lines = (block: Block) => sources.nestedSpan(file.path, file.block, block).lines.map(line => line.text.slice(file.childIndent));
   const flows: TeamScan['flows'] = written
-    .filter((b): b is Block & { name: string } => b.key === 'FLOW' && b.name !== null)
-    .map(b => ({ name: b.name, block: b, body: sources.nestedSpan(file.path, file.block, b).lines.slice(1).map(l => l.text.slice(file.childIndent)).join('\n') }));
-  return { ...unit, name: file.name, blocks: written, flows };
+    .filter((block): block is Block & { name: string } => block.key === 'FLOW' && block.name !== null)
+    .map(block => ({ name: block.name, block, body: lines(block).slice(1).join('\n') }));
+  const routing = written.filter(block => block.key === 'WHEN').flatMap(lines).join('\n');
+  return { ...unit, name: file.name, blocks: written, flows, routing };
 }
 
 /** A definition's body nested in the decorators above it, outermost first — each opening the block the next one, then the body, stands in. */
 function wrapped(decorators: readonly DecoratorLine[], body: string): string {
-  const pad = (n: number) => '    '.repeat(n);
-  const heads = decorators.map((d, k) => `${pad(k)}${DECORATOR_MARK}${d.key}${d.rest ? ` ${d.rest}` : ''}:`);
-  return [...heads, ...body.split(/\r?\n/).map(l => (l.trim() ? `${pad(decorators.length)}${l}` : l))].join('\n');
+  const pad = (depth: number) => '    '.repeat(depth);
+  const heads = decorators.map((decorator, depth) => `${pad(depth)}${DECORATOR_MARK}${decorator.key}${decorator.rest ? ` ${decorator.rest}` : ''}:`);
+  return [...heads, ...body.split(/\r?\n/).map(line => (line.trim() ? `${pad(decorators.length)}${line}` : line))].join('\n');
 }

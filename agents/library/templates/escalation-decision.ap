@@ -1,0 +1,10 @@
+# escalation-decision
+
+EXPORT TEMPLATE escalation-decision:
+    ABOUT  what the user decided about the findings left after the last review round
+    SLOTS:
+        action:     ENUM[proceed, stop]  "go on to the tests, or end the flow"
+        accepted?:  TEXT  "the findings the user accepts as they are, one per line"
+    BODY:
+        action: {action}
+        accepted: {accepted}

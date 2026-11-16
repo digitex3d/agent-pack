@@ -118,37 +118,37 @@ export interface StoreDriver {
 
 /** A slot's type as a short human phrase — the field list of a store chapter. */
 /** A number slot's phrase: its bounds, when it has any. */
-function numberPhrase(t: Extract<ApSlotType, { kind: 'number' }>): string {
+function numberPhrase(slotType: Extract<ApSlotType, { kind: 'number' }>): string {
   const TY = FORMULAS.types;
-  if (t.min !== undefined && t.max !== undefined) return qualified(TY.number, [fill(TY.range, { min: t.min, max: t.max })]);
-  if (t.min !== undefined) return qualified(TY.number, [fill(TY.atLeast, { min: t.min })]);
-  if (t.max !== undefined) return qualified(TY.number, [fill(TY.atMost, { max: t.max })]);
+  if (slotType.min !== undefined && slotType.max !== undefined) return qualified(TY.number, [fill(TY.range, { min: slotType.min, max: slotType.max })]);
+  if (slotType.min !== undefined) return qualified(TY.number, [fill(TY.atLeast, { min: slotType.min })]);
+  if (slotType.max !== undefined) return qualified(TY.number, [fill(TY.atMost, { max: slotType.max })]);
   return TY.number;
 }
 
 /** A text slot's phrase: its word bounds, when it has any. */
-function textPhrase(t: Extract<ApSlotType, { kind: 'text' }>): string {
+function textPhrase(slotType: Extract<ApSlotType, { kind: 'text' }>): string {
   const TY = FORMULAS.types;
   const bits: string[] = [];
-  if (t.minWords !== undefined) bits.push(fill(TY.minWords, { n: t.minWords }));
-  if (t.maxWords !== undefined) bits.push(fill(TY.maxWords, { n: t.maxWords }));
+  if (slotType.minWords !== undefined) bits.push(fill(TY.minWords, { n: slotType.minWords }));
+  if (slotType.maxWords !== undefined) bits.push(fill(TY.maxWords, { n: slotType.maxWords }));
   return qualified(TY.text, bits);
 }
 
-export function phraseOf(t: ApSlotType): string {
+export function phraseOf(slotType: ApSlotType): string {
   const TY = FORMULAS.types;
-  switch (t.kind) {
+  switch (slotType.kind) {
     case 'enum':
-      return fill(TY.enum, { values: t.values.join(', ') });
+      return fill(TY.enum, { values: slotType.values.join(', ') });
     case 'number':
-      return numberPhrase(t);
+      return numberPhrase(slotType);
     case 'text':
-      return textPhrase(t);
+      return textPhrase(slotType);
     case 'shape':
-      return fill(TY.storeShape, { target: t.ref.target });
+      return fill(TY.storeShape, { target: slotType.ref.target });
     case 'list':
-      return fill(TY.storeList, { target: t.ref.target });
+      return fill(TY.storeList, { target: slotType.ref.target });
     default:
-      return t.raw;
+      return slotType.raw;
   }
 }

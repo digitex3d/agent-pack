@@ -1,0 +1,13 @@
+# develop-feature — what the steps of the flow hand each other
+IMPORT feature-brief, functional-design, escalation-decision, test-report, feature-report FROM @main.templates
+
+EXPORT VAR test-rules = write and run a test per acceptance criterion, never edit production code, report every failure
+
+EXPORT SESSION VAR brief AS feature-brief
+EXPORT SESSION VAR design AS functional-design
+EXPORT SESSION VAR build
+EXPORT SESSION VAR review-findings
+EXPORT SESSION VAR fix-report
+EXPORT SESSION VAR decision AS escalation-decision
+EXPORT SESSION VAR tests AS test-report
+EXPORT SESSION VAR closing AS feature-report

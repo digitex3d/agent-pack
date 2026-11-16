@@ -460,7 +460,7 @@ export interface ApDocumentMeta {
   harnesses?: Record<string, HarnessInvocation>;
   /** The plugins whose blocks this agent holds, by name — the apx serves them from here (src/plugins.ts). */
   plugins?: Record<string, PluginSpec>;
-  /** The agent a DELEGATE without BY is handed to — set when this agent has one (src/executor.ts). */
+  /** The agent an ASK without BY is handed to — set when this agent has one (src/executor.ts). */
   delegate?: string;
   /** The model this agent runs on, from the `delegate.models` config key — absent: the harness decides. */
   model?: string;

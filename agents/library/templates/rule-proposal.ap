@@ -1,0 +1,49 @@
+# rule-proposal — the rule proposed for one problem, or why none is
+
+EXPORT TEMPLATE rule-proposal:
+    ABOUT  the rule proposed for one problem — a recorded consideration or a rule the user asks for — or why none is
+    SLOTS:
+        record?:            TEXT  "the ref of the record in considerations"
+          MUST  fill it when the rule answers a recorded consideration
+        verdict:            ENUM[rule, no-rule]  "whether a rule is proposed"
+        problem:            TEXT MAX_WORDS 30  "the problem, which the rule prevents"
+        cause:              TEXT MAX_WORDS 40  "what allowed it: the source, routing line, brief or missing check"
+        repeats?:           TEXT MAX_WORDS 40  "the earlier record's ref and status, and what the repeat says of it"
+        why_none?:          TEXT MAX_WORDS 40  "why no rule would help"
+          MUST  fill it when the verdict is no-rule
+        enforcement?:       ENUM[mechanical, structural, prose]  "how the rule is enforced"
+          MUST  fill it when the verdict is rule
+        why_not_stronger?:  TEXT MAX_WORDS 40  "why no stronger enforcement fits"
+          MUST  fill it when the enforcement is structural or prose
+        repo?:              TEXT  "the absolute path of the root of the repo holding the file"
+          MUST  fill it when the verdict is rule
+        file?:              TEXT  "the file the rule goes in, from the root of that repo"
+          MUST  fill it when the verdict is rule
+        text?:              TEXT  "the exact text of the rule, as it would stand in the file"
+          MUST  fill it when the verdict is rule
+        overlap?:           TEXT MAX_WORDS 40  "the existing rule it changes, or `none` once they were checked"
+          MUST  fill it when the verdict is rule
+    BODY:
+        record: {record}
+        verdict: {verdict}
+        problem: {problem}
+        cause: {cause}
+        repeats: {repeats}
+        why none: {why_none}
+        enforcement: {enforcement}
+        why not stronger: {why_not_stronger}
+        repo: {repo}
+        file: {file}
+        text: {text}
+        overlap: {overlap}
+    EXAMPLE:
+        record: 2026-10-30-single-step-flows
+        verdict: rule
+        problem: a flow made of one step with one delegate adds a layer and no structure
+        cause: the FLOW scaffold let a flow hold a single step with a single delegate
+        enforcement: prose
+        why not stronger: a lint needs a change to agent-pack's compiler; the scaffold reaches every author now
+        repo: /srv/projects/agent-pack
+        file: templates/library/templates/ap-scaffolds.ap
+        text: NEVER  write a FLOW whose whole body is one STEP holding one DELEGATE
+        overlap: none

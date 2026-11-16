@@ -2,10 +2,10 @@
 // Copyright (c) 2026 Giuseppe Federico
 /**
  * A unit's own verbs, in its `.apx` — a unit is what holds agents: the main,
- * or a team. `start` prints the unit — the main's rules and orchestration, a
- * team's routing and flows — `ls` what it holds, `version` and `help`. Any
- * other first word names an agent of the unit, which the agent's engine then
- * serves (src/apx/main.ts): `<unit> <agent> <verb> …`.
+ * or a team. `ls` lists what it holds, `version` and `help` say what it is;
+ * `start` is not one of them: a unit starts as an agent does, the engine
+ * serving its own document. Any other first word names a block it holds,
+ * which the engine then serves (src/apx/main.ts): `<unit> <agent> <verb> …`.
  */
 import type { UnitSection } from './payload.js';
 import { apxCommand } from './paths.js';
@@ -25,25 +25,18 @@ const WHAT: Record<UnitSection['kind'], string> = {
   team: 'its routing and its flows',
 };
 
-/** The verbs a unit answers itself — any other first word is an agent's name. */
-/** The verb a unit answers when none is given: who it is. */
-export const START_VERB = 'start';
-/** The verb that lists what a unit holds. */
+/** The verb that lists what a unit holds — `ls --json`, every document it holds as data (src/apx/main.ts). */
 export const LS_VERB = 'ls';
 
+/** The verbs a unit answers itself — any other first word is an agent's name. */
 const UNIT_VERBS: Record<string, (run: UnitRun) => void> = {
-  start: ({ unit, cmd, out }) => {
-    out(unit.text.trimEnd());
-    out('');
-    out(`# every agent of the ${unit.kind} answers through it: ${cmd} <agent> <verb> — the agents: ${cmd} ls`);
-  },
   ls: ({ unit, cmd, out }) => {
-    for (const t of unit.teams) {
-      out(`team ${t.name}${about(t.about)}`);
-      for (const m of t.members) out(`  ${m}`);
+    for (const team of unit.teams) {
+      out(`team ${team.name}${about(team.about)}`);
+      for (const member of team.members) out(`  ${member}`);
     }
     if (unit.members.length) out('agents');
-    for (const a of unit.members) out(`  ${a.name}${about(a.about)}`);
+    for (const agent of unit.members) out(`  ${agent.name}${about(agent.about)}`);
     out(`# an agent's own verbs: ${cmd} <agent> help`);
   },
   version: ({ unit, out, built }) => out(`${unit.name}${unit.version ? ` ${unit.version}` : ''} — built ${built}`),
@@ -58,14 +51,14 @@ const UNIT_VERBS: Record<string, (run: UnitRun) => void> = {
 
 const about = (text: string): string => (text ? ` — ${text}` : '');
 
-/** Whether the first word is one of a unit's own verbs — none is `start`. */
-export function isUnitVerb(word: string | undefined): boolean {
-  return word === undefined || Object.hasOwn(UNIT_VERBS, word);
+/** Whether the first word is one of a unit's own verbs — `start` is not: a unit starts as an agent does, from its own document. */
+export function isUnitVerb(word: string | undefined): word is string {
+  return word !== undefined && Object.hasOwn(UNIT_VERBS, word);
 }
 
 /** Answer one of a unit's own verbs. */
-export function runUnitVerb(verb: string | undefined, run: UnitRun): void {
-  UNIT_VERBS[verb ?? START_VERB](run);
+export function runUnitVerb(verb: string, run: UnitRun): void {
+  UNIT_VERBS[verb](run);
 }
 
 /**
@@ -77,16 +70,16 @@ export function runUnitVerb(verb: string | undefined, run: UnitRun): void {
 export function throughUnit(unit: UnitSection, cmd: string): (line: string) => string {
   const own = new Map(unitHolds(unit).map(held => [apxCommand(held), `${cmd} ${held}`]));
   if (own.size === 0) return line => line;
-  const pattern = new RegExp([...own.keys()].sort((a, b) => b.length - a.length).map(escapeRegex).join('|'), 'g');
+  const pattern = new RegExp([...own.keys()].sort((left, right) => right.length - left.length).map(escapeRegex).join('|'), 'g');
   return line => line.replace(pattern, found => own.get(found) ?? found);
 }
 
 /** The agents a unit holds: its standalone agents, then each team's members. */
 export function unitAgents(unit: UnitSection): string[] {
-  return [...unit.members.map(a => a.name), ...unit.teams.flatMap(t => t.members)];
+  return [...unit.members.map(agent => agent.name), ...unit.teams.flatMap(team => team.members)];
 }
 
 /** What a unit holds an image of: its agents, and — the main — its teams, each with its own document. */
 export function unitHolds(unit: UnitSection): string[] {
-  return [...unitAgents(unit), ...(unit.kind === 'main' ? unit.teams.map(t => t.name) : [])];
+  return [...unitAgents(unit), ...(unit.kind === 'main' ? unit.teams.map(team => team.name) : [])];
 }

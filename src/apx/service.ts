@@ -11,13 +11,15 @@
  * the engine's dispatch read them here — and serves one call. What it may use
  * of the engine is `ApxHost`: the document, the output, the shared checks.
  */
-import type { DelegationTable, DelegationRecord } from './delegations.js';
 import type { ApDocument } from '../apdoc/document.js';
-import type { AgentBlock, VarBlock } from '../apdoc/blocks.js';
+import type { VarBlock } from '../apdoc/blocks.js';
+import type { ApBlock } from '../apdoc/block.js';
 import type { ApRef } from '../apdoc/types.js';
 import type { ApxBuild } from './engine.js';
 import type { SessionVars, ExecutorRecord } from './sessionVars.js';
 import type { ApExecutorSpec } from '../executor.js';
+import type { ContractWork } from './contractWork.js';
+import { FORMULAS, fill } from '../formulas.js';
 
 /** One operation of a service: its name, what follows it, what it does — as the help prints it. */
 export interface ApxOperation {
@@ -37,55 +39,85 @@ export interface ApxService {
   serve(host: ApxHost, op: string | undefined, args: string[]): number | Promise<number>;
 }
 
-/** What a service may use of the engine. */
-export interface ApxHost {
-  readonly doc: ApDocument;
-  readonly build: ApxBuild;
-  /** The path the harness invoked the apx by. */
-  readonly exe: string;
+/** How the apx speaks: every line it prints, every error it fails with, and the exit code of the last refusal. */
+export interface ApxOutput {
   /** The command every printed command starts with. */
   readonly cmd: string;
-  readonly root: AgentBlock;
-  /** The project root the apx lives in. */
-  readonly projectRoot: string;
   lastCode: number;
   out(line: string): void;
   print(text: string): number;
   fail(code: number, message: string): number;
-  /** A JSON text checked against a template's slots — the issues, or null. */
-  contractIssues(json: string, template: ApRef, list?: { name: string; min: number }): string | null;
-  variable(name: string): VarBlock | null;
-  storeVariable(block: VarBlock, value: string): { code: number; reason: string } | null;
-  openSession(): SessionVars | string;
+  /** A formula filled with the values and the command prefix every printed command starts with. */
+  phrase(formula: string, values?: Record<string, string | number>): string;
+  /** Print a formula, filled. */
+  say(formula: string, values?: Record<string, string | number>): void;
+  /** Fail with a formula, filled — its exit code is returned. */
+  refuse(code: number, formula: string, values?: Record<string, string | number>): number;
+}
+
+/** What the apx serves: the compiled document, how it was built, and where it lives. */
+export interface ApxContext {
+  readonly doc: ApDocument;
+  readonly build: ApxBuild;
+  /** The path the harness invoked the apx by. */
+  readonly exe: string;
+  /** The document's root — an agent, or a unit: its name is who the apx serves. */
+  readonly root: ApBlock;
+  /** The project root the apx lives in. */
+  readonly projectRoot: string;
+}
+
+/** The harness session: its id, and the variables it holds. */
+export interface ApxSession {
   /** The harness session id — or why there is none, opening with what `needs` it. */
   sessionIdOrReason(needs?: string): { id: string } | { reason: string };
+  openSession(): SessionVars | string;
+  /** This session's variables — or null after saying why there are none. */
+  sessionVars(): SessionVars | null;
+  /** The values this session holds for `names` — or the first one that is empty. */
+  readVariables(session: SessionVars, names: string[]): { values: NamedValue[] } | { empty: string };
+  variable(name: string): VarBlock | null;
+  storeVariable(block: VarBlock, value: string): { code: number; reason: string } | null;
+  /** A JSON text checked against a template's slots — the issues, or null. */
+  contractIssues(json: string, template: ApRef, list?: { name: string; min: number }): string | null;
+}
+
+/** The executors: a delegate's or a program's contract, its input, where its answer goes, and that answer recorded. */
+export interface ApxExecutors {
   executorArg(verb: string, id: string | undefined): ApExecutorSpec | null;
   inputJson(spec: ApExecutorSpec, extra?: Record<string, unknown>): Record<string, unknown> | null;
   intoArg(spec: ApExecutorSpec, id: string, args: string[]): { spec: ApExecutorSpec; args: string[] } | null;
   answerShape(spec: ApExecutorSpec): ApRef | null;
   deliver(id: string, spec: ApExecutorSpec, text: string, outcome: ExecutorRecord['outcome'], fingerprint: string): string | null;
   delivered(id: string, spec: ApExecutorSpec, text: string): number;
-  /**
-   * The perimeter a piece is handed under, as the registry keeps it (D65): the
-   * WRITES globs of the domains of its `@WITHIN`, and those of its assignee's
-   * own — JSON, one glob list each; '' when neither has one.
-   */
-  workPerimeter(within: readonly string[], assignee: string): string;
-  /** The contracts' own steps, on their copies (src/apx/engine.ts): delivering one, where its copy is, folding a WAIT's back in. */
-  readonly contracts: {
-    deliver(table: DelegationTable, r: DelegationRecord, args: string[]): number;
-    copy(ctr: string): string | null;
-    fold(table: DelegationTable, pieces: DelegationRecord[]): DelegationRecord[];
-    /** A delegation to another harness, just started: its copy opened, its prompt written, the command printed (D66). */
-    launch(r: DelegationRecord): number;
-    /** A delegation to another harness, delivered: its answer stored, what its copy changed kept within its perimeter. */
-    deliverElsewhere(table: DelegationTable, r: DelegationRecord): number;
-  };
+}
+
+/** All a service may use of the engine — each function asks only for the parts it uses. */
+export interface ApxHost extends ApxOutput, ApxContext, ApxSession, ApxExecutors {
+  /** The contracts: their verbs, the guard, and their own steps on copies (src/apx/contractWork.ts). */
+  readonly contracts: ContractWork;
+}
+
+/** The node types of a block's body the apx reads. */
+export const NODE = { when: 'when', run: 'run', directive: 'directive' } as const;
+
+/** A variable's name and the value this session stores for it. */
+export interface NamedValue { name: string; value: string }
+
+/** What a caught value says, whatever was thrown. */
+export const reasonOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+/** What an empty variable is told — the caller says what follows from it. */
+export const emptyVariable = (name: string): string => fill(FORMULAS.apx.variables.empty, { name });
+
+/** Why a value cannot be checked: what holds it is typed with a template this agent was not compiled with. */
+export function notCompiled(what: string, template: string): string {
+  return `\`${what}\` is shaped as \`${template}\`, a template not compiled into this agent`;
 }
 
 /** `1 entry`, `3 entries`. */
-export function countOf(n: number, one: string, many: string): string {
-  return `${n} ${n === 1 ? one : many}`;
+export function countOf(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
 }
 
 /** The command of one operation on one id, as the apx prints it: `<apx> <kind> <op> <id>`. */

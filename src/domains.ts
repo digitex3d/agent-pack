@@ -34,9 +34,9 @@ const IN_RE = /^(?:(.*?)\s+)?IN\s+(\S.*)$/;
 /** A DOMAIN line's rest as its formula and its globs. */
 export function parseDomainLine(rest: string): DomainLineParts {
   const text = rest.trim();
-  const m = IN_RE.exec(text);
-  if (!m) return { formula: text || null, globs: [] };
-  return { formula: m[1]?.trim() || null, globs: splitList(m[2]) };
+  const match = IN_RE.exec(text);
+  if (!match) return { formula: text || null, globs: [] };
+  return { formula: match[1]?.trim() || null, globs: splitList(match[2]) };
 }
 
 /** What is wrong with a DOMAIN line — null when it holds. `level` is its `!`s. */
@@ -49,8 +49,8 @@ export function domainLineIssue(keyword: DomainLine, level: number, parts: Domai
 }
 
 /** A formula line with no judge in the config: the compilation's error — a judge decides it, or its files are written. */
-export function noJudgeMessage(f: Pick<DomainFormula, 'keyword' | 'level' | 'formula'>): string {
-  return `${f.keyword}${'!'.repeat(f.level)} ${f.formula}: a domain formula needs a judge — add \`judge\` to the config (the judge of the lines decides it, file by file), or write its files: \`${f.keyword} IN <glob>, …\``;
+export function noJudgeMessage(domainFormula: Pick<DomainFormula, 'keyword' | 'level' | 'formula'>): string {
+  return `${domainFormula.keyword}${'!'.repeat(domainFormula.level)} ${domainFormula.formula}: a domain formula needs a judge — add \`judge\` to the config (the judge of the lines decides it, file by file), or write its files: \`${domainFormula.keyword} IN <glob>, …\``;
 }
 
 /** The probabilities that split a formula's files: at or above `in` within, at or below `out` outside. */
@@ -76,29 +76,29 @@ export interface DomainFormula {
 /** A DOMAIN's lines as written: the globs of its plain lines, and its formula lines. */
 export function domainLines(body: string): { writes: string[]; reads: string[]; formulas: DomainFormula[] } {
   const out = { writes: [] as string[], reads: [] as string[], formulas: [] as DomainFormula[] };
-  for (const t of lex(body)) {
-    if (t.kind !== 'keyword' || t.indent !== 0 || (t.keyword !== 'WRITES' && t.keyword !== 'READS') || !t.rest) continue;
-    const parts = parseDomainLine(t.rest);
-    const level = t.level ?? 0;
-    if (parts.formula !== null && (level === 1 || level === 2)) out.formulas.push({ keyword: t.keyword as DomainLine, level, formula: parts.formula, globs: parts.globs });
-    else if (parts.formula === null) (t.keyword === 'WRITES' ? out.writes : out.reads).push(...parts.globs);
+  for (const token of lex(body)) {
+    if (token.kind !== 'keyword' || token.indent !== 0 || (token.keyword !== 'WRITES' && token.keyword !== 'READS') || !token.rest) continue;
+    const parts = parseDomainLine(token.rest);
+    const level = token.level ?? 0;
+    if (parts.formula !== null && (level === 1 || level === 2)) out.formulas.push({ keyword: token.keyword as DomainLine, level, formula: parts.formula, globs: parts.globs });
+    else if (parts.formula === null) (token.keyword === 'WRITES' ? out.writes : out.reads).push(...parts.globs);
   }
   return out;
 }
 
 /** What a judged formula puts within: the files at or above `in`, and — under `!` — the uncertain ones with their probability. */
-export function formulaFiles(f: DomainFormula, t: DomainThresholds): { within: string[]; uncertain: Record<string, number> } {
+export function formulaFiles(domainFormula: DomainFormula, thresholds: DomainThresholds): { within: string[]; uncertain: Record<string, number> } {
   const within: string[] = [];
   const uncertain: Record<string, number> = {};
-  for (const [file, p] of Object.entries(f.p ?? {}).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
-    if (p >= t.in) within.push(file);
-    else if (f.level === 1 && p > t.out) uncertain[file] = p;
+  for (const [file, probability] of Object.entries(domainFormula.p ?? {}).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)) {
+    if (probability >= thresholds.in) within.push(file);
+    else if (domainFormula.level === 1 && probability > thresholds.out) uncertain[file] = probability;
   }
   return { within, uncertain };
 }
 
 /** The question the judge answers for one file: the probability that it belongs to the formula. */
-export function formulaQuestion(f: Pick<DomainFormula, 'keyword' | 'formula'>): { id: string; question: string } {
-  const what = f.keyword === 'WRITES' ? 'work within this domain may write' : 'work within this domain may only read';
-  return { id: `domain-${f.keyword.toLowerCase()}`, question: `The domain's ${f.keyword} line says the files ${what}: "${f.formula}". Does the file in the state — its path, then its text — belong to them?` };
+export function formulaQuestion(domainFormula: Pick<DomainFormula, 'keyword' | 'formula'>): { id: string; question: string } {
+  const what = domainFormula.keyword === 'WRITES' ? 'work within this domain may write' : 'work within this domain may only read';
+  return { id: `domain-${domainFormula.keyword.toLowerCase()}`, question: `The domain's ${domainFormula.keyword} line says the files ${what}: "${domainFormula.formula}". Does the file in the state — its path, then its text — belong to them?` };
 }

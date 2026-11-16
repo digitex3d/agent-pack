@@ -15,7 +15,8 @@ import type { ApRef, ApShape, ApSlot, ApSlotType, ApNode, ApBlockData, ApStorePr
 import type { Definition } from '../definition.js';
 import type { BundleContext } from '../dispatch/types.js';
 import { ApBlock, type ApBlockInit } from './block.js';
-import { stableId } from './ids.js';
+import { addressName, stableId } from './ids.js';
+import type { ApDocument } from './document.js';
 import { buildNamespace } from '../namespace.js';
 import { FORMULAS, fill } from '../formulas.js';
 import { withScopeLine } from '../withUse.js';
@@ -68,7 +69,6 @@ export interface BlockCx {
   /** The SLOTS of a template the compilation holds — null when it holds none by that name. */
   templateSlots(name: string): Slot[] | null;
   agentRef(name: string): ApRef;
-  runnableRef(name: string): ApRef;
   refFromAddress(address: string, expectedKind?: string): ApRef;
   /** Namespace of a library file path, or null when outside every root. */
   namespaceOfPath(path: string): string | null;
@@ -143,23 +143,23 @@ export class RuleBlock extends ApBlock {
    * (ENSURE). RETURN starts at `shapePos`.
    */
   private computeMd(env: MdEnv): string {
-    const C = FORMULAS.keywords.COMPUTE;
+    const computeFormulas = FORMULAS.keywords.COMPUTE;
     const at = this.shapePos ?? 0;
     // A section's rules are conditions on the input or the result, never orders: `MUST x be y` → `It requires that x be y`.
     const asConditions = (that: string): MdEnv => ({
       ...env,
       forceLevels: Object.fromEntries(Object.entries(env.forceLevels).map(([family, levels]) =>
-        [family, Object.fromEntries(Object.keys(levels).map(l => [l, Number(l) < 0 ? C.rule.never : that]))])),
+        [family, Object.fromEntries(Object.keys(levels).map(level => [level, Number(level) < 0 ? computeFormulas.rule.never : that]))])),
     });
     const section = (head: string, nodes: ApNode[] | null, that: string) =>
       (nodes?.length ? [head, ...renderNodes(asConditions(that), nodes, false)] : []);
     return [
       ...renderNodes(env, this.body.slice(0, at)),
-      ...section(C.require, this.require, C.rule.require),
-      C.return,
+      ...section(computeFormulas.require, this.require, computeFormulas.rule.require),
+      computeFormulas.return,
       ...(this.shape ? [shapeLine(env, this.shape)] : []),
       ...renderNodes(env, this.body.slice(at)),
-      ...section(C.ensure, this.ensure, C.rule.ensure),
+      ...section(computeFormulas.ensure, this.ensure, computeFormulas.rule.ensure),
     ].join('\n');
   }
 
@@ -258,13 +258,13 @@ export class StoreBlock extends ApBlock {
     const as = extractPrimitive(def.body, 'AS');
     if (as) block.shape = { force: 0, ref: cx.templateRef(as) };
     const raw: Slot[] = as && !block.ownSlots ? cx.templateSlots(as) ?? [] : own;
-    block.slots = raw.map((s): ApSlot => ({
-      name: s.name,
-      optional: s.optional,
-      type: cx.slotType(s.rawType),
-      ...(s.description ? { description: s.description } : {}),
+    block.slots = raw.map((slot): ApSlot => ({
+      name: slot.name,
+      optional: slot.optional,
+      type: cx.slotType(slot.rawType),
+      ...(slot.description ? { description: slot.description } : {}),
       rules: [],
-      chars: s.description?.length ?? 0,
+      chars: slot.description?.length ?? 0,
     }));
     return block;
   }
@@ -320,24 +320,24 @@ export class StoreBlock extends ApBlock {
   }
 
   override asMdBody(env: MdEnv): string {
-    const p = this.projection(env.agent, env.apxOf(null));
-    if (p.unknownDriver) {
-      return storeUnknownDriverLine(this.name, this.storeDriver, p.unknownDriver.available);
+    const projection = this.projection(env.agent, env.apxOf(null));
+    if (projection.unknownDriver) {
+      return storeUnknownDriverLine(this.name, this.storeDriver, projection.unknownDriver.available);
     }
-    const out: string[] = [storeHomeLine(p.location, this.lasts), '', FIELDS_LABEL];
-    const S = FORMULAS.blocks.store;
+    const out: string[] = [storeHomeLine(projection.location, this.lasts), '', FIELDS_LABEL];
+    const storeFormulas = FORMULAS.blocks.store;
     for (const slot of this.slots) {
-      out.push(fill(S.field, {
+      out.push(fill(storeFormulas.field, {
         name: slot.name,
         // a store field sets the mark one space further out than a template field
         optional: slot.optional ? ` ${OPTIONAL_MARK}` : '',
         type: phraseOf(slot.type),
         description: slot.description ? fill(FORMULAS.blocks.template.description, { description: slot.description }) : '',
-        key: this.storeKey === slot.name ? S.key : '',
+        key: this.storeKey === slot.name ? storeFormulas.key : '',
       }));
-      if (p.rejects[slot.name]) out.push(storeRejectLine(p.driver, p.rejects[slot.name]));
+      if (projection.rejects[slot.name]) out.push(storeRejectLine(projection.driver, projection.rejects[slot.name]));
     }
-    out.push('', storeUsageLabel(), '```', ...p.usage, '```');
+    out.push('', storeUsageLabel(), '```', ...projection.usage, '```');
     const body = super.asMdBody(env);
     if (body.trim()) out.push('', body);
     return out.join('\n');
@@ -400,20 +400,20 @@ export class DimensionBlock extends ApBlock {
 
   /** Where it applies (src/withUse.ts), what it covers and its store, how to read, write and search it, then its rules. */
   override asMdBody(env: MdEnv): string {
-    const D = FORMULAS.blocks.dimension;
+    const dimensionFormulas = FORMULAS.blocks.dimension;
     // A dimension is reached by its id, like every block: `<apx> dimension <op> <dim-id>`.
     const command = (op: string) => serviceCommand(env.apxOf(null), 'dimension', op, this.id);
-    const each = this.eachRef ? fill(D.eachShape, { name: refName(this.eachRef), ref: env.refOf(this.eachRef.target) }) : this.each;
+    const each = this.eachRef ? fill(dimensionFormulas.eachShape, { name: refName(this.eachRef), ref: env.refOf(this.eachRef.target) }) : this.each;
     return withScopeLine(this.kind, this.scopes, [
-      fill(D.covers, {
+      fill(dimensionFormulas.covers, {
         globs: renderGlobs(this.globs),
         each,
         name: this.store ? refName(this.store) : '',
         ref: this.store ? env.refOf(this.store.target) : '',
       }),
-      fill(D.read, { read: command('read') }),
-      fill(D.write, { write: command('write') }),
-      fill(D.query, { q: command('q'), next: command('next') }),
+      fill(dimensionFormulas.read, { read: command('read') }),
+      fill(dimensionFormulas.write, { write: command('write') }),
+      fill(dimensionFormulas.query, { q: command('q'), next: command('next') }),
       ...renderNodes(env, this.body),
     ].join('\n'));
   }
@@ -459,8 +459,8 @@ export class DomainBlock extends ApBlock {
   side(keyword: DomainLine): { globs: string[]; within: string[]; uncertain: Record<string, number> } {
     const within: string[] = [];
     const uncertain: Record<string, number> = {};
-    for (const f of this.formulas.filter(f => f.keyword === keyword)) {
-      const files = formulaFiles(f, this.thresholds ?? DEFAULT_DOMAIN_THRESHOLDS);
+    for (const formula of this.formulas.filter(candidate => candidate.keyword === keyword)) {
+      const files = formulaFiles(formula, this.thresholds ?? DEFAULT_DOMAIN_THRESHOLDS);
       within.push(...files.within);
       Object.assign(uncertain, files.uncertain);
     }
@@ -469,7 +469,7 @@ export class DomainBlock extends ApBlock {
 
   /** Whether it says anything of a side — a plain glob or a formula. */
   declares(keyword: DomainLine): boolean {
-    return (keyword === 'WRITES' ? this.writes : this.reads).length > 0 || this.formulas.some(f => f.keyword === keyword);
+    return (keyword === 'WRITES' ? this.writes : this.reads).length > 0 || this.formulas.some(formula => formula.keyword === keyword);
   }
 
   protected override argsJson(): Record<string, unknown> {
@@ -483,14 +483,14 @@ export class DomainBlock extends ApBlock {
 
   /** The files it covers — a domain holds no rule, it only says where. */
   override asMdBody(): string {
-    const D = FORMULAS.blocks.domain;
+    const domainFormulas = FORMULAS.blocks.domain;
     const side = (keyword: DomainLine, line: string) => {
       const { globs } = this.side(keyword);
-      const judged = this.formulas.filter(f => f.keyword === keyword).map(f => fill(D.formula, { formula: f.formula, count: String(formulaFiles(f, this.thresholds ?? DEFAULT_DOMAIN_THRESHOLDS).within.length) }));
+      const judged = this.formulas.filter(formula => formula.keyword === keyword).map(formula => fill(domainFormulas.formula, { formula: formula.formula, count: String(formulaFiles(formula, this.thresholds ?? DEFAULT_DOMAIN_THRESHOLDS).within.length) }));
       const what = [...(globs.length ? [renderGlobs(globs)] : []), ...judged].join(', ');
       return what ? [fill(line, { globs: what })] : [];
     };
-    return [...side('WRITES', D.writes), ...side('READS', D.reads)].join('\n');
+    return [...side('WRITES', domainFormulas.writes), ...side('READS', domainFormulas.reads)].join('\n');
   }
 }
 
@@ -519,9 +519,9 @@ export class PluginBlock extends ApBlock {
 
   static fromDefinition(spec: PluginSpec, def: Definition, cx: BlockCx): PluginBlock {
     const block = new PluginBlock(spec, cx.defInit(def));
-    const lines = def.body.split(/\r?\n/).flatMap(l => {
-      const m = l.match(/^\s*([A-Z][A-Z0-9-]*)\s+(.+)$/);
-      return m ? [{ key: m[1], rest: m[2] }] : [];
+    const lines = def.body.split(/\r?\n/).flatMap(line => {
+      const match = line.match(/^\s*([A-Z][A-Z0-9-]*)\s+(.+)$/);
+      return match ? [{ key: match[1], rest: match[2] }] : [];
     });
     block.fields = recordOfLines(spec, lines);
     return block;
@@ -534,15 +534,15 @@ export class PluginBlock extends ApBlock {
   /** Its lines as written, then each command its plugin serves it with, on its id. */
   override asMdBody(env: MdEnv): string {
     const spec = pluginOf(this.kind);
-    const P = FORMULAS.blocks.plugin;
+    const pluginFormulas = FORMULAS.blocks.plugin;
     const lines = Object.entries(this.fields).flatMap(([slot, value]) =>
-      (Array.isArray(value) ? value : [value]).map(v => fill(P.line, { key: lineKeyOf(slot), value: String(v) })));
+      (Array.isArray(value) ? value : [value]).map(item => fill(pluginFormulas.line, { key: lineKeyOf(slot), value: String(item) })));
     if (!spec || spec.operations.length === 0) return lines.join('\n');
-    const commands = spec.operations.map(o => fill(P.command, {
-      command: `${serviceCommand(env.apxOf(null), spec.name, o.op, this.id)} ${inputUsage(spec, o.input)}`.trimEnd(),
-      about: o.about,
+    const commands = spec.operations.map(operation => fill(pluginFormulas.command, {
+      command: `${serviceCommand(env.apxOf(null), spec.name, operation.op, this.id)} ${inputUsage(spec, operation.input)}`.trimEnd(),
+      about: operation.about,
     }));
-    return [...lines, '', P.commands, ...commands].join('\n');
+    return [...lines, '', pluginFormulas.commands, ...commands].join('\n');
   }
 }
 
@@ -558,7 +558,7 @@ export class TemplateBlock extends ApBlock {
   static fromData(data: ApBlockData): TemplateBlock {
     const block = restore(new TemplateBlock(initOf(data)), data);
     const slots = (data.args.slots as ApSlot[] | undefined) ?? null;
-    block.slots = slots ? slots.map(s => ({ ...s, rules: reviveNodes(s.rules) })) : null;
+    block.slots = slots ? slots.map(slot => ({ ...slot, rules: reviveNodes(slot.rules) })) : null;
     block.layout = (data.args.layout as string | undefined) ?? null;
     block.example = (data.args.example as string | undefined) ?? null;
     block.scalar = (data.args.scalar as { typePhrase: string; description?: string } | undefined) ?? null;
@@ -584,21 +584,21 @@ export class TemplateBlock extends ApBlock {
   fill(body: string, cx: BlockCx): void {
     const parsed = parseTemplate(body);
     if (parsed && parsed.slots.length > 0) {
-      this.slots = parsed.slots.map((s): ApSlot => {
-        const criteria = (s.rawRules ?? []).map(r => r.criteria ?? null);
+      this.slots = parsed.slots.map((slot): ApSlot => {
+        const criteria = (slot.rawRules ?? []).map(rawRule => rawRule.criteria ?? null);
         return {
-          name: s.name,
-          optional: s.optional,
-          type: cx.slotType(s.rawType),
-          ...(s.description ? { description: s.description } : {}),
-          rules: (s.rawRules ?? []).map(r => {
-            const { base, force } = cx.parseForce(r.keyword);
-            const rule = new DirectiveNode(base, force, r.text);
-            rule.chars = r.text.length;
+          name: slot.name,
+          optional: slot.optional,
+          type: cx.slotType(slot.rawType),
+          ...(slot.description ? { description: slot.description } : {}),
+          rules: (slot.rawRules ?? []).map(rawRule => {
+            const { base, force } = cx.parseForce(rawRule.keyword);
+            const rule = new DirectiveNode(base, force, rawRule.text);
+            rule.chars = rawRule.text.length;
             return rule;
           }),
           ...(criteria.some(Boolean) ? { criteria } : {}),
-          chars: (s.description?.length ?? 0) + (s.rawRules ?? []).reduce((n, r) => n + r.text.length, 0),
+          chars: (slot.description?.length ?? 0) + (slot.rawRules ?? []).reduce((total, rawRule) => total + rawRule.text.length, 0),
         };
       });
       this.layout = parsed.bodyLayout;
@@ -627,11 +627,11 @@ export class TemplateBlock extends ApBlock {
 
   /** The slot rules as neutral checks, in order — id `<template>.<slot>.<n>`, the rule text verbatim. */
   asChecks(): ApCheck[] {
-    return (this.slots ?? []).flatMap(slot => slot.rules.map((rule, i) => ({
-      id: `${this.name}.${slot.name}.${i + 1}`,
+    return (this.slots ?? []).flatMap(slot => slot.rules.map((rule, index) => ({
+      id: `${this.name}.${slot.name}.${index + 1}`,
       statement: rule.text,
       force: { keyword: rule.keyword, level: rule.force },
-      ...(slot.criteria?.[i] ? { criteria: slot.criteria[i]! } : {}),
+      ...(slot.criteria?.[index] ? { criteria: slot.criteria[index]! } : {}),
     })));
   }
 
@@ -642,11 +642,11 @@ export class TemplateBlock extends ApBlock {
 
   /** One instance of it, as text: its layout with every `{slot}` replaced by the instance's value — a text as is, any other value as JSON. */
   instanceText(instance: Record<string, unknown>): string {
-    const slots = new Set((this.slots ?? []).map(s => s.name));
-    return this.layoutText().replace(new RegExp(`\\{(${SLOT_NAME})\\}`, 'g'), (m, name: string) => {
-      if (!slots.has(name)) return m;
-      const v = instance[name];
-      return v === undefined ? '' : typeof v === 'string' ? v : JSON.stringify(v);
+    const slots = new Set((this.slots ?? []).map(slot => slot.name));
+    return this.layoutText().replace(new RegExp(`\\{(${SLOT_NAME})\\}`, 'g'), (placeholder, name: string) => {
+      if (!slots.has(name)) return placeholder;
+      const value = instance[name];
+      return value === undefined ? '' : typeof value === 'string' ? value : JSON.stringify(value);
     });
   }
 
@@ -656,19 +656,19 @@ export class TemplateBlock extends ApBlock {
     if (this.scalar) {
       out.push(scalarTemplateLine(this.name, this.scalar.typePhrase, this.scalar.description));
     } else if (this.slots) {
-      const T = FORMULAS.blocks.template;
+      const templateFormulas = FORMULAS.blocks.template;
       out.push(templateScaffoldIntro(this.name));
       out.push('', this.layoutText(), '');
       out.push(FIELDS_LABEL);
-      for (const s of this.slots) {
-        out.push(fill(T.field, {
-          name: s.name,
-          optional: s.optional ? OPTIONAL_MARK : '',
-          type: slotTypePhrase(env, s.type),
-          description: s.description ? fill(T.description, { description: s.description }) : '',
+      for (const slot of this.slots) {
+        out.push(fill(templateFormulas.field, {
+          name: slot.name,
+          optional: slot.optional ? OPTIONAL_MARK : '',
+          type: slotTypePhrase(env, slot.type),
+          description: slot.description ? fill(templateFormulas.description, { description: slot.description }) : '',
         }));
-        for (const r of s.rules) {
-          out.push(fill(T.rule, { intro: forceIntro(env, r.keyword, r.force) ?? r.keyword, text: r.text }));
+        for (const rule of slot.rules) {
+          out.push(fill(templateFormulas.rule, { intro: forceIntro(env, rule.keyword, rule.force) ?? rule.keyword, text: rule.text }));
         }
       }
     } else {
@@ -706,10 +706,10 @@ export class VarBlock extends ApBlock {
   }
 
   static fromDeclaration(name: string, scope: VarScope, type: ApRef | null, declared: string): VarBlock {
-    const V = FORMULAS.keywords.VAR;
+    const varFormulas = FORMULAS.keywords.VAR;
     const block = new VarBlock({
       name, namespace: VarBlock.NAMESPACE,
-      about: fill(V.about, { scope: V.scopes[scope], type: type ? fill(V.typed, { name: refName(type) }) : '', where: declared }),
+      about: fill(varFormulas.about, { scope: varFormulas.scopes[scope], type: type ? fill(varFormulas.typed, { name: refName(type) }) : '', where: declared }),
     });
     block.scope = scope;
     block.type = type;
@@ -755,6 +755,8 @@ export interface TeamScan {
   memberFiles: string[];
   /** The blocks of the TEAM or MAIN block — its routing WHENs and its FLOWs. */
   blocks: Block[];
+  /** Its routing as its body: every WHEN of the block, de-indented as an agent's body is written. */
+  routing: string;
   /** The FLOW blocks sliced back to raw text, de-indented as a flow file writes them. */
   flows: { name: string; body: string; block: Block | null }[];
 }
@@ -765,7 +767,6 @@ export class TeamBlock extends ApBlock {
   readonly kind = 'team';
   protected readonly idPrefix = TeamBlock.PREFIX;
   members: ApRef[] = [];
-  routing: { when: string; run: ApRef }[] | null = null;
   shared: string | null = null;
 
   /** The namespace a team's own flows live under. */
@@ -776,12 +777,11 @@ export class TeamBlock extends ApBlock {
   static fromData(data: ApBlockData): TeamBlock {
     const block = restore(new TeamBlock(initOf(data)), data);
     block.members = (data.args.members as ApRef[] | undefined) ?? [];
-    block.routing = (data.args.routing as { when: string; run: ApRef }[] | undefined) ?? null;
     block.shared = (data.args.shared as string | undefined) ?? null;
     return block;
   }
 
-  /** Build the team block from its scanned directory: members/routing/shared. */
+  /** Build the team block from its scanned directory: its members, its routing as its body — walked as an agent's is — and its shared text. */
   static fromScan(scan: TeamScan, cx: BlockCx): TeamBlock {
     const block = new TeamBlock({
       name: scan.name,
@@ -789,8 +789,7 @@ export class TeamBlock extends ApBlock {
       about: scan.file.about || null,
     });
     block.members = scan.members.map(name => cx.agentRef(name));
-    const routes = routesOf(scan, cx);
-    if (routes.length > 0) block.routing = routes;
+    cx.walk(scan.routing, block.body, block);
 
     const teamAp = resolve(scan.root, 'team.ap');
     if (existsSync(teamAp)) {
@@ -800,21 +799,35 @@ export class TeamBlock extends ApBlock {
     return block;
   }
 
+  /** The team's identity — who it is and its members, each with the command that reaches it: what an agent's role is to the agent. */
+  override asMdIdentity(env: MdEnv, doc: ApDocument): string {
+    const words = FORMULAS.blocks.team.unit;
+    return unitIdentity(env, doc, this, { lead: words.lead, groups: [{ title: words.members, refs: this.members }] });
+  }
+
   protected override argsJson(): Record<string, unknown> {
     return {
       members: this.members,
-      ...(this.routing ? { routing: this.routing } : {}),
       ...(this.shared ? { shared: this.shared } : {}),
     };
   }
 }
 
-/** The `WHEN … : RUN <flow|procedure>` routing entries of a unit's block. */
-function routesOf(scan: TeamScan, cx: BlockCx): { when: string; run: ApRef }[] {
-  return scan.blocks.filter(b => b.key === 'WHEN').flatMap(b => {
-    const when = [b.name, b.rest].filter(Boolean).join(' ');
-    return b.children.flatMap(child => (child.type === 'line' && child.keyword === 'RUN' ? [{ when, run: cx.runnableRef(child.rest.trim()) }] : []));
-  });
+/**
+ * A unit's identity: the line that says who it is, then each group of what it
+ * holds — its members, the main's teams — one row per block, with its ABOUT
+ * (read by id wherever the block is held) and the command that starts it.
+ */
+function unitIdentity(env: MdEnv, doc: ApDocument, unit: ApBlock, { lead, groups }: { lead: string; groups: { title: string; refs: readonly ApRef[] }[] }): string {
+  const lines = [FORMULAS.blocks.agent.identity, '', fill(lead, { name: unit.name, about: unit.about ?? '' })];
+  for (const { title, refs } of groups.filter(group => group.refs.length > 0)) {
+    lines.push('', title);
+    for (const ref of refs) {
+      const name = addressName(ref.target);
+      lines.push(fill(FORMULAS.blocks.team.unit.row, { name, about: doc.reach(ref)?.about ?? FORMULAS.blocks.team.undescribed, command: env.apxOf(name) }));
+    }
+  }
+  return `${lines.join('\n')}\n\n`;
 }
 
 /**
@@ -829,13 +842,11 @@ export class MainBlock extends ApBlock {
   protected readonly idPrefix = MainBlock.PREFIX;
   members: ApRef[] = [];
   teams: ApRef[] = [];
-  routing: { when: string; run: ApRef }[] | null = null;
 
   static fromData(data: ApBlockData): MainBlock {
     const block = restore(new MainBlock(initOf(data)), data);
     block.members = (data.args.members as ApRef[] | undefined) ?? [];
     block.teams = (data.args.teams as ApRef[] | undefined) ?? [];
-    block.routing = (data.args.routing as { when: string; run: ApRef }[] | undefined) ?? null;
     return block;
   }
 
@@ -844,16 +855,20 @@ export class MainBlock extends ApBlock {
     const block = new MainBlock({ name: scan.name, namespace: MainBlock.NAMESPACE, about: scan.file.about || null });
     block.members = scan.members.map(name => cx.agentRef(name));
     block.teams = scan.teams.map(name => cx.refFromAddress(`${TeamBlock.NAMESPACE}/${name}`, 'team'));
-    const routes = routesOf(scan, cx);
-    if (routes.length > 0) block.routing = routes;
+    cx.walk(scan.routing, block.body, block);
     return block;
+  }
+
+  /** The main's identity — who it is, its teams, its agents, each with the command that reaches it. */
+  override asMdIdentity(env: MdEnv, doc: ApDocument): string {
+    const words = FORMULAS.blocks.main.unit;
+    return unitIdentity(env, doc, this, { lead: words.lead, groups: [{ title: words.teams, refs: this.teams }, { title: words.members, refs: this.members }] });
   }
 
   protected override argsJson(): Record<string, unknown> {
     return {
       members: this.members,
       teams: this.teams,
-      ...(this.routing ? { routing: this.routing } : {}),
     };
   }
 }
@@ -874,10 +889,10 @@ export interface AgentSource {
  */
 function mergedBehaviours(roleBlocks: readonly ApBlock[]): ApNode[] {
   const seen = new Set<string>();
-  const key = (n: ApNode) => JSON.stringify(n, (k, v) => (k === 'line' || k === 'col' || k === 'chars' ? undefined : v));
-  return roleBlocks.flatMap((role, k) => {
-    const kept = k === 0 ? role.body : role.body.filter(n => !seen.has(key(n)));
-    kept.forEach(n => seen.add(key(n)));
+  const key = (node: ApNode) => JSON.stringify(node, (field, fieldValue) => (field === 'line' || field === 'col' || field === 'chars' ? undefined : fieldValue));
+  return roleBlocks.flatMap((role, index) => {
+    const kept = index === 0 ? role.body : role.body.filter(node => !seen.has(key(node)));
+    kept.forEach(node => seen.add(key(node)));
     return kept;
   });
 }
@@ -912,13 +927,14 @@ export class AgentBlock extends ApBlock {
    * The agent's md preamble — Identity (via the ONE legacy composer) and the
    * lens binding lines. The block owns its own md; the backend composes.
    */
-  asMdIdentity(env: MdEnv, roleBlocks: readonly ApBlock[]): string {
+  override asMdIdentity(env: MdEnv, doc: ApDocument): string {
+    const roleBlocks = this.roles.map(ref => doc.resolve(ref)).filter((block): block is ApBlock => block !== null);
     // One identity line per role, in the order bound; ROLE, ROLE-ABOUT and EXPERTISE align by position.
     const identityMeta = new Map<string, string[]>();
     if (roleBlocks.length) {
-      identityMeta.set('ROLE', roleBlocks.map(r => deslugifyRole(r.name)));
-      identityMeta.set('ROLE-ABOUT', roleBlocks.map(r => r.about ?? ''));
-      identityMeta.set('EXPERTISE', roleBlocks.map(r => ((r as { expertise?: string[] | null }).expertise ?? []).join(', ')));
+      identityMeta.set('ROLE', roleBlocks.map(role => deslugifyRole(role.name)));
+      identityMeta.set('ROLE-ABOUT', roleBlocks.map(role => role.about ?? ''));
+      identityMeta.set('EXPERTISE', roleBlocks.map(role => ((role as { expertise?: string[] | null }).expertise ?? []).join(', ')));
     }
     if (this.mandate) identityMeta.set('MANDATE', [this.mandate]);
     const behaviours = renderNodes(env, mergedBehaviours(roleBlocks)).join('\n');
@@ -937,7 +953,7 @@ export class AgentBlock extends ApBlock {
 
   /** The root block: identity from the already-extracted metadata Map. */
   static fromContext(src: AgentSource, cx: BlockCx): AgentBlock {
-    const md = (k: string): string | null => src.metadata.get(k)?.[0]?.trim() ?? null;
+    const md = (key: string): string | null => src.metadata.get(key)?.[0]?.trim() ?? null;
     const block = new AgentBlock({ name: src.agentName, namespace: AgentBlock.NAMESPACE, about: md('ABOUT') });
 
     block.roles = src.boundRoles.map(role => {
@@ -1032,7 +1048,7 @@ export const KIND_STRATEGIES: KindStrategy[] = [
 ];
 
 export function strategyOf(kind: string): KindStrategy | null {
-  return KIND_STRATEGIES.find(s => s.kind === kind) ?? null;
+  return KIND_STRATEGIES.find(strategy => strategy.kind === kind) ?? null;
 }
 
 /**
@@ -1041,7 +1057,7 @@ export function strategyOf(kind: string): KindStrategy | null {
  * apx both call it.
  */
 export function installPluginKind(spec: PluginSpec): void {
-  if (KIND_STRATEGIES.some(s => s.kind === spec.name)) return;
+  if (KIND_STRATEGIES.some(strategy => strategy.kind === spec.name)) return;
   KIND_STRATEGIES.push({
     kind: spec.name, prefix: spec.prefix, folder: spec.folder, ref: null,
     chapterTitle: spec.folder.charAt(0).toUpperCase() + spec.folder.slice(1),
@@ -1053,7 +1069,7 @@ export function installPluginKind(spec: PluginSpec): void {
 
 /** The kind living in a library folder / namespace segment, or null. */
 export function kindOfFolder(folder: string): string | null {
-  return KIND_STRATEGIES.find(s => s.folder === folder)?.kind ?? null;
+  return KIND_STRATEGIES.find(strategy => strategy.folder === folder)?.kind ?? null;
 }
 
 /** The folder / namespace segment of a kind (fallback: kind + 's'). */

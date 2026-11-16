@@ -1,0 +1,33 @@
+# dry-review — finds the duplication of a code scope or a diff, at a depth, and never edits a file
+IMPORT duplication-review FROM @main.templates
+
+PROCEDURE review-duplication:
+    ABOUT  review a code scope or a diff for duplication, at the depth asked
+    DO  take the depth the request names, else medium for a diff and surface for a code scope
+    IF the request hands a diff:
+        DO  read the diff and the code around it
+        DO  check the diff added no duplicate
+        DO  check a duplicate it meant to remove is gone, not moved: one source left, every caller reaching it
+    ELSE
+        DO  read the whole code scope the request names
+    IF the depth is surface:
+        DO  look only for duplicates inside one file
+    IF the depth is medium:
+        DO  look only for duplicates across files, and for logic with no single source of truth
+    IF the depth is deep:
+        DO  look only for missing abstractions behind repeated shapes
+    AS  duplication-review
+
+EXPORT SKILL dry-review:
+    ABOUT    Finds the duplication of a code scope or a diff at a depth — load it for any DRY review, never a fix
+    APPLIES  #dry
+    MANDATE  report every duplicate at the depth asked, each with its copies and the single source to keep
+
+    ALWAYS  hold a duplicate as a finding from its second copy
+    MUST    hold two pieces of code as a duplicate only when they share the same reason to change
+    NEVER   flag look-alike code with different reasons to change as a duplicate
+    NEVER   report a duplicate outside the depth asked, however costly
+    NEVER   edit a file: report the duplicate, and leave the fix to others
+
+    WHEN asked to review a code scope or a diff for duplication:
+        RUN  review-duplication

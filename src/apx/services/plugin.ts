@@ -18,8 +18,7 @@ import { pathToFileURL } from 'node:url';
 import type { PluginBlock } from '../../apdoc/blocks.js';
 import { STATE_DIR } from '../paths.js';
 import { inputUsage, recordIssues, recordOfArgs, type PluginSpec } from '../../plugins.js';
-import { serviceCommand, type ApxHost, type ApxService } from '../service.js';
-import { errorMessage } from '../../errors.js';
+import { serviceCommand, type ApxContext, type ApxOutput, type ApxService, type ApxSession } from '../service.js';
 
 type Result = number | { refuse: string } | void;
 type Operation = (call: { block: Record<string, unknown>; input: Record<string, unknown>; state: { get(fallback: unknown): unknown; set(value: unknown): void }; out(line: string): void }) => Result | Promise<Result>;
@@ -29,24 +28,24 @@ export function pluginService(spec: PluginSpec): ApxService {
   return {
     kind: spec.name,
     about: spec.about,
-    operations: spec.operations.map(o => ({ op: o.op, args: `<${spec.prefix}-id> ${inputUsage(spec, o.input)}`.trimEnd(), about: o.about })),
+    operations: spec.operations.map(operation => ({ op: operation.op, args: `<${spec.prefix}-id> ${inputUsage(spec, operation.input)}`.trimEnd(), about: operation.about })),
     serve: (host, op, args) => serve(host, spec, op, args),
   };
 }
 
-async function serve(host: ApxHost, spec: PluginSpec, op: string | undefined, args: string[]): Promise<number> {
+async function serve(host: ApxOutput & ApxContext & ApxSession, spec: PluginSpec, op: string | undefined, args: string[]): Promise<number> {
   const blocks = host.doc.byKind(spec.name) as PluginBlock[];
-  const operations = spec.operations.map(o => o.op).join('|');
+  const operations = spec.operations.map(operationSpec => operationSpec.op).join('|');
   if (!op) {
-    for (const b of blocks) host.out(`${b.id}  ${b.name}${b.about ? `  — ${b.about}` : ''}`);
+    for (const pluginBlock of blocks) host.out(`${pluginBlock.id}  ${pluginBlock.name}${pluginBlock.about ? `  — ${pluginBlock.about}` : ''}`);
     return 0;
   }
-  const operation = spec.operations.find(o => o.op === op);
+  const operation = spec.operations.find(candidate => candidate.op === op);
   if (!operation) return host.fail(2, `'${op}' is no operation of ${spec.name} — ${host.cmd} ${spec.name} ${operations} <${spec.prefix}-id> …`);
   const [id, ...rest] = args;
-  const block = id ? blocks.find(b => b.id === id) : undefined;
+  const block = id ? blocks.find(candidate => candidate.id === id) : undefined;
   if (!block) {
-    const known = blocks.map(b => `${b.id} (${b.name})`).join(', ') || 'none';
+    const known = blocks.map(pluginBlock => `${pluginBlock.id} (${pluginBlock.name})`).join(', ') || 'none';
     return host.fail(2, `${id ? `no ${spec.name} \`${id}\` in this agent` : `${spec.name} ${op} takes an id (${spec.prefix}-…)`} — its ${spec.folder}: ${known}`);
   }
   const usage = `${serviceCommand(host.cmd, spec.name, op, block.id)} ${inputUsage(spec, operation.input)}`.trimEnd();
@@ -78,9 +77,9 @@ async function serve(host: ApxHost, spec: PluginSpec, op: string | undefined, ar
   try {
     const mod = await import(pathToFileURL(spec.service).href) as Record<string, Operation>;
     result = await mod[op]({ block: { id: block.id, name: block.name, about: block.about, ...block.fields }, input: read.record, state, out: line => host.out(line) });
-  } catch (e) {
-    if (e instanceof Refusal) return host.fail(1, e.message);
-    return host.fail(1, `${spec.name} ${op} failed: ${errorMessage(e)} — nothing of its state was written`);
+  } catch (error) {
+    if (error instanceof Refusal) return host.fail(1, error.message);
+    return host.fail(1, `${spec.name} ${op} failed: ${error instanceof Error ? error.message : error} — nothing of its state was written`);
   }
   if (written) {
     mkdirSync(dirname(file!), { recursive: true });

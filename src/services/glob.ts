@@ -9,27 +9,27 @@
 
 /** A glob as an anchored RegExp over a `/`-separated relative path. */
 export function globRegExp(glob: string): RegExp {
-  const g = glob.replace(/^\.\//, '');
+  const pattern = glob.replace(/^\.\//, '');
   let out = '';
   let braces = 0;
-  for (let i = 0; i < g.length; i++) {
-    const c = g[i];
-    if (c === '*' && g[i + 1] === '*') {
-      i++;
+  for (let index = 0; index < pattern.length; index++) {
+    const character = pattern[index];
+    if (character === '*' && pattern[index + 1] === '*') {
+      index++;
       // `**/` — any folders, or none; a trailing `**` — anything below.
-      if (g[i + 1] === '/') { i++; out += '(?:.*/)?'; } else out += '.*';
-    } else if (c === '*') out += '[^/]*';
-    else if (c === '?') out += '[^/]';
-    else if (c === '{') { braces++; out += '(?:'; }
-    else if (c === '}' && braces > 0) { braces--; out += ')'; }
-    else if (c === ',' && braces > 0) out += '|';
-    else if (c === '[') {
-      const end = g.indexOf(']', i + 1);
+      if (pattern[index + 1] === '/') { index++; out += '(?:.*/)?'; } else out += '.*';
+    } else if (character === '*') out += '[^/]*';
+    else if (character === '?') out += '[^/]';
+    else if (character === '{') { braces++; out += '(?:'; }
+    else if (character === '}' && braces > 0) { braces--; out += ')'; }
+    else if (character === ',' && braces > 0) out += '|';
+    else if (character === '[') {
+      const end = pattern.indexOf(']', index + 1);
       if (end < 0) { out += '\\['; continue; }
-      const body = g.slice(i + 1, end).replace(/^!/, '^').replace(/\\/g, '\\\\');
+      const body = pattern.slice(index + 1, end).replace(/^!/, '^').replace(/\\/g, '\\\\');
       out += `[${body}]`;
-      i = end;
-    } else out += c.replace(/[.+^${}()|\\]/g, '\\$&');
+      index = end;
+    } else out += character.replace(/[.+^${}()|\\]/g, '\\$&');
   }
   return new RegExp(`^${out}$`);
 }
@@ -41,5 +41,5 @@ export function matchesAnyGlob(path: string, globs: readonly string[]): boolean 
 
 /** A path as a glob that matches it alone — each glob character in a class of its own (`a[*].ts`). */
 export function literalGlob(path: string): string {
-  return path.replace(/[*?{}[]/g, c => `[${c}]`);
+  return path.replace(/[*?{}[]/g, character => `[${character}]`);
 }

@@ -11,7 +11,6 @@
 import { readFileSync } from 'fs';
 import { relative } from 'path';
 import { CompileError, type BuildSummary, type Diagnostic, type Reporter } from '../../src/report.js';
-import { errorMessage } from '../../src/errors.js';
 
 export interface PrettyOptions {
   /** The project root — paths are shown from it. */
@@ -92,7 +91,7 @@ export function prettyReporter({ root, verbose = false, color = true }: PrettyOp
       // A compilation's errors are shown once, whichever agent met them first.
       if (error instanceof CompileError) { error.diagnostics.forEach(show); return; }
       errors++;
-      out(`${red('error')}${bold(`: ${subject ? `${subject}: ` : ''}${errorMessage(error)}`)}`);
+      out(`${red('error')}${bold(`: ${subject ? `${subject}: ` : ''}${error instanceof Error ? error.message : String(error)}`)}`);
       out();
     },
     done: ({ agents, adapters, files, failures }: BuildSummary) => {

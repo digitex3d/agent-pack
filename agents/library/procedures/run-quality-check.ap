@@ -1,0 +1,10 @@
+# run-quality-check — runs the project's quality check: this machine's script when there is one, else the project's own linter
+IMPORT quality-check FROM @main.vars
+
+EXPORT PROCEDURE run-quality-check:
+    ABOUT  run the quality check, and read the report it prints
+    IF `{{quality-check}}` exists at the project root:
+        DO  run `{{quality-check}}` from the project root
+    ELSE
+        DO  run the project's own linter instead, and say that the quality-check script is missing
+    DO  read the report the check prints, and each result in it

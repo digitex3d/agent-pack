@@ -23,30 +23,30 @@ export interface DecoratorRead {
 
 /** The definitions a decorator may name, by kind — the compilation's imports. */
 export function lookupIn(ctx: BundleContext): (kind: string) => Definition[] {
-  return kind => STRATEGIES.find(s => s.kind === kind)?.getEntries(ctx) ?? [];
+  return kind => STRATEGIES.find(strategy => strategy.kind === kind)?.getEntries(ctx) ?? [];
 }
 
 /** A decorator token read against the compilation — null for any other token, or a key no decorator has (the lint's). */
-export function readDecorator(t: Token, ctx: BundleContext): DecoratorRead | null {
-  if (t.kind !== 'decorator') return null;
-  const spec = decoratorOf(t.key);
+export function readDecorator(token: Token, ctx: BundleContext): DecoratorRead | null {
+  if (token.kind !== 'decorator') return null;
+  const spec = decoratorOf(token.key);
   if (!spec) return null;
   const defs = lookupIn(ctx);
   const lookup: DecoratorLookup = kind => defs(kind);
-  const { items, template } = splitDecoratorRest(t.rest);
+  const { items, template } = splitDecoratorRest(token.rest);
   const { uses, problems } = resolveDecorator(spec, items, lookup, template);
   return {
     spec, problems,
-    uses: uses.map(u => defs(u.kind).find(d => d.name === u.name)!),
-    template: template ? defs('template').find(d => d.name === template) ?? null : null,
+    uses: uses.map(use => defs(use.kind).find(definition => definition.name === use.name)!),
+    template: template ? defs('template').find(definition => definition.name === template) ?? null : null,
   };
 }
 
 /** The sentence above the work a decorator decorates: its opening, each block it names with its id, the shape of its answer. */
 export function decoratorPhrase(spec: DecoratorSpec, uses: { kind: string; name: string; ref: string }[], shape?: { name: string; ref: string }): string {
-  const D = FORMULAS.decorators;
-  const named = uses.map(u => fill(D.use, u));
-  const listed = named.length > 1 ? `${named.slice(0, -1).join(', ')}${D.and}${named[named.length - 1]}` : named[0] ?? '';
+  const decoratorFormulas = FORMULAS.decorators;
+  const named = uses.map(use => fill(decoratorFormulas.use, use));
+  const listed = named.length > 1 ? `${named.slice(0, -1).join(', ')}${decoratorFormulas.and}${named[named.length - 1]}` : named[0] ?? '';
   const text = shape ? fill(FORMULAS.keywords.AS.shaped, { text: listed, name: shape.name, ref: shape.ref }) : listed;
   return `${spec.intro} ${text}`.trimEnd();
 }

@@ -19,7 +19,7 @@ import { findAgentFiles, readAgentFile, standaloneDir, agentNameOf, teamRootForA
 import { isMainFile, readMainFile } from '../services/mainMetadata.js';
 import { apxCommand } from '../apx/paths.js';
 import { harnessesOf, harnessProblem, agentModels, modelProblem, type HarnessRow } from '../harnesses.js';
-import { delegateTargetErrors, executorErrors, usesPrograms, WRITE_PROGRAM, type AgentIndexEntry } from '../executor.js';
+import { delegateTargetErrors, delegationSiteErrors, executorErrors, usesPrograms, WRITE_PROGRAM, type AgentIndexEntry } from '../executor.js';
 import { BUILTIN_AGENTS_DIR, resolveDelegateConfig, type DelegateConfig } from '../config.js';
 import { type LintError, checkVocabulary, lineOfName, checkedHeadIssues, dimensionBlockErrors, domainBlockErrors, pluginBlockErrors, teamFileErrors, mainBlockErrors } from '../lint.js';
 import { CompileError, reporter } from '../report.js';
@@ -201,7 +201,7 @@ function buildBundleOpts(
 
 /** A name that resolves to no block fails the compilation (D30): what is missing, and how to bring it in. */
 function unresolvedErrors(unresolved: { path: string; name: string; kind: string }[]): LintError[] {
-  return unresolved.map(u => ({ file: u.path, line: lineOfName(u.path, u.name), message: unresolvedMessage(u.kind, u.name) }));
+  return unresolved.map(entry => ({ file: entry.path, line: lineOfName(entry.path, entry.name), message: unresolvedMessage(entry.kind, entry.name) }));
 }
 
 /**
@@ -214,7 +214,7 @@ function unresolvedErrors(unresolved: { path: string; name: string; kind: string
  */
 function unappliedErrors(ctx: BundleContext, named: ReadonlySet<string>, dimensions = false): LintError[] {
   const blocks = [...ctx.policies, ...ctx.skills, ...(dimensions ? ctx.dimensions : [])];
-  return unappliedBlocks(blocks, named).map(b => ({ file: b.path, line: lineOfName(b.path, b.name), ...unappliedIssue(b) }));
+  return unappliedBlocks(blocks, named).map(block => ({ file: block.path, line: lineOfName(block.path, block.name), ...unappliedIssue(block) }));
 }
 
 /**
@@ -227,13 +227,13 @@ function standaloneDecoratorErrors(ctx: BundleContext, file: string, body: strin
   const named = new Set<string>();
   const errors: LintError[] = [];
   // A definition's decorators stand above its body: read with it.
-  const above = (d: Definition) => (ctx.sources.span(d.path, d.kind, d.name)?.decorators ?? []).map(x => `${DECORATOR_MARK}${x.key} ${x.rest}`);
-  for (const { path, text } of [{ path: file, text: body }, ...blocks.map(d => ({ path: d.path, text: [...above(d), d.body].join('\n') }))]) {
-    for (const t of lex(text)) {
-      const read = readDecorator(t, ctx);
+  const above = (definition: Definition) => (ctx.sources.span(definition.path, definition.kind, definition.name)?.decorators ?? []).map(decorator => `${DECORATOR_MARK}${decorator.key} ${decorator.rest}`);
+  for (const { path, text } of [{ path: file, text: body }, ...blocks.map(definition => ({ path: definition.path, text: [...above(definition), definition.body].join('\n') }))]) {
+    for (const token of lex(text)) {
+      const read = readDecorator(token, ctx);
       if (!read) continue;
-      for (const d of read.uses) named.add(d.name);
-      const line = path === file && 'line' in t ? t.line : lineOfText(path, 'raw' in t ? t.raw : '');
+      for (const use of read.uses) named.add(use.name);
+      const line = path === file && 'line' in token ? token.line : lineOfText(path, 'raw' in token ? token.raw : '');
       errors.push(...read.problems.map(message => ({ file: path, line, message })));
     }
   }
@@ -243,8 +243,8 @@ function standaloneDecoratorErrors(ctx: BundleContext, file: string, body: strin
 /** The 1-based line of `path` that holds `text`, trimmed — 1 when none does. */
 function lineOfText(path: string, text: string): number {
   if (!existsSync(path)) return 1;
-  const i = readFileSync(path, 'utf-8').split(/\r?\n/).findIndex(l => l.trim() === text.trim());
-  return i + 1 || 1;
+  const index = readFileSync(path, 'utf-8').split(/\r?\n/).findIndex(line => line.trim() === text.trim());
+  return index + 1 || 1;
 }
 
 /** What a name that resolves to no block of its kind is told. */
@@ -287,7 +287,7 @@ export function makeBundleContext(opts: MakeContextOpts): BundleContext {
     dimensions: [],
     domains: [],
     // Each plugin's blocks, under its folder's name — read back by its kind strategy.
-    ...Object.fromEntries(plugins().map(p => [p.folder, []])),
+    ...Object.fromEntries(plugins().map(plugin => [plugin.folder, []])),
     skills: [],
     variables: [],
     lintErrors: [],
@@ -337,7 +337,7 @@ function bindRoles(metadata: Map<string, string[]>, ctx: BundleContext): { roles
   const roles: RoleEntry[] = [];
   const missing: string[] = [];
   for (const name of names) {
-    const role = ctx.roles.find(r => r.name === name);
+    const role = ctx.roles.find(candidate => candidate.name === name);
     if (!role) missing.push(name);
     else if (!roles.includes(role)) roles.push(role);
   }
@@ -354,9 +354,9 @@ function roleConflicts(roles: readonly RoleEntry[], file: string): LintError[] {
   const errors: LintError[] = [];
   for (const role of roles) {
     for (const line of role.body.split('\n')) {
-      const m = line.trim().match(/^([A-Z][A-Z-]*!{0,2})[ \t]+(.+)$/);
-      if (!m) continue;
-      const [, keyword, text] = m;
+      const match = line.trim().match(/^([A-Z][A-Z-]*!{0,2})[ \t]+(.+)$/);
+      if (!match) continue;
+      const [, keyword, text] = match;
       const prior = seen.get(text);
       if (prior && prior.keyword !== keyword && prior.role !== role.name) {
         errors.push({ file, line: lineOfName(file, role.name), message: `roles \`${prior.role}\` and \`${role.name}\` disagree: \`${prior.keyword} ${text}\` and \`${keyword} ${text}\` — bind one of them, or make them agree` });
@@ -381,15 +381,15 @@ function roleConflicts(roles: readonly RoleEntry[], file: string): LintError[] {
  * only there.
  */
 function eachElements(source: string): (line: number) => ReadonlySet<string> {
-  const tokens = lex(source).filter(t => t.kind !== 'blank' && t.kind !== 'comment');
+  const tokens = lex(source).filter(token => token.kind !== 'blank' && token.kind !== 'comment');
   const scopes: { item: string; from: number; to: number }[] = [];
-  tokens.forEach((t, k) => {
-    const head = t.kind === 'keyword' && t.keyword === 'EACH' ? eachHeadOf(t.rest) : null;
+  tokens.forEach((token, index) => {
+    const head = token.kind === 'keyword' && token.keyword === 'EACH' ? eachHeadOf(token.rest) : null;
     if (!head) return;
-    const end = tokens.slice(k + 1).find(n => n.indent <= t.indent);
-    scopes.push({ item: head.item, from: t.line + 1, to: end ? end.line - 1 : Number.MAX_SAFE_INTEGER });
+    const end = tokens.slice(index + 1).find(next => next.indent <= token.indent);
+    scopes.push({ item: head.item, from: token.line + 1, to: end ? end.line - 1 : Number.MAX_SAFE_INTEGER });
   });
-  return line => new Set(scopes.filter(s => line >= s.from && line <= s.to).map(s => s.item));
+  return line => new Set(scopes.filter(scope => line >= scope.from && line <= scope.to).map(scope => scope.item));
 }
 
 function variableUseErrors(
@@ -397,7 +397,7 @@ function variableUseErrors(
   sessionRead: (file: string) => string | null,
 ): LintError[] {
   const kinds = [ctx.policies, ctx.roles, ctx.templates, ctx.procedures, ctx.flows, ctx.stores, ctx.dimensions] as { path: string }[][];
-  const files = new Set([sourcePath, ...kinds.flat().map(d => d.path)]);
+  const files = new Set([sourcePath, ...kinds.flat().map(definition => definition.path)]);
   const errors: LintError[] = [];
   for (const file of files) {
     if (!existsSync(file)) continue;
@@ -405,29 +405,29 @@ function variableUseErrors(
     const { constants, variables } = seen(file);
     const source = ctx.sources.read(file);
     const elementOf = eachElements(source);
-    for (const t of lex(source)) {
-      if (t.kind !== 'keyword') continue;
-      const decl = parseVarLine(t.keyword, t.rest);
-      const write = takesInto(t.keyword) ? splitInto(t.rest)?.name : decl && 'form' in decl && decl.form === 'variable' && decl.block ? decl.name : undefined;
-      if (write && !variables.has(write) && ctx.variables.some(v => v.name === write)) {
-        errors.push({ file, line: t.line, message: unknownVariable(t.raw.trim(), write, ctx) });
+    for (const token of lex(source)) {
+      if (token.kind !== 'keyword') continue;
+      const decl = parseVarLine(token.keyword, token.rest);
+      const write = takesInto(token.keyword) ? splitInto(token.rest)?.name : decl && 'form' in decl && decl.form === 'variable' && decl.block ? decl.name : undefined;
+      if (write && !variables.has(write) && ctx.variables.some(variable => variable.name === write)) {
+        errors.push({ file, line: token.line, message: unknownVariable(token.raw.trim(), write, ctx) });
       }
     }
-    source.split(/\r?\n/).forEach((line, i) => {
+    source.split(/\r?\n/).forEach((line, index) => {
       if (line.startsWith('#')) return;
       for (const { read, name, field, template } of readsOf(line)) {
-        const err = (message: string) => errors.push({ file, line: i + 1, message });
+        const err = (message: string) => errors.push({ file, line: index + 1, message });
         if (field) continue;   // a field read is the vocabulary check's
         // A shaped read takes the shape of a template the agent has, from a variable — never a constant.
         if (template && constantOf(constants, name) !== undefined) err(`\`${read}\`: a constant has no shape to take — write the part you need`);
         else if (template && !ctx.templates.some(tpl => tpl.name === template)) err(`\`${read}\`: ${unresolvedMessage('template', template)}`);
         if (constantOf(constants, name) !== undefined) continue;
         // An EACH's element, read in the lines beneath it.
-        if (elementOf(i + 1).has(name)) continue;
+        if (elementOf(index + 1).has(name)) continue;
         if (!variables.has(name)) {
           err(unknownVariable(read, name, ctx));
         } else if (refused) {
-          errors.push({ file, line: i + 1, message: `\`${read}\`: ${refused}` });
+          errors.push({ file, line: index + 1, message: `\`${read}\`: ${refused}` });
         }
       }
     });
@@ -441,9 +441,9 @@ function variableUseErrors(
  * that exports it.
  */
 function unknownVariable(read: string, name: string, ctx: BundleContext): string {
-  const elsewhere = ctx.variables.find(v => v.name === name);
+  const elsewhere = ctx.variables.find(variable => variable.name === name);
   if (elsewhere) return `\`${read}\`: \`${name}\` is imported by ${elsewhere.importers.join(', ')}, not here — an import never passes on: IMPORT ${name} FROM ${elsewhere.from} in this file too`;
-  return ctx.templates.some(t => t.name === name)
+  return ctx.templates.some(template => template.name === name)
     ? `\`${read}\`: \`${name}\` is a template, not a variable — declare \`VAR <name> AS ${name}\` and read that`
     : `unknown variable \`${read}\` — declare it in the body (\`VAR ${name}\`), or IMPORT it FROM the module that exports it (\`EXPORT VAR ${name}\`)`;
 }
@@ -452,7 +452,7 @@ function unknownVariable(read: string, name: string, ctx: BundleContext): string
 function templateNameErrors(ctx: BundleContext, names: Iterable<string>): LintError[] {
   const errors: LintError[] = [];
   for (const name of new Set(names)) {
-    const template = ctx.templates.find(t => t.name === name);
+    const template = ctx.templates.find(candidate => candidate.name === name);
     if (template) errors.push({ file: template.path, line: lineOfName(template.path, name), message: `\`${name}\` names both a variable and a template — give one of them another name` });
   }
   return errors;
@@ -481,12 +481,12 @@ function storeSlotIssue(slot: string): string | null {
 /** A store its driver cannot keep — an unknown DRIVER, a store or a slot the driver refuses — fails the compilation. */
 function storeErrors(doc: ApDocument, ctx: BundleContext, agentFilePath: string): LintError[] {
   return (doc.byKind('store') as StoreBlock[]).flatMap(store => {
-    const file = ctx.stores.find(s => s.name === store.name)?.path ?? agentFilePath;
-    const p = store.projection();
-    if (p.unknownDriver) {
-      return [{ file, line: lineOfName(file, store.storeDriver), message: `STORE ${store.name}: unknown DRIVER \`${store.storeDriver}\` (installed: ${p.unknownDriver.available.join(', ')})` }];
+    const file = ctx.stores.find(definition => definition.name === store.name)?.path ?? agentFilePath;
+    const projection = store.projection();
+    if (projection.unknownDriver) {
+      return [{ file, line: lineOfName(file, store.storeDriver), message: `STORE ${store.name}: unknown DRIVER \`${store.storeDriver}\` (installed: ${projection.unknownDriver.available.join(', ')})` }];
     }
-    const refused = p.refused ? [{ file, line: lineOfName(file, store.storeDriver), message: `STORE ${store.name}: ${p.refused}` }] : [];
+    const refused = projection.refused ? [{ file, line: lineOfName(file, store.storeDriver), message: `STORE ${store.name}: ${projection.refused}` }] : [];
     if (store.shape && store.ownSlots) {
       refused.push({ file, line: lineOfName(file, refName(store.shape.ref)), message: `STORE ${store.name}: its fields come from AS \`${refName(store.shape.ref)}\` or from its SLOTS — not both` });
     }
@@ -497,15 +497,15 @@ function storeErrors(doc: ApDocument, ctx: BundleContext, agentFilePath: string)
       const why = storeSlotIssue(sl.name);
       return why ? [{ file, line: lineOfName(file, sl.name), message: `STORE ${store.name}: ${why}` }] : [];
     });
-    return [...refused, ...key, ...names, ...Object.entries(p.rejects).map(([slot, why]) => ({ file, line: lineOfName(file, slot), message: `STORE ${store.name}: ${why}` }))];
+    return [...refused, ...key, ...names, ...Object.entries(projection.rejects).map(([slot, why]) => ({ file, line: lineOfName(file, slot), message: `STORE ${store.name}: ${why}` }))];
   });
 }
 
 
 /** A plugin's block keeps its contract and its template wherever it is written — a library file or the agent's own (pluginBlockErrors). */
 function pluginFileErrors(ctx: BundleContext): LintError[] {
-  const defs = plugins().flatMap(p => (ctx as unknown as Record<string, { path: string }[]>)[p.folder] ?? []);
-  const files = [...new Set(defs.map(d => d.path))].filter(file => existsSync(file));
+  const defs = plugins().flatMap(plugin => (ctx as unknown as Record<string, { path: string }[]>)[plugin.folder] ?? []);
+  const files = [...new Set(defs.map(definition => definition.path))].filter(file => existsSync(file));
   return files.flatMap(file => pluginBlockErrors(file, ctx.sources.tree(file).blocks));
 }
 
@@ -517,17 +517,17 @@ function pluginFileErrors(ctx: BundleContext): LintError[] {
  * is not judged (no judge, a file not answered) is said elsewhere.
  */
 function domainFileErrors(ctx: BundleContext, doc: ApDocument, projectRoot: string, unjudged: ReadonlySet<string>): LintError[] {
-  const files = [...new Set(ctx.domains.map(d => d.path))].filter(file => existsSync(file));
-  const empty = (doc.byKind('domain') as DomainBlock[]).flatMap(d => {
-    const file = ctx.domains.find(e => e.name === d.name)?.path;
-    if (!file || unjudged.has(d.name)) return [];
-    const globs = [...d.writes, ...d.reads];
-    const sides = [d.side('WRITES'), d.side('READS')];
-    if (sides.some(s => s.within.length > 0 || Object.keys(s.uncertain).length > 0)) return [];
+  const files = [...new Set(ctx.domains.map(domain => domain.path))].filter(file => existsSync(file));
+  const empty = (doc.byKind('domain') as DomainBlock[]).flatMap(domain => {
+    const file = ctx.domains.find(definition => definition.name === domain.name)?.path;
+    if (!file || unjudged.has(domain.name)) return [];
+    const globs = [...domain.writes, ...domain.reads];
+    const sides = [domain.side('WRITES'), domain.side('READS')];
+    if (sides.some(side => side.within.length > 0 || Object.keys(side.uncertain).length > 0)) return [];
     if (globs.length > 0 && hasProjectFile(projectRoot, rel => matchesAnyGlob(rel, globs))) return [];
-    if (globs.length === 0 && d.formulas.length === 0) return [];
-    const what = [...(globs.length ? [`no file of the project matches ${renderGlobs(globs)}`] : []), ...d.formulas.map(f => `a judge placed no file in \u201c${f.formula}\u201d`)].join(', and ');
-    return [{ file, line: lineOfName(file, d.name), message: `DOMAIN ${d.name}: ${what} — a domain says where work is done: name files that are there` }];
+    if (globs.length === 0 && domain.formulas.length === 0) return [];
+    const what = [...(globs.length ? [`no file of the project matches ${renderGlobs(globs)}`] : []), ...domain.formulas.map(domainFormula => `a judge placed no file in \u201c${domainFormula.formula}\u201d`)].join(', and ');
+    return [{ file, line: lineOfName(file, domain.name), message: `DOMAIN ${domain.name}: ${what} — a domain says where work is done: name files that are there` }];
   });
   return [...files.flatMap(file => domainBlockErrors(file, ctx.sources.tree(file).blocks)), ...empty];
 }
@@ -545,23 +545,23 @@ function domainFileErrors(ctx: BundleContext, doc: ApDocument, projectRoot: stri
  * delegates to, read from its own file.
  */
 function delegationPerimeterErrors(delegations: DocumentBuilder['delegationScopes'], domainsOf: (agent: string) => string[] | null): LintError[] {
-  return delegations.flatMap(s => {
-    const domains = domainsOf(s.by);
+  return delegations.flatMap(delegation => {
+    const domains = domainsOf(delegation.by);
     if (!domains) return [];
     const names = new Set(domains);
-    const outside = (s.scope.get(WITHIN_DECORATOR.key) ?? []).filter(u => !names.has(u.name));
+    const outside = (delegation.scope.get(WITHIN_DECORATOR.key) ?? []).filter(use => !names.has(use.name));
     if (outside.length === 0) return [];
-    return [{ file: s.path, line: s.line ?? 1, message: `${DECORATOR_MARK}${WITHIN_DECORATOR.key} ${outside.map(u => u.name).join(', ')}: \`${s.by}\`, whom this line delegates to, works within ${[...names].map(n => `\`${n}\``).join(', ')} — a step's ${DECORATOR_MARK}${WITHIN_DECORATOR.key} names only domains of the agents it delegates to` }];
+    return [{ file: delegation.path, line: delegation.line ?? 1, message: `${DECORATOR_MARK}${WITHIN_DECORATOR.key} ${outside.map(use => use.name).join(', ')}: \`${delegation.by}\`, whom this line delegates to, works within ${[...names].map(name => `\`${name}\``).join(', ')} — a step's ${DECORATOR_MARK}${WITHIN_DECORATOR.key} names only domains of the agents it delegates to` }];
   });
 }
 
 /** The domains an agent of a unit works within — its `@WITHIN` line above its block, by name — or null when none decorates it. */
 function memberDomains(files: string[], sources: SourceRegistry): (agent: string) => string[] | null {
   return agent => {
-    const file = files.find(f => agentNameOf(f) === agent);
-    const block = file ? sources.tree(file).blocks.find(b => AGENT_KEYS.has(b.key) && b.name === agent) : undefined;
-    const within = (block?.decorators ?? []).filter(d => d.key === WITHIN_DECORATOR.key);
-    return within.length ? within.flatMap(d => splitList(d.rest)) : null;
+    const file = files.find(agentFile => agentNameOf(agentFile) === agent);
+    const block = file ? sources.tree(file).blocks.find(treeBlock => AGENT_KEYS.has(treeBlock.key) && treeBlock.name === agent) : undefined;
+    const within = (block?.decorators ?? []).filter(decorator => decorator.key === WITHIN_DECORATOR.key);
+    return within.length ? within.flatMap(decorator => splitList(decorator.rest)) : null;
   };
 }
 
@@ -574,9 +574,9 @@ function memberDomains(files: string[], sources: SourceRegistry): (agent: string
  * and its driver takes and guards records.
  */
 function dimensionErrors(doc: ApDocument, ctx: BundleContext): LintError[] {
-  const files = [...new Set(ctx.dimensions.map(d => d.path))].filter(file => existsSync(file));
+  const files = [...new Set(ctx.dimensions.map(dimension => dimension.path))].filter(file => existsSync(file));
   return [...files.flatMap(file => dimensionBlockErrors(file, ctx.sources.tree(file).blocks)), ...(doc.byKind('dimension') as DimensionBlock[]).flatMap(dim => {
-    const file = ctx.dimensions.find(d => d.name === dim.name)?.path;
+    const file = ctx.dimensions.find(definition => definition.name === dim.name)?.path;
     if (!file || !existsSync(file)) return [];
     const err = (name: string, message: string): LintError => ({ file, line: lineOfName(file, name), message: `DIMENSION ${dim.name}: ${message}` });
     const store = dim.store ? doc.resolve(dim.store) as StoreBlock | null : null;
@@ -591,7 +591,7 @@ function dimensionStoreErrors(store: StoreBlock, err: (name: string, message: st
   if (store.declaredLasts === 'session') errors.push(err(store.name, `its store \`${store.name}\` says LASTS session — a dimension's answers are kept for the project: drop the line`));
   if (store.storeKey) errors.push(err(store.name, `its store \`${store.name}\` says KEY ${store.storeKey} — a dimension keeps its records by file itself: drop the line`));
   const driver = storeDriverOf(store.storeDriver);
-  const lacks = driver ? DIMENSION_CAPABILITIES.filter(c => !driver.capabilities.includes(c)) : [];
+  const lacks = driver ? DIMENSION_CAPABILITIES.filter(capability => !driver.capabilities.includes(capability)) : [];
   if (lacks.length > 0) errors.push(err(store.name, `its store's driver \`${store.storeDriver}\` has no ${lacks.join(' and ')} — a dimension takes and guards its records: keep it with files or tabeli`));
   return errors;
 }
@@ -605,10 +605,10 @@ const DIMENSION_CAPABILITIES = ['take', 'guard'] as const;
  * team's file), from `from` on in `ctx.dimensions`, fails it at `file`.
  */
 export function strayDimensionErrors(ctx: BundleContext, file: string, from = 0): LintError[] {
-  return ctx.dimensions.slice(from).map(d => ({
+  return ctx.dimensions.slice(from).map(dimension => ({
     file,
-    line: d.path === file ? lineOfName(file, d.name) : lineOfName(file, d.name, 'import'),
-    message: `DIMENSION ${d.name}: a dimension belongs to an agent — it is read and written through that agent's apx, so only an agent's file declares or imports it`,
+    line: dimension.path === file ? lineOfName(file, dimension.name) : lineOfName(file, dimension.name, 'import'),
+    message: `DIMENSION ${dimension.name}: a dimension belongs to an agent — it is read and written through that agent's apx, so only an agent's file declares or imports it`,
   }));
 }
 
@@ -623,7 +623,7 @@ export function lintSource(path: string, ctx: BundleContext): void {
  * are reported where they stand (an `IF!` warns, an `IF!!` fails).
  */
 function noExecutableChecks(sourcePath: string, ctx: BundleContext): void {
-  for (const file of new Set([sourcePath, ...ctx.procedures.map(p => p.path)])) {
+  for (const file of new Set([sourcePath, ...ctx.procedures.map(procedure => procedure.path)])) {
     if (existsSync(file)) ctx.lintErrors.push(...checkedHeadIssues(file, ctx.sources.read(file), ctx.checks));
   }
 }
@@ -635,9 +635,9 @@ export function reportLintIssues(ctx: BundleContext, label: string): void {
 
 /** Report the warnings among `issues`, then throw on its errors. */
 function reportIssues(issues: LintError[], label: string): void {
-  const warnings = issues.filter(e => e.severity === 'warning');
+  const warnings = issues.filter(issue => issue.severity === 'warning');
   if (warnings.length > 0) reporter().diagnostics(warnings);
-  failOnErrors(issues.filter(e => e.severity !== 'warning'), label);
+  failOnErrors(issues.filter(issue => issue.severity !== 'warning'), label);
 }
 
 /** The errors stop the compilation — they travel as data, for the reporter to show. */
@@ -675,7 +675,7 @@ async function emitTools(ctx: BundleContext): Promise<string> {
     title: FORMULAS.blocks.tool.chapter,
     intro: introOf('tool'),
     entries: resolved,
-    renderEntry: t => ({ heading: fill(FORMULAS.blocks.tool.heading, { name: t.name }), body: t.body }),
+    renderEntry: tool => ({ heading: fill(FORMULAS.blocks.tool.heading, { name: tool.name }), body: tool.body }),
   });
 }
 
@@ -684,27 +684,27 @@ async function emitTools(ctx: BundleContext): Promise<string> {
  * null result (no bespoke shape — e.g. prose templates) falls back to the
  * generic verbatim body, header keyword stripped when the kind declares one.
  */
-function renderShapeBody(s: DefinitionStrategy, e: Definition, ctx: BundleContext): string {
-  const body = s.renderBody?.(e, ctx) ?? (s.headerKeyword ? stripHeaderKeyword(e.body, s.headerKeyword, e.name) : e.body);
+function renderShapeBody(strategy: DefinitionStrategy, entry: Definition, ctx: BundleContext): string {
+  const body = strategy.renderBody?.(entry, ctx) ?? (strategy.headerKeyword ? stripHeaderKeyword(entry.body, strategy.headerKeyword, entry.name) : entry.body);
   // A policy or a skill opens with the line that says where it applies (src/withUse.ts).
-  return withScopeLine(e.kind, e.scopes, body);
+  return withScopeLine(entry.kind, entry.scopes, body);
 }
 
-function buildChapterFromStrategy(s: DefinitionStrategy, ctx: BundleContext) {
-  const entries = s.getEntries(ctx);
+function buildChapterFromStrategy(strategy: DefinitionStrategy, ctx: BundleContext) {
+  const entries = strategy.getEntries(ctx);
   // A strategy that declares `legendEnum` gets the enum's mode legend appended
   // to its intro — adapter-native renderings when the bundle has an adapter.
-  const legend = s.legendEnum ? renderEnumLegend(s.legendEnum, ctx) : '';
+  const legend = strategy.legendEnum ? renderEnumLegend(strategy.legendEnum, ctx) : '';
   return {
-    title: s.sectionTitle,
-    intro: [introOf(s.kind), legend].filter(Boolean).join('\n\n'),
+    title: strategy.sectionTitle,
+    intro: [introOf(strategy.kind), legend].filter(Boolean).join('\n\n'),
     entries,
-    renderEntry: (e: Definition) => ({
-      heading: s.formatHeading(e.name),
-      prelude: e.about,
-      body: renderShapeBody(s, e, ctx),
+    renderEntry: (entry: Definition) => ({
+      heading: strategy.formatHeading(entry.name),
+      prelude: entry.about,
+      body: renderShapeBody(strategy, entry, ctx),
     }),
-    afterEmit: s.afterEmit,
+    afterEmit: strategy.afterEmit,
   };
 }
 
@@ -712,8 +712,8 @@ export function emitCollectedSections(ctx: BundleContext): string {
   let out = '';
 
   // Strategy-driven sections in declaration order (role → template → procedure → flow).
-  for (const s of STRATEGIES) {
-    out += emitChapter(ctx, buildChapterFromStrategy(s, ctx));
+  for (const strategy of STRATEGIES) {
+    out += emitChapter(ctx, buildChapterFromStrategy(strategy, ctx));
   }
 
   return out;
@@ -738,23 +738,23 @@ function parseStandaloneHeader(raw: string): StandaloneHeader {
 
   const tokens = lex(raw);
   // A `WHEN <trigger>:` with lines nested below is the file's own trigger, never header metadata: it stays in the body.
-  const opensTrigger = (i: number): boolean => {
-    const below = tokens.slice(i + 1).find(n => n.kind !== 'blank' && n.kind !== 'comment');
-    return tokens[i].kind === 'keyword' && (tokens[i] as { keyword: string }).keyword === 'WHEN' && opensBlock(tokens[i]) && !!below && below.indent > tokens[i].indent;
+  const opensTrigger = (index: number): boolean => {
+    const below = tokens.slice(index + 1).find(next => next.kind !== 'blank' && next.kind !== 'comment');
+    return tokens[index].kind === 'keyword' && (tokens[index] as { keyword: string }).keyword === 'WHEN' && opensBlock(tokens[index]) && !!below && below.indent > tokens[index].indent;
   };
-  for (const [i, t] of tokens.entries()) {
-    if (t.kind === 'comment') continue;
-    if (t.kind === 'keyword' && t.indent === 0 && HEADER_KEYWORDS.has(t.keyword) && !opensTrigger(i)) {
-      if (t.rest) {
-        const arr = metadata.get(t.keyword) ?? [];
+  for (const [index, token] of tokens.entries()) {
+    if (token.kind === 'comment') continue;
+    if (token.kind === 'keyword' && token.indent === 0 && HEADER_KEYWORDS.has(token.keyword) && !opensTrigger(index)) {
+      if (token.rest) {
+        const arr = metadata.get(token.keyword) ?? [];
         // WHEN accumulates; the others: first wins.
-        if (t.keyword !== 'WHEN' && arr.length > 0) continue;
-        arr.push(t.rest);
-        metadata.set(t.keyword, arr);
+        if (token.keyword !== 'WHEN' && arr.length > 0) continue;
+        arr.push(token.rest);
+        metadata.set(token.keyword, arr);
       }
       continue;
     }
-    out.push(t.kind === 'blank' ? '' : ('raw' in t ? t.raw : ''));
+    out.push(token.kind === 'blank' ? '' : ('raw' in token ? token.raw : ''));
   }
   return { metadata, stripped: out.join('\n').replace(/^\n+/, '') };
 }
@@ -788,10 +788,10 @@ export async function bundleStandaloneToString(
  */
 export async function bundleMainTexts(main: MainFile, config: Config): Promise<{ text: string; universal: string }> {
   const { text, ctx } = await compileStandalone(main.path, config, { main });
-  const policies = STRATEGIES.find(s => s.kind === 'policy');
+  const policies = STRATEGIES.find(strategy => strategy.kind === 'policy');
   if (!policies) return { text, universal: '' };
   const chapter = buildChapterFromStrategy(policies, ctx);
-  const universal = emitChapter(ctx, { ...chapter, entries: chapter.entries.filter(e => e.scopes.includes(UNIVERSAL_SCOPE)) });
+  const universal = emitChapter(ctx, { ...chapter, entries: chapter.entries.filter(entry => entry.scopes.includes(UNIVERSAL_SCOPE)) });
   return { text, universal: universal ? postProcessBody(universal, ctx).trim() : '' };
 }
 
@@ -893,7 +893,7 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     ctx.lintErrors.push(...teamFileErrors(teamFile.path, teamFile.source), ...teamRosterIssues(teamFile));
     // The team's flows are the team's own document; so are the blocks the team
     // file imports for them (a step's AS template). A member holds neither.
-    const imports = unit ? teamFile.source.split(/\r?\n/).filter(l => /^IMPORT\s/.test(l)).join('\n') : '';
+    const imports = unit ? teamFile.source.split(/\r?\n/).filter(line => /^IMPORT\s/.test(line)).join('\n') : '';
     if (imports) await expandImports(imports, ctx, teamFile.path);
   }
 
@@ -910,9 +910,9 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     ctx.lintErrors.push(...mainBlockErrors(main.path, main.block));
     await resolveInlineBlocks(outsideBlock(main.source.split(/\r?\n/), main.block), ctx, main.path);
   }
-  const memberFiles = main ? main.members.map(m => opts.agentFileOf?.(m.name) ?? '').filter(f => f && existsSync(f)) : [];
+  const memberFiles = main ? main.members.map(member => opts.agentFileOf?.(member.name) ?? '').filter(file => file && existsSync(file)) : [];
   // A program carries out some of this agent's work: how to write one comes with it.
-  if (usesPrograms(agentBody, ctx.procedures) && opts.libraries?.['@builtin'] && !ctx.procedures.some(p => p.name === WRITE_PROGRAM)) {
+  if (usesPrograms(agentBody, ctx.procedures) && opts.libraries?.['@builtin'] && !ctx.procedures.some(procedure => procedure.name === WRITE_PROGRAM)) {
     await expandImports(`IMPORT ${WRITE_PROGRAM} FROM @builtin.procedures`, ctx, agentFilePath);
   }
   const variables = importedVariables(ctx.variables, opts.vars ?? {});
@@ -925,7 +925,7 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
   // separate cognitive layer.
   const bound = bindRoles(metadata, ctx);
   const boundRoles = bound.roles;
-  ctx.roles = ctx.roles.filter(r => !boundRoles.includes(r));
+  ctx.roles = ctx.roles.filter(role => !boundRoles.includes(role));
 
   // An `AS <role>` naming no role is a broken reference like any other.
   for (const name of bound.missing) {
@@ -947,46 +947,47 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     ...(unit ? { unit } : {}),
     ...(main ? { memberFiles } : {}),
   });
-  // A DELEGATE without BY goes to the default delegate; the config may set this agent's model.
+  // An ASK without BY goes to the default delegate; the config may set this agent's model.
   const delegate = opts.delegate ?? resolveDelegateConfig(undefined);
-  if (Object.values(structure.meta.executors ?? {}).some(e => e.executor === 1 && !e.by)) structure.meta.delegate = delegate.default;
+  if (Object.values(structure.meta.executors ?? {}).some(executor => executor.executor === 1 && !executor.by)) structure.meta.delegate = delegate.default;
   if (delegate.models[agentName]) structure.meta.model = delegate.models[agentName];
   // The recipe of each harness a delegation goes to — a piece or a list of contracts — for the apx to fill when it starts (D66),
   // with the model each agent of the project runs on there: its BUDGET tier's.
   const used = new Set([...structure.nodes()].flatMap(({ node }) => (node.type === 'directive' && node.harness ? [node.harness] : [])));
-  const recipes = Object.fromEntries([...used].flatMap(h => {
-    const row = (opts.harnesses ?? []).find(r => r.name === h);
+  const recipes = Object.fromEntries([...used].flatMap(harness => {
+    const row = (opts.harnesses ?? []).find(harnessRow => harnessRow.name === harness);
     if (!row?.invocation) return [];
     const models = agentModels(row, opts.agentIndex ?? []);
-    return [[h, { ...row.invocation, ...(Object.keys(models).length ? { models } : {}) }]];
+    return [[harness, { ...row.invocation, ...(Object.keys(models).length ? { models } : {}) }]];
   }));
   if (Object.keys(recipes).length > 0) structure.meta.harnesses = recipes;
-  const declared = new Set(structure.byKind('var').map(b => b.name));
+  const declared = new Set(structure.byKind('var').map(block => block.name));
   // Every file sees the bodies' declarations and the implicit constants; an import, only the file that writes it.
-  const imported = new Set(ctx.variables.map(v => v.name));
+  const imported = new Set(ctx.variables.map(variable => variable.name));
   const everywhere = { constants: opts.vars ?? {}, variables: [...declared].filter(name => !imported.has(name)) };
-  const located = (e: { path: string; name: string; line: number | null; message: string; severity?: 'warning' }): LintError =>
-    ({ file: e.path, line: e.line ?? lineOfName(e.path, e.name), message: e.message, ...(e.severity ? { severity: e.severity } : {}) });
+  const located = (issue: { path: string; name: string; line: number | null; message: string; severity?: 'warning' }): LintError =>
+    ({ file: issue.path, line: issue.line ?? lineOfName(issue.path, issue.name), message: issue.message, ...(issue.severity ? { severity: issue.severity } : {}) });
   const projectRoot = opts.projectRoot ?? process.cwd();
   const judgedDomains = await judgeDomainFormulas(structure, ctx, opts.judge, projectRoot);
   reportIssues([
     ...unresolvedErrors(builder.unresolved),
-    ...builder.decoratorProblems.map(p => ({ file: p.path, line: p.line ?? 1, message: p.message })),
+    ...builder.decoratorProblems.map(problem => ({ file: problem.path, line: problem.line ?? 1, message: problem.message })),
     ...unappliedErrors(ctx, builder.decoratorNamed, true),
     ...storeErrors(structure, ctx, agentFilePath),
     ...dimensionErrors(structure, ctx),
     // A unit's flows delegate to its members, each within its own domains; an agent's own body, to itself.
     ...delegationPerimeterErrors(builder.delegationScopes, unit === 'team' && teamRoot ? memberDomains(findAgentFiles(teamRoot), ctx.sources)
       : unit === 'main' ? memberDomains(memberFiles, ctx.sources)
-      : agent => (agent === agentName ? structure.domains()?.map(d => d.name) ?? null : null)),
+      : agent => (agent === agentName ? structure.domains()?.map(domain => domain.name) ?? null : null)),
     ...judgedDomains.errors,
     ...domainFileErrors(ctx, structure, projectRoot, judgedDomains.unjudged),
     ...pluginFileErrors(ctx),
     ...builder.varErrors.map(located),
     ...builder.checkIssues.map(located),
     ...(opts.agentIndex ? delegateTargetErrors(structure, opts.agentIndex, teamRoot ? basename(teamRoot) : null,
-      h => harnessProblem(h, opts.harnesses ?? []), (h, a) => modelProblem(h, a, opts.harnesses ?? [])) : []),
+      harness => harnessProblem(harness, opts.harnesses ?? []), (harness, agent) => modelProblem(harness, agent, opts.harnesses ?? [])) : []),
     ...executorErrors(structure),
+    ...delegationSiteErrors(structure),
     ...variableUseErrors(ctx, agentFilePath, file => visibleIn(file, ctx.variables, everywhere), libraryReadRule(ctx, agentFilePath)),
     ...templateNameErrors(ctx, [...declared, ...Object.keys(variables.constants)]),
   ], 'Bundle');
