@@ -1,0 +1,6 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
+  // `script` (util-linux) is a system tool, not an npm dependency: test/tui.test.mjs
+  // uses it to give the full-screen chat a pseudo-terminal, and skips itself without it.
+  "ignoreBinaries": ["script"]
+}

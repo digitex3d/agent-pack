@@ -10,6 +10,7 @@ import {
   STORE_EXIT, StoreRefusal, checkWrite, countLine, fieldsOf, filtersOf, open, optionalOp, recordLine, requireCapability, storesOf, type OpenStore,
 } from '../stores.js';
 import type { ApxHost, ApxService } from '../service.js';
+import { errorMessage } from '../../errors.js';
 
 const OPERATIONS = [
   { op: 'put', args: '<sto-id> <field>=<value> …', about: 'add a record — with the KEY already present, update it instead' },
@@ -153,7 +154,7 @@ export const storeService: ApxService = {
       return await serveOp(host, op, args);
     } catch (e) {
       if (e instanceof StoreRefusal) return host.fail(e.code, e.message);
-      return host.fail(STORE_EXIT.usage, e instanceof Error ? e.message : String(e));
+      return host.fail(STORE_EXIT.usage, errorMessage(e));
     }
   },
 };

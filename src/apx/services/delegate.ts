@@ -24,6 +24,7 @@ import { sha256Hex } from '../../apdoc/ids.js';
 import { parseDuration, DURATION_FORM } from '../../delegation.js';
 import { DelegationTable, DELEGATION_ID_RE, CONTRACT_ID_RE, MARK_ID_RE, SETTLED_STATES, pieceRecord, pieceOf, runsOf, answerFlag, type DelegationRecord, type DelegationState } from '../delegations.js';
 import { countOf, type ApxHost, type ApxService } from '../service.js';
+import { errorMessage } from '../../errors.js';
 
 /** The service's old name: what it says to whoever still calls it. */
 export const OLD_DELEGATE_KIND = 'ask';
@@ -103,7 +104,7 @@ function withRegistry(host: ApxHost, needs: string, then: (table: DelegationTabl
   try {
     return then(table);
   } catch (e) {
-    return host.fail(2, `the background work could not be read or written: ${e instanceof Error ? e.message : e}`);
+    return host.fail(2, `the background work could not be read or written: ${errorMessage(e)}`);
   }
 }
 

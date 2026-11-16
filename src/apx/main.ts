@@ -17,8 +17,10 @@ import { relative } from 'node:path';
 import { ApDocument } from '../apdoc/document.js';
 import { ApxEngine } from './engine.js';
 import { Pack } from './pack.js';
-import { packPayload, packHolds, viewHolding, parsePayload, MIN_NODE_MAJOR, UNIT_SECTION, type ApxPayload, type UnitSection } from './payload.js';
-import { isUnitVerb, runUnitVerb, throughUnit } from './unit.js';
+import { heldNames, packPayload, packHolds, viewHolding, parsePayload, MIN_NODE_MAJOR, UNIT_SECTION, type ApxPayload, type UnitSection } from './payload.js';
+import { LS_VERB, START_VERB, isUnitVerb, runUnitVerb, throughUnit } from './unit.js';
+import { announceIdentity } from '../../adapters/acp/events.js';
+import { JSON_FLAG, listingOf } from './listing.js';
 
 /** The data lines a compiled binary carries — undefined when this engine heads an `.apx` file. */
 declare const __APX_PACK: string | undefined;
@@ -66,9 +68,14 @@ function serve(payload: ApxPayload, inUnit: string | null, args: string[]): void
 /** A unit's own document — its flows — when it has one: its image with no name. */
 const own = unit !== null && pack && packHolds(pack) ? packPayload(pack) : null;
 
-if (pack === null) serve(parsePayload(text ?? ''), null, argv);
+if (unit !== null && pack !== null && argv[0] === LS_VERB && argv[1] === JSON_FLAG) {
+  // A unit's listing: every document it holds, its own first.
+  const docs = heldNames(pack).map(holder => ({ doc: ApDocument.fromJson(packPayload(pack, holder).document), holder }));
+  out(JSON.stringify(listingOf(docs, { kind: unit.kind, name: unit.name })));
+} else if (pack === null) serve(parsePayload(text ?? ''), null, argv);
 else if (unit === null) serve(packPayload(pack), null, argv);
 else if (isUnitVerb(argv[0]) && !(argv[0] === 'ls' && argv.length > 1 && own)) {
+  if ((argv[0] ?? START_VERB) === START_VERB) announceIdentity(unit.name, unit.kind);
   runUnitVerb(argv[0], { unit, cmd, out, built: pack.header.built });
   // `ls` alone: what the unit holds, then its own blocks.
   if (argv[0] === 'ls' && own) serve(own, null, ['ls']);

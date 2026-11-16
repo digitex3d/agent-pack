@@ -2,12 +2,13 @@
 // Copyright (c) 2026 Giuseppe Federico
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { AdapterPlugin } from '../types.js';
+import type { AdapterPlugin, Invocation } from '../types.js';
 import { makeAgentMdEmitter, CLAUDE_BUDGET_MODELS } from './emitters/agent-md.js';
 import type { BudgetModels } from '../budget.js';
 import { makeClaudeSkillEmitter } from './emitters/claude-skill.js';
 import { compileWorkflow } from './workflow.js';
 import { installGuardHook } from './emitters/guard-hook.js';
+import { agentFileIntro } from '../acp/index.js';
 
 export interface ClaudeCodeOptions {
   agentsDir?: string;
@@ -16,6 +17,19 @@ export interface ClaudeCodeOptions {
   tools?: string;
   /** The model of each `BUDGET` tier, over Claude Code's own (haiku, sonnet, opus) — the config's `models`. */
   models?: BudgetModels;
+}
+
+/** How an agent on another harness hands one of these agents a task (D66): `claude -p --agent` in the delegation's copy. */
+function invocationOf(agentsDir: string): Invocation {
+  const agentFile = `${agentsDir}/{agent}.md`;
+  return {
+    recipe: resolve(dirname(fileURLToPath(import.meta.url)), 'invoke.ap'),
+    cli: 'claude',
+    // A copy of the project holds what git tracks; the generated definitions often are not.
+    carry: [agentFile],
+    // Reached over ACP, no `--agent` picks the agent: the prompt names it, and its file.
+    transportIntro: agentFileIntro(agentFile),
+  };
 }
 
 export default function claudeCodeAdapter(opts: ClaudeCodeOptions = {}): AdapterPlugin {
@@ -43,13 +57,7 @@ export default function claudeCodeAdapter(opts: ClaudeCodeOptions = {}): Adapter
     sessionEnv: 'CLAUDE_CODE_SESSION_ID',
     // Every flow compiles to a Workflow tool script: Claude Code runs the steps.
     flowScript: { ext: 'js', compile: compileWorkflow },
-    // How an agent on another harness hands one of these agents a task (D66): `claude -p --agent` in the delegation's copy.
-    invocation: {
-      recipe: resolve(dirname(fileURLToPath(import.meta.url)), 'invoke.ap'),
-      cli: 'claude',
-      // A copy of the project holds what git tracks; the generated definitions often are not.
-      carry: [`${opts.agentsDir ?? '.claude/agents'}/{agent}.md`],
-    },
+    invocation: invocationOf(opts.agentsDir ?? '.claude/agents'),
     renderings: {
       // Claude Code's own memory: with `memory:` in the frontmatter (set for
       // every agent that uses MEM) the agent has a memory directory whose

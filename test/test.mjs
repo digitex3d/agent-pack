@@ -255,6 +255,10 @@ await import('./marks.test.mjs');
 await import('./guard.test.mjs');
 await import('./harness.test.mjs');
 await import('./harnessContracts.test.mjs');
+await import('./acp.test.mjs');
+await import('./chat.test.mjs');
+await import('./ask.test.mjs');
+await import('./tui.test.mjs');
 
 // --- User-level config cascade (default → user → project), reserved @user alias ---
 await import('./userConfigCascade.test.mjs');

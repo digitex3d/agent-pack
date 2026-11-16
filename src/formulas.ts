@@ -87,6 +87,25 @@ export interface Formulas {
     ref: Text; heading: Text; entry: Text; about: Text;
     crossReferences: { chapter: Text; row: Text; entry: Text };
   };
+  /** What the commands and the ACP client say (src/commands/, adapters/acp/). */
+  messages: {
+    config: Record<'chatObject' | 'chatUnknownKey' | 'chatBoss', Text>;
+    chat: Record<'notSet' | 'noServer' | 'eventsLost' | 'bossExited' | 'cannotStart' | 'preambleSent' | 'turnFailed' | 'jumpToLatest'
+      | 'joined' | 'removed' | 'removeUnknown' | 'removeFixed' | 'removeUsage' | 'participants'
+      | 'inviteList' | 'inviteUnknown' | 'inviteAlready' | 'notInRoom' | 'emptyRoom' | 'sendFailed' | 'recapPrompt' | 'recapAnswer' | 'recapFailed' | 'recapSent'
+      | 'aboutInvite' | 'aboutRemove' | 'aboutAll', Text>;
+    /** The chat screen's launcher (adapters/acp/launcher.ts): its labels, its lines, what it sends. */
+    launcher: Record<
+      | 'title' | 'search' | 'flow' | 'team' | 'agent' | 'skill' | 'procedure' | 'policy' | 'template' | 'var' | 'room' | 'command'
+      | 'detail' | 'of' | 'uses' | 'actionsFlow' | 'actionsBlock' | 'actionsInsert' | 'nothing' | 'runLine' | 'runPrompt' | 'citeRef', Text>;
+    ask: Record<'unknown' | 'configured' | 'noneConfigured' | 'noDefinition', Text>;
+    harnesses: Record<'clash' | 'twice', Text>;
+    acp: Record<
+      | 'noAnswer' | 'noMessage' | 'refusedPermission' | 'modelDefault' | 'modelNotOffered' | 'modelNoWay' | 'serverExited' | 'exitCode'
+      | 'timeout' | 'eventsLost' | 'noConfig' | 'noServer' | 'eventsUnwritable' | 'terminalsRefused' | 'terminalsOff' | 'notServed'
+      | 'needsPath' | 'refusedOutside' | 'outside' | 'notServer' | 'noField' | 'modelsNote' | 'serversShape' | 'serverName'
+      | 'version' | 'signIn' | 'offers' | 'sessionFailed' | 'noSession' | 'answered' | 'noCommand' | 'needsContent' | 'badArgs' | 'badEnv' | 'cancelled', Text>;
+  };
 }
 
 /** Every leaf must be a non-empty string (or a list of them): drift fails loud at load. */

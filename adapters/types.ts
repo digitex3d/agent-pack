@@ -140,9 +140,24 @@ export interface AdapterPlugin {
    * `model` the flag that picks the model the CLI runs on (`{model}` its id),
    * when the CLI has one — filled with the model the delegated agent's `BUDGET`
    * tier maps to (`models`), left out when it maps to none.
+   * `definition` the file of the agent's compiled definition (`{agent}` its
+   * name, from the project root), when the harness has no agent files of its
+   * own: the prompt opens with it, as a section of its own, before the task.
+   * `fills` the values of the recipe's own slots, filled when the recipe is
+   * read — never a secret: the command line is printed. `transport` how the
+   * command reaches the harness, when not by the harness's own CLI (`acp`).
+   * `transportIntro` the prompt's first line when a transport reaches the
+   * harness and its CLI, which picked the agent itself (`--agent`), is not
+   * run: it names the agent and the native file that defines it.
    * Example: codex declares `{ recipe: '<dir>/invoke.ap', cli: 'codex', shape: '--output-schema {schema}', model: '-m {model}' }`.
    */
-  invocation?: { recipe: string; cli: string; shape?: string; model?: string; carry?: string[]; intro?: string };
+  invocation?: Invocation;
+  /**
+   * Optional: further harnesses this adapter reaches, each delegable by its own
+   * name (`BY <name>:<agent>`), with its recipe and its `BUDGET` models —
+   * e.g. the servers the acp adapter is configured with.
+   */
+  harnesses?: { name: string; invocation: Invocation; models?: BudgetModels }[];
   /**
    * Optional: the model of its harness each `BUDGET` tier maps to — its own
    * defaults, or what the project config gives it
@@ -151,6 +166,20 @@ export interface AdapterPlugin {
    * Example: claude-code maps `{ cheap: 'haiku', moderate: 'sonnet', costly: 'opus' }`.
    */
   models?: BudgetModels;
+}
+
+/** How an agent on another harness launches an agent of this one — see `AdapterPlugin.invocation`. */
+export interface Invocation {
+  recipe: string;
+  cli: string;
+  shape?: string;
+  model?: string;
+  carry?: string[];
+  intro?: string;
+  definition?: string;
+  fills?: Record<string, string>;
+  transport?: string;
+  transportIntro?: string;
 }
 
 /**

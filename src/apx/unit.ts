@@ -26,6 +26,11 @@ const WHAT: Record<UnitSection['kind'], string> = {
 };
 
 /** The verbs a unit answers itself — any other first word is an agent's name. */
+/** The verb a unit answers when none is given: who it is. */
+export const START_VERB = 'start';
+/** The verb that lists what a unit holds. */
+export const LS_VERB = 'ls';
+
 const UNIT_VERBS: Record<string, (run: UnitRun) => void> = {
   start: ({ unit, cmd, out }) => {
     out(unit.text.trimEnd());
@@ -60,7 +65,7 @@ export function isUnitVerb(word: string | undefined): boolean {
 
 /** Answer one of a unit's own verbs. */
 export function runUnitVerb(verb: string | undefined, run: UnitRun): void {
-  UNIT_VERBS[verb ?? 'start'](run);
+  UNIT_VERBS[verb ?? START_VERB](run);
 }
 
 /**

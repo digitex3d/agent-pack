@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ApSlot } from '../apdoc/types.js';
 import type { Collection, Doc, StoreDriver, StoreRef } from './types.js';
+import { errorMessage } from '../errors.js';
 
 /** One case of the contract, and how it went. */
 export interface ContractResult {
@@ -176,7 +177,7 @@ export async function runDriverContract(driver: StoreDriver): Promise<ContractRe
         await run(await driver.open(freshStore(driver, root, ++n, key)));
         results.push({ name, ok: true });
       } catch (e) {
-        results.push({ name, ok: false, detail: e instanceof Error ? e.message : String(e) });
+        results.push({ name, ok: false, detail: errorMessage(e) });
       }
     }
   } finally {

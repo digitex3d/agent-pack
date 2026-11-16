@@ -17,6 +17,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { JudgeCheck, JudgeQuestion } from './types.js';
 import { sha256Hex } from '../apdoc/ids.js';
+import { errorMessage } from '../errors.js';
 
 /** A human decision: a probability on one check of one line text. */
 export interface Decision {
@@ -63,7 +64,7 @@ export class JudgeLock {
     try {
       data = JSON.parse(readFileSync(path, 'utf-8'));
     } catch (err) {
-      throw new Error(`Invalid JSON in the judge lock ${path}: ${(err as Error).message}`);
+      throw new Error(`Invalid JSON in the judge lock ${path}: ${errorMessage(err)}`);
     }
     if (data?.version !== 1 || typeof data.decisions !== 'object' || data.decisions === null) {
       throw new Error(`The judge lock ${path} is not a version 1 judge lock`);

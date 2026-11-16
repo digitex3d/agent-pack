@@ -23,6 +23,7 @@ import { unitApxFiles, unitPayload, apxChecks } from '../apx/write.js';
 import { unitAgents } from '../apx/unit.js';
 import type { UnitSection } from '../apx/payload.js';
 import { buildExecutable, bunInstalled } from './executable.js';
+import { errorMessage } from '../errors.js';
 
 /**
  * CLI command: parse args, build a bundle (agent or skill), optionally
@@ -185,7 +186,7 @@ export async function bundleAllOnce(
   try {
     judge = openJudgeRun(config, ctx.projectRoot);
   } catch (err) {
-    report.info(`judge: ${err instanceof Error ? err.message : err}`);
+    report.info(`judge: ${errorMessage(err)}`);
     return false;
   }
   const programIds = new Set<string>();
@@ -403,7 +404,7 @@ async function runWatchLoop(
       try {
         await bundleAllOnce(config, adapters, ctx);
       } catch (err) {
-        reporter().note(`[watch] error: ${err instanceof Error ? err.message : err}`);
+        reporter().note(`[watch] error: ${errorMessage(err)}`);
       } finally {
         running = false;
       }

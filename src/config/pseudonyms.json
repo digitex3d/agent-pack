@@ -1,0 +1,264 @@
+{
+  "$comment": "The pseudonyms a chat gives its participants: <first>-the-<adjective>. The first name, and the adjective out of the most specific group that applies (role, then effort, then model size, then harness, then the default), are picked by a hash of the participant's id \u2014 the same participant, the same pseudonym, every chat. Friendly words only, lowercase, no hyphens.",
+  "names": [
+    "ada",
+    "alma",
+    "ari",
+    "bea",
+    "bob",
+    "cal",
+    "cleo",
+    "dan",
+    "eli",
+    "emma",
+    "eric",
+    "eva",
+    "finn",
+    "gus",
+    "hana",
+    "ivo",
+    "jay",
+    "juno",
+    "kai",
+    "lea",
+    "leo",
+    "lia",
+    "luca",
+    "mae",
+    "max",
+    "mia",
+    "nico",
+    "nina",
+    "noa",
+    "olly",
+    "otto",
+    "pia",
+    "ray",
+    "rosa",
+    "sam",
+    "tess",
+    "theo",
+    "uma",
+    "vera",
+    "zoe"
+  ],
+  "role": {
+    "reviewer": {
+      "match": [
+        "review",
+        "audit",
+        "check"
+      ],
+      "words": [
+        "picky",
+        "sharpeyed",
+        "exacting",
+        "watchful",
+        "keeneyed",
+        "scrupulous"
+      ]
+    },
+    "implementer": {
+      "match": [
+        "implement",
+        "developer",
+        "coder",
+        "builder",
+        "engineer"
+      ],
+      "words": [
+        "handy",
+        "busy",
+        "practical",
+        "steady",
+        "resourceful",
+        "industrious"
+      ]
+    },
+    "pm": {
+      "match": [
+        "pm",
+        "product",
+        "planner",
+        "manager"
+      ],
+      "words": [
+        "visionary",
+        "organized",
+        "decisive",
+        "farsighted",
+        "persuasive",
+        "clearheaded"
+      ]
+    },
+    "writer": {
+      "match": [
+        "writer",
+        "doc",
+        "wiki",
+        "curator"
+      ],
+      "words": [
+        "wordy",
+        "lyrical",
+        "articulate",
+        "storied",
+        "fluent",
+        "poetic"
+      ]
+    },
+    "tester": {
+      "match": [
+        "test",
+        "qa",
+        "hunter"
+      ],
+      "words": [
+        "relentless",
+        "curious",
+        "probing",
+        "stubborn",
+        "meddlesome",
+        "inquisitive"
+      ]
+    },
+    "other": {
+      "match": [],
+      "words": [
+        "keen",
+        "eager",
+        "willing",
+        "helpful",
+        "earnest",
+        "friendly",
+        "cheerful",
+        "plucky"
+      ]
+    }
+  },
+  "effort": {
+    "high": [
+      "thorough",
+      "careful",
+      "meticulous",
+      "diligent",
+      "painstaking",
+      "attentive"
+    ],
+    "low": [
+      "hasty",
+      "breezy",
+      "casual",
+      "snappy",
+      "relaxed",
+      "easygoing"
+    ]
+  },
+  "model": {
+    "small": {
+      "match": [
+        "haiku",
+        "mini",
+        "flash",
+        "luna",
+        "nano",
+        "lite",
+        "small",
+        "fast",
+        "tiny"
+      ],
+      "words": [
+        "swift",
+        "quick",
+        "nimble",
+        "brisk",
+        "light",
+        "zippy",
+        "speedy",
+        "agile"
+      ]
+    },
+    "large": {
+      "match": [
+        "opus",
+        "pro",
+        "max",
+        "big",
+        "large",
+        "ultra",
+        "heavy",
+        "deep"
+      ],
+      "words": [
+        "wise",
+        "deep",
+        "patient",
+        "mighty",
+        "grand",
+        "learned",
+        "sage",
+        "weighty"
+      ]
+    }
+  },
+  "harness": {
+    "claude": [
+      "thoughtful",
+      "eloquent",
+      "gentle",
+      "courteous",
+      "reflective",
+      "polite",
+      "measured",
+      "considerate"
+    ],
+    "codex": [
+      "crafty",
+      "precise",
+      "terse",
+      "tinkering",
+      "methodical",
+      "exact",
+      "clever",
+      "inventive"
+    ],
+    "junie": [
+      "tidy",
+      "diligent",
+      "orderly",
+      "neat",
+      "punctual",
+      "dutiful",
+      "prim",
+      "careful"
+    ],
+    "opencode": [
+      "open",
+      "frank",
+      "candid",
+      "sociable",
+      "outgoing",
+      "sunny"
+    ],
+    "gemini": [
+      "twinned",
+      "bright",
+      "starry",
+      "lively",
+      "sparkling",
+      "radiant"
+    ]
+  },
+  "default": [
+    "curious",
+    "bold",
+    "brave",
+    "calm",
+    "jolly",
+    "merry",
+    "witty",
+    "gentle",
+    "sunny",
+    "lucky"
+  ]
+}

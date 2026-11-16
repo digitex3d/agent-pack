@@ -7,8 +7,10 @@ import claudeCodeApxAdapter from '../adapters/claude-code-apx/index.js';
 import codexAdapter from '../adapters/codex/index.js';
 import cursorAdapter from '../adapters/cursor/index.js';
 import opencodeAdapter from '../adapters/opencode/index.js';
+import acpAdapter, { acpTransport } from '../adapters/acp/index.js';
 import { checkBudgetModels } from '../adapters/budget.js';
 import { fromBuiltins } from './judge/builtins.js';
+import { FORMULAS, fill } from './formulas.js';
 
 /**
  * The adapters shipped with agent-pack, by name: a config names them
@@ -17,12 +19,22 @@ import { fromBuiltins } from './judge/builtins.js';
  * options, `{ name: 'opencode', models: { … } }`.
  */
 // The options are each factory's own: it takes what its adapter declares.
-const BUILTIN_ADAPTERS: Record<string, (opts?: any) => AdapterPlugin> = {
-  'claude-code': opts => claudeCodeAdapter(opts),
-  'claude-code-apx': opts => claudeCodeApxAdapter(opts),
-  codex: opts => codexAdapter(opts),
-  cursor: opts => cursorAdapter(opts),
-  opencode: opts => opencodeAdapter(opts),
+type Factory = (opts?: any) => AdapterPlugin;
+
+/** A harness's factory that also takes `acp: { … }`: its delegations then go through the ACP client, not its own CLI. */
+const overAcp = (make: Factory): Factory => (opts?: Record<string, unknown>) => {
+  if (opts?.acp === undefined) return make(opts);
+  const { acp, ...own } = opts;
+  return acpTransport(make(own), acp);
+};
+
+const BUILTIN_ADAPTERS: Record<string, Factory> = {
+  'claude-code': overAcp(opts => claudeCodeAdapter(opts)),
+  'claude-code-apx': overAcp(opts => claudeCodeApxAdapter(opts)),
+  codex: overAcp(opts => codexAdapter(opts)),
+  cursor: overAcp(opts => cursorAdapter(opts)),
+  opencode: overAcp(opts => opencodeAdapter(opts)),
+  acp: opts => acpAdapter(opts),
 };
 
 /**
@@ -37,6 +49,25 @@ export const resolveAdapter = fromBuiltins('adapter', BUILTIN_ADAPTERS, (name, o
 /** Every adapter shipped with agent-pack, by name — the harnesses installed before any config names one (D66). */
 export function builtinAdapters(): AdapterPlugin[] {
   return Object.values(BUILTIN_ADAPTERS).map(make => make());
+}
+
+/**
+ * The config's adapters, each harness name taken once: a further harness an
+ * adapter reaches (an acp server) cannot take the name of an installed one.
+ * Throws, naming both.
+ */
+export function checkHarnessNames(adapters: readonly AdapterPlugin[]): AdapterPlugin[] {
+  const installed = new Set([...Object.keys(BUILTIN_ADAPTERS), ...adapters.map(adapter => adapter.name)]);
+  const reached = new Map<string, string>();
+  for (const adapter of adapters) {
+    for (const { name } of adapter.harnesses ?? []) {
+      if (installed.has(name)) throw new Error(fill(FORMULAS.messages.harnesses.clash, { adapter: adapter.name, name }));
+      const other = reached.get(name);
+      if (other) throw new Error(fill(FORMULAS.messages.harnesses.twice, { adapter: adapter.name, other, name }));
+      reached.set(name, adapter.name);
+    }
+  }
+  return [...adapters];
 }
 
 /** A config entry as a judge — the judges' own table (judge/builtins.ts), shared with the apx. */

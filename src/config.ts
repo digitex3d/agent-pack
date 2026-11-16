@@ -8,13 +8,15 @@ import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import type { AdapterPlugin } from '../adapters/types.js';
-import { resolveAdapter, resolveJudge } from './adapter-registry.js';
+import { resolveAdapter, resolveJudge, checkHarnessNames } from './adapter-registry.js';
 import type { ChecksConfig, JudgeConfig, JudgePlugin } from './judge/types.js';
 import { defaultBundleConfig } from './bundleDefaults.js';
 import { DEFAULT_MAX_LINE_LENGTH } from './lint.js';
 import { parseDuration, DURATION_FORM } from './delegation.js';
 import { DEFAULT_DOMAIN_THRESHOLDS, type DomainThresholds } from './domains.js';
 import { isProbability } from './judge/lock.js';
+import { FORMULAS, fill } from './formulas.js';
+import { errorMessage } from './errors.js';
 
 function expandHome(p: string): string {
   if (p === '~') return homedir();
@@ -195,14 +197,14 @@ function readUserConfigLayer(): Record<string, unknown> {
   try {
     text = readFileSync(path, 'utf-8');
   } catch (err) {
-    throw new Error(`Cannot read user config at ${path}: ${(err as Error).message}`);
+    throw new Error(`Cannot read user config at ${path}: ${errorMessage(err)}`);
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch (err) {
-    throw new Error(`Invalid JSON in user config at ${path}: ${(err as Error).message}`);
+    throw new Error(`Invalid JSON in user config at ${path}: ${errorMessage(err)}`);
   }
 
   if (!isPlainObject(parsed)) {
@@ -288,6 +290,8 @@ export interface Config {
   delegate?: DelegateConfig;
   /** The plugins the project activates (`plugins: ['./plugins/checklist']`), installed — src/plugins.ts. */
   plugins?: PluginSpec[];
+  /** `agent-pack chat`: the ACP server the chat talks to — null (no `chat` key): no chat. */
+  chat?: ChatConfig | null;
   /** The store drivers the project adds to files and tabeli (`drivers: ['agent-pack-driver-sqlite']`), installed — src/storeDrivers/. */
   drivers?: DriverEntry[];
 }
@@ -406,6 +410,26 @@ function resolveMarkConfig(raw: unknown): MarkConfig {
   const max = (raw as Record<string, unknown>).max ?? MARK_DEFAULTS.max;
   if (!Number.isInteger(max) || (max as number) < 1) throw new Error('mark.max must be a whole number ≥ 1');
   return { max: max as number };
+}
+
+/** The `chat` key: `boss` the harness `agent-pack chat` talks to — an acp server, or a harness with the acp option. */
+interface ChatConfig {
+  boss: string;
+}
+
+/** The keys the `chat` key takes. */
+const CHAT_KEYS: readonly string[] = ['boss'];
+
+/** The `chat` key resolved: `boss` a harness name — absent, no chat. Whether it names an ACP server is the chat's to check. */
+function resolveChatConfig(raw: unknown): ChatConfig | null {
+  if (raw === undefined || raw === null) return null;
+  const SAY = FORMULAS.messages.config;
+  if (!isPlainObject(raw)) throw new Error(SAY.chatObject);
+  const unknown = Object.keys(raw).filter(key => !CHAT_KEYS.includes(key));
+  if (unknown.length) throw new Error(fill(SAY.chatUnknownKey, { keys: unknown.map(key => `\`${key}\``).join(', ') }));
+  const boss = (raw as Record<string, unknown>).boss;
+  if (typeof boss !== 'string' || boss.trim() === '') throw new Error(SAY.chatBoss);
+  return { boss };
 }
 
 /** The `wait` key: how long a WAIT waits at most, as a duration. */
@@ -531,12 +555,13 @@ export async function loadConfig(args: string[]): Promise<Config> {
     lint: {
       maxLineLength: userLint.maxLineLength ?? LINT_DEFAULTS.maxLineLength,
     },
-    adapters: (userConfig.adapters || []).map(resolveAdapter),
+    adapters: checkHarnessNames((userConfig.adapters || []).map(resolveAdapter)),
     judge: resolveJudgeConfig(userConfig.judge, projectRoot),
     checks: resolveChecksConfig(userConfig.checks),
     domains: resolveDomainThresholds(userConfig.domains),
     wait: resolveWaitConfig(userConfig.wait),
     mark: resolveMarkConfig(userConfig.mark),
+    chat: resolveChatConfig(userConfig.chat),
     delegate: resolveDelegateConfig(userConfig.delegate),
     // Each plugin folder, from the project root — loaded and installed before any agent compiles.
     plugins: await loadPlugins(((userConfig.plugins ?? []) as string[]).map(dir => resolve(projectRoot, expandHome(dir)))),

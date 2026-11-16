@@ -18,9 +18,11 @@
  */
 import { accessSync, constants, readFileSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
-import type { AdapterPlugin } from '../adapters/types.js';
+import type { AdapterPlugin, Invocation } from '../adapters/types.js';
+import type { BudgetModels } from '../adapters/budget.js';
 import { builtinAdapters } from './adapter-registry.js';
 import { parseTemplate } from './shapeCompiler.js';
+import { fill } from './formulas.js';
 import { modelOfTier } from '../adapters/budget.js';
 import type { HarnessInvocation } from './delegation.js';
 
@@ -33,37 +35,69 @@ export interface HarnessRow {
   /** Its recipe read, or why it is not delegable — null when it has a recipe. */
   invocation: HarnessInvocation | null;
   problem: string | null;
-  /** Whether its CLI is an executable on the PATH — null when it has no recipe. */
+  /** Whether its CLI is an executable on the PATH (or, written as a path, an executable file) — null when it has no recipe. */
   onPath: boolean | null;
+  /** How its recipe reaches it: `cli`, its own CLI, or a transport such as `acp` — null when it has no recipe. */
+  transport: string | null;
   /** The model of each `BUDGET` tier on this harness (adapters/budget.ts) — empty when it maps none. */
   models: Record<string, string>;
 }
 
-/** Whether `cli` is an executable file in one of the PATH's folders — looked up, never run. */
+/** Whether a command written as a path (it holds a `/`) is named that way, rather than looked up on the PATH. */
+const isPath = (cli: string): boolean => cli.includes('/');
+
+/** Whether `cli` is an executable file — at its path when written as one, else in one of the PATH's folders — looked up, never run. */
 export function onPath(cli: string, path = process.env.PATH ?? ''): boolean {
-  return path.split(delimiter).filter(Boolean).some(dir => {
-    try { accessSync(join(dir, cli), constants.X_OK); return true; } catch { return false; }
-  });
+  const executable = (file: string): boolean => {
+    // A missing or non-executable file is the answer itself: no.
+    try { accessSync(file, constants.X_OK); return true; } catch { return false; }
+  };
+  if (isPath(cli)) return executable(cli);
+  return path.split(delimiter).filter(Boolean).some(dir => executable(join(dir, cli)));
 }
 
-/** An adapter's recipe, read — or why it cannot be. */
-export function readInvocation(adapter: AdapterPlugin): { invocation: HarnessInvocation } | { problem: string } {
-  const inv = adapter.invocation;
-  if (!inv) return { problem: `${adapter.name} has no launch recipe — it cannot be delegated to` };
+/** A harness's recipe, read — or why it cannot be: an adapter's own, or one of the further harnesses it reaches. */
+export function readInvocation(harness: { name: string; invocation?: Invocation }): { invocation: HarnessInvocation } | { problem: string } {
+  const { name, invocation: inv } = harness;
+  if (!inv) return { problem: `${name} has no launch recipe — it cannot be delegated to` };
   let text: string;
-  try { text = readFileSync(inv.recipe, 'utf-8'); } catch { return { problem: `${adapter.name}: its recipe ${inv.recipe} cannot be read` }; }
+  try { text = readFileSync(inv.recipe, 'utf-8'); } catch { return { problem: `${name}: its recipe ${inv.recipe} cannot be read` }; }
   const parsed = parseTemplate(text);
-  const command = parsed?.bodyLayout?.trim();
-  if (!parsed || !command) return { problem: `${adapter.name}: its recipe ${inv.recipe} is no TEMPLATE with a BODY — the BODY is the command line` };
+  const body = parsed?.bodyLayout?.trim();
+  if (!parsed || !body) return { problem: `${name}: its recipe ${inv.recipe} is no TEMPLATE with a BODY — the BODY is the command line` };
+  // The recipe's own slots, filled now; the delegation's (`{project}`, `{prompt}`, …) are the apx's, at start.
+  const command = fill(body, inv.fills);
   return {
     invocation: {
       command, cli: inv.cli,
       rules: parsed.slots.flatMap(s => s.rules),
       carry: inv.carry ?? [],
-      ...(inv.shape ? { shape: inv.shape } : {}),
-      ...(inv.model ? { model: inv.model } : {}),
-      ...(inv.intro ? { intro: inv.intro } : {}),
+      ...optionalOf(inv),
     },
+  };
+}
+
+/** What a recipe declares only when its harness has it: the shape and model flags, the intro, the definition, the transport. */
+function optionalOf(inv: Invocation): Pick<HarnessInvocation, 'shape' | 'model' | 'intro' | 'definition' | 'transport'> {
+  return {
+    ...(inv.shape ? { shape: inv.shape } : {}),
+    ...(inv.model ? { model: inv.model } : {}),
+    ...(inv.intro ? { intro: inv.intro } : {}),
+    ...(inv.definition ? { definition: inv.definition } : {}),
+    ...(inv.transport ? { transport: inv.transport } : {}),
+  };
+}
+
+/** One harness as a row: its recipe read, its CLI looked up, the models its tiers map to. */
+function rowOf(harness: { name: string; invocation?: Invocation; models?: BudgetModels }, enabled: boolean, path?: string): HarnessRow {
+  const { name, models } = harness;
+  const read = readInvocation(harness);
+  const invocation = 'invocation' in read ? read.invocation : null;
+  return {
+    name, enabled, invocation, problem: 'problem' in read ? read.problem : null,
+    onPath: invocation ? onPath(invocation.cli, path) : null,
+    transport: invocation ? invocation.transport ?? 'cli' : null,
+    models: Object.fromEntries(Object.entries(models ?? {}).filter((entry): entry is [string, string] => typeof entry[1] === 'string')),
   };
 }
 
@@ -73,14 +107,11 @@ export function harnessesOf(enabled: readonly AdapterPlugin[], path?: string): H
   for (const a of builtinAdapters()) byName.set(a.name, a);
   for (const a of enabled) byName.set(a.name, a);
   const on = new Set(enabled.map(a => a.name));
-  return [...byName.values()].map(a => {
-    const read = readInvocation(a);
-    const invocation = 'invocation' in read ? read.invocation : null;
-    return {
-      name: a.name, enabled: on.has(a.name), invocation, problem: 'problem' in read ? read.problem : null, onPath: invocation ? onPath(invocation.cli, path) : null,
-      models: Object.fromEntries(Object.entries(a.models ?? {}).filter((e): e is [string, string] => typeof e[1] === 'string')),
-    };
-  });
+  // Each adapter, then the further harnesses it reaches (an acp server), enabled with it.
+  return [...byName.values()].flatMap(adapter => [
+    rowOf(adapter, on.has(adapter.name), path),
+    ...(adapter.harnesses ?? []).map(reached => rowOf(reached, on.has(adapter.name), path)),
+  ]);
 }
 
 /**
@@ -106,6 +137,7 @@ export function harnessProblem(harness: string, rows: readonly HarnessRow[]): st
   if (!row) return `no harness is called \`${harness}\` — the harnesses installed: ${rows.map(r => r.name).join(', ')}`;
   if (!row.enabled) return `the harness \`${harness}\` is not enabled — add '${harness}' to \`adapters:\` in agent-pack.config.mjs`;
   if (!row.invocation) return row.problem ?? `${harness} cannot be delegated to`;
+  if (!row.onPath && isPath(row.invocation.cli)) return `the harness \`${harness}\` runs \`${row.invocation.cli}\`, and no executable file is there — install it, fix its path, or delegate to another harness`;
   if (!row.onPath) return `the harness \`${harness}\` needs its CLI, \`${row.invocation.cli}\`, on the PATH — install it, or delegate to another harness`;
   return null;
 }

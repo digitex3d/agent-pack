@@ -1,0 +1,21 @@
+# invoke-acp
+
+EXPORT TEMPLATE invoke-acp:
+    ABOUT  the command an orchestrator on another harness runs to hand one task to an agent reached through the Agent Client Protocol
+
+    SLOTS:
+        client:   TEXT  "agent-pack's ACP client — filled when the recipe is read"
+        server:   TEXT  "the harness's name: the client reads its server — command, args, env — from the project's config, so no env value is on the command line"
+          MUST  never place a secret or a credential in the task or anywhere on the command line — the agent signs in with its own credentials, and a run that needs a sign-in fails saying so
+        project:  TEXT  "the folder the agent works in — the delegation's copy of the project, the session's cwd"
+          MUST  know the client approves a permission request only when every path it touches is inside the copy, and refuses the rest, saying so on stderr
+        agent:    TEXT  "the agent of the project it runs — its name tags its lines in a chat's log (`<harness>:<agent>`)"
+        prompt:   TEXT  "the file holding the task and what it is handed — the apx writes it"
+        answer:   TEXT  "the file the client writes the agent's last message to — the apx reads it back at deliver"
+          MUST  read a non-zero exit as a failed run, its reason on stderr: block the piece, or launch it again — never deliver an empty answer
+          MUST  give the process a timeout of your own longer than the server's (30 minutes unless its config says otherwise): a run of several minutes is no error
+        model?:   TEXT  "`--model <model>` when the agent's BUDGET tier maps to a model of the server (the config's `models`) — left out, the agent's own default"
+    BODY:
+        node {client} --server {server} --agent {agent} --project {project} --prompt {prompt} --answer {answer} {model}
+    EXAMPLE:
+        node /usr/lib/node_modules/agent-pack/dist/adapters/acp/client.js --server junie --agent hunter --project .agent-pack/work/s-1/dlg-1d06e0a6 --prompt .agent-pack/work/s-1/dlg-1d06e0a6.prompt.md --answer .agent-pack/work/s-1/dlg-1d06e0a6.answer.txt

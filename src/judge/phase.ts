@@ -32,6 +32,7 @@ import { JudgeLock, verdictKey, questionKey } from './lock.js';
 import { DEFAULT_DOMAIN_THRESHOLDS, type DomainThresholds } from '../domains.js';
 import { sha256, UnitStore, type Unit, type UnitDiagnostic } from './units.js';
 import { JudgeError, isDirect, type JudgeCheck, type JudgeConfig, type JudgeQuestion, type JudgeRule } from './types.js';
+import { errorMessage } from '../errors.js';
 
 /** One check's verdict on one line text: the one that counts, and the judge's own when known. */
 interface CheckVerdict {
@@ -186,7 +187,7 @@ export class JudgeRun {
         if (answer && (typeof p !== 'number' || !(p >= 0 && p <= 1))) throw new JudgeError('line', `${judge.name} gave no probability for ${check.id}`);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = errorMessage(err);
       if ((err as Partial<JudgeError> | null)?.kind === 'line') {
         this.stats.notJudged++;
         return { reason: `${judge.name} failed on this line: ${message}` };
@@ -415,7 +416,7 @@ export function finishJudgeRun(run: JudgeRun, opts: { prune: boolean }): void {
   try {
     run.lock.save();
   } catch (err) {
-    report.info(`judge: could not save the lock — ${err instanceof Error ? err.message : String(err)}`);
+    report.info(`judge: could not save the lock — ${errorMessage(err)}`);
   }
   if (opts.prune) {
     const orphans = Object.keys(run.lock.decisions).filter(k => !run.usedKeys.has(k)).sort();
@@ -431,6 +432,6 @@ export function finishJudgeRun(run: JudgeRun, opts: { prune: boolean }): void {
     }
     if (opts.prune) run.units.prune(run.files.keys());
   } catch (err) {
-    report.info(`judge: could not save the units — ${err instanceof Error ? err.message : String(err)}`);
+    report.info(`judge: could not save the units — ${errorMessage(err)}`);
   }
 }

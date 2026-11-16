@@ -19,6 +19,7 @@ import type { PluginBlock } from '../../apdoc/blocks.js';
 import { STATE_DIR } from '../paths.js';
 import { inputUsage, recordIssues, recordOfArgs, type PluginSpec } from '../../plugins.js';
 import { serviceCommand, type ApxHost, type ApxService } from '../service.js';
+import { errorMessage } from '../../errors.js';
 
 type Result = number | { refuse: string } | void;
 type Operation = (call: { block: Record<string, unknown>; input: Record<string, unknown>; state: { get(fallback: unknown): unknown; set(value: unknown): void }; out(line: string): void }) => Result | Promise<Result>;
@@ -79,7 +80,7 @@ async function serve(host: ApxHost, spec: PluginSpec, op: string | undefined, ar
     result = await mod[op]({ block: { id: block.id, name: block.name, about: block.about, ...block.fields }, input: read.record, state, out: line => host.out(line) });
   } catch (e) {
     if (e instanceof Refusal) return host.fail(1, e.message);
-    return host.fail(1, `${spec.name} ${op} failed: ${e instanceof Error ? e.message : e} — nothing of its state was written`);
+    return host.fail(1, `${spec.name} ${op} failed: ${errorMessage(e)} — nothing of its state was written`);
   }
   if (written) {
     mkdirSync(dirname(file!), { recursive: true });

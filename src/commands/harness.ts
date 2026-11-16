@@ -7,8 +7,10 @@ import { printUsage } from './usage.js';
 /**
  * CLI command: `agent-pack harness list` — the harnesses a delegation can go
  * to (D66): installed (shipped, or an adapter object of the config), enabled
- * (the config's `adapters:`), delegable (enabled, with a launch recipe), and
- * whether the recipe's CLI is on the PATH — looked up, never run.
+ * (the config's `adapters:`), delegable (enabled, with a launch recipe), how
+ * the recipe reaches it (its own CLI, or `acp` — an acp server, or a harness
+ * with the acp option), and whether the recipe's CLI is on the PATH — looked
+ * up, never run.
  */
 const usage = (): void => printUsage('agent-pack harness list [--json]');
 
@@ -17,8 +19,8 @@ const yes = (v: boolean | null) => (v === null ? '—' : v ? 'yes' : 'no');
 /** The rows as a table: one column per list, the CLI last. */
 export function renderHarnessTable(rows: readonly HarnessRow[]): string {
   const cells = [
-    ['harness', 'installed', 'enabled', 'delegable', 'cli on PATH'],
-    ...rows.map(r => [r.name, 'yes', yes(r.enabled), yes(r.enabled && r.invocation !== null), r.invocation ? `${r.invocation.cli}: ${yes(r.onPath)}` : '—']),
+    ['harness', 'installed', 'enabled', 'delegable', 'via', 'cli on PATH'],
+    ...rows.map(row => [row.name, 'yes', yes(row.enabled), yes(row.enabled && row.invocation !== null), row.transport ?? '—', row.invocation ? `${row.invocation.cli}: ${yes(row.onPath)}` : '—']),
   ];
   const widths = cells[0].map((_, k) => Math.max(...cells.map(row => row[k].length)));
   return cells.map(row => row.map((c, k) => c.padEnd(widths[k])).join('  ').trimEnd()).join('\n');
@@ -35,7 +37,7 @@ export async function harness(args: string[]): Promise<void> {
   if (args.includes('--json')) {
     console.log(JSON.stringify(rows.map(r => ({
       harness: r.name, installed: true, enabled: r.enabled, delegable: r.enabled && r.invocation !== null,
-      cli: r.invocation?.cli ?? null, onPath: r.onPath, ...(r.problem ? { problem: r.problem } : {}),
+      via: r.transport, cli: r.invocation?.cli ?? null, onPath: r.onPath, ...(r.problem ? { problem: r.problem } : {}),
     })), null, 2));
     return;
   }

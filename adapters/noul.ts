@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { JudgeError, isDirect, type JudgeCheck, type JudgeQuestion, type JudgePlugin, type JudgeAnswer } from '../src/judge/types.js';
+import { errorMessage } from '../src/errors.js';
 
 /**
  * A judge over a decisions API — one request per line, the line as the input
@@ -91,7 +92,7 @@ export function noulJudge(p: NoulProvider, opts: { url?: string; model?: string 
           });
           return { res, text: await res.text().catch(() => '') };
         } catch (err) {
-          throw new JudgeError('offline', `${p.name}: unreachable — ${scrub(err instanceof Error ? err.message : String(err), key)}`);
+          throw new JudgeError('offline', `${p.name}: unreachable — ${scrub(errorMessage(err), key)}`);
         }
       };
       const retryable = (status: number): boolean => status === 429 || status >= 500;

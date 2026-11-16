@@ -6,6 +6,9 @@ import { init } from './src/commands/init.js';
 import { bundle } from './src/commands/bundle.js';
 import { agents } from './src/commands/agents.js';
 import { harness } from './src/commands/harness.js';
+import { chat } from './src/commands/chat.js';
+import { ask } from './src/commands/ask.js';
+import { errorMessage } from './src/errors.js';
 import { driver } from './src/commands/driver.js';
 import { CREDIT } from './src/credits.js';
 import { banner, isPreRelease } from './reporters/pretty/logo.js';
@@ -13,7 +16,7 @@ import { packageInfo, packageVersion } from './src/config.js';
 
 const [command, ...rest] = process.argv.slice(2);
 
-const commands: Record<string, (args: string[]) => Promise<void>> = { init, bundle, agents, harness, driver };
+const commands: Record<string, (args: string[]) => Promise<void>> = { init, bundle, agents, harness, driver, chat, ask };
 
 if (command === '--version') {
   const version = packageVersion();
@@ -37,6 +40,10 @@ Commands:
                                  library); filter with --domain, machine output with --json
   harness list                   The harnesses a delegation can go to (BY <harness>:<agent>): installed,
                                  enabled in the config, delegable, CLI on the PATH; --json
+  chat                           A terminal chat with the boss harness the config names (chat: { boss }),
+                                 over ACP — the work of the harnesses it delegates to shown in one log
+  ask <harness>[:<agent>] "<task>"  Run one task on a harness reached over ACP — as that agent, when named — in this folder;
+                                 its answer on stdout — inside a chat, its work in the chat's log
   driver test <driver>           Run the store-driver contract on a driver: files, tabeli, or a
                                  module or path, with --options '<json>'; exits 1 when a case fails
 
@@ -64,4 +71,10 @@ if (!commands[command]) {
   process.exit(1);
 }
 
-await commands[command](rest);
+try {
+  await commands[command](rest);
+} catch (error) {
+  // A failure a command does not report itself — a config error among them — is said in one line, never as a stack.
+  console.error(`agent-pack: ${errorMessage(error)}`);
+  process.exit(1);
+}

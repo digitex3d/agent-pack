@@ -14,7 +14,7 @@
  * first line, `open` (exit 0) or `closed` (exit 1, or 2 on a usage or config error).
  */
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { spawnSync, type SpawnSyncOptionsWithStringEncoding } from 'node:child_process';
 import { ApDocument as ApDocumentClass, type ApDocument } from '../apdoc/document.js';
 import type { ApBlock } from '../apdoc/block.js';
@@ -31,14 +31,14 @@ import { PROGRAM, WRITE_PROGRAM, executorKey, programDir, programFolders, type A
 import { resolveJudge } from '../judge/builtins.js';
 import type { JudgePlugin } from '../judge/types.js';
 import { refName } from '../../adapters/md/phrases.js';
-import { scopeLabel } from '../withUse.js';
-import { SCOPED_KINDS } from '../services/tags.js';
 import { CREDIT } from '../credits.js';
 import { validateRecord, formatIssues, jsonExample, jsonSchemaOf } from '../shapeSchema.js';
 import { BLOCK_ID_RE, addressName, sha256Hex, shortId } from '../apdoc/ids.js';
 import { perimeterFiles, scanZones, zoneMarks, zonesText, parseZones } from './contracts.js';
 import { DelegationTable, CONTRACT_ID_RE, MARK_ID_RE, pieceRecord, pieceOf, answerFlag, type DelegationRecord } from './delegations.js';
-import { splitHarness, type ApMark, type HarnessInvocation } from '../delegation.js';
+import { agentPromptHead, definitionPath, splitHarness, type ApMark, type HarnessInvocation } from '../delegation.js';
+import { announceIdentity } from '../../adapters/acp/events.js';
+import { JSON_FLAG, entryOf, listingOf, lsLine, uniqueRefs } from './listing.js';
 import { parsePayload } from './payload.js';
 import type { DriverEntry } from '../storeDrivers/registry.js';
 import { installRecorded } from './stores.js';
@@ -50,6 +50,7 @@ import { waitFor, OLD_DELEGATE_KIND } from './services/delegate.js';
 import { countOf } from './service.js';
 import { type PerimeterGlobs } from '../primitives.js';
 import { globRegExp, matchesAnyGlob, literalGlob } from '../services/glob.js';
+import { errorMessage } from '../errors.js';
 
 /** The exit of an UNTIL*'s answer at its round limit: the loop ends (src/check.ts roundLine). */
 const ROUND_LIMIT = 7;
@@ -208,8 +209,8 @@ export class ApxEngine {
   private readonly byId = new Map<string, ApBlock>();
   /** Every verb, by name — the table APX_VERBS lists. */
   private readonly verbs: Record<ApxVerb, (args: string[]) => number | Promise<number>> = {
-    start: args => this.start(args),
-    scope: () => this.scope(),
+    start: args => { this.announce(); return this.start(args); },
+    scope: () => { this.announce(); return this.scope(); },
     ls: args => this.ls(args),
     get: args => this.get(args),
     set: args => this.set(args),
@@ -273,6 +274,11 @@ export class ApxEngine {
   }
 
   // ------------------------------------------------------------------ verbs
+
+  /** Who this apx is, told to the chat it runs in, if any — what `start` and `scope` serve. */
+  private announce(): void {
+    announceIdentity(this.root.name, (this.root as ApBlock).kind);
+  }
 
   private start(args: string[]): number {
     this.out(this.headLine(this.root));
@@ -415,16 +421,20 @@ export class ApxEngine {
   private ls(args: string[]): number {
     const terms: { key: string; op: string; val: string }[] = [];
     let count = false;
+    let json = false;
     for (const arg of args) {
       if (arg === 'count') { count = true; continue; }
+      if (arg === JSON_FLAG) { json = true; continue; }
       const m = FILTER_RE.exec(arg);
       if (!m) return this.fail(2, `bad filter '${arg}' — filters look like: ${this.cmd} ls kind=template tag=planning name~idea about~plan`);
       terms.push({ key: m[1], op: m[2], val: m[3] });
     }
     const hits = this.doc.all().filter(b => terms.every(t => matches(b, t.key, t.op, t.val)));
+    // One model, two renderings: the listing as JSON, or as lines.
+    if (json) return this.print(JSON.stringify(listingOf([{ doc: this.doc, holder: this.inUnit ?? '' }], null)));
     for (const [kind, blocks] of this.groups(hits)) {
       this.out(`${kind} (${blocks.length})`);
-      if (!count) for (const b of blocks) this.out(`  ${this.lsLine(b)}`);
+      if (!count) for (const b of blocks) this.out(`  ${lsLine(entryOf(this.doc, b, ''))}`);
     }
     this.out(`# ${countOf(hits.length, 'block', 'blocks')}${hits.length === 0 && terms.length > 0 ? ' match' : ''}`);
     return 0;
@@ -461,7 +471,7 @@ export class ApxEngine {
       const lines = this.text(block).split('\n').filter(l => l.toLowerCase().includes(needle));
       if (lines.length === 0) continue;
       n++;
-      this.out(this.lsLine(block));
+      this.out(lsLine(entryOf(this.doc, block, '')));
       for (const line of lines) this.out(`  > ${line.trim()}`);
     }
     this.out(`# ${countOf(n, 'block', 'blocks')}${n === 0 ? ' match' : ''}`);
@@ -721,7 +731,7 @@ export class ApxEngine {
     const session = this.openSession();
     if (typeof session === 'string') return refused(`${session} — the gate stays closed`);
     let judge: JudgePlugin;
-    try { judge = this.judgeNamed(config.adapter); } catch (e) { return refused(`the judge \`${config.adapter}\` cannot be loaded by the apx (${e instanceof Error ? e.message : e})`); }
+    try { judge = this.judgeNamed(config.adapter); } catch (error) { return refused(`the judge \`${config.adapter}\` cannot be loaded by the apx (${errorMessage(error)})`); }
     try {
       const verdict = await this.verdict(spec, id, session, judge, config.model);
       const prior = spec.kind === 'UNTIL' ? session.checks(id) : [];
@@ -734,7 +744,7 @@ export class ApxEngine {
       answer('closed', verdict.why, ...rounds);
       return 1;
     } catch (e) {
-      return refused(`the check could not be run or recorded: ${e instanceof Error ? e.message : e}`);
+      return refused(`the check could not be run or recorded: ${errorMessage(e)}`);
     }
   }
 
@@ -761,7 +771,7 @@ export class ApxEngine {
     try {
       answered = await judge.ask(state, [{ id, question: spec.question }], model);
     } catch (e) {
-      const why = (e instanceof Error ? e.message : String(e)).split(spec.question).join('…');
+      const why = errorMessage(e).split(spec.question).join('…');
       return closed(`the judge could not answer (${why})`, `the judge could not answer (${why})`, { fingerprint });
     }
     const p = answered.answers[id];
@@ -908,13 +918,6 @@ export class ApxEngine {
     return `# ${block.kind} ${block.name}${block.about ? ` — ${block.about}` : ''}`;
   }
 
-  private lsLine(block: ApBlock): string {
-    const tags = block.tags.length > 0 ? `  ${block.tags.map(t => `#${t}`).join(' ')}` : '';
-    // A policy or a skill says where it holds: its perimeter, or only under a WITH that names it (src/withUse.ts).
-    const scope = SCOPED_KINDS.includes(block.kind) ? `  [${scopeLabel(block.scopes)}]` : '';
-    return `${block.id}  ${block.name}${tags}${scope}${block.about ? `  — ${block.about}` : ''}`;
-  }
-
   /** Blocks grouped by kind, in reading order. */
   private groups(blocks: ApBlock[]): [string, ApBlock[]][] {
     const kinds = [...new Set(blocks.map(b => b.kind))].sort((a, b) => kindRank(a) - kindRank(b));
@@ -1001,7 +1004,7 @@ export class ApxEngine {
     const vars = this.sessionVars();
     if (!vars) return this.lastCode;
     let stored: string | null;
-    try { stored = vars.read(name, block.scope); } catch (e) { return this.fail(2, `reading ${name}: ${e instanceof Error ? e.message : e}`); }
+    try { stored = vars.read(name, block.scope); } catch (error) { return this.fail(2, `reading ${name}: ${errorMessage(error)}`); }
     this.print(this.text(block));
     this.out(`# var ${name}  ${block.id}`);
     this.links(block);
@@ -1059,7 +1062,7 @@ export class ApxEngine {
     }
     const session = this.openSession();
     if (typeof session === 'string') return { code: 2, reason: session };
-    try { session.write(block.name, block.scope, { value, type, by: this.root.name }); } catch (e) { return { code: 2, reason: `storing ${block.name}: ${e instanceof Error ? e.message : e}` }; }
+    try { session.write(block.name, block.scope, { value, type, by: this.root.name }); } catch (error) { return { code: 2, reason: `storing ${block.name}: ${errorMessage(error)}` }; }
     return null;
   }
 
@@ -1150,7 +1153,7 @@ export class ApxEngine {
         default: return this.contractList(cx, rest);
       }
     } catch (e) {
-      return this.fail(2, `the contracts could not be read or written: ${e instanceof Error ? e.message : e}`);
+      return this.fail(2, `the contracts could not be read or written: ${errorMessage(e)}`);
     }
   }
 
@@ -1335,6 +1338,8 @@ export class ApxEngine {
       return this.fail(2, `${other.harness}'s recipe was not compiled into ${this.root.name} — write \`DELEGATE ${mark.list} BY ${by}\` in its flow and bundle again; nothing was started`);
     }
     const agent = other?.agent ?? by;
+    const missing = inv ? this.missingDefinition(cx, inv, agent) : null;
+    if (missing) return this.fail(2, missing);
     const pending = cx.table.all().filter(r => r.mark === mark.id && r.state === 'marked');
     if (pending.length === 0) return this.print(`# ${mark.list}: no zone was marked — nothing to start`);
     const scope = this.doc.perimeter()?.writes;
@@ -1480,7 +1485,7 @@ export class ApxEngine {
   /** The files carried into the copy of a piece on another harness — its agent's definition — never delivered back. */
   private carriedOf(r: DelegationRecord): Set<string> {
     const inv = r.harness ? this.doc.meta.harnesses?.[r.harness] : undefined;
-    return new Set((inv?.carry ?? []).map(c => c.replace(/\{agent\}/g, r.assignee)));
+    return new Set((inv?.carry ?? []).map(file => fill(file, { agent: r.assignee })));
   }
 
   /** The files a delegation to another harness keeps beside its copy: the prompt it is handed, the answer it writes, the schema of an AS. */
@@ -1503,6 +1508,8 @@ export class ApxEngine {
     const agent = work.by ?? '';
     const cx = this.contractCx();
     if (!cx) return this.lastCode;
+    const missing = this.missingDefinition(cx, inv, agent);
+    if (missing) return this.fail(2, missing);
     const landing = cx.ws().land();
     if ('conflicts' in landing) return this.fail(3, `what was merged conflicts with the working folder: ${landing.conflicts.join(', ')} — make them agree there, then start again`);
     // What it is handed: the task, the variables and constants it reads — never the conversation (D66).
@@ -1540,9 +1547,22 @@ export class ApxEngine {
     return inv.model ? inv.models?.[agent] ?? null : null;
   }
 
+  /** The file of an agent's compiled definition, when its harness has no agent files of its own — null when it reads its own. */
+  private definitionFile(cx: ContractCx, inv: HarnessInvocation, agent: string): string | null {
+    const path = definitionPath(inv, agent);
+    return path ? join(cx.root, path) : null;
+  }
+
+  /** Why a piece cannot be handed over: its harness takes the agent's definition in the prompt, and it was not written — or null. */
+  private missingDefinition(cx: ContractCx, inv: HarnessInvocation, agent: string): string | null {
+    const file = this.definitionFile(cx, inv, agent);
+    return file && !existsSync(file) ? `${agent}'s compiled definition (${relative(cx.root, file)}) is missing, and its harness reads it from the prompt — bundle again; nothing was started` : null;
+  }
+
   /**
    * A copy for a piece on another harness (D66), opened: the files its harness
-   * needs carried in, its prompt written beside it — the CLI's intro, `task`,
+   * needs carried in, its prompt written beside it — the agent's compiled
+   * definition when the harness has no agent files of its own, the CLI's intro, `task`,
    * then where it works — and the schema of its AS when the CLI binds one.
    * Returns the harness's command line, filled: the copy, the agent, the
    * prompt, the answer, the shape and the model its BUDGET tier maps to.
@@ -1550,25 +1570,25 @@ export class ApxEngine {
   private openElsewhere(cx: ContractCx, id: string, inv: HarnessInvocation, agent: string, writes: string[], task: string[], shape: ApRef | null): string {
     cx.ws().open(id, { reads: null, writes });
     const files = this.elsewhereFiles(cx, id);
-    for (const path of inv.carry.map(c => c.replace(/\{agent\}/g, agent))) {
+    for (const path of inv.carry.map(file => fill(file, { agent }))) {
       const from = join(cx.root, path);
       if (!existsSync(from)) continue;
       mkdirSync(dirname(join(files.copy, path)), { recursive: true });
       copyFileSync(from, join(files.copy, path));
     }
+    const definition = this.definitionFile(cx, inv, agent);
     const prompt = [
-      ...(inv.intro ? [inv.intro.replace(/\{agent\}/g, agent), ''] : []),
+      ...agentPromptHead(inv, agent, definition ? readFileSync(definition, 'utf-8') : null),
       ...task,
       '', 'Work only in this folder: it is your own copy of the project. Your last message is your answer.',
     ].join('\n');
     writeFileSync(files.prompt, `${prompt}\n`);
     const slots = shape ? this.doc.slotsOf(shape) : null;
     if (shape && inv.shape && slots) writeFileSync(files.schema, JSON.stringify(jsonSchemaOf(slots, this.doc.slotResolver()), null, 2));
-    const flag = shape && inv.shape && slots ? inv.shape.replace(/\{schema\}/g, files.schema) : '';
+    const flag = shape && inv.shape && slots ? fill(inv.shape, { schema: files.schema }) : '';
     const model = this.modelOf(inv, agent);
-    const modelFlag = model ? inv.model!.replace(/\{model\}/g, model) : '';
-    return inv.command.replace(/\{project\}/g, files.copy).replace(/\{agent\}/g, agent).replace(/\{prompt\}/g, files.prompt)
-      .replace(/\{answer\}/g, files.answer).replace(/\{shape\}/g, flag).replace(/\{model\}/g, modelFlag).replace(/\s{2,}/g, ' ').trim();
+    const modelFlag = model && inv.model ? fill(inv.model, { model }) : '';
+    return fill(inv.command, { project: files.copy, agent, prompt: files.prompt, answer: files.answer, shape: flag, model: modelFlag }).replace(/\s{2,}/g, ' ').trim();
   }
 
   /** The AS of a delegation to another harness, as a reference — null when it has none, or its template was not compiled in. */
@@ -1698,21 +1718,3 @@ function matches(block: ApBlock, key: string, op: string, val: string): boolean 
   return op === '=' ? value === val : value.toLowerCase().includes(val.toLowerCase());
 }
 
-/** Every reference a block's data holds — any `{ kind, target, id }` object — once per target. */
-function uniqueRefs(data: unknown): ApRef[] {
-  const found = new Map<string, ApRef>();
-  const walk = (v: unknown): void => {
-    if (Array.isArray(v)) { v.forEach(walk); return; }
-    if (!v || typeof v !== 'object') return;
-    const o = v as Record<string, unknown>;
-    if (typeof o.target === 'string' && typeof o.kind === 'string' && 'id' in o) {
-      if (!found.has(o.target)) found.set(o.target, o as unknown as ApRef);
-      return;
-    }
-    Object.values(o).forEach(walk);
-  };
-  const { args, body } = data as { args?: unknown; body?: unknown };
-  walk(args);
-  walk(body);
-  return [...found.values()];
-}

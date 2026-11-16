@@ -99,7 +99,7 @@ function agentFiles(config: Config): string[] {
 }
 
 /** Every agent of the project (the global ones after it), the team it belongs to and its `BUDGET` tier. */
-function agentIndexOf(config: Config): AgentIndexEntry[] {
+export function agentIndexOf(config: Config): AgentIndexEntry[] {
   return agentFiles(config).map(file => {
     const teamRoot = teamRootForAgentFile(file);
     const team = teamRoot ? basename(teamRoot) : null;

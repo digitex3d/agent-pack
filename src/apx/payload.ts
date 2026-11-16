@@ -156,6 +156,12 @@ export function packHolds(pack: Pack, name = ''): boolean {
   return pack.entry(VIEW_SECTION, name) !== null || pack.entry(IMAGE_SECTION, name) !== null;
 }
 
+/** The names of the documents a pack holds — its own ('') first. */
+export function heldNames(pack: Pack): string[] {
+  const names = new Set([VIEW_SECTION, IMAGE_SECTION].flatMap(type => pack.entries(type).map(e => e.name)));
+  return [...names].sort((a, b) => Number(b === '') - Number(a === ''));
+}
+
 /**
  * The payload of an opened pack — a file's, or the data a compiled binary
  * carries (`Pack.fromData`): the document `name` views, each block taken from

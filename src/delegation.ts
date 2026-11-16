@@ -140,6 +140,28 @@ export interface HarnessInvocation {
   carry: string[];
   /** The prompt's first line, `{agent}` its name — absent when the CLI picks the agent itself. */
   intro?: string;
+  /** The file of the agent's compiled definition, from the project root (`{agent}` its name) — the prompt opens with it; absent when the harness reads agent files of its own. */
+  definition?: string;
+  /** How the command reaches the harness when not by its own CLI — `acp`. */
+  transport?: string;
+}
+
+/** The file of an agent's compiled definition, from the project root, when its harness takes it in the prompt — null when it reads agent files of its own. */
+export function definitionPath(inv: Pick<HarnessInvocation, 'definition'>, agent: string): string | null {
+  return inv.definition ? fill(inv.definition, { agent }) : null;
+}
+
+/**
+ * What a prompt that hands a task to `agent` on another harness opens with:
+ * its compiled definition (`definition`, its text) when the harness has no
+ * agent files of its own, then the harness's intro naming the agent — the one
+ * way the apx and `agent-pack ask` both write it.
+ */
+export function agentPromptHead(inv: Pick<HarnessInvocation, 'intro'>, agent: string, definition: string | null): string[] {
+  return [
+    ...(definition !== null ? [`# Who you are — the definition of the agent \`${agent}\``, '', definition.trimEnd(), '', '# Your task', ''] : []),
+    ...(inv.intro ? [fill(inv.intro, { agent }), ''] : []),
+  ];
 }
 
 /** The keywords whose words an adapter may give its own (`renderings.<KEYWORD>.<key>`): how its harness hands work out and waits. */

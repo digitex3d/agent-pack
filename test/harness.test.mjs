@@ -74,13 +74,13 @@ try {
 
   // --- the three lists ---
   let out = ok(run([CLI, 'harness', 'list']), 'harness list');
-  has(out, 'harness', 'installed', 'enabled', 'delegable', 'cli on PATH');
-  assert.match(out, /^codex\s+yes\s+yes\s+yes\s+codex: yes$/m, out);
-  assert.match(out, /^claude-code\s+yes\s+yes\s+yes\s+claude: yes$/m, out);
-  assert.match(out, /^cursor\s+yes\s+no\s+no\s+—$/m, 'installed, not enabled, no recipe');
-  assert.match(out, /^opencode\s+yes\s+no\s+no\s+opencode: (yes|no)$/m, 'installed, not enabled: not delegable until the config names it');
+  has(out, 'harness', 'installed', 'enabled', 'delegable', 'via', 'cli on PATH');
+  assert.match(out, /^codex\s+yes\s+yes\s+yes\s+cli\s+codex: yes$/m, out);
+  assert.match(out, /^claude-code\s+yes\s+yes\s+yes\s+cli\s+claude: yes$/m, out);
+  assert.match(out, /^cursor\s+yes\s+no\s+no\s+—\s+—$/m, 'installed, not enabled, no recipe');
+  assert.match(out, /^opencode\s+yes\s+no\s+no\s+cli\s+opencode: (yes|no)$/m, 'installed, not enabled: not delegable until the config names it');
   const json = JSON.parse(ok(run([CLI, 'harness', 'list', '--json']), 'harness list --json'));
-  assert.deepEqual(json.find(r => r.harness === 'claude-code-apx'), { harness: 'claude-code-apx', installed: true, enabled: false, delegable: false, cli: 'claude', onPath: true });
+  assert.deepEqual(json.find(r => r.harness === 'claude-code-apx'), { harness: 'claude-code-apx', installed: true, enabled: false, delegable: false, via: 'cli', cli: 'claude', onPath: true });
   console.log('harness: the three lists passed.');
 
   // --- the harness is a dependency of the build ---
@@ -89,7 +89,7 @@ try {
   flow(FLOW.map(l => l.replace('codex:hunter', 'cursor:hunter')));
   has(run([CLI, 'bundle', 'all']).out, 'the harness `cursor` is not enabled — add \'cursor\' to `adapters:`');
   flow(FLOW.map(l => l.replace('codex:hunter', 'nowhere:hunter')));
-  has(run([CLI, 'bundle', 'all']).out, 'no harness is called `nowhere` — the harnesses installed: claude-code, claude-code-apx, codex, cursor, opencode');
+  has(run([CLI, 'bundle', 'all']).out, 'no harness is called `nowhere` — the harnesses installed: claude-code, claude-code-apx, codex, cursor, opencode, acp');
   flow(FLOW.map(l => l.replace('codex:hunter', 'codex:nobody')));
   has(run([CLI, 'bundle', 'all']).out, 'BY codex:nobody: unknown agent `nobody`');
   flow(FLOW.map(l => l.replace('DELEGATE write the notes BY claude-code:writer', 'FORK write the notes BY claude-code:writer')));

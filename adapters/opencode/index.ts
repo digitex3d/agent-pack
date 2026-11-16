@@ -6,6 +6,7 @@ import type { AdapterPlugin, AgentBundle, Emitter } from '../types.js';
 import { descriptionOf } from '../skill-frontmatter.js';
 import { budgetModel, type BudgetModels } from '../budget.js';
 import { makeClaudeSkillEmitter } from '../claude-code/emitters/claude-skill.js';
+import { agentFileIntro } from '../acp/index.js';
 
 /**
  * opencode adapter — the same two sides as claude-code and codex (D66).
@@ -64,6 +65,7 @@ export default function opencodeAdapter(opts: OpencodeOptions = {}): AdapterPlug
       model: '--model {model}',
       // A copy of the project holds what git tracks; the generated definitions often are not.
       carry: [`${agentsDir}/{agent}.md`, 'AGENTS.md'],
+      transportIntro: agentFileIntro(`${agentsDir}/{agent}.md`),
     },
   };
 }
