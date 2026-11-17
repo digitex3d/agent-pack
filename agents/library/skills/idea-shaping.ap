@@ -1,0 +1,146 @@
+# idea-shaping — guides the user from a raw idea to one idea-card: asks for the evidence, never designs or judges it
+IMPORT idea-filing FROM @main.skills
+
+POLICY idea-fidelity:
+    ABOUT    whose words and which facts go in an idea card
+    APPLIES  #idea-fidelity
+
+    ALWAYS  keep the user's words for the problem and the idea
+    ALWAYS  write the idea in english
+    NEVER   add a feature, a solution or a design choice the user did not state
+    NEVER   design the implementation: syntax, code or files stay out of the card
+    NEVER   take the proposer's enthusiasm as evidence
+    NEVER   fill a slot with a charitable guess
+    ALWAYS  write what one unanswered follow-up left missing as missing: `none cited`, `none named`, or an open question
+    ALWAYS  put the assistant's doubts in open-questions, each with a proposed default, never as settled decisions
+    NEVER   score the idea or give a verdict on it
+
+TEMPLATE idea-card:
+    ABOUT  one atomic idea, stated with the evidence that lets someone who was not in the chat judge it
+    SLOTS:
+        title:            TEXT MAX_WORDS 10  "the idea as a card title: what changes, not how"
+          MUST  not name a file, a component or an internal identifier
+        date:             TEXT REGEX /^\d{4}-\d{2}-\d{2}$/  "the day the idea was stated, as YYYY-MM-DD"
+        idea:             TEXT MAX_WORDS 25  "the single idea in one line"
+          MUST  hold one idea only: a second one gets its own card
+        problem:          TEXT MAX_WORDS 50  "what does not work or is missing today, in the user's words"
+        evidence:         TEXT MAX_WORDS 40  "a real case where the problem cost something, or `none cited`"
+          MUST  write `none cited` when the user named no real case, never a plausible one
+        for-whom:         TEXT MAX_WORDS 20  "who has the problem, and how often"
+        before:           TEXT  "one concrete case as it goes today"
+        after:            TEXT  "the same case once the idea exists"
+        cheapest-path:    TEXT MAX_WORDS 30  "the cheapest thing that already works, and what it loses, or `none named`"
+        overlap:          TEXT MAX_WORDS 40  "the primitive, agent, skill or card that already covers it, or `none` once checked"
+          MUST  check the primitives, the library, the agents and the board before writing `none`
+        cost:             TEXT MAX_WORDS 25  "what it adds: files, primitives, dependencies, public surface, config"
+        gain:             TEXT MAX_WORDS 30  "what gets better, and how one would notice"
+        riskiest-guess?:  TEXT MAX_WORDS 30  "the assumption most likely to be wrong, and the cheap test for it"
+        settled?:         TEXT  "what the user already decided about it, one per line"
+        open-questions?:  TEXT  "what is still undecided, each with the default proposed, one per line"
+        out-of-scope?:    TEXT  "what the idea deliberately leaves out, one per line"
+    BODY:
+        **{title}** — {date}
+
+        {idea}
+
+        ## Problem
+        {problem}
+
+        Evidence: {evidence}
+        For whom: {for-whom}
+
+        ## Example
+        Before:
+        {before}
+
+        After:
+        {after}
+
+        ## Is it worth it
+        Cheapest path today: {cheapest-path}
+        Already covered by: {overlap}
+        Cost: {cost}
+        Gain: {gain}
+        Riskiest guess: {riskiest-guess}
+
+        ## Settled
+        {settled}
+
+        ## Open questions
+        {open-questions}
+
+        ## Out of scope
+        {out-of-scope}
+    EXAMPLE:
+        **Skills to shape and file a new idea** — 2026-11-17
+
+        Two skills: one shapes a raw idea into a card with its evidence, the other files the approved card on Trello.
+
+        ## Problem
+        A new idea stays in the chat, half stated, and reaches Trello late or reworded. Whoever reads the card later cannot tell what the problem was.
+
+        Evidence: none cited
+        For whom: the developer of agent-pack, each time a new idea comes up in a session
+
+        ## Example
+        Before:
+        The developer states an idea in the middle of a session. The session moves on, and days later a card is written from memory, in other words.
+
+        After:
+        The developer states the idea. The assistant asks what is missing, shows the card, and files it on Trello once the developer approves its text.
+
+        ## Is it worth it
+        Cheapest path today: writing the card by hand on Trello; the evidence and the overlap check then depend on remembering them
+        Already covered by: the pm agent judges a feature already asked for, not a raw idea; no skill, primitive or card shapes one
+        Cost: one template and two skills in the library; no primitive, no dependency, no compiler change
+        Gain: an idea reaches the board the day it is stated, in the user's words; its card needs no rewording to be judged
+        Riskiest guess: that the questions cost less than they save; test: shape the next three ideas and count those abandoned midway
+
+        ## Settled
+        no score and no verdict: judging the idea stays with the pm agent
+        the card goes in the Raw cards list, with the label shaped
+
+        ## Open questions
+        whether a shaped card is later moved by hand or by a skill; default: by hand
+
+        ## Out of scope
+        judging or ranking the idea
+        moving, archiving or editing any other card
+
+VAR card AS idea-card
+
+@WITH idea-fidelity
+PROCEDURE shape-idea:
+    ABOUT  shape one idea into a card, asking the user what the card still lacks
+    IF what the user said holds more than one idea:
+        DO  tell the user which ideas you see in it
+        DO  shape one card per idea, one at a time
+    DO  fill the card's slots with what the user said INTO card
+    @WITH idea-filing:
+        DO  find the ideas already filed that cover the idea
+    DO  check the primitives, the library, the agents and those cards for what already covers it
+    DO  rewrite the card with what covers it in overlap INTO card
+    UNTIL! problem, evidence, before, after, cheapest-path and cost in {{card AS idea-card}} are each clear or stated as missing MAX 5:
+        DO  ask the user the one question that most blocks the card
+        DO  wait for the answer
+        DO  rewrite the card with the answer INTO card
+    IF the last round left one of those slots unclear:
+        DO  write that slot as missing in the card INTO card
+    UNTIL the user approves the card or drops it:
+        DO  show {{card}} to the user
+        DO  wait for the answer
+        IF the user corrects the card:
+            DO  rewrite the card with the correction INTO card
+    IF the user dropped the card:
+        DO  report that the card was dropped unapproved
+
+EXPORT SKILL idea-shaping:
+    ABOUT    Load when the user brings a new idea to formalize: shapes it into one idea-card
+    APPLIES  #idea-shaping
+    MANDATE  turn a raw idea into a card the user recognises as theirs, with the evidence to judge it, without designing or judging it
+
+    WHEN the user brings a new idea, or asks to formalize one:
+        RUN  shape-idea
+        IF the user approves the card:
+            @WITH idea-filing:
+                DO  offer to file it on Trello

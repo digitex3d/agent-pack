@@ -1,0 +1,57 @@
+# idea-filing — files one approved idea-card on the AgentPack Trello board, once, as a card written in Italian
+
+POLICY idea-filing-safety:
+    ABOUT    what may be written on Trello, where, and with whose approval
+    APPLIES  #idea-filing-safety
+
+    NEVER   write anything on the board before the user approves its exact text
+    NEVER   file a card that duplicates one already on the board
+    ALWAYS  add an agreed duplicate as a comment on the card already there
+    NEVER   change any other card in any way
+
+TEMPLATE trello-card:
+    ABOUT  one Trello card or comment, as it will be written on the board
+    SLOTS:
+        name:         TEXT  "the card's name: the idea-card's title, in Italian"
+        description:  TEXT  "the idea-card's body in Italian, headings included, a blank line between blocks, identifiers and code unchanged"
+
+VAR idea
+VAR same-card
+VAR draft AS trello-card
+
+@WITH idea-filing-safety
+PROCEDURE find-same-cards:
+    ABOUT  read the cards of the AgentPack board that cover one idea
+    DO  call the Trello REST API directly, with TRELLO_API_KEY and TRELLO_TOKEN read from `/home/giuseppe/PhpstormProjects/cardrunner/.env`
+    DO  read the cards of the AgentPack board that cover the same idea
+
+@WITH idea-filing-safety
+PROCEDURE file-idea:
+    ABOUT  file one idea-card in the target column of the board, or as a comment on the card that already holds the idea
+    VAR column:
+        DO  take the list named `Raw cards` with id `6abd26a83b11cf3ff48a5ec7`
+    DO  read the idea-card the user approved INTO idea
+    RUN  find-same-cards INTO same-card
+    IF a card in {{same-card}} is the same idea:
+        DO  show it to the user
+        DO  ask whether to add the idea to it as a comment instead
+        DO  stop until they answer
+    DO  write the title of {{idea}} as the name and its body as the description, both in Italian INTO draft
+    UNTIL the user approves the exact text of the draft or drops it:
+        DO  show {{draft}} to the user exactly as it will be written
+        DO  tell the user the column {{column}} is where the card will go
+
+EXPORT SKILL idea-filing:
+    ABOUT    Load when the user asks to put a formalized idea on Trello: files one idea-card as a card
+    APPLIES  #idea-filing
+    MANDATE  file only approved ideas, once, on the right board
+
+    WHEN the user asks to file an idea that is already an idea-card:
+        RUN  file-idea
+
+    WHEN asked which cards of the board already cover an idea:
+        RUN  find-same-cards
+
+    WHEN the user asks to file an idea that is not formalized yet:
+        DO  tell the user the idea needs the idea-shaping skill first
+        DO  offer to shape it now
