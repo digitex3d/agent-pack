@@ -7,12 +7,12 @@
  * permission asked in the box's place, answered with one key.
  */
 import { Conversation, ENTRY_KIND } from './conversation.js';
-import { MouseFilter, SCROLL_UNIT, emptyInput, insert, isEmpty, keyInput, type InputAction, type InputState, type Key } from './input.js';
+import { MouseFilter, SCROLL_UNIT, emptyInput, insert, isEmpty, ESCAPE, keyId, keyInput, type InputAction, type InputState, type Key } from './input.js';
 import { frameOf, type Frame } from './view.js';
 import { Screen } from './screen.js';
 import type { ChatEvent } from './events.js';
 import { ANSWER_KEY, type Front, type FrontHandlers } from './front.js';
-import { accepted, menuOf, moved, type MenuSources, type MenuState } from './menu.js';
+import { accepted, menuOf, movedBy, type MenuSources, type MenuState } from './menu.js';
 import { CATEGORIES, launcherKey, openLauncher, type LauncherAction, type LauncherData, type LauncherState } from './launcher.js';
 import type { CatalogEntry } from './catalog.js';
 import { ALL, COMMANDS } from './room.js';
@@ -38,11 +38,11 @@ export interface TuiOptions {
   invitable: readonly string[];
 }
 
-/** The keys the open menu takes: move, accept, close. */
-type MenuAction = 'up' | 'down' | 'accept' | 'close';
+/** The keys the open menu takes besides the moves: accept, close. */
+type MenuAction = 'accept' | 'close';
 /** The keys that open the launcher. */
 const LAUNCHER_KEYS: ReadonlySet<string> = new Set(['ctrl+p', 'f2']);
-const MENU_KEYS: Record<string, MenuAction> = { up: 'up', down: 'down', tab: 'accept', return: 'accept', escape: 'close' };
+const MENU_KEYS: Record<string, MenuAction> = { tab: 'accept', return: 'accept', [ESCAPE]: 'close' };
 
 export class TuiFront implements Front {
   private readonly conversation: Conversation;
@@ -161,16 +161,17 @@ export class TuiFront implements Front {
   /** A key the open menu takes — true; any other goes on to the box (and filters the menu). The history never moves while it is open. */
   private menuKey(key: Key): boolean {
     if (!this.menu) return false;
-    const does = !key.ctrl && !key.meta && key.name ? MENU_KEYS[key.name] : undefined;
-    if (!this.menu || !does) return false;
+    const id = keyId(key);
+    const menu = movedBy(this.menu, id);
+    if (menu) { this.menu = menu; return true; }
+    const does = MENU_KEYS[id];
+    if (!does) return false;
     this.menuActions[does](this.menu);
     return true;
   }
 
-  /** What each key of the open menu does: move the selection, accept it into the box, or close the menu. */
+  /** What each key of the open menu does besides the moves (MOVES): accept the selection into the box, or close the menu. */
   private readonly menuActions: Record<MenuAction, (menu: MenuState) => void> = {
-    up: menu => { this.menu = moved(menu, -1); },
-    down: menu => { this.menu = moved(menu, 1); },
     accept: menu => { this.input = accepted(this.input, menu); this.menu = menuOf(this.input, this.sources(), null); },
     close: () => { this.menu = null; this.dismissed = true; },
   };
@@ -178,7 +179,7 @@ export class TuiFront implements Front {
   /** A key in the open launcher: its state moved, its action done — then it closes. */
   private launcherKey(str: string | undefined, key: Key): boolean {
     if (!this.launcher) {
-      if (!LAUNCHER_KEYS.has(`${key.ctrl ? 'ctrl+' : ''}${key.name ?? ''}`)) return false;
+      if (!LAUNCHER_KEYS.has(keyId(key))) return false;
       this.launcher = openLauncher();
       this.menu = null;
       return true;

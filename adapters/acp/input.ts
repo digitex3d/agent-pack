@@ -142,8 +142,12 @@ const KEYS: Record<string, (s: InputState) => Step> = {
   'paste-end': edit(s => ({ ...s, pasting: false })),
 };
 
-/** A key's name with its modifiers — how KEYS names it. */
-const keyId = (key: Key): string => `${key.ctrl ? 'ctrl+' : ''}${key.meta ? 'meta+' : ''}${key.name ?? ''}`;
+/** The key Node reads an Esc alone as — with `meta` set, the Esc being its own modifier. */
+export const ESCAPE = 'escape';
+
+/** A key's name with its modifiers — how KEYS names it; an Esc alone is `escape`, whatever Node sets for it. */
+export const keyId = (key: Key): string =>
+  `${key.ctrl ? 'ctrl+' : ''}${key.meta && key.name !== ESCAPE ? 'meta+' : ''}${key.name ?? ''}`;
 
 /** A printable text a key types — none for a control or an escape sequence. */
 const typed = (str: string | undefined, key: Key): string | null =>

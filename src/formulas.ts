@@ -120,12 +120,13 @@ export interface Formulas {
     chat: Record<'notSet' | 'noServer' | 'eventsLost' | 'bossExited' | 'cannotStart' | 'preambleSent' | 'turnFailed' | 'jumpToLatest'
       | 'joined' | 'removed' | 'removeUnknown' | 'removeFixed' | 'removeUsage' | 'participants'
       | 'inviteList' | 'inviteUnknown' | 'inviteAlready' | 'notInRoom' | 'emptyRoom' | 'sendFailed' | 'recapPrompt' | 'recapAnswer' | 'recapFailed' | 'recapSent'
-      | 'aboutInvite' | 'aboutRemove' | 'aboutAll', Text>;
+      | 'aboutInvite' | 'aboutRemove' | 'aboutAll', Text>
+      & { setup: Record<'step' | 'reachTitle' | 'reachHint' | 'bossTitle' | 'bossHint' | 'noneFound' | 'saved' | 'badFile', Text> };
     /** The chat screen's launcher (adapters/acp/launcher.ts): its labels, its lines, what it sends. */
     launcher: Record<
       | 'title' | 'search' | 'flow' | 'team' | 'agent' | 'skill' | 'procedure' | 'policy' | 'template' | 'var' | 'room' | 'command'
       | 'detail' | 'of' | 'uses' | 'actionsFlow' | 'actionsBlock' | 'actionsInsert' | 'nothing' | 'runLine' | 'runPrompt' | 'citeRef', Text>;
-    ask: Record<'unknown' | 'configured' | 'noneConfigured' | 'noDefinition', Text>;
+    ask: Record<'unknown' | 'configured' | 'noneConfigured' | 'noAgentFiles', Text>;
     harnesses: Record<'clash' | 'twice', Text>;
     acp: Record<
       | 'noAnswer' | 'noMessage' | 'refusedPermission' | 'modelDefault' | 'modelNotOffered' | 'modelNoWay' | 'serverExited' | 'exitCode'

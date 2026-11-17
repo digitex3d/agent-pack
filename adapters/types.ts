@@ -140,9 +140,6 @@ export interface AdapterPlugin {
    * `model` the flag that picks the model the CLI runs on (`{model}` its id),
    * when the CLI has one — filled with the model the delegated agent's `BUDGET`
    * tier maps to (`models`), left out when it maps to none.
-   * `definition` the file of the agent's compiled definition (`{agent}` its
-   * name, from the project root), when the harness has no agent files of its
-   * own: the prompt opens with it, as a section of its own, before the task.
    * `fills` the values of the recipe's own slots, filled when the recipe is
    * read — never a secret: the command line is printed. `transport` how the
    * command reaches the harness, when not by the harness's own CLI (`acp`).
@@ -176,7 +173,6 @@ export interface Invocation {
   model?: string;
   carry?: string[];
   intro?: string;
-  definition?: string;
   fills?: Record<string, string>;
   transport?: string;
   transportIntro?: string;

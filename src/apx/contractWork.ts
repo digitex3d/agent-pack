@@ -23,7 +23,7 @@ import { shortId } from '../apdoc/ids.js';
 import { perimeterFiles, scanZones, zoneMarks, zonesText, parseZones } from './contracts.js';
 import { DelegationTable, CONTRACT_ID_RE, MARK_ID_RE, Piece, STATE, pieceRecord, pieceOf, answerFlag, type DelegationRecord } from './delegations.js';
 import { ApxArgs } from './args.js';
-import { agentPromptHead, definitionPath, splitHarness, type ApMark, type HarnessInvocation } from '../delegation.js';
+import { agentPromptHead, splitHarness, unnamedAgent, type ApMark, type HarnessInvocation } from '../delegation.js';
 import { parsePayload } from './payload.js';
 import { resolveWorkspace } from '../workspace/registry.js';
 import type { Allowed, Delivery, WorkspaceSession } from '../workspace/types.js';
@@ -372,25 +372,12 @@ export class ContractWork {
       this.host.lastCode = this.host.refuse(2, WORDS.contract.recipeMissing, { harness: other.harness, name: this.host.root.name, list: mark.list, by });
       return null;
     }
-    const missing = this.missingDefinition(invocation, other.agent, other.harness);
-    if (missing) {
-      this.host.lastCode = this.host.fail(2, missing);
+    const unnamed = unnamedAgent(invocation, other.agent, other.harness);
+    if (unnamed) {
+      this.host.lastCode = this.host.fail(2, unnamed);
       return null;
     }
     return { by, agent: other.agent, elsewhere: { harness: other.harness, invocation } };
-  }
-
-  /** The file of an agent's compiled definition, when its harness takes it in the prompt (an acp server) — null when it reads agent files of its own. */
-  private definitionFile(invocation: HarnessInvocation, agent: string): string | null {
-    const path = definitionPath(invocation, agent);
-    return path ? join(this.host.projectRoot, path) : null;
-  }
-
-  /** Why a piece cannot be handed over: its harness takes the agent's definition in the prompt, and it was not written — or null. */
-  private missingDefinition(invocation: HarnessInvocation, agent: string, harness: string): string | null {
-    const file = this.definitionFile(invocation, agent);
-    if (!file || existsSync(file)) return null;
-    return fill(FORMULAS.messages.ask.noDefinition, { agent, file: definitionPath(invocation, agent) ?? '', harness });
   }
 
   /** The zones the contracts `pending` start on, found by their marks — or null after saying which cannot start. */
@@ -647,8 +634,8 @@ export class ContractWork {
     const invocation = work?.harness ? this.host.doc.meta.harnesses?.[work.harness] : undefined;
     if (!work?.harness || !invocation) return this.host.refuse(2, WORDS.elsewhere.noRecipe, { id: record.dlg, name: this.host.root.name });
     const agent = work.by ?? '';
-    const missing = this.missingDefinition(invocation, agent, work.harness);
-    if (missing) return this.host.fail(2, missing);
+    const unnamed = unnamedAgent(invocation, agent, work.harness);
+    if (unnamed) return this.host.fail(2, unnamed);
     const contracts = this.context();
     if (!contracts) return this.host.lastCode;
     if (!this.landMerged(contracts)) return this.host.lastCode;
@@ -713,10 +700,8 @@ export class ContractWork {
       mkdirSync(dirname(join(files.copy, path)), { recursive: true });
       copyFileSync(from, join(files.copy, path));
     }
-    // The agent's compiled definition first when its harness has no agent files of its own (an acp server), then the harness's intro.
-    const definition = this.definitionFile(invocation, agent);
     const prompt = [
-      ...agentPromptHead(invocation, agent, definition ? readFileSync(definition, 'utf-8') : null),
+      ...agentPromptHead(invocation, agent),
       ...task,
       '', 'Work only in this folder: it is your own copy of the project. Your last message is your answer.',
     ].join('\n');

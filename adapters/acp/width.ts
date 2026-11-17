@@ -76,3 +76,9 @@ export function fit(text: string, width: number): string {
 export function padPainted(text: string, width: number): string {
   return `${text}${' '.repeat(Math.max(0, width - textWidth(stripVTControlCharacters(text))))}`;
 }
+
+/** A painted text that fits `width` columns as it is — else cut, its colours dropped: a wider one would wrap on a full screen. */
+export function fitPainted(text: string, width: number): string {
+  const plain = stripVTControlCharacters(text);
+  return textWidth(plain) <= width ? text : chop(plain, width)[0];
+}

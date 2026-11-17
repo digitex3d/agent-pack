@@ -6,6 +6,9 @@
  *
  *   - the answer on stdout, exit 0; standalone, no events written
  *   - inside a chat (AGENT_PACK_CHAT_EVENTS), its events tagged with the harness
+ *   - `<harness>:<agent>`: the prompt opens with the adapter's intro naming the
+ *     agent's native file, no compiled definition read; on a bare acp server,
+ *     whose agent files no adapter writes, refused naming why
  *   - an unknown harness or a failing one: non-zero, the cause on stderr, every event line whole
  */
 import { strict as assert } from 'node:assert';
@@ -22,6 +25,7 @@ const has = (out, ...needles) => { for (const n of needles) assert.ok(out.includ
 const fake = env => `{ command: ${JSON.stringify(process.execPath)}, args: [${JSON.stringify(FAKE)}], env: ${JSON.stringify(env)} }`;
 
 const proj = mkdtempSync(join(tmpdir(), 'ap-ask-'));
+const prompts = join(proj, 'prompts.jsonl');
 const base = { ...process.env };
 delete base.AGENT_PACK_CHAT_EVENTS;
 const ask = (args, env = {}) => {
@@ -34,7 +38,8 @@ try {
   writeFileSync(join(proj, 'README.md'), '# here\n');
   writeFileSync(join(proj, 'agent-pack.config.mjs'), ['export default {', '  adapters: [',
     `    { name: 'acp', servers: { helper: ${fake({ FAKE_ACP: 'ok', FAKE_ANSWER: 'the answer' })}, broken: ${fake({ FAKE_ACP: 'refusal' })}, echo: ${fake({ FAKE_ACP: 'ok', FAKE_ANSWER: 'echoed', FAKE_ECHO: 'PARENT_API_KEY' })} } },`,
-    `    { name: 'codex', acp: ${fake({ FAKE_ACP: 'ok', FAKE_ANSWER: 'from codex' })} },`, '  ],', '};', ''].join('\n'));
+    `    { name: 'codex', acp: ${fake({ FAKE_ACP: 'ok', FAKE_ANSWER: 'from codex', FAKE_PROMPTS: prompts })} },`,
+    `    { name: 'claude-code', acp: ${fake({ FAKE_ACP: 'ok', FAKE_ANSWER: 'from claude', FAKE_PROMPTS: prompts })} },`, '  ],', '};', ''].join('\n'));
 
   // Standalone: the answer on stdout, exit 0, no events anywhere.
   let r = ask(['helper', 'help me']);
@@ -46,6 +51,24 @@ try {
   r = ask(['codex', 'help me']);
   assert.equal(r.stdout, 'from codex\n', 'a built-in harness with its acp option');
   console.log('ask: standalone passed.');
+
+  // A named agent: the adapter's intro names it and its native file; no compiled definition is read.
+  writeFileSync(prompts, '');
+  r = ask(['codex:dry-review', 'review it']);
+  assert.equal(r.code, 0, r.stderr);
+  r = ask(['claude-code:dry-review', 'review it']);
+  assert.equal(r.code, 0, r.stderr);
+  assert.deepEqual(lines(prompts).trimEnd().split('\n').map(l => JSON.parse(l)), [
+    'Have the custom agent `dry-review` carry out the task below, and answer with its result.\n\nreview it',
+    'Act as the agent `dry-review` defined in `.claude/agents/dry-review.md`: read that file first and follow it, then carry out the task below, and answer with its result.\n\nreview it',
+  ]);
+  assert.ok(!existsSync(join(proj, '.agent-pack', 'compiled')), 'no compiled definition looked for or written');
+  // A bare acp server: no adapter writes its agent files — refused, nothing run.
+  r = ask(['helper:dry-review', 'review it']);
+  assert.notEqual(r.code, 0);
+  has(r.stderr, "agent-pack: helper cannot act as `dry-review`: no adapter writes helper's agent files");
+  assert.equal(r.stdout, '');
+  console.log('ask: named agents passed.');
 
   // Inside a chat: the harness's text, tool and verdict events, tagged with its name.
   const events = join(proj, 'events.jsonl');
@@ -68,7 +91,7 @@ try {
   // An unknown harness: the ones there are, listed.
   r = ask(['nobody', 'x']);
   assert.notEqual(r.code, 0);
-  assert.equal(r.stderr.trim(), 'agent-pack: no ACP harness is called `nobody` — the ACP harnesses configured: helper, broken, echo, codex');
+  assert.equal(r.stderr.trim(), 'agent-pack: no ACP harness is called `nobody` — the ACP harnesses configured: helper, broken, echo, codex, claude-code');
   assert.equal(r.stdout, '');
 
   // A failing harness: non-zero, the cause on stderr, the events whole lines — the failure among them.

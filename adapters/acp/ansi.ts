@@ -39,6 +39,9 @@ export interface Style {
   dim?: boolean;
 }
 
+/** Whether colour is on: off when NO_COLOR is set, whatever its value. */
+export const colorOn = (): boolean => !('NO_COLOR' in process.env);
+
 /** A text painted — or as it is, with colour off. */
 export function paint(text: string, style: Style, color: boolean): string {
   const codes = [style.bold ? '1' : '', style.dim ? '2' : '', style.fg ?? '', style.bg ?? ''].filter(Boolean);

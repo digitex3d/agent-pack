@@ -18,6 +18,7 @@ import { documentDefHashes, removeStaleCaches } from '../apx/dimensions.js';
 import { reporter, useReporter, plainReporter } from '../report.js';
 import { prettyReporter } from '../../reporters/pretty/index.js';
 import { banner } from '../../reporters/pretty/logo.js';
+import { colorOn } from '../../adapters/acp/ansi.js';
 import { apxPath, binPath } from '../apx/paths.js';
 import { unitApxFiles, unitPayload, apxChecks } from '../apx/write.js';
 import { unitAgents } from '../apx/unit.js';
@@ -433,7 +434,7 @@ function writeFiles(files: EmittedFile[]): void {
  * `--plain`, `NO_COLOR`, or when stderr is no terminal (a pipe, CI, a test).
  */
 function chooseReporter(args: string[]) {
-  const plain = args.includes('--plain') || 'NO_COLOR' in process.env || !process.stderr.isTTY;
+  const plain = args.includes('--plain') || !colorOn() || !process.stderr.isTTY;
   if (plain) return plainReporter;
   process.stderr.write(`\n${banner(packageInfo(), { columns: process.stderr.columns }).join('\n')}\n\n`);
   return prettyReporter({ verbose: args.includes('--verbose'), root: process.cwd() });

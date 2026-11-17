@@ -12,7 +12,7 @@
  *   - a missing or unknown chat.boss, and a config error, as one clean line
  */
 import { strict as assert } from 'node:assert';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, realpathSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, realpathSync, chmodSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawn, spawnSync } from 'node:child_process';
@@ -44,7 +44,7 @@ delete env.AGENT_PACK_SESSION_ID;
 delete env.AGENT_PACK_CHAT_EVENTS;
 const run = args => { const r = spawnSync(process.execPath, args, { cwd: proj, encoding: 'utf-8', env }); return { code: r.status, out: `${r.stdout}${r.stderr}`.trimEnd() }; };
 const config = chat => write(join(proj, 'agent-pack.config.mjs'), ['export default {', "  libraryRoot: 'library',", "  agentsDir: 'agents',",
-  `  adapters: [{ name: 'acp', servers: { boss: ${fake({ FAKE_ACP: 'boss', FAKE_PROMPTS: PROMPTS })}, own: ${fake({ FAKE_ACP: 'boss', FAKE_OWN_SESSION: 'own-session-1', FAKE_SESSION_ENV: 'AGENT_PACK_SESSION_ID' })}, helper: ${fake({ FAKE_ACP: 'ok', FAKE_ANSWER: 'ok.', FAKE_PROMPTS: HELPER_PROMPTS })}, broken: ${fake({ FAKE_ACP: 'refusal' })} } }],`,
+  `  adapters: [{ name: 'acp', servers: { boss: ${fake({ FAKE_ACP: 'boss', FAKE_PROMPTS: PROMPTS })}, own: ${fake({ FAKE_ACP: 'boss', FAKE_OWN_SESSION: 'own-session-1', FAKE_SESSION_ENV: 'AGENT_PACK_SESSION_ID' })}, helper: ${fake({ FAKE_ACP: 'ok', FAKE_ANSWER: 'ok.', FAKE_PROMPTS: HELPER_PROMPTS })}, broken: ${fake({ FAKE_ACP: 'refusal' })} } }, { name: 'codex', acp: ${fake({ FAKE_ACP: 'ok', FAKE_ANSWER: 'ok.', FAKE_PROMPTS: HELPER_PROMPTS })} }],`,
   ...(chat ? [`  chat: ${chat},`] : []), '};']);
 
 /** A chat, as a user drives it: what it printed so far, a line typed, a signal, waiting for a text. */
@@ -82,13 +82,88 @@ try {
   config(null);
   let r = run([CLI, 'chat']);
   assert.notEqual(r.code, 0);
-  assert.equal(r.out, "agent-pack: chat.boss is not set — name the harness the chat talks to in agent-pack.config.mjs: chat: { boss: '<harness>' }");
+  assert.equal(r.out, "agent-pack: chat.boss is not set — name the harness the chat talks to in agent-pack.config.mjs: chat: { boss: '<harness>' }, or run agent-pack chat on a terminal to pick one");
   config("{ boss: 'nobody' }");
   r = run([CLI, 'chat']);
   assert.notEqual(r.code, 0);
   has(r.out, 'agent-pack: chat.boss names `nobody`, and no ACP server is configured under that name');
   config("{ boss: '' }");
   has(run([CLI, 'chat']).out, 'agent-pack: chat.boss must name the harness');
+
+  // --- the first setup: the known harnesses found on the PATH; the boss it kept, the fallback of a config naming none ---
+  {
+    const { discoverBosses } = await import('../dist/src/commands/chatSetup.js');
+    const bin = mkdtempSync(join(tmpdir(), 'ap-chat-bin-'));
+    const tool = name => { writeFileSync(join(bin, name), '#!/bin/sh\n'); chmodSync(join(bin, name), 0o755); };
+    assert.deepEqual(discoverBosses(bin), [], 'nothing on the PATH, nothing proposed');
+    for (const name of ['claude', 'codex', 'npx', 'codex-acp', 'opencode']) tool(name);
+    writeFileSync(join(bin, 'junie'), 'not executable');
+    assert.deepEqual(discoverBosses(bin), [
+      { name: 'claude', command: 'npx', args: ['-y', '@agentclientprotocol/claude-agent-acp@0.108.0'] },
+      { name: 'codex-acp', command: 'codex-acp', args: [] },
+      { name: 'opencode-acp', command: 'opencode', args: ['acp'] },
+    ], 'the bridge installed, else npx; a harness speaking ACP with its own command; a non-executable skipped');
+    rmSync(bin, { recursive: true, force: true });
+
+    const kept = join(proj, '.agent-pack', 'chat.json');
+    config(null);
+    const bossServer = { command: process.execPath, args: [FAKE], env: { FAKE_ACP: 'boss', FAKE_PROMPTS: PROMPTS } };
+    write(kept, ['not json']);
+    has(run([CLI, 'chat']).out, 'agent-pack: .agent-pack/chat.json is no setup of the chat');
+    write(kept, [JSON.stringify({ boss: '0', servers: [bossServer] })]);
+    has(run([CLI, 'chat']).out, 'agent-pack: .agent-pack/chat.json is no setup of the chat'); // servers a list, not names
+    write(kept, [JSON.stringify({ boss: 'kept', servers: { other: bossServer } })]);
+    has(run([CLI, 'chat']).out, 'agent-pack: .agent-pack/chat.json is no setup of the chat'); // the boss none of the servers
+    write(kept, [JSON.stringify({ boss: 'kept', servers: { kept: { args: [] } } })]);
+    has(run([CLI, 'chat']).out, "agent-pack: adapters: acp's server `kept`.command");
+    write(kept, [JSON.stringify({ boss: 'codex', servers: { codex: bossServer } })]);
+    has(run([CLI, 'chat']).out, "takes the name of the installed harness `codex`");
+    write(kept, [JSON.stringify({ boss: 'kept', servers: { kept: bossServer, mate: bossServer } })]);
+    const c = chat();
+    await c.until('> ');
+    c.child.stdin.end();
+    assert.equal(await c.exited, 0, `the chat on the kept boss quits on Ctrl-D:\n${c.out}`);
+    rmSync(kept);
+
+    // A kept server reaches the config's adapter of its harness, named after it; one no adapter writes agent files for stays an acp server.
+    {
+      const { readChatFile } = await import('../dist/src/commands/chatSetup.js');
+      const { default: codexAdapter } = await import('../dist/adapters/codex/index.js');
+      const { acpHarnessNames } = await import('../dist/adapters/acp/index.js');
+      write(kept, [JSON.stringify({ boss: 'codex-acp', servers: { 'codex-acp': bossServer, gemini: bossServer } })]);
+      const choice = readChatFile(proj, [codexAdapter()]);
+      assert.equal(choice.boss, 'codex', 'the boss named after the adapter that writes its agent files');
+      assert.deepEqual(acpHarnessNames(choice.adapters), ['codex', 'gemini']);
+      const [codex, bare] = choice.adapters;
+      assert.equal(codex.invocation.transport, 'acp', 'the config\'s codex, reached over ACP');
+      assert.match(codex.invocation.intro, /^Have the custom agent `\{agent\}`/, 'its intro kept: the prompt names the agent');
+      assert.equal(bare.harnesses[0].invocation.intro, undefined, 'no adapter writes gemini\'s agent files: no intro');
+      assert.equal(readChatFile(proj, []).boss, 'codex-acp', 'no codex adapter in the config: the kept name, a bare server');
+      const { default: claudeCodeApxAdapter } = await import('../dist/adapters/claude-code-apx/index.js');
+      write(kept, [JSON.stringify({ boss: 'claude', servers: { claude: bossServer } })]);
+      const claude = readChatFile(proj, [claudeCodeApxAdapter(), codexAdapter()]);
+      assert.equal(claude.boss, 'claude-code-apx', 'claude kept: the config\'s claude-code-apx');
+      assert.equal(claude.adapters[0].invocation.transport, 'acp');
+      assert.ok(claude.adapters[0].invocation.intro.includes('`{agent}` defined in `.claude/agents/{agent}.md`'), claude.adapters[0].invocation.intro);
+      assert.equal(claude.adapters[1].invocation.transport, undefined, 'codex, not kept, by its own CLI');
+      rmSync(kept);
+    }
+
+    // The picker: arrows wrap, space ticks, Enter confirms the ticked — none ticked, nothing; one picker picks the selected; Esc gives up.
+    const { picker, keyPicker, pickerRows } = await import('../dist/adapters/acp/picker.js');
+    const items = ['a', 'b', 'c'].map(name => ({ insert: name, label: name, detail: `run ${name}` }));
+    const press = (state, ...names) => names.reduce((acc, name) => { const step = keyPicker(acc.state, { name }); return { state: step.state, action: step.action ?? acc.action }; }, { state, action: null });
+    assert.equal(press(picker(items, true), 'return').action, null, 'nothing ticked: Enter waits');
+    assert.deepEqual(press(picker(items, true), 'space', 'up', 'space', 'return').action, { type: 'done', picked: [0, 2] }, 'up from the first wraps to the last');
+    assert.deepEqual(press(picker(items, true, [true, true, false]), 'down', 'space', 'return').action, { type: 'done', picked: [0] });
+    assert.deepEqual(press(picker(items, false), 'down', 'down', 'return').action, { type: 'done', picked: [2] });
+    assert.deepEqual(press(picker(items, false), 'escape').action, { type: 'cancel' });
+    assert.deepEqual(keyPicker(picker(items, true), { name: 'c', ctrl: true }).action, { type: 'cancel' });
+    assert.deepEqual(keyPicker(picker(items, true), { name: 'escape', meta: true }).action, { type: 'cancel' }, 'an Esc alone, as Node reads it: meta set');
+    assert.deepEqual(pickerRows(picker(items, true, [true, false, false]), 'Title', 'hint', 40, false).map(row => row.trimEnd()),
+      [' Title', '', '> [✔] a  run a', '  [ ] b  run b', '  [ ] c  run c', '', ' hint'], 'the rows without colour: the selected behind >, each behind its tick');
+    assert.deepEqual(pickerRows(picker(items, false), 'T', 'h', 40, false).slice(2, 3).map(row => row.trimEnd()), ['> a  run a']);
+  }
   // A config error, from any command: one line, a non-zero exit, no stack.
   config("{ boss: 'boss' }");
   write(join(proj, 'agent-pack.config.mjs'), [readFileSync(join(proj, 'agent-pack.config.mjs'), 'utf-8').replace("helper:", `codex: ${fake({})}, helper:`)]);
@@ -208,23 +283,32 @@ try {
 
   // The room: /invite lists, validates and brings in; @name sends to one, as that agent; @all to the room, then one recap by the boss.
   c.type('/invite');
-  at = await c.until('/invite <harness> or <harness>:<agent> — the harnesses: own, helper, broken; the agents: lead, quick, writer', at);
+  at = await c.until('/invite <harness> or <harness>:<agent> — the harnesses: own, helper, broken, codex; the agents: lead, quick, writer', at);
   c.type('/invite nobody');
   at = await c.until('/invite: `nobody` is no harness or agent of this project', at);
   c.type('/invite helper:nobody');
   at = await c.until('/invite: `helper:nobody` is no harness or agent of this project', at);
-  c.type('/invite helper:lead');
-  at = await c.until('--> helper:lead joined', at);
-  c.type('/invite helper:lead');
-  at = await c.until('/invite: `helper:lead` is in the room already', at);
+  c.type('/invite codex:lead');
+  at = await c.until('--> codex:lead joined', at);
+  c.type('/invite codex:lead');
+  at = await c.until('/invite: `codex:lead` is in the room already', at);
   c.type('/invite broken');
   at = await c.until('--> broken joined', at);
   c.type('@ghost hi');
   at = await c.until('@ghost: no one of that name is in the room', at);
-  c.type('@helper:lead hello lead');
-  at = await c.until('[helper:lead] ok.', at);
+  // A bare acp server asked for an agent: refused in the room, naming why — the chat goes on.
+  c.type('/invite helper:lead');
+  at = await c.until('--> helper:lead joined', at);
+  c.type('@helper:lead hi');
+  at = await c.until("helper cannot act as `lead`: no adapter writes helper's agent files", at);
+  at = await c.until('> ', at);
+  c.type('/remove helper:lead');
+  at = await c.until('<-- helper:lead removed', at);
+  // A named agent: codex's intro names it — its native file, the one codex's adapter writes; no definition pasted in.
+  c.type('@codex:lead hello lead');
+  at = await c.until('[codex:lead] ok.', at);
   const asLead = lastPrompt(HELPER_PROMPTS);
-  assert.ok(asLead.startsWith('# Who you are — the definition of the agent `lead`') && asLead.endsWith('hello lead'), asLead);
+  assert.ok(asLead.startsWith('Have the custom agent `lead` carry out') && asLead.endsWith('hello lead'), asLead);
   at = await c.until('> ', at);
   c.type('/remove helper:reviewer');
   at = await c.until('<-- helper:reviewer removed', at);
@@ -233,10 +317,10 @@ try {
   at = await c.until('all answered — the boss is asked for a recap', at);
   at = await c.until('> ', at);
   const fanned = readFileSync(HELPER_PROMPTS, 'utf-8').trimEnd().split('\n').slice(sentBefore).map(l => JSON.parse(l));
-  assert.equal(fanned.length, 2, `helper and helper:lead, not the removed helper:reviewer: ${JSON.stringify(fanned)}`);
+  assert.equal(fanned.length, 2, `helper and codex:lead, not the removed helper:reviewer: ${JSON.stringify(fanned)}`);
   has(c.out, 'broken failed — the turn ended without an answer: stopReason refusal');
   const recap = lastPrompt(PROMPTS);
-  has(recap, 'The user asked everyone in the room: compare notes', '— helper:\nok.', '— helper:lead:\nok.', '— broken (failed): the turn ended without an answer: stopReason refusal', 'where they agree, where they differ');
+  has(recap, 'The user asked everyone in the room: compare notes', '— helper:\nok.', '— codex:lead:\nok.', '— broken (failed): the turn ended without an answer: stopReason refusal', 'where they agree, where they differ');
   assert.ok(!recap.includes('helper:reviewer') && !recap.includes('boss:'), 'only the room, not the removed, not the boss');
   const prompts2 = readFileSync(PROMPTS, 'utf-8').trimEnd().split('\n').map(l => JSON.parse(l));
   assert.equal(prompts2.filter(p => p.includes('The user asked everyone in the room')).length, 1, 'exactly one recap prompt');
@@ -246,9 +330,13 @@ try {
   at = await c.until('> ', await c.until('[helper] ok.', at));
   assert.ok(lastPrompt(HELPER_PROMPTS).endsWith('by your pseudonym'));
   // agent-pack ask <harness>:<agent>, from the command line: the same prompt head.
-  r = run([CLI, 'ask', 'helper:writer', 'from the cli']);
+  r = run([CLI, 'ask', 'codex:writer', 'from the cli']);
   assert.equal(r.code, 0, r.out);
-  assert.ok(lastPrompt(HELPER_PROMPTS).startsWith('# Who you are — the definition of the agent `writer`'), lastPrompt(HELPER_PROMPTS));
+  assert.ok(lastPrompt(HELPER_PROMPTS).startsWith('Have the custom agent `writer` carry out'), lastPrompt(HELPER_PROMPTS));
+  // A bare acp server: no adapter writes its agent files — refused, naming why.
+  r = run([CLI, 'ask', 'helper:writer', 'from the cli']);
+  assert.notEqual(r.code, 0);
+  has(r.out, "helper cannot act as `writer`: no adapter writes helper's agent files");
 
   // The boss becomes an agent by reading its apx: its next lines are `<boss>:<agent>`'s, a participant that joins.
   const before = c.out.length;

@@ -4,6 +4,7 @@ import { realpathSync } from 'node:fs';
 import { loadConfig } from '../config.js';
 import { askHarness } from '../../adapters/acp/ask.js';
 import { printUsage } from './usage.js';
+import { chatChoice } from './chat.js';
 
 /**
  * CLI command: `agent-pack ask <harness>[:<agent>] "<task>"` — one task, run on a
@@ -20,8 +21,11 @@ export async function ask(args: string[]): Promise<void> {
     process.exit(1);
   }
   const config = await loadConfig(args);
+  const root = realpathSync(process.cwd());
+  // The harnesses a chat reaches: the config's, or those its first setup kept.
+  const adapters = (await chatChoice(config, root))?.adapters ?? config.adapters;
   const answer = await askHarness({
-    adapters: config.adapters, root: realpathSync(process.cwd()), target, task,
+    adapters, root, target, task,
     report: line => process.stderr.write(`acp ${target}: ${line}\n`),
   });
   process.stdout.write(answer.endsWith('\n') ? answer : `${answer}\n`);

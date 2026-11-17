@@ -469,7 +469,17 @@
       "chatBoss": "chat.boss must name the harness the chat talks to, e.g. { boss: 'claude-code' }"
     },
     "chat": {
-      "notSet": "chat.boss is not set — name the harness the chat talks to in agent-pack.config.mjs: chat: { boss: '<harness>' }",
+      "notSet": "chat.boss is not set — name the harness the chat talks to in agent-pack.config.mjs: chat: { boss: '<harness>' }, or run agent-pack chat on a terminal to pick one",
+      "setup": {
+        "step": "Chat setup · step {step} of {steps}",
+        "reachTitle": "The harnesses the chat can reach — found on this machine, speaking ACP",
+        "reachHint": "↑/↓ move · space ticks · enter confirms · esc quits",
+        "bossTitle": "The boss — the one the chat talks to",
+        "bossHint": "↑/↓ move · enter picks · esc quits",
+        "noneFound": "No harness that speaks ACP was found on the PATH — the ones known: {harnesses}",
+        "saved": "{boss} is the boss, the chat reaches {harnesses} — kept in {file}; chat.boss in the config takes its place",
+        "badFile": "{file} is no setup of the chat — { \"boss\": \"<harness>\", \"servers\": { \"<harness>\": { \"command\": \"…\", \"args\": [] } } }, the boss one of the servers; remove it to pick again"
+      },
       "noServer": "chat.boss names `{boss}`, and no ACP server is configured under that name — an acp server (adapters: [{ name: 'acp', servers: { {boss}: { command: '…' } } }]) or a harness with its acp option ({ name: '{boss}', acp: { command: '…' } })",
       "eventsLost": "agent-pack chat: {why} — the chat stops\n",
       "bossExited": "the boss exited (code {code}){lastWords}",
@@ -525,7 +535,7 @@
       "unknown": "no ACP harness is called `{harness}` — {configured}",
       "configured": "the ACP harnesses configured: {names}",
       "noneConfigured": "none is configured: add an acp server or a harness's acp option to agent-pack.config.mjs",
-      "noDefinition": "{agent}'s compiled definition ({file}) is missing, and {harness} reads it from the prompt — bundle again"
+      "noAgentFiles": "{harness} cannot act as `{agent}`: no adapter writes {harness}'s agent files, so nothing names the agent to it — ask {harness} itself, or reach `{agent}` through a harness whose adapter writes them (codex, claude-code, opencode)"
     },
     "harnesses": {
       "clash": "adapters: {adapter}'s `{name}` takes the name of the installed harness `{name}` — give {adapter}'s one another name",

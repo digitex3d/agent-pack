@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Giuseppe Federico
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { neutralEmitter, type AdapterPlugin, type Invocation } from '../types.js';
+import type { AdapterPlugin, Emitter, Invocation } from '../types.js';
 import { checkBudgetModels, type BudgetModels } from '../budget.js';
 import { parseDuration, DURATION_FORM, HARNESS_SEP } from '../../src/delegation.js';
 import { FORMULAS, fill } from '../../src/formulas.js';
@@ -13,9 +13,9 @@ import { FORMULAS, fill } from '../../src/formulas.js';
  * the recipe `invoke.ap` (D66). Two ways in:
  *
  *   - open harnesses: `{ name: 'acp', servers: { junie: { command, args, env } } }`
- *     — each server a harness of its own, delegable as `BY junie:<agent>`. It
- *     has no agent files: the prompt opens with the agent's compiled
- *     definition, the one this adapter writes to `.agent-pack/compiled/`.
+ *     — each server a harness of its own, to talk to directly. No adapter
+ *     writes its agent files, so nothing names an agent to it: a task for one
+ *     of the project's agents (`BY junie:<agent>`) is refused, saying so.
  *   - a transport: `{ name: 'codex', acp: { command, args, env } }` — a
  *     built-in harness keeps its agent files and its BY, and its delegations
  *     go through the ACP client instead of its own CLI.
@@ -98,7 +98,7 @@ export function checkServer(where: string, raw: unknown, { models = true } = {})
 }
 
 /** The recipe that reaches `harness` through the ACP client — its CLI the server's command, looked up when a delegation names it. */
-function acpInvocation(harness: string, server: AcpServer, own: Pick<Invocation, 'carry' | 'intro' | 'definition'>): Invocation {
+function acpInvocation(harness: string, server: AcpServer, own: Pick<Invocation, 'carry' | 'intro'> = {}): Invocation {
   return {
     recipe: resolve(HERE, 'invoke.ap'),
     cli: server.command,
@@ -107,7 +107,6 @@ function acpInvocation(harness: string, server: AcpServer, own: Pick<Invocation,
     fills: { client: resolve(HERE, 'client.js'), server: harness },
     ...(own.carry?.length ? { carry: own.carry } : {}),
     ...(own.intro ? { intro: own.intro } : {}),
-    ...(own.definition ? { definition: own.definition } : {}),
   };
 }
 
@@ -120,8 +119,8 @@ export function agentFileIntro(file: string): string {
   return `Act as the agent \`{agent}\` defined in \`${file}\`: read that file first and follow it, then carry out the task below, and answer with its result.`;
 }
 
-/** Where this adapter writes an agent's compiled definition — the neutral emitter's file, which the prompt opens with. */
-const DEFINITION = '.agent-pack/compiled/{agent}.md';
+/** What an acp server's agents and skills get from this adapter: no file — no agent files of its own. */
+const NO_FILES: Emitter = () => [];
 
 /** The open harnesses: one per configured server, named by its key. */
 export default function acpAdapter(opts: AcpOptions = {}): AdapterPlugin {
@@ -140,11 +139,10 @@ export default function acpAdapter(opts: AcpOptions = {}): AdapterPlugin {
     type: 'adapter',
     apiVersion: 2,
     name: 'acp',
-    // No agent files of its own: each agent's compiled definition, for the prompt to open with.
-    emitters: { agent: neutralEmitter, skill: neutralEmitter },
+    emitters: { agent: NO_FILES, skill: NO_FILES },
     sessionEnv: ACP_SESSION_ENV,
     harnesses: Object.entries(servers).map(([name, server]) => ({
-      name, invocation: acpInvocation(name, server, { definition: DEFINITION }), ...(server.models ? { models: server.models } : {}),
+      name, invocation: acpInvocation(name, server), ...(server.models ? { models: server.models } : {}),
     })),
     [SERVERS]: servers,
   };

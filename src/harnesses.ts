@@ -77,13 +77,12 @@ export function readInvocation(harness: { name: string; invocation?: Invocation 
   };
 }
 
-/** What a recipe declares only when its harness has it: the shape and model flags, the intro, the definition, the transport. */
-function optionalOf(inv: Invocation): Pick<HarnessInvocation, 'shape' | 'model' | 'intro' | 'definition' | 'transport'> {
+/** What a recipe declares only when its harness has it: the shape and model flags, the intro, the transport. */
+function optionalOf(inv: Invocation): Pick<HarnessInvocation, 'shape' | 'model' | 'intro' | 'transport'> {
   return {
     ...(inv.shape ? { shape: inv.shape } : {}),
     ...(inv.model ? { model: inv.model } : {}),
     ...(inv.intro ? { intro: inv.intro } : {}),
-    ...(inv.definition ? { definition: inv.definition } : {}),
     ...(inv.transport ? { transport: inv.transport } : {}),
   };
 }

@@ -24,6 +24,7 @@ import { Connection, obj, str, type Params } from './rpc.js';
 import { REJECT_KINDS, optionOf, outcomeOf, requestName } from './perimeter.js';
 import { killGroup } from './terminals.js';
 import { reportedModel } from './usage.js';
+import { colorOn } from './ansi.js';
 import { Host } from './host.js';
 import { initialize, maskedError, maskerOf, openSession, prompt, spawnServer } from './server.js';
 import { OPTION_KIND, SESSION_UPDATE, TURN_END } from './protocol.js';
@@ -142,7 +143,7 @@ class Chat {
     const tty = o.input.isTTY === true && o.output.isTTY === true;
     this.front = tty
       ? new TuiFront({
-        boss: o.boss, stamp: this.stamp, input: o.input, output: o.output, color: !('NO_COLOR' in process.env),
+        boss: o.boss, stamp: this.stamp, input: o.input, output: o.output, color: colorOn(),
         catalog: () => this.catalog.entries(),
         invitable: o.consult.harnesses.flatMap(harness => [harness, ...o.agents.map(agent => `${harness}${HARNESS_SEP}${agent}`)]),
       })

@@ -6,9 +6,9 @@
  *   - the client: the session in the copy, the last message as the answer,
  *     permissions and files only inside the copy, terminals only when enabled,
  *     a sign-in, a crash, a refusal and a timeout each a failure — no secret shown
- *   - open harnesses: each acp server a harness (`BY junie:<agent>`), its prompt
- *     opening with the agent's compiled definition; a name clash and a missing
- *     command fail the build
+ *   - open harnesses: each acp server a harness, no agent files written for it —
+ *     `BY junie:<agent>` refused at start, naming why; a name clash and a
+ *     missing command fail the build
  *   - a transport: `{ name: 'codex', acp: { … } }` — the BY unchanged, the
  *     delegation through the client, codex's own agent files and intro kept
  *   - harness list: the servers, and how each harness is reached
@@ -139,7 +139,7 @@ try {
   }
   assert.match(resolveAdapter({ name: 'codex', acp: { command: 'x' } }).invocation.intro, /^Have the custom agent `\{agent\}`/, 'codex keeps its own intro');
 
-  // --- a project: junie and sloppy as open harnesses, codex over ACP ---
+  // --- a project: junie and sloppy as open harnesses, claude-code and codex over ACP ---
   const run = (args, opts = {}) => {
     const r = spawnSync(process.execPath, args, { cwd: proj, encoding: 'utf-8', input: opts.input, env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'acp-session' } });
     return { code: r.status, out: `${r.stdout}${r.stderr}`.trimEnd() };
@@ -149,7 +149,7 @@ try {
   const git = (...args) => { const r = spawnSync('git', args, { cwd: proj, encoding: 'utf-8' }); assert.equal(r.status, 0, `git ${args.join(' ')}: ${r.stderr}`); };
   const fake = env => `{ command: ${JSON.stringify(process.execPath)}, args: [${JSON.stringify(FAKE)}], env: ${JSON.stringify({ FAKE_SECRET: SECRET, ...env })} }`;
   const config = servers => write(join(proj, 'agent-pack.config.mjs'), ['export default {', "  libraryRoot: 'library',", "  agentsDir: 'agents',",
-    `  adapters: [{ name: 'claude-code', acp: ${fake({ FAKE_ACP: 'ok', FAKE_ANSWER: 'reviewed' })} }, { name: 'codex', acp: ${fake({ FAKE_ACP: 'ok', FAKE_ANSWER: 'written' })} }, { name: 'acp', servers: { ${servers} } }],`, '};']);
+    `  adapters: [{ name: 'claude-code', acp: ${fake({ FAKE_ACP: 'ok', FAKE_ANSWER: '{"diff":"app 1 -> 2"}' })} }, { name: 'codex', acp: ${fake({ FAKE_ACP: 'ok', FAKE_ANSWER: 'written' })} }, { name: 'acp', servers: { ${servers} } }],`, '};']);
   config(`junie: ${fake({ FAKE_ACP: 'ok', FAKE_ANSWER: '{"diff":"app 1 -> 2"}' })}, sloppy: ${fake({ FAKE_ACP: 'ok', FAKE_ANSWER: 'no json at all' })}`);
   const team = join(proj, 'agents', 'teams', 'site');
   for (const name of ['lead', 'hunter', 'writer']) {
@@ -157,15 +157,17 @@ try {
   }
   const FLOW = [
     '    STEP review:',
-    '        DELEGATE~ trace every path of {{notes}} INTO gaps BY junie:hunter AS diff-only',
+    '        DELEGATE~ trace every path of {{notes}} INTO gaps BY claude-code:hunter AS diff-only',
     '        WAIT gaps',
     '    STEP write:',
     '        DELEGATE write the notes BY codex:writer',
     '    STEP again:',
-    '        DELEGATE~ trace it again INTO loose BY sloppy:hunter AS diff-only',
+    '        DELEGATE~ trace it again INTO loose BY codex:hunter AS diff-only',
     '        WAIT loose',
     '    STEP check:',
     '        DELEGATE review the notes BY claude-code:hunter',
+    '    STEP bare:',
+    '        DELEGATE trace it on junie BY junie:hunter',
   ];
   const flow = lines => write(join(team, 'site.ap'), teamSource('site', ['lead', 'hunter', 'writer'], [
     'IMPORT gaps, notes, loose FROM @main.vars', 'IMPORT diff-only FROM @main.templates',
@@ -213,15 +215,15 @@ try {
   config(`junie: ${fake({ FAKE_ACP: 'ok', FAKE_ANSWER: '{"diff":"app 1 -> 2"}' })}, sloppy: ${fake({ FAKE_ACP: 'ok', FAKE_ANSWER: 'no json at all' })}, gated: ${fake({ FAKE_ACP: 'auth' })}, slow: ${slow}`);
   out = ok(run([CLI, 'bundle', 'all']), 'bundle all');
   assert.ok(!out.includes(SECRET), 'no env value in the build');
-  assert.ok(existsSync(join(proj, '.agent-pack', 'compiled', 'hunter.md')), 'acp writes each compiled definition');
+  assert.ok(!existsSync(join(proj, '.agent-pack', 'compiled', 'hunter.md')), 'acp writes no compiled definition: no prompt reads one');
   assert.ok(existsSync(join(proj, '.codex', 'agents', 'writer.toml')), 'codex over ACP keeps its agent files');
   console.log('acp: the build passed.');
 
   // --- start, run, deliver ---
   const flowId = readFileSync(join(proj, 'AGENTS.md'), 'utf-8').match(/flow `build` \((flw-[0-9a-f]{8})\)/)[1];
   const md = ok(apx(['flow', flowId]), 'apx flow');
-  const [hunt, writ, loose, check] = [...md.matchAll(/delegate start (dlg-[0-9a-f]{8})/g)].map(m => m[1]);
-  assert.ok(hunt && writ && loose && check, md);
+  const [hunt, writ, loose, check, bare] = [...md.matchAll(/delegate start (dlg-[0-9a-f]{8})/g)].map(m => m[1]);
+  assert.ok(hunt && writ && loose && check && bare, md);
   ok(apx(['set', 'notes', '-'], 'the login form changed'), 'set notes');
   const launch = id => {
     const started = ok(apx(['delegate', 'start', id]), `delegate start ${id}`);
@@ -233,13 +235,17 @@ try {
   };
   const sh = command => spawnSync('sh', ['-c', command], { cwd: proj, encoding: 'utf-8' });
 
-  // Mode 2: the prompt opens with the agent's compiled definition; the session runs in the copy.
+  // An open harness: no adapter writes its agent files — refused at start, nothing opened.
+  const refusedBare = apx(['delegate', 'start', bare]);
+  assert.notEqual(refusedBare.code, 0, refusedBare.out);
+  has(refusedBare.out, "junie cannot act as `hunter`: no adapter writes junie's agent files");
+
+  // The prompt names the agent and its native file — no definition pasted in; the session runs in the copy.
   const h = launch(hunt);
-  has(h.command, 'adapters/acp/client.js --server junie --agent hunter --project ', '--prompt ', '--answer ');
-  assert.ok(h.prompt.startsWith('# Who you are — the definition of the agent `hunter`\n'), h.prompt);
-  const definition = readFileSync(join(proj, '.agent-pack', 'compiled', 'hunter.md'), 'utf-8').trimEnd();
-  assert.ok(h.prompt.startsWith(`# Who you are — the definition of the agent \`hunter\`\n\n${definition}\n`), 'the compiled definition heads the prompt, before the task');
-  has(h.prompt, 'hunter of the site', '# Your task', 'trace every path of {{notes}}', '"notes": "the login form changed"', 'shaped as `diff-only`');
+  has(h.command, 'adapters/acp/client.js --server claude-code --agent hunter --project ', '--prompt ', '--answer ');
+  assert.ok(h.prompt.startsWith('Act as the agent `hunter` defined in `.claude/agents/hunter.md`'), h.prompt);
+  assert.ok(!h.prompt.includes('# Who you are') && !h.prompt.includes('hunter of the site'), 'no definition inlined');
+  has(h.prompt, 'trace every path of {{notes}}', '"notes": "the login form changed"', 'shaped as `diff-only`');
   let r = sh(h.command);
   assert.equal(r.status, 0, r.stderr);
   assert.equal(JSON.parse(readFileSync(join(h.copy, 'acp-probe.json'), 'utf-8')).cwd, realpathSync(h.copy));
@@ -267,7 +273,7 @@ try {
   assert.ok(existsSync(join(c.copy, '.claude', 'agents', 'hunter.md')), 'its native definition is carried in');
   r = sh(c.command);
   assert.equal(r.status, 0, r.stderr);
-  assert.equal(readFileSync(`${c.copy}.answer.txt`, 'utf-8'), 'reviewed\n');
+  assert.equal(readFileSync(`${c.copy}.answer.txt`, 'utf-8'), '{"diff":"app 1 -> 2"}\n');
 
   // An AS answer that does not fit its template is rejected at deliver.
   const l = launch(loose);
@@ -276,7 +282,7 @@ try {
   const refused = apx(['delegate', 'deliver', loose, '--answer']);
   assert.notEqual(refused.code, 0, refused.out);
   has(refused.out, 'delivers into `loose`', 'nothing was stored');
-  assert.ok(!ok(apx(['get', 'loose']), 'get loose').includes('no json at all'), 'the answer that does not fit is not stored');
+  assert.ok(!ok(apx(['get', 'loose']), 'get loose').includes('written'), 'the answer that does not fit is not stored');
 
   // The client as the recipe runs it: a sign-in demanded, a timeout — each a failure, no answer file, no secret.
   const work = join(proj, '.agent-pack', 'work', 'manual');

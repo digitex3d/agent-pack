@@ -12,7 +12,7 @@ import { chop, graphemes, textWidth } from './width.js';
 import type { InputState } from './input.js';
 
 /** One choice: what it puts in the box, what it shows, and — dim — what it says of itself. */
-interface MenuItem {
+export interface MenuItem {
   insert: string;
   label: string;
   detail?: string;
@@ -79,10 +79,19 @@ export function menuOf(input: InputState, s: MenuSources, before: MenuState | nu
   return { items, selected, start: choices.start };
 }
 
+/** The keys that move a selection, by their name as input.ts's keyId gives it: how far each moves it. */
+const MOVES: Readonly<Record<string, number>> = { up: -1, down: 1 };
+
 /** The selection moved by `by`, wrapping round. */
 export function moved(menu: MenuState, by: number): MenuState {
   const count = menu.items.length;
   return { ...menu, selected: (menu.selected + by + count) % count };
+}
+
+/** The selection moved by the key named `id` (input.ts's keyId) — null when that key is no move (MOVES). */
+export function movedBy(menu: MenuState, id: string): MenuState | null {
+  const by = MOVES[id];
+  return by ? moved(menu, by) : null;
 }
 
 /** The selected choice put in the box in place of the word typed, and a space after it. */

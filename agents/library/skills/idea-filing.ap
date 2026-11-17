@@ -40,6 +40,9 @@ PROCEDURE file-idea:
     UNTIL the user approves the exact text of the draft or drops it:
         DO  show {{draft}} to the user exactly as it will be written
         DO  tell the user the column {{column}} is where the card will go
+    IF the user approved the draft:
+        DO  create the card from {{draft}} in the list {{column}}, through the Trello REST API
+        DO  give the user the link of the card
 
 EXPORT SKILL idea-filing:
     ABOUT    Load when the user asks to put a formalized idea on Trello: files one idea-card as a card
