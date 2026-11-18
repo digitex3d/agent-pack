@@ -117,6 +117,10 @@ export interface Formulas {
   /** What the commands and the ACP client say (src/commands/, adapters/acp/). */
   messages: {
     config: Record<'chatObject' | 'chatUnknownKey' | 'chatBoss', Text>;
+    /** What the affinity engine (src/affinity/) says of an index or its inputs it refuses. */
+    affinity: Record<
+      | 'notEntryList' | 'notEntry' | 'duplicateKey' | 'badWeight' | 'notLexicon' | 'notLexiconItems' | 'orphanLexiconKey'
+      | 'notBackground' | 'notObject' | 'missingVersion' | 'unknownVersion' | 'badKeys' | 'badWeights' | 'badUnit', Text>;
     chat: Record<'notSet' | 'noServer' | 'eventsLost' | 'bossExited' | 'cannotStart' | 'preambleSent' | 'turnFailed' | 'jumpToLatest'
       | 'joined' | 'removed' | 'removeUnknown' | 'removeFixed' | 'removeUsage' | 'participants'
       | 'inviteList' | 'inviteUnknown' | 'inviteAlready' | 'notInRoom' | 'emptyRoom' | 'sendFailed' | 'recapPrompt' | 'recapAnswer' | 'recapFailed' | 'recapSent'

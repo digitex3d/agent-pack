@@ -1,0 +1,1123 @@
+{
+ "about": "Bench of the affinity engine: the scope tags of this project's own agents on 2026-11-18, the words a model wrote for each (from the tag with its ABOUT, and from its whole blocks, merged), and two sets of sentences with the keys expected to light. model: written by a model that had read the blocks but not the words. hand: written by hand, blocks unread. background: the agents' .ap sources of that day, for word rarity. threshold: the value with the most exact sentences on 628 other generated sentences, found with this engine — never tuned on these cases; just above 1, it means that one word alone never lights a key.",
+ "threshold": 1.05,
+ "entries": [
+  {
+   "key": "#coding",
+   "texts": [
+    "how code reads: whole-word names, prose-like methods, each text and fixed value written once",
+    "how a module imports another module of the project",
+    "code style and quality policies",
+    "how the project's code turns a failure into an error, passes it on and shows it"
+   ]
+  },
+  {
+   "key": "#dry",
+   "texts": [
+    "Finds the duplication of a code scope or a diff at a depth — load it for any DRY review, never a fix"
+   ]
+  },
+  {
+   "key": "#review",
+   "texts": [
+    "Load to walk the user through a code review live in this session, one critical zone at a time in PhpStorm"
+   ]
+  },
+  {
+   "key": "#wiki",
+   "texts": [
+    "Decides a wiki page's type, path and name — load it to create, move or rename a page, or to lint the wiki"
+   ]
+  },
+  {
+   "key": "#feedback",
+   "texts": [
+    "Load when the user criticises or corrects how an agent, flow or routing worked: records it, proposes rules"
+   ]
+  },
+  {
+   "key": "#rules",
+   "texts": [
+    "Load when the user asks to add a rule: makes it a lint check, else the narrowest agent line"
+   ]
+  },
+  {
+   "key": "#idea-shaping",
+   "texts": [
+    "Load when the user brings a new idea to formalize: shapes it into one idea-card"
+   ]
+  },
+  {
+   "key": "#idea-filing",
+   "texts": [
+    "Load when the user asks to put a formalized idea on Trello: files one idea-card as a card"
+   ]
+  }
+ ],
+ "lexicon": {
+  "#coding": [
+   "coding",
+   "code",
+   "style",
+   "quality",
+   "naming",
+   "names",
+   "readability",
+   "readable",
+   "import",
+   "imports",
+   "imported",
+   "importing",
+   "module",
+   "modules",
+   "error",
+   "errors",
+   "exception",
+   "exceptions",
+   "throw",
+   "throws",
+   "thrown",
+   "catch",
+   "failure",
+   "failures",
+   "propagate",
+   "propagation",
+   "constant",
+   "constants",
+   "literal",
+   "literals",
+   "magic",
+   "refactor",
+   "refactoring",
+   "convention",
+   "conventions",
+   "idiom",
+   "lint",
+   "linting",
+   "formatting",
+   "method",
+   "methods",
+   "function",
+   "functions",
+   "variable",
+   "variables",
+   "identifier",
+   "abbreviation",
+   "whole-word",
+   "prose-like",
+   "policy",
+   "policies",
+   "typescript",
+   "coder",
+   "programming",
+   "implement",
+   "implementation",
+   "implementer",
+   "parameter",
+   "switch",
+   "conditional",
+   "magic-number",
+   "hardcoded",
+   "esm",
+   "extension",
+   "alias",
+   "dependency",
+   "dependencies",
+   "library",
+   "linter",
+   "eslint",
+   "knip",
+   "depcruise",
+   "suppress",
+   "silence",
+   "try-catch",
+   "unknown",
+   "cast",
+   "type",
+   "types",
+   "enum",
+   "ts",
+   "npm",
+   "node",
+   "nodejs"
+  ],
+  "#dry": [
+   "dry",
+   "duplication",
+   "duplicate",
+   "duplicated",
+   "duplicates",
+   "duplicating",
+   "copy-paste",
+   "copypaste",
+   "repeated",
+   "repetition",
+   "redundant",
+   "redundancy",
+   "clone",
+   "clones",
+   "similar",
+   "dedupe",
+   "deduplicate",
+   "deduplication",
+   "consolidate",
+   "centralize",
+   "extract",
+   "reuse",
+   "reusable",
+   "scope",
+   "diff",
+   "depth",
+   "shallow",
+   "deep",
+   "overlap",
+   "overlapping",
+   "parallel",
+   "identical",
+   "near-duplicate",
+   "abstraction",
+   "helper",
+   "shared",
+   "repeat",
+   "twice",
+   "copies",
+   "copied",
+   "same",
+   "logic",
+   "once",
+   "single-source",
+   "principle",
+   "copy",
+   "source-of-truth",
+   "look-alike",
+   "surface",
+   "medium",
+   "same-logic",
+   "twin",
+   "parallel-implementations",
+   "recurring",
+   "redundantly",
+   "duplicates-across-files",
+   "moved",
+   "caller",
+   "callers"
+  ],
+  "#review": [
+   "review",
+   "reviewing",
+   "reviewer",
+   "walkthrough",
+   "walk-through",
+   "walk",
+   "guided",
+   "live",
+   "critical",
+   "zone",
+   "zones",
+   "zone-by-zone",
+   "pull-request",
+   "pr",
+   "merge-request",
+   "changeset",
+   "changes",
+   "diff",
+   "phpstorm",
+   "ide",
+   "inspect",
+   "inspection",
+   "audit",
+   "examine",
+   "explain",
+   "session",
+   "step-by-step",
+   "interactive",
+   "approve",
+   "approval",
+   "feedback-on-code",
+   "findings",
+   "hunk",
+   "hunks",
+   "commit",
+   "commits",
+   "branch",
+   "patch",
+   "readthrough",
+   "tour",
+   "present",
+   "presenting",
+   "annotate",
+   "comments",
+   "severity",
+   "severe",
+   "defect",
+   "defects",
+   "smell",
+   "smells",
+   "code-smell",
+   "breakpoint",
+   "breakpoints",
+   "debugger",
+   "critique",
+   "walked",
+   "critical-zone",
+   "complexity",
+   "cyclomatic",
+   "nesting",
+   "coupling",
+   "cohesion",
+   "god-class",
+   "long-function",
+   "feature-envy",
+   "middle-man",
+   "shotgun-surgery",
+   "responsibilities",
+   "untestable",
+   "tests",
+   "quality",
+   "quality-check",
+   "diff-review",
+   "code-review",
+   "hotspot",
+   "tangled",
+   "hub"
+  ],
+  "#wiki": [
+   "wiki",
+   "page",
+   "pages",
+   "path",
+   "paths",
+   "name",
+   "naming",
+   "rename",
+   "renamed",
+   "renaming",
+   "move",
+   "moved",
+   "moving",
+   "create",
+   "creating",
+   "type",
+   "taxonomy",
+   "lint",
+   "linting",
+   "documentation",
+   "docs",
+   "doc",
+   "knowledge",
+   "knowledge-base",
+   "article",
+   "articles",
+   "folder",
+   "directory",
+   "structure",
+   "slug",
+   "title",
+   "hierarchy",
+   "categorize",
+   "categorise",
+   "organize",
+   "organise",
+   "index",
+   "link",
+   "links",
+   "wikilink",
+   "markdown",
+   "note",
+   "notes",
+   "curate",
+   "curator",
+   "relocate",
+   "reorganize",
+   "wikis",
+   "folders",
+   "subfolder",
+   "kebab-case",
+   "basename",
+   "frontmatter",
+   "obsidian",
+   "wikilinks",
+   "vault",
+   "alias",
+   "aliases",
+   "log",
+   "entity",
+   "entities",
+   "concept",
+   "concepts",
+   "synthesis",
+   "syntheses",
+   "sources",
+   "categories",
+   "category",
+   "classification",
+   "naming-convention",
+   "ingest",
+   "raw",
+   "labels",
+   "label",
+   "lint-wiki",
+   "restructure",
+   "merge",
+   "placement"
+  ],
+  "#feedback": [
+   "feedback",
+   "criticise",
+   "criticize",
+   "criticism",
+   "criticised",
+   "correct",
+   "corrects",
+   "corrected",
+   "correction",
+   "complain",
+   "complaint",
+   "wrong",
+   "mistake",
+   "mistakes",
+   "misrouted",
+   "misrouting",
+   "routing",
+   "routed",
+   "agent",
+   "agents",
+   "flow",
+   "flows",
+   "behaved",
+   "behavior",
+   "behaviour",
+   "unhappy",
+   "dissatisfied",
+   "should-have",
+   "shouldn't",
+   "instead",
+   "improve",
+   "improvement",
+   "propose",
+   "proposal",
+   "record",
+   "records",
+   "lesson",
+   "lessons",
+   "postmortem",
+   "retrospective",
+   "regret",
+   "annoyed",
+   "poorly",
+   "badly",
+   "failed",
+   "misbehaved",
+   "ignored",
+   "skipped",
+   "stop",
+   "again",
+   "redirect",
+   "consideration",
+   "considerations",
+   "recorded",
+   "repeat",
+   "repeats",
+   "recurrence",
+   "recurring",
+   "proposed",
+   "rule-proposal",
+   "cause",
+   "analysis",
+   "status",
+   "approved",
+   "rejected",
+   "applied",
+   "complained",
+   "shouldnt",
+   "prevent",
+   "never-again",
+   "considerations-store",
+   "faithful"
+  ],
+  "#rules": [
+   "rule",
+   "rules",
+   "lint-check",
+   "linter",
+   "lint",
+   "check",
+   "checks",
+   "enforce",
+   "enforcement",
+   "enforced",
+   "convention",
+   "constraint",
+   "constraints",
+   "guideline",
+   "guidelines",
+   "policy",
+   "never",
+   "always",
+   "must",
+   "forbid",
+   "forbidden",
+   "prohibit",
+   "ban",
+   "banned",
+   "narrowest",
+   "agent-line",
+   "instruction",
+   "instructions",
+   "add-rule",
+   "new-rule",
+   "standing",
+   "preference",
+   "guardrail",
+   "guardrails",
+   "validate",
+   "validation",
+   "static-analysis",
+   "automated",
+   "regex",
+   "pattern",
+   "violation",
+   "violations",
+   "comply",
+   "compliance",
+   "codify",
+   "persist",
+   "remember",
+   "conventions",
+   "enforcing",
+   "mandate",
+   "policies",
+   "require",
+   "lint-rule",
+   "strongest",
+   "recompile",
+   "bundle",
+   "compile",
+   "compiler",
+   "feature-delivery",
+   "routing",
+   "governs",
+   "govern",
+   "check-rule",
+   "restate",
+   "directive",
+   "from-now-on",
+   "whenever",
+   "principle",
+   "standard",
+   "mechanical",
+   "structural",
+   "prose",
+   "target",
+   "tooling",
+   "approve"
+  ],
+  "#idea-shaping": [
+   "idea",
+   "ideas",
+   "shape",
+   "shaping",
+   "shaped",
+   "formalize",
+   "formalise",
+   "formalized",
+   "brainstorm",
+   "concept",
+   "proposal",
+   "pitch",
+   "feature",
+   "brainstorming",
+   "refine",
+   "flesh",
+   "sketch",
+   "draft",
+   "spec",
+   "specification",
+   "card",
+   "idea-card",
+   "vision",
+   "thought",
+   "brain-dump",
+   "explore",
+   "clarify",
+   "define",
+   "scoping",
+   "problem",
+   "goal",
+   "goals",
+   "motivation",
+   "requirements",
+   "what-if",
+   "imagine",
+   "wish",
+   "envision",
+   "invention",
+   "initiative",
+   "opportunity",
+   "hypothesis",
+   "structure",
+   "articulate",
+   "develop",
+   "crystallize",
+   "outline",
+   "idea-shaping",
+   "formalizing",
+   "hunch",
+   "suggestion",
+   "maybe",
+   "wouldnt-it-be-nice",
+   "feature-idea",
+   "evidence",
+   "pain-point",
+   "rationale",
+   "before-after",
+   "cheapest-path",
+   "overlap",
+   "riskiest",
+   "assumption",
+   "open-questions",
+   "settled",
+   "out-of-scope",
+   "raw-idea",
+   "half-baked",
+   "atomic",
+   "one-idea",
+   "worth",
+   "gain",
+   "cost",
+   "stakeholder",
+   "for-whom",
+   "enthusiasm",
+   "speculate",
+   "proposer"
+  ],
+  "#idea-filing": [
+   "trello",
+   "card",
+   "cards",
+   "board",
+   "boards",
+   "file",
+   "filing",
+   "filed",
+   "list",
+   "backlog",
+   "kanban",
+   "ticket",
+   "tickets",
+   "post",
+   "publish",
+   "push",
+   "create-card",
+   "column",
+   "label",
+   "labels",
+   "idea-card",
+   "formalized",
+   "upload",
+   "submit",
+   "park",
+   "parked",
+   "track",
+   "tracker",
+   "tracking",
+   "triage",
+   "queue",
+   "inbox",
+   "todo",
+   "to-do",
+   "add-to-board",
+   "sync",
+   "export",
+   "attach",
+   "description",
+   "checklist",
+   "due",
+   "assign",
+   "move-card",
+   "project-management",
+   "archive",
+   "store",
+   "register",
+   "log",
+   "record",
+   "idea-filing",
+   "raw-cards",
+   "comment",
+   "comments",
+   "italian",
+   "translate",
+   "translation",
+   "agentpack",
+   "rest-api",
+   "api",
+   "token",
+   "duplicate-card",
+   "already-on-board",
+   "approve",
+   "approved",
+   "exact-text",
+   "draft",
+   "link",
+   "cardrunner",
+   "add-card",
+   "same-card",
+   "same-idea",
+   "write-on-board",
+   "put-on-trello",
+   "send-to-trello"
+  ]
+ },
+ "cases": {
+  "model": [
+   {
+    "expect": [
+     "#coding"
+    ],
+    "text": "I'm renaming the single-letter loop variables in this parser to longer names that say what each one holds."
+   },
+   {
+    "expect": [
+     "#coding"
+    ],
+    "text": "Before writing a new helper for reading JSON files, I'm grepping the source tree to see whether one already exists to import."
+   },
+   {
+    "expect": [
+     "#coding"
+    ],
+    "text": "I'm fixing the import statements in the new module so they use relative paths ending in .js instead of the @ alias."
+   },
+   {
+    "expect": [
+     "#coding"
+    ],
+    "text": "I'm wrapping the failing fetch call so the failure becomes the project's own error type with a message saying which URL failed."
+   },
+   {
+    "expect": [
+     "#coding"
+    ],
+    "text": "I'm replacing this long if/else chain that compares the status string with a switch, and moving the error texts into one constants table."
+   },
+   {
+    "expect": [
+     "#dry"
+    ],
+    "text": "I'm scanning the changed files in this diff to see whether the same validation logic was pasted into two places."
+   },
+   {
+    "expect": [
+     "#dry"
+    ],
+    "text": "The reviewer asked for a deep pass, so I'm hunting for missing abstractions behind these repeated object shapes without touching any file."
+   },
+   {
+    "expect": [
+     "#dry"
+    ],
+    "text": "I'm comparing two similar-looking formatters to decide whether they change for the same reason before calling them copies."
+   },
+   {
+    "expect": [
+     "#dry"
+    ],
+    "text": "I'm reading the whole src/cli folder to list every function copied across files, with the one version worth keeping."
+   },
+   {
+    "expect": [
+     "#dry"
+    ],
+    "text": "I'm checking that the refactor really removed the old duplicate helper and that every caller now reaches the single remaining one."
+   },
+   {
+    "expect": [
+     "#review"
+    ],
+    "text": "I'm walking you through the riskiest spots of this change one at a time, pointing at each line in PhpStorm."
+   },
+   {
+    "expect": [
+     "#review"
+    ],
+    "text": "I'm setting a breakpoint on the line of the first problem zone so you can see it in the editor before we move on."
+   },
+   {
+    "expect": [
+     "#review"
+    ],
+    "text": "I'm ranking the findings from the quality check by severity and picking the five worst to show you live."
+   },
+   {
+    "expect": [
+     "#review"
+    ],
+    "text": "You stopped the walkthrough early, so I'm removing the breakpoints I placed and writing the summary of what we covered."
+   },
+   {
+    "expect": [
+     "#review",
+     "#coding"
+    ],
+    "text": "I'm skimming the lines in this diff for code smells like long functions, magic numbers and functions with too many parameters, naming the refactoring for each."
+   },
+   {
+    "expect": [
+     "#wiki"
+    ],
+    "text": "I'm deciding which folder the new page about the billing service belongs in and what its file name should be."
+   },
+   {
+    "expect": [
+     "#wiki"
+    ],
+    "text": "I'm renaming a knowledge-base page and rewriting every link that pointed to the old name so nothing breaks."
+   },
+   {
+    "expect": [
+     "#wiki"
+    ],
+    "text": "I'm checking whether this page about a tool is a named thing or a general notion, so I can file it under the right type."
+   },
+   {
+    "expect": [
+     "#wiki"
+    ],
+    "text": "I'm running a structural check over the documentation vault to find pages in the wrong place or with clashing file names."
+   },
+   {
+    "expect": [
+     "#wiki"
+    ],
+    "text": "I'm updating the table that lists each documentation file with its labels because I just deleted two pages."
+   },
+   {
+    "expect": [
+     "#feedback"
+    ],
+    "text": "You said the router sent that task to the wrong agent, so I'm writing down your complaint exactly as you phrased it."
+   },
+   {
+    "expect": [
+     "#feedback"
+    ],
+    "text": "I'm looking through earlier recorded complaints to see whether this same mistake by the reviewer has already happened before."
+   },
+   {
+    "expect": [
+     "#feedback"
+    ],
+    "text": "You approved the proposed change to the implementer's instructions, so I'm applying it and recompiling to confirm it passes."
+   },
+   {
+    "expect": [
+     "#feedback"
+    ],
+    "text": "I'm listing the criticisms you gave me about the agents that are still waiting for a decision."
+   },
+   {
+    "expect": [
+     "#feedback",
+     "#rules"
+    ],
+    "text": "You didn't like how the planning agent skipped the tests, so I'm drafting a rule that would stop that from happening again."
+   },
+   {
+    "expect": [
+     "#rules"
+    ],
+    "text": "You asked me to always run the formatter before commits, so I'm restating that in one line for you to confirm."
+   },
+   {
+    "expect": [
+     "#rules"
+    ],
+    "text": "I'm checking whether a linter check could enforce this new requirement before I put it in any agent's instructions."
+   },
+   {
+    "expect": [
+     "#rules"
+    ],
+    "text": "I'm choosing the narrowest place to put your new requirement, one line in the one agent it concerns rather than the global instructions."
+   },
+   {
+    "expect": [
+     "#rules"
+    ],
+    "text": "I'm recompiling the agent definitions after adding the line you approved, and reporting what the compiler printed."
+   },
+   {
+    "expect": [
+     "#rules",
+     "#coding"
+    ],
+    "text": "I'm handing the lint check you approved to the delivery team so that the build fails whenever someone writes it that way."
+   },
+   {
+    "expect": [
+     "#idea-shaping"
+    ],
+    "text": "You just described a new thing you'd like built, so I'm turning it into a one-page proposal with the problem and a real example."
+   },
+   {
+    "expect": [
+     "#idea-shaping"
+    ],
+    "text": "I'm asking you which real situation this problem actually cost you something, since the proposal has no evidence yet."
+   },
+   {
+    "expect": [
+     "#idea-shaping"
+    ],
+    "text": "I'm checking existing features, agents and open cards to see whether something already covers what you just proposed."
+   },
+   {
+    "expect": [
+     "#idea-shaping"
+    ],
+    "text": "Your message holds two separate suggestions, so I'm splitting them and writing a separate proposal for each, one at a time."
+   },
+   {
+    "expect": [
+     "#idea-shaping"
+    ],
+    "text": "I'm showing you the drafted proposal in your own words and waiting for your corrections before anything else happens."
+   },
+   {
+    "expect": [
+     "#idea-filing"
+    ],
+    "text": "I'm publishing the approved proposal on the project board, translated into Italian, in the Raw cards column."
+   },
+   {
+    "expect": [
+     "#idea-filing"
+    ],
+    "text": "I'm reading the cards already on the board to make sure nobody has filed this same suggestion before."
+   },
+   {
+    "expect": [
+     "#idea-filing"
+    ],
+    "text": "Since an identical card exists, I'm asking whether you'd like your text added there as a comment instead."
+   },
+   {
+    "expect": [
+     "#idea-filing"
+    ],
+    "text": "I'm showing you the exact Italian text and the destination column of the card before I create anything on Trello."
+   },
+   {
+    "expect": [
+     "#idea-filing",
+     "#idea-shaping"
+    ],
+    "text": "You asked me to put this half-formed suggestion on the board, so I'm first turning it into a complete proposal before filing it."
+   },
+   {
+    "expect": [],
+    "text": "I'm converting the grandmother's apple pie recipe from cups to grams for the bake sale tomorrow."
+   },
+   {
+    "expect": [],
+    "text": "I'm comparing three train itineraries from Milan to Vienna and picking the one with the shortest layover."
+   },
+   {
+    "expect": [],
+    "text": "I'm explaining to you how tides are caused by the moon's gravity and why there are two a day."
+   },
+   {
+    "expect": [],
+    "text": "I'm drafting a polite email to the landlord asking when the broken heater will be repaired."
+   },
+   {
+    "expect": [],
+    "text": "I'm summarising the main differences between the Roman and Greek mythology gods for your school assignment."
+   },
+   {
+    "expect": [],
+    "text": "I'm deploying the latest build to the staging server and restarting the service behind the load balancer."
+   },
+   {
+    "expect": [],
+    "text": "I'm writing a SQL query that counts orders per customer in the last thirty days and sorts them descending."
+   },
+   {
+    "expect": [],
+    "text": "I'm rebasing the feature branch onto the latest main and resolving the merge conflicts in the lockfile."
+   },
+   {
+    "expect": [],
+    "text": "I'm restarting the Docker container that hosts the database because it ran out of disk space overnight."
+   },
+   {
+    "expect": [],
+    "text": "I'm answering your question about the difference between a process and a thread in an operating system."
+   }
+  ],
+  "hand": [
+   {
+    "expect": [
+     "#coding"
+    ],
+    "text": "I am about to fix the date parser that crashes on empty input."
+   },
+   {
+    "expect": [
+     "#coding"
+    ],
+    "text": "Renaming a parameter in a TypeScript helper and updating its callers."
+   },
+   {
+    "expect": [
+     "#coding"
+    ],
+    "text": "Writing the new function that turns a failure into a readable message."
+   },
+   {
+    "expect": [
+     "#coding"
+    ],
+    "text": "Adding an import of the tags service into the engine module."
+   },
+   {
+    "expect": [
+     "#dry",
+     "#review"
+    ],
+    "text": "Looking at the latest commit for duplicated logic before it is merged."
+   },
+   {
+    "expect": [
+     "#dry"
+    ],
+    "text": "Two helpers do almost the same thing; I want to see what else is repeated in this folder."
+   },
+   {
+    "expect": [
+     "#review"
+    ],
+    "text": "The user wants me to walk them through the diff and point at the risky parts."
+   },
+   {
+    "expect": [
+     "#review"
+    ],
+    "text": "The user would like an opinion on whether the new module is well written."
+   },
+   {
+    "expect": [
+     "#wiki"
+    ],
+    "text": "Moving the page about adapters under a different section and fixing the links."
+   },
+   {
+    "expect": [
+     "#wiki"
+    ],
+    "text": "Creating a documentation page for session variables; deciding where it goes and what it is called."
+   },
+   {
+    "expect": [
+     "#feedback"
+    ],
+    "text": "The user says the reviewer agent skipped a step and should not have delegated."
+   },
+   {
+    "expect": [
+     "#feedback"
+    ],
+    "text": "The user is unhappy with how the team routed the last request."
+   },
+   {
+    "expect": [
+     "#rules"
+    ],
+    "text": "The user wants a rule that forbids default exports from now on."
+   },
+   {
+    "expect": [
+     "#rules"
+    ],
+    "text": "Adding a lint check so that nobody writes abbreviated names again."
+   },
+   {
+    "expect": [
+     "#idea-shaping"
+    ],
+    "text": "The user has a rough thought about a plugin marketplace and wants it written down properly."
+   },
+   {
+    "expect": [
+     "#idea-filing"
+    ],
+    "text": "The idea card is ready; the user asks to put it on the board as a card."
+   },
+   {
+    "expect": [],
+    "text": "The user asks for a good restaurant near the office for a team lunch."
+   },
+   {
+    "expect": [],
+    "text": "The user asks to convert a list of dates from one time zone to another."
+   },
+   {
+    "expect": [],
+    "text": "The user says thanks and wants to stop for today."
+   },
+   {
+    "expect": [],
+    "text": "Drafting an email to a colleague about next week's meeting."
+   }
+  ]
+ },
+ "background": [
+  "# common — the project-wide config files every agent that writes code may edit\n\nEXPORT DOMAIN common:\n    ABOUT   the project-wide config files shared by every agent that writes code\n    WRITES  IN package.json, package-lock.json\n",
+  "# agent-feedback-proposal — what a proposed rule must say, and which rule is worth proposing\n\nEXPORT POLICY agent-feedback-proposal:\n    ABOUT    what a proposed rule must say, and which rule is worth proposing\n    APPLIES  #feedback-proposal\n\n    ALWAYS  propose one rule per problem, shaped as rule-proposal\n    ALWAYS  choose the first enforcement that fits: what fails mechanically, then a structural change, then prose\n    ALWAYS  count as mechanical what the compiler, a test or the linter fails on\n    ALWAYS  count as structural a change to a flow or to a routing, as prose an ALWAYS/NEVER line\n    ALWAYS  say why each stronger enforcement does not fit, when the rule is not mechanical\n    ALWAYS  aim a rule at the source file: never AGENTS.md, .claude/, .agents/, .codex/ or .agent-pack/\n    ALWAYS  name the repo the target file is really in, as `git rev-parse --show-toplevel` prints it from its folder\n    NEVER   assume the target is in this repo: a shared scaffold or a library may live in another one\n    NEVER   propose a rule that duplicates or contradicts an existing one: change the existing one, and name it\n    NEVER   answer the repeat of an applied rule's problem with a line beside it: strengthen or replace that rule\n    NEVER   propose a rule for a one-off mistake with no cause in the definitions, and say why instead\n",
+  "# coding-policy — code style and quality policies\n\nEXPORT POLICY coding-policy:\n    ABOUT    code style and quality policies\n    APPLIES  #coding, agent:typescript-implementer\n\n    ALWAYS  use a switch, not a chain of if/else, when the branches compare one value\n    ALWAYS  search the code for an existing type, constant or function before writing one, and import it instead of writing it again\n    ALWAYS  give a format one module writes and another reads — a file layout, a property bag, a status literal — one typed source\n    ALWAYS  write that source as a type plus constants for its literal values, and import it on both the writing and the reading side\n    ALWAYS  give each disable comment, ignore entry or config exception the user approved a comment saying why it exists\n    ALWAYS  declare a thing's group on the thing itself and read it there, never in a hand-written list of its members — see `group-membership`\n    ALWAYS  before writing a common mechanism by hand, look for a Node or platform API, then an open-source library, and write it by hand only when none fits, saying why\n    NEVER   duplicate code to get around a dependency rule — stop and ask the developer instead\n    NEVER   silence a lint, knip or depcruise finding with a disable comment, an ignore entry or a config exception without the user's approval\n    NEVER   add a dependency the developer has not approved on its validate-dependency assessment\n",
+  "# error-handling — how the project's code turns failures into errors, passes them on and shows them\n\nEXPORT POLICY error-handling:\n    ABOUT    how the project's code turns a failure into an error, passes it on and shows it\n    APPLIES  #coding, agent:typescript-implementer\n\n    ALWAYS  turn a failure into the project's error type where it enters the code: an API call, a parse, a system call\n    ALWAYS  read a caught value as unknown and convert it with the project's one conversion function, adding it when there is none, never with a cast\n    ALWAYS  throw or reject only an Error, with a message saying what failed and on what\n    NEVER   swallow an error in an empty catch, or one that only logs, without a comment saying why\n",
+  "# import-paths — how a module imports another one of the project\n\nEXPORT POLICY import-paths:\n    ABOUT    how a module imports another module of the project\n    APPLIES  #coding, agent:typescript-implementer\n\n    ALWAYS  import a module of the project by its relative path, ending in `.js` as Node ESM resolves it\n    ALWAYS  import a Node built-in with the `node:` prefix\n    NEVER   import a module of the project through an alias, or without its extension\n",
+  "# readable-code — how code reads: whole-word names, prose-like methods, each text and fixed value written once\n\nEXPORT POLICY readable-code:\n    ABOUT    how code reads: whole-word names, prose-like methods, each text and fixed value written once\n    APPLIES  #coding, agent:typescript-implementer\n\n    ALWAYS  name a variable, a parameter or a function with whole words that say what it holds — never a single letter, never an abbreviation\n    ALWAYS  write code that reads like prose: each step of a method named, an object asked what it is, a switch on one value instead of nested ifs\n    ALWAYS  write each text and each fixed value once — messages in formulas.json, states and exit codes in a named table — never inline in a call\n",
+  "# clarify-task — whoever runs develop-feature makes the user's request one clear task, before its design\nIMPORT feature-brief FROM @main.templates\nIMPORT brief FROM @main.vars\n\nEXPORT PROCEDURE clarify-task:\n    ABOUT  make the user's request one clear task, asking the user what blocks the design\n    DO  write the user's request, what is settled, the open questions and what is out of scope INTO brief\n    IF {{brief}} leaves the user's task unclear:\n        UNTIL! the user's task and its request in {{brief AS feature-brief}} are clear MAX 3:\n            DO  ask the user the one question that most blocks the design, and wait for the answer\n            DO  rewrite the brief with the answer INTO brief\n        IF the last round ended with the task still unclear:\n            DO  report that the task is still unclear, and what is missing\n",
+  "# improve-static-analysis — turns a problem into a lint rule that fails on it, on the user's approval\nIMPORT run-quality-check FROM @main.procedures\n\nEXPORT PROCEDURE improve-static-analysis:\n    ABOUT  turn a problem into a check that fails on it, a Biome rule first, then an ESLint one\n    DO  take the problem it is asked for: a rule the user states, or a zone found by judgment and not by the quality check\n    DO  ask whether the linter the quality check runs could fail on it: a Biome rule first, else an ESLint rule\n    IF it could:\n        DO  write the exact rule in the config that linter reads, with a comment saying why\n        RUN  run-quality-check\n        DO  list what the new rule reports on the code as it is\n    DO  show the user each rule and what it reports, and add only the rules they approve\n    RUN  run-quality-check\n    DO  report what it printed\n    IF the user asked for the tests:\n        DO  run `npm test`, and report what it printed\n    IF the linter could not fail on it:\n        DO  say so, and add nothing\n    NEVER  weaken, disable or add an exception to an existing rule to make a new one pass\n    NEVER  add a rule that only restates one the project already has\n",
+  "# run-project-checks — the project checks and the quality check every implementer runs before handing back\nIMPORT run-quality-check FROM @main.procedures\n\nEXPORT PROCEDURE run-project-checks:\n    ABOUT  run the test suite and the quality check, and fix what they report\n    DO  run `npm test` from the project root: it builds dist/, then runs every test\n    RUN  run-quality-check\n    UNTIL both report no failure and no finding in the files the change touches:\n        DO  fix each such failure or finding in the code, and run both again\n    DO  report every finding left in a file the change does not touch, with its tool, rule and file\n",
+  "# run-quality-check — runs the project's quality check: this machine's script when there is one, else the project's own linter\nIMPORT quality-check FROM @main.vars\n\nEXPORT PROCEDURE run-quality-check:\n    ABOUT  run the quality check, and read the report it prints\n    IF `{{quality-check}}` exists at the project root:\n        DO  run `{{quality-check}}` from the project root\n    ELSE\n        DO  run the project's own linter instead, and say that the quality-check script is missing\n    DO  read the report the check prints, and each result in it\n",
+  "# validate-dependency — assesses one candidate npm package from real data, before the developer approves it\nIMPORT dependency-assessment FROM @main.templates\n\nEXPORT PROCEDURE validate-dependency:\n    ABOUT  assess one candidate npm package from real data, and give a verdict\n    NEVER  fill a criterion from memory: read each value from the command or the API it names\n    DO  run `npm view <pkg> versions time license maintainers dependencies dist.unpackedSize types type exports --json`\n    DO  read its weekly downloads with `npm view` or https://api.npmjs.org/downloads/point/last-week/<pkg>\n    DO  run `gh api repos/<owner>/<repo>` and its contributors, commits, releases and issues endpoints\n    DO  read the stars, the contributors, the last commit and release, the open issues and how fast they get an answer\n    DO  install it in a scratch folder, run `npm audit` there, or query osv.dev, for its known vulnerabilities\n    DO  count its transitive dependencies in that scratch install\n    DO  check its TypeScript types, its ESM support and its npm provenance (`npm view <pkg> dist.attestations`)\n    IF its license is not compatible with Apache-2.0:\n        DO  give the verdict avoid\n    DO  give the verdict recommended, with-reservations or avoid, with the criteria that decided it\n    DO  show the developer the assessment: only they approve it\n    AS  dependency-assessment\n",
+  "# designer — a craft: shaping a solution before it is built\n\nEXPORT ROLE designer:\n    ABOUT      a designer who shapes a solution before it is built\n    EXPERTISE  design, simplification\n    ALWAYS     start from the problem and from the people who have it\n    ALWAYS     prefer the simplest design that solves the problem\n    ALWAYS     state each decision with its reason\n    NEVER      design for a need nobody has stated\n    NEVER      hide an open decision: mark it as open\n",
+  "# implementer — a craft: building what was agreed\n\nEXPORT ROLE implementer:\n    ABOUT      an implementer who builds what was agreed, and proves it works\n    EXPERTISE  implementation, testing\n    ALWAYS     read the existing code before changing it, and follow its conventions\n    ALWAYS     make the smallest change that does the job\n    ALWAYS     run what you built before calling it done, and report what you saw\n    NEVER      change a design decision silently: say what does not work, and why\n    NEVER      leave out a failure or a skipped step from your report\n",
+  "# reviewer — a craft: judging work from what it shows, without touching it\n\nEXPORT ROLE reviewer:\n    ABOUT      a reviewer who judges work from what its lines show, and reports without touching it\n    EXPERTISE  code-review, code-reading\n    ALWAYS     back every finding with the lines that show it\n    ALWAYS     write one finding per defect, and list in it every place the defect shows\n    ALWAYS     answer with an empty review when nothing clears the bar: it is a valid result\n    NEVER      hold the work against a taste of your own\n    NEVER      edit a file: report, and leave the change to others\n",
+  "# agent-feedback — the user's considerations on the agents' work, and the rules proposed so they do not happen again\nIMPORT agent-feedback-proposal FROM @main.policies\nIMPORT rule-proposal FROM @main.templates\n\nPOLICY agent-feedback-fidelity:\n    ABOUT    whose words and which facts go in a record\n    APPLIES  #feedback-fidelity\n\n    ALWAYS  write the consideration as the user said it: translated to English if needed, otherwise unchanged\n    ALWAYS  state what happened from the session's facts: what was asked, what was done, by whom\n    NEVER   put in a consideration anything the user did not say, nor soften or sharpen what they said\n    NEVER   record the assistant's opinion as the user's: the analysis goes in cause, and only there\n    NEVER   record a change of requirements, or a preference on the product, as a consideration\n\nPOLICY agent-feedback-approval:\n    ABOUT    who decides on a rule, and who writes it\n    APPLIES  #feedback-approval\n\n    NEVER   apply a rule, or change anything but the store, without the user's approval of that very rule\n    NEVER   take the approval of one rule as the approval of another\n    ALWAYS  recompile from the repo root of a .ap file a rule was written in\n    ALWAYS  send a rule in TypeScript tooling to typescript-implementer, saying the user approved it\n    NEVER   mark a record applied before the compiler or the check of the changed rule has passed\n    ALWAYS  move a status only along: open to proposed or no-rule, proposed to approved or rejected\n    ALWAYS  move a status from approved only to applied, from no-rule only to proposed, when the user asks for a rule\n\nTEMPLATE rule-to-apply:\n    ABOUT  one approved rule, as its writer needs it\n    SLOTS:\n        record:       TEXT  \"the ref of the record in considerations\"\n        enforcement:  ENUM[mechanical, structural, prose]  \"how the rule is enforced\"\n        target:       TEXT  \"where the rule goes, as <repo root>:<file from that root>\"\n        rule:         TEXT  \"the exact text of the rule\"\n\nVAR proposal AS rule-proposal\nVAR approved-rule AS rule-to-apply\n\n@WITH agent-feedback-fidelity\nPROCEDURE record-consideration:\n    ABOUT  add one record per consideration, kept across sessions\n    DO  split what the user said into one consideration per problem\n    IN considerations:\n        DO  add one record per consideration, with status open\n    DO  show the user each record as written, for them to correct\n\nPROCEDURE analyse-consideration:\n    ABOUT  link a record to the earlier ones, and find its cause in the definitions\n    IN considerations:\n        DO  read every earlier record, of any status, on the same subject or the same problem\n        IF an earlier record has the same problem:\n            DO  write the ref of the most recent one in repeats\n    DO  read the .ap sources, routing lines and briefs behind what happened, from the main's .ap file and agents/\n    DO  find which one allowed it, or which check was missing, whichever repo it is in\n    IN considerations:\n        DO  write that in cause, as the assistant's analysis\n\n@WITH agent-feedback-proposal\nPROCEDURE propose-rule:\n    ABOUT  write the one rule that would prevent the problem, or say why none would\n    DO  read the target file and every rule that already covers the same ground\n    IF the record repeats one whose status is proposed or approved:\n        DO  propose that same rule again, saying the repeat is more evidence for it\n    IF the record repeats one whose status is applied:\n        DO  propose the stronger enforcement that replaces that rule, saying the rule did not hold\n    IF the record repeats one whose status is rejected or no-rule:\n        DO  say the user's earlier decision and what the repeat changes, then propose the rule if one now helps\n    IF the record repeats nothing, or one still open, and a rule would help:\n        DO  try each enforcement in order, and write the exact text of the first that fits\n    IF the record repeats nothing, or one still open, and no rule would help:\n        DO  say why no rule would help\n    AS  rule-proposal\n\nPROCEDURE analyse-and-propose:\n    ABOUT  analyse one record, propose its rule, and stop for the user's decision\n    RUN  analyse-consideration\n    RUN  propose-rule INTO proposal\n    IN considerations:\n        DO  write what {{proposal}} says, with status proposed, or no-rule and its reason\n    DO  show {{proposal}} to the user, and stop until they answer\n\n@WITH agent-feedback-approval\nPROCEDURE apply-approved-rule:\n    ABOUT  have one approved rule written by whoever owns its file, and close its record\n    IN considerations:\n        DO  set the record's status to approved, and read its enforcement, target and rule INTO approved-rule\n    IF the target is a .ap file, in this repo or another:\n        DO  write {{approved-rule}} in its target, and recompile from the target's repo root\n    IF the target is TypeScript tooling of this repo:\n        DO  hand {{approved-rule}} to typescript-implementer: apply it exactly, the user approved it, and run its check\n    IF the target is neither:\n        DO  ask the user who writes it, and stop\n    IF the compiler or the check passed:\n        IN considerations:\n            DO  set the record's status to applied\n    ELSE\n        DO  report the failure, and leave the record approved\n\nSTORE considerations:\n    ABOUT  the user's considerations on the agents' work, one record per consideration\n    DRIVER tabeli\n    LASTS  project\n    KEY    ref\n    SLOTS:\n        ref:            TEXT REGEX /^\\d{4}-\\d{2}-\\d{2}-[a-z0-9-]+$/  \"the record's name, as <date>-<kebab-case-problem>\"\n        date:           TEXT REGEX /^\\d{4}-\\d{2}-\\d{2}$/  \"the day it was said, as YYYY-MM-DD\"\n        subject:        TEXT REGEX /^(agent|skill|flow|routing):[a-z0-9-]+$/  \"who it is about, as <kind>:<name>\"\n        happened:       TEXT  \"what happened, stated from the facts of the session\"\n        consideration:  TEXT  \"what the user said, faithful, translated to English if needed\"\n        status:         ENUM[open, proposed, approved, applied, rejected, no-rule]  \"where the record stands\"\n        repeats?:       TEXT  \"the ref of the most recent earlier record on the same problem\"\n        cause?:         TEXT  \"what in the definitions allowed it: the assistant's analysis, not the user's words\"\n        enforcement?:   ENUM[mechanical, structural, prose]  \"how the proposed rule is enforced\"\n        target?:        TEXT REGEX /^\\/.+:.+$/  \"where the rule goes, as <repo root>:<file from that root>\"\n        rule?:          TEXT  \"the exact text of the proposed rule\"\n        reason?:        TEXT  \"why no rule would help, or why the user rejected the rule\"\n\nEXPORT SKILL agent-feedback:\n    ABOUT    Load when the user criticises or corrects how an agent, flow or routing worked: records it, proposes rules\n    APPLIES  #feedback\n    MANDATE  keep a faithful record of the user's considerations, and propose only rules the user then decides on\n\n    WHEN the user comments on, criticises or corrects how an agent, flow or routing worked, or asks to record it:\n        RUN  record-consideration\n        RUN  analyse-and-propose\n\n    WHEN the user asks to analyse a recorded consideration that is still open:\n        RUN  analyse-and-propose\n\n    WHEN the user approves a proposed rule:\n        RUN  apply-approved-rule\n\n    WHEN the user rejects a proposed rule:\n        IN considerations:\n            DO  set the record's status to rejected, and write their reason\n\n    WHEN the user asks which considerations are recorded, or still undecided:\n        IN considerations:\n            DO  report them by status, with what each one repeats\n",
+  "# dry-review — finds the duplication of a code scope or a diff, at a depth, and never edits a file\nIMPORT duplication-review FROM @main.templates\n\nPROCEDURE review-duplication:\n    ABOUT  review a code scope or a diff for duplication, at the depth asked\n    DO  take the depth the request names, else medium for a diff and surface for a code scope\n    IF the request hands a diff:\n        DO  read the diff and the code around it\n        DO  check the diff added no duplicate\n        DO  check a duplicate it meant to remove is gone, not moved: one source left, every caller reaching it\n    ELSE\n        DO  read the whole code scope the request names\n    IF the depth is surface:\n        DO  look only for duplicates inside one file\n    IF the depth is medium:\n        DO  look only for duplicates across files, and for logic with no single source of truth\n    IF the depth is deep:\n        DO  look only for missing abstractions behind repeated shapes\n    AS  duplication-review\n\nEXPORT SKILL dry-review:\n    ABOUT    Finds the duplication of a code scope or a diff at a depth — load it for any DRY review, never a fix\n    APPLIES  #dry\n    MANDATE  report every duplicate at the depth asked, each with its copies and the single source to keep\n\n    ALWAYS  hold a duplicate as a finding from its second copy\n    MUST    hold two pieces of code as a duplicate only when they share the same reason to change\n    NEVER   flag look-alike code with different reasons to change as a duplicate\n    NEVER   report a duplicate outside the depth asked, however costly\n    NEVER   edit a file: report the duplicate, and leave the fix to others\n\n    WHEN asked to review a code scope or a diff for duplication:\n        RUN  review-duplication\n",
+  "# guided-review — walks the user through a review live, one critical zone at a time, pointed at in PhpStorm\nIMPORT agent-feedback FROM @main.skills\nIMPORT improve-static-analysis, run-quality-check FROM @main.procedures\n\nTEMPLATE review-zone:\n    ABOUT  one critical zone of the code in scope: a defect, or a code smell and its refactoring\n    SLOTS:\n        file:          TEXT  \"the file the zone is in, from the project root\"\n        line:          NUMBER >=1  \"the line the zone starts at\"\n        severity:      ENUM[high, medium, low]  \"how severe the zone is\"\n        kind:          ENUM[defect, smell]  \"a defect the quality check found, or a code smell of scan-code-smells\"\n        why:           TEXT MAX_WORDS 25  \"why the zone is critical, in one sentence\"\n        smell?:        TEXT MAX_WORDS 6  \"the smell's name, e.g. long function, magic number, data clump\"\n          MUST  fill it when the kind is smell\n        refactoring?:  TEXT MAX_WORDS 8  \"the refactoring to apply, e.g. Extract Function, Replace Magic Literal\"\n          MUST  fill it when the kind is smell\n    BODY:\n        - [{severity}] [{kind}] {file}:{line} — {why}\n          smell: {smell} — refactoring: {refactoring}\n    EXAMPLE:\n        - [medium] [smell] src/apx/engine.ts:1450 — the method checks the zones, commits the copy and prints the summary\n          smell: mixed responsibilities — refactoring: Extract Function\n\nTEMPLATE review-zones:\n    ABOUT  the critical zones selected for the walk, the most severe first\n    SLOTS:\n        zones:  LIST <review-zone>  \"at most 5 zones, the most severe first, or none\"\n    BODY:\n        {zones}\n\nTEMPLATE walked-zone:\n    ABOUT  one zone of the walk, and what the user decided on it\n    SLOTS:\n        zone:      <review-zone>  \"the zone shown\"\n        decision:  ENUM[next, deeper, noted, refactor]  \"next, dig deeper, note for later, or refactored in the session\"\n    BODY:\n        {zone}\n          decision: {decision}\n    EXAMPLE:\n        - [high] [defect] src/cli/quality.ts:42 — the exit code ignores a tool that failed, so a broken check passes\n          decision: noted\n\nTEMPLATE guided-review-summary:\n    ABOUT  how the guided review ended: each zone shown and the user's decision on it\n    SLOTS:\n        scope:  TEXT MAX_WORDS 30  \"the diff, file or folder reviewed\"\n        zones:  LIST <walked-zone>  \"one entry per zone shown, in the order shown, or none\"\n    BODY:\n        scope: {scope}\n\n        zones:\n        {zones}\n\nTEMPLATE smell-zones:\n    ABOUT  every code smell the skim found, the most severe first\n    SLOTS:\n        zones:  LIST <review-zone>  \"one smell per zone, each of kind smell, or none\"\n    BODY:\n        {zones}\n\nVAR zones AS review-zones\nVAR smells AS smell-zones\nVAR summary AS guided-review-summary\n\nPROCEDURE scan-code-smells:\n    ABOUT  skim the lines in scope for code smells, each one a zone with its refactoring\n    DO  take only the lines the diff touches, or the scope the user names, and skim them fast\n    DO  check the mechanical smells the linter also reports, from the check's report when one exists:\n        DO  a module over 300 lines\n        DO  a function over 50 lines\n        DO  a function with more than 4 parameters\n        DO  nesting deeper than 3\n        DO  tangled control flow: a cyclomatic complexity over 10\n        DO  a hard-coded magic number other than 0, 1 and -1\n    DO  check the smells that take judgment:\n        DO  a hard-coded string repeated — a path, a URL, a key — that should be one named constant\n        DO  mixed responsibilities: one function or module doing I/O, logic and formatting together\n        DO  a data clump or primitive obsession: 3 to 4 parameters always together, or a raw string for a type\n        DO  speculative generality: an option, a parameter or an abstraction nothing uses yet\n        DO  a name that does not say what the thing does, or a comment that restates the code instead of why\n        DO  a boolean flag parameter that switches the function's behaviour\n    DO  check the coupling smells that break decoupling:\n        DO  a cyclic dependency, or a layer reaching into one it should not: one zone per violation\n        DO  feature envy: a function using another module's data more than its own — Move Function\n        DO  inappropriate intimacy: reaching into another module's internals or private shapes — Move Function, Extract Module, or hide it behind an interface\n        DO  a message chain such as `a.b.c.d` — Hide Delegate\n        DO  a middle man: a module that only forwards calls — Remove Middle Man\n        DO  a hub-like module: a new import making one module depend on many, or depended on by many — Extract Module\n        DO  a hard-wired dependency, untestable alone: process.env, homedir(), Date.now(), fs deep in logic, a module singleton — inject it\n        DO  a type leaking across a boundary: node:fs, node:child_process or a harness's API where the module should not know it — map it to a type of its own at the boundary\n        DO  shotgun surgery: one reason in the diff touching many unrelated modules — Move Function, or Combine\n    DO  make each smell one zone of kind smell, usually of severity low or medium\n    DO  name in each zone the smell and the refactoring to apply: Extract Function, Introduce Parameter Object, Replace Magic Literal, Extract Module, Decompose Conditional\n    NEVER  report a spot the check's report already holds: the same spot is never reported twice\n    NEVER  report duplicate code or dead code: they belong to the dry-review skill and to knip\n    NEVER  apply the refactoring: name it only\n    AS  smell-zones\n\nPROCEDURE select-zones:\n    ABOUT  analyse the scope and select its critical zones\n    DO  take the file or folder the user names, else the uncommitted diff: `git diff` plus the untracked files\n    RUN  run-quality-check\n    DO  read the code in scope\n    RUN  scan-code-smells INTO smells\n    DO  rank the quality check's findings, as zones of kind defect, and {{smells}} together by severity\n    DO  select at most 5 critical zones from both, the most severe first\n    AS  review-zones\n\nPROCEDURE walk-zone:\n    ABOUT  point at one zone in PhpStorm, explain it, and record the user's decision\n    DO  call `mcp__phpstorm__toggle_debugger_breakpoint` with `filePathInProject` and `line` of the zone\n    DO  show the zone's line with the code around it, and the declarations in other files it depends on, then explain it in 2 to 3 lines\n    DO  ask the user: next, dig deeper, or note for later\n    IF the zone calls for a refactoring — a smell, or a defect such as a complexity over its limit:\n        DO  ask the user too whether to refactor it now\n    DO  record their decision on the zone\n\nPROCEDURE refactor-zone:\n    ABOUT  refactor the zone the user chose, yourself, keeping its behaviour\n    DO  say what you will change and which files it touches, and go on only on the user's go\n    DO  make the change yourself, in this session: the zone and what it needs, nothing else\n    RUN  run-quality-check\n    IF the user asked for the tests:\n        DO  run `npm test` from the project root\n    DO  report what changed and what the commands printed\n    RUN  improve-static-analysis\n    DO  ask the user whether to improve typescript-implementer, so the same problem is not written again\n    NEVER  change the zone's behaviour, its error messages or its exported API, unless the user asks it\n\nPROCEDURE close-review:\n    ABOUT  report each zone with the user's decision, and remove every breakpoint set\n    DO  call `mcp__phpstorm__toggle_debugger_breakpoint` again on each zone pointed at, to remove its breakpoint\n    DO  write each zone shown, with the user's decision on it INTO summary\n    DO  report {{summary}} to the user\n\nEXPORT SKILL guided-review:\n    ABOUT    Load to walk the user through a code review live in this session, one critical zone at a time in PhpStorm\n    APPLIES  #review\n    MANDATE  walk the user through the critical zones of the scope, one at a time, and refactor only what the user asks\n\n    ALWAYS  show one zone at a time, then wait for the user before moving on\n    ALWAYS  back every zone with the lines that show it\n    ALWAYS  rank the zones by severity, the most severe first\n    NEVER   hold the code against a taste of your own\n    NEVER   edit a file the user did not ask to refactor\n    NEVER   run the tests unless the user asks for them\n    NEVER   point at a line with `open_file_in_editor`: it cannot go to a line\n    MUST!   remove every breakpoint it set before it ends, even when the user stops early\n    NEVER   hand a refactoring to a contract or another agent: make it yourself, in this session\n\n    WHEN asked for a guided or live review of a change, a file or a folder:\n        RUN  select-zones INTO zones\n        DO  walk each zone of {{zones}} in order, running walk-zone, until the zones end or the user stops\n        RUN  close-review\n\n    WHEN the user stops the walk early:\n        RUN  close-review\n\n    WHEN the user chooses to refactor a zone, or asks to fix it:\n        RUN  refactor-zone\n\n    WHEN the user asks to turn a problem into a lint rule:\n        RUN  improve-static-analysis\n        IF neither tool could fail on it:\n            DO  offer to improve typescript-implementer instead\n\n    WHEN the user wants typescript-implementer improved after a fixed zone:\n        @WITH agent-feedback:\n            DO  record the fixed problem as a consideration on agent:typescript-implementer, and propose its rule\n",
+  "# idea-filing — files one approved idea-card on the AgentPack Trello board, once, as a card written in Italian\n\nPOLICY idea-filing-safety:\n    ABOUT    what may be written on Trello, where, and with whose approval\n    APPLIES  #idea-filing-safety\n\n    NEVER   write anything on the board before the user approves its exact text\n    NEVER   file a card that duplicates one already on the board\n    ALWAYS  add an agreed duplicate as a comment on the card already there\n    NEVER   change any other card in any way\n\nTEMPLATE trello-card:\n    ABOUT  one Trello card or comment, as it will be written on the board\n    SLOTS:\n        name:         TEXT  \"the card's name: the idea-card's title, in Italian\"\n        description:  TEXT  \"the idea-card's body in Italian, headings included, a blank line between blocks, identifiers and code unchanged\"\n\nVAR idea\nVAR same-card\nVAR draft AS trello-card\n\n@WITH idea-filing-safety\nPROCEDURE find-same-cards:\n    ABOUT  read the cards of the AgentPack board that cover one idea\n    DO  call the Trello REST API directly, with TRELLO_API_KEY and TRELLO_TOKEN read from `/home/giuseppe/PhpstormProjects/cardrunner/.env`\n    DO  read the cards of the AgentPack board that cover the same idea\n\n@WITH idea-filing-safety\nPROCEDURE file-idea:\n    ABOUT  file one idea-card in the target column of the board, or as a comment on the card that already holds the idea\n    VAR column:\n        DO  take the list named `Raw cards` with id `6abd26a83b11cf3ff48a5ec7`\n    DO  read the idea-card the user approved INTO idea\n    RUN  find-same-cards INTO same-card\n    IF a card in {{same-card}} is the same idea:\n        DO  show it to the user\n        DO  ask whether to add the idea to it as a comment instead\n        DO  stop until they answer\n    DO  write the title of {{idea}} as the name and its body as the description, both in Italian INTO draft\n    UNTIL the user approves the exact text of the draft or drops it:\n        DO  show {{draft}} to the user exactly as it will be written\n        DO  tell the user the column {{column}} is where the card will go\n    IF the user approved the draft:\n        DO  create the card from {{draft}} in the list {{column}}, through the Trello REST API\n        DO  give the user the link of the card\n\nEXPORT SKILL idea-filing:\n    ABOUT    Load when the user asks to put a formalized idea on Trello: files one idea-card as a card\n    APPLIES  #idea-filing\n    MANDATE  file only approved ideas, once, on the right board\n\n    WHEN the user asks to file an idea that is already an idea-card:\n        RUN  file-idea\n\n    WHEN asked which cards of the board already cover an idea:\n        RUN  find-same-cards\n\n    WHEN the user asks to file an idea that is not formalized yet:\n        DO  tell the user the idea needs the idea-shaping skill first\n        DO  offer to shape it now\n",
+  "# idea-shaping — guides the user from a raw idea to one idea-card: asks for the evidence, never designs or judges it\nIMPORT idea-filing FROM @main.skills\n\nPOLICY idea-fidelity:\n    ABOUT    whose words and which facts go in an idea card\n    APPLIES  #idea-fidelity\n\n    ALWAYS  keep the user's words for the problem and the idea\n    ALWAYS  write the idea in english\n    NEVER   add a feature, a solution or a design choice the user did not state\n    NEVER   design the implementation: syntax, code or files stay out of the card\n    NEVER   take the proposer's enthusiasm as evidence\n    NEVER   fill a slot with a charitable guess\n    ALWAYS  write what one unanswered follow-up left missing as missing: `none cited`, `none named`, or an open question\n    ALWAYS  put the assistant's doubts in open-questions, each with a proposed default, never as settled decisions\n    NEVER   score the idea or give a verdict on it\n\nTEMPLATE idea-card:\n    ABOUT  one atomic idea, stated with the evidence that lets someone who was not in the chat judge it\n    SLOTS:\n        title:            TEXT MAX_WORDS 10  \"the idea as a card title: what changes, not how\"\n          MUST  not name a file, a component or an internal identifier\n        date:             TEXT REGEX /^\\d{4}-\\d{2}-\\d{2}$/  \"the day the idea was stated, as YYYY-MM-DD\"\n        idea:             TEXT MAX_WORDS 25  \"the single idea in one line\"\n          MUST  hold one idea only: a second one gets its own card\n        problem:          TEXT MAX_WORDS 50  \"what does not work or is missing today, in the user's words\"\n        evidence:         TEXT MAX_WORDS 40  \"a real case where the problem cost something, or `none cited`\"\n          MUST  write `none cited` when the user named no real case, never a plausible one\n        for-whom:         TEXT MAX_WORDS 20  \"who has the problem, and how often\"\n        before:           TEXT  \"one concrete case as it goes today\"\n        after:            TEXT  \"the same case once the idea exists\"\n        cheapest-path:    TEXT MAX_WORDS 30  \"the cheapest thing that already works, and what it loses, or `none named`\"\n        overlap:          TEXT MAX_WORDS 40  \"the primitive, agent, skill or card that already covers it, or `none` once checked\"\n          MUST  check the primitives, the library, the agents and the board before writing `none`\n        cost:             TEXT MAX_WORDS 25  \"what it adds: files, primitives, dependencies, public surface, config\"\n        gain:             TEXT MAX_WORDS 30  \"what gets better, and how one would notice\"\n        riskiest-guess?:  TEXT MAX_WORDS 30  \"the assumption most likely to be wrong, and the cheap test for it\"\n        settled?:         TEXT  \"what the user already decided about it, one per line\"\n        open-questions?:  TEXT  \"what is still undecided, each with the default proposed, one per line\"\n        out-of-scope?:    TEXT  \"what the idea deliberately leaves out, one per line\"\n    BODY:\n        **{title}** — {date}\n\n        {idea}\n\n        ## Problem\n        {problem}\n\n        Evidence: {evidence}\n        For whom: {for-whom}\n\n        ## Example\n        Before:\n        {before}\n\n        After:\n        {after}\n\n        ## Is it worth it\n        Cheapest path today: {cheapest-path}\n        Already covered by: {overlap}\n        Cost: {cost}\n        Gain: {gain}\n        Riskiest guess: {riskiest-guess}\n\n        ## Settled\n        {settled}\n\n        ## Open questions\n        {open-questions}\n\n        ## Out of scope\n        {out-of-scope}\n    EXAMPLE:\n        **Skills to shape and file a new idea** — 2026-11-17\n\n        Two skills: one shapes a raw idea into a card with its evidence, the other files the approved card on Trello.\n\n        ## Problem\n        A new idea stays in the chat, half stated, and reaches Trello late or reworded. Whoever reads the card later cannot tell what the problem was.\n\n        Evidence: none cited\n        For whom: the developer of agent-pack, each time a new idea comes up in a session\n\n        ## Example\n        Before:\n        The developer states an idea in the middle of a session. The session moves on, and days later a card is written from memory, in other words.\n\n        After:\n        The developer states the idea. The assistant asks what is missing, shows the card, and files it on Trello once the developer approves its text.\n\n        ## Is it worth it\n        Cheapest path today: writing the card by hand on Trello; the evidence and the overlap check then depend on remembering them\n        Already covered by: the pm agent judges a feature already asked for, not a raw idea; no skill, primitive or card shapes one\n        Cost: one template and two skills in the library; no primitive, no dependency, no compiler change\n        Gain: an idea reaches the board the day it is stated, in the user's words; its card needs no rewording to be judged\n        Riskiest guess: that the questions cost less than they save; test: shape the next three ideas and count those abandoned midway\n\n        ## Settled\n        no score and no verdict: judging the idea stays with the pm agent\n        the card goes in the Raw cards list, with the label shaped\n\n        ## Open questions\n        whether a shaped card is later moved by hand or by a skill; default: by hand\n\n        ## Out of scope\n        judging or ranking the idea\n        moving, archiving or editing any other card\n\nVAR card AS idea-card\n\n@WITH idea-fidelity\nPROCEDURE shape-idea:\n    ABOUT  shape one idea into a card, asking the user what the card still lacks\n    IF what the user said holds more than one idea:\n        DO  tell the user which ideas you see in it\n        DO  shape one card per idea, one at a time\n    DO  fill the card's slots with what the user said INTO card\n    @WITH idea-filing:\n        DO  find the ideas already filed that cover the idea\n    DO  check the primitives, the library, the agents and those cards for what already covers it\n    DO  rewrite the card with what covers it in overlap INTO card\n    UNTIL! problem, evidence, before, after, cheapest-path and cost in {{card AS idea-card}} are each clear or stated as missing MAX 5:\n        DO  ask the user the one question that most blocks the card\n        DO  wait for the answer\n        DO  rewrite the card with the answer INTO card\n    IF the last round left one of those slots unclear:\n        DO  write that slot as missing in the card INTO card\n    UNTIL the user approves the card or drops it:\n        DO  show {{card}} to the user\n        DO  wait for the answer\n        IF the user corrects the card:\n            DO  rewrite the card with the correction INTO card\n    IF the user dropped the card:\n        DO  report that the card was dropped unapproved\n\nEXPORT SKILL idea-shaping:\n    ABOUT    Load when the user brings a new idea to formalize: shapes it into one idea-card\n    APPLIES  #idea-shaping\n    MANDATE  turn a raw idea into a card the user recognises as theirs, with the evidence to judge it, without designing or judging it\n\n    WHEN the user brings a new idea, or asks to formalize one:\n        RUN  shape-idea\n        IF the user approves the card:\n            @WITH idea-filing:\n                DO  offer to file it on Trello\n",
+  "# new-rule — enforces a rule the user asks for: a lint check first, else the narrowest line of the right agents\nIMPORT improve-static-analysis FROM @main.procedures\nIMPORT agent-feedback-proposal FROM @main.policies\nIMPORT rule-proposal FROM @main.templates\n\nVAR proposal AS rule-proposal\n\n@WITH agent-feedback-proposal\nPROCEDURE place-rule-in-agents:\n    ABOUT  write the rule in the narrowest block of the agents it governs\n    DO  find the team, and the member or members of it, the rule governs, from agents/ and the team's routing\n    DO  read their .ap sources, and every rule of the main's .ap file and of agents/ on the same ground\n    DO  choose the narrowest block that holds it: a line in a WHEN or a procedure of that agent\n    DO  else a policy that applies only to those agents, and the main's .ap file only for a rule every agent must follow\n    DO  prefer changing an existing line to adding one\n    DO  write the exact text of the rule and its target file\n    AS  rule-proposal\n\nEXPORT SKILL new-rule:\n    ABOUT    Load when the user asks to add a rule: makes it a lint check, else the narrowest agent line\n    APPLIES  #rules\n    MANDATE  enforce each rule the user asks for in the strongest and narrowest place, and write only what they approve\n\n    NEVER   change a file before the user approves that very rule\n    ALWAYS  have the feature-delivery team add a lint rule the user approved, saying the user approved it\n    ALWAYS  recompile with `node dist/index.js bundle all` after writing a .ap rule\n\n    WHEN the user asks to add a rule:\n        DO  restate the rule in one line, ask the user to correct it if needed, and wait for the answer\n        RUN  improve-static-analysis\n        IF neither tool could fail on it:\n            RUN  place-rule-in-agents INTO proposal\n            DO  show {{proposal}} to the user, and stop until they answer\n            IF the user approves it:\n                DO  write {{proposal}} in its target file, and recompile\n        DO  report what was added, where, and what the check or the compiler printed\n",
+  "# wiki-paths — a wiki page's type, path and name\n\nPOLICY wiki-paths-placement:\n    ABOUT    which folders and root files hold wiki pages\n    APPLIES  #wiki-placement\n\n    ALWAYS  put a page in the one folder of its type: wiki/sources/, wiki/entities/, wiki/concepts/ or wiki/syntheses/\n    ALWAYS  keep wiki/index.md and wiki/log.md as the only content files at the wiki root\n    ALWAYS  write a page's frontmatter as page-frontmatter says, a wiki/index.md line as index-line says\n    ALWAYS  write a wiki/log.md entry as log-entry says\n    NEVER   create a folder or subfolder without the user's approval\n\nPOLICY wiki-paths-naming:\n    ABOUT    what a wiki file is called\n    APPLIES  #wiki-naming\n\n    ALWAYS  name a file in lowercase kebab-case, after its subject as a singular canonical noun phrase\n    NEVER   put a type prefix or version suffix in a file name, or a date outside wiki/sources/\n    ALWAYS  name a page in wiki/sources/ after its raw file — raw/YYYY-MM-DD-slug.ext is wiki/sources/YYYY-MM-DD-slug.md\n    ALWAYS  keep every basename unique across the whole vault — Obsidian [[wikilinks]] resolve by basename\n    ALWAYS  give each subject at most one page — a synonym goes in the aliases of that page\n    ALWAYS  name and scope a page at the level people recognize at once — no broad umbrella, no narrow instance\n\nPOLICY wiki-paths-justification:\n    ABOUT    what earns a category or a page its place, and how categories are chosen\n    APPLIES  #wiki-justification\n\n    NEVER   add a category that no real document justifies\n    ALWAYS  open a page in wiki/entities/ or wiki/concepts/ only for a subject in two sources or more, or central to one\n    ALWAYS  treat a subject as central to a source when it is in the source's title or has its own heading there\n    ALWAYS  choose and order wiki/index.md categories by how people look for things, never by abstract subject logic\n\nPOLICY wiki-paths-classification:\n    ABOUT    how a page is classified: one verifiable type by folder, anything further by attributes\n    APPLIES  #wiki-classification\n\n    ALWAYS  give every page exactly one type\n    ALWAYS  type a subject's page as entity when it has a proper name and a single referent, as concept otherwise\n    ALWAYS  decide a page's type by criteria two people would apply the same way\n    NEVER   let a page's type depend on anything that changes over time\n    ALWAYS  describe any further dimension with an independent frontmatter attribute\n    NEVER   introduce free-form tags\n\nTEMPLATE page-frontmatter:\n    ABOUT  the frontmatter of a wiki page\n    SLOTS:\n        type:      ENUM[source, entity, concept, synthesis]  \"the page's type\"\n        updated:   TEXT  \"the date of the last change, as YYYY-MM-DD\"\n        sources?:  TEXT  \"the source pages behind it; not on a source page\"\n        raw?:      TEXT  \"the path of its raw file; only on a source page\"\n        aliases?:  TEXT  \"the other names of its subject\"\n\nTEMPLATE index-line:\n    ABOUT  one line of wiki/index.md\n    SLOTS:\n        line:  TEXT  \"`- [[page]] — one-line summary`, under the heading of its category\"\n\nTEMPLATE log-entry:\n    ABOUT  one entry of wiki/log.md\n    SLOTS:\n        entry:  TEXT  \"`## [YYYY-MM-DD] ingest|query|lint | Title`\"\n\nTEMPLATE page-path:\n    ABOUT  the path a new page takes\n    SLOTS:\n        path:  TEXT  \"the page's path from the project root\"\n\nTEMPLATE page-path-request:\n    ABOUT  what is needed to derive the path of a new page\n    SLOTS:\n        type:   ENUM[source, entity, concept, synthesis]  \"the page's type\"\n        slug:   TEXT  \"the page's file name, without extension\"\n        taken?:  TEXT  \"every basename already in the vault, comma-separated\"\n\nTEMPLATE wiki-state:\n    ABOUT  the wiki and the raw files as they are now, for a program to read\n    SLOTS:\n        pages:  TEXT  \"every file of wiki/ with its full text, each opening with a line `=== <path>`\"\n        raw:    TEXT  \"every path under raw/, one per line\"\n\nTEMPLATE page-match:\n    ABOUT  the page a subject already has, by name or alias\n    SLOTS:\n        path?:  TEXT  \"the page's path, absent when no name or alias matches\"\n\nTEMPLATE page-move-request:\n    ABOUT  which page to move or rename, and where\n    SLOTS:\n        old_name:  TEXT  \"the page's basename now\"\n        new_name:  TEXT  \"its new basename\"\n        folder?:   ENUM[wiki/sources/, wiki/entities/, wiki/concepts/, wiki/syntheses/]  \"its new folder, if it changes\"\n        date:      TEXT  \"today, as YYYY-MM-DD\"\n\nTEMPLATE page-move-plan:\n    ABOUT  every edit a move or a rename needs\n    SLOTS:\n        from:       TEXT  \"the page's path now\"\n        to:         TEXT  \"the page's new path\"\n        rewritten:  TEXT  \"every file that changes, with its new full text, each opening with a line `=== <path>`\"\n        log_entry:  TEXT  \"the entry to append to wiki/log.md\"\n\nTEMPLATE wiki-findings:\n    ABOUT  what the mechanical checks of the wiki found\n    SLOTS:\n        errors?:    TEXT  \"what breaks a rule for certain, one `<path>: <problem>` per line\"\n        warnings?:  TEXT  \"what the agent has to judge, one `<path>: <problem>` per line\"\n\nTEMPLATE label-tables:\n    ABOUT  the three tables to join, as `store q` prints them\n    SLOTS:\n        files:   TEXT  \"every record of wiki-files, one per line\"\n        labels:  TEXT  \"every record of wiki-labels, one per line\"\n        links?:  TEXT  \"every record of wiki-file-labels, one per line\"\n\nTEMPLATE file-labels:\n    ABOUT  every wiki file joined with its labels\n    SLOTS:\n        rows:         TEXT  \"one `<path> | <label> | <label description>` per line\"\n        unlabelled?:  TEXT  \"the files with no label, one path per line\"\n        broken?:      TEXT  \"the links to a file or a label that does not exist, one per line\"\n\nVAR path-request AS page-path-request\nVAR label-data AS label-tables\nVAR labelled-files AS file-labels\nVAR new-page-path AS page-path\nVAR wiki-now AS wiki-state\nVAR page-subject\nVAR existing-page AS page-match\nVAR move-request AS page-move-request\nVAR move-plan AS page-move-plan\nVAR structure-findings AS wiki-findings\n\nCOMPUTE derive-page-path:\n    ABOUT  the path of a new page, from its type, its file name and the basenames already taken\n    NEVER  read a file, the network or the clock\n    REQUIRE:\n        MUST  the slug of {{path-request}} be absent from its taken names\n    RETURN AS page-path:\n        DO    path = the folder of the type of {{path-request}} + its slug + .md\n    ENSURE:\n        MUST  path sit directly in wiki/sources/, wiki/entities/, wiki/concepts/ or wiki/syntheses/\n\nCOMPUTE find-existing-page:\n    ABOUT  the page whose name or aliases match a subject exactly\n    NEVER  read a file, the network or the clock\n    REQUIRE:\n        MUST  {{page-subject}} be a kebab-case name, and {{wiki-now}} hold the wiki's pages\n    RETURN AS page-match:\n        DO    path = the page of {{wiki-now}} whose basename or aliases equal {{page-subject}}\n    ENSURE:\n        MUST  path be absent when nothing matches exactly\n\nCOMPUTE plan-page-move:\n    ABOUT  every edit a move or a rename needs, computed and not applied\n    NEVER  read a file, the network or the clock\n    REQUIRE:\n        MUST  the old name of {{move-request}} be a page of {{wiki-now}}\n        MUST  its new name be taken by no page of {{wiki-now}}, and be lowercase kebab-case\n    RETURN AS page-move-plan:\n        DO    add the old name to the aliases of the page in {{wiki-now}}\n        DO    rewrite every wikilink and wiki/index.md entry pointing to the old name\n        DO    write the entry to append to wiki/log.md\n    ENSURE:\n        MUST  no wikilink to the old name be left in rewritten\n\nCOMPUTE check-wiki-structure:\n    ABOUT  the checks of the wiki's structure that need no judgment\n    NEVER  read a file, the network or the clock\n    REQUIRE:\n        MUST  {{wiki-now}} hold the wiki's pages\n    RETURN AS wiki-findings:\n        DO    errors = folders and root files not allowed, `type` missing or not matching its folder\n        DO    errors += file names breaking the naming rules, repeated basenames, aliases that collide\n        DO    errors += `raw:` paths not in {{wiki-now}}, free-form tags, broken wikilinks\n        DO    errors += pages and wiki/index.md entries that do not match, malformed wiki/log.md entries\n        DO    warnings = entity and concept pages with fewer than two sources, close names, plural-looking names\n    ENSURE:\n        MUST  every line name the path it is about\n\nCOMPUTE join-files-labels:\n    ABOUT  every wiki file joined with its labels and their descriptions\n    NEVER  read a file, the network or the clock\n    REQUIRE:\n        MUST  every record of {{label-data}} be a line of key=value fields, as `store q` prints it\n    RETURN AS file-labels:\n        DO    join the files and the labels of {{label-data}} through its links, on path and on label\n    ENSURE:\n        MUST  every file be in rows or in unlabelled, and every link that matches nothing be in broken\n\nPROCEDURE show-file-labels:\n    ABOUT  show which labels each wiki file has\n    DO  read all records of wiki-files, wiki-labels and wiki-file-labels with limit=100000 INTO label-data\n    RUN  join-files-labels INTO labelled-files\n    DO  report the rows, the unlabelled files and the broken links\n\nPROCEDURE gather-wiki-state:\n    ABOUT  read the wiki and the raw paths, for a program\n    DO  read every file of wiki/ and list every path under raw/ INTO wiki-now\n\n@WITH wiki-paths-placement, wiki-paths-naming, wiki-paths-justification\n@WITH wiki-paths-classification\nPROCEDURE choose-new-page-path:\n    ABOUT  choose the path of a new page\n    RUN  gather-wiki-state\n    DO  name the page's subject in kebab-case INTO page-subject\n    RUN  find-existing-page INTO existing-page\n    IF no page matched, and an existing page covers the subject under another name:\n        DO  add the name to that page's aliases, and use that page's path\n    ELSE IF a page matched:\n        DO  use that page's path\n    ELSE\n        IF the page's type is uncertain:\n            RUN  resolve-boundary-case\n        IF the type is entity or concept, and the subject is in fewer than two sources and central to none:\n            DO  put the content in a section of an existing page, and derive no new path\n        ELSE\n            DO  store the page's type, its file name and every basename in the vault INTO path-request\n            RUN  derive-page-path INTO new-page-path\n\n@WITH wiki-paths-placement, wiki-paths-classification\nPROCEDURE handle-unplaced-page:\n    ABOUT  handle a page that fits no type or seems to need a new folder\n    DO  ask the user for approval before adding a type or a folder\n\n@WITH wiki-paths-placement, wiki-paths-naming\nPROCEDURE move-or-rename-page:\n    ABOUT  move or rename a page\n    RUN  gather-wiki-state\n    DO  state the page's old name, its new name and any new folder INTO move-request\n    RUN  plan-page-move INTO move-plan\n    DO  apply the plan as it is: move the file, write each rewritten file, append the log entry\n\n@WITH wiki-paths-classification\nPROCEDURE resolve-boundary-case:\n    ABOUT  settle the type of a page that could plausibly be of two types\n    DO  compare the page with typical pages of each candidate type\n    IF wiki/log.md records a decision on a similar page:\n        DO  follow that decision\n    ELSE\n        DO  ask the user which type the page is\n        DO  record the decision and its reason in wiki/log.md, so that later similar pages go the same way\n\n@WITH wiki-paths-placement, wiki-paths-naming, wiki-paths-justification\n@WITH wiki-paths-classification\nPROCEDURE review-wiki-structure:\n    ABOUT  report what no longer fits and propose merges or moves\n    MUST-NOT  move, merge, rename or restructure anything without the user's approval\n    RUN  gather-wiki-state\n    RUN  check-wiki-structure INTO structure-findings\n    DO  judge each warning in structure-findings, and keep those that hold\n    DO  look for pages hard to place, types that hide content, and pages failing a judgment rule\n    DO  report every error and each finding kept, with its proposed merge or move\n    IF the user approves a merge or a move:\n        RUN  move-or-rename-page\n\nSTORE wiki-files:\n    ABOUT  every file of the wiki: where it is and what it holds\n    DRIVER tabeli\n    LASTS  project\n    KEY    path\n    SLOTS:\n        path:         TEXT                \"the file's path from the project root\"\n        description:  TEXT MAX_WORDS 30   \"what the file holds\"\n\nSTORE wiki-labels:\n    ABOUT  the labels available for wiki files, and what each one means\n    DRIVER tabeli\n    LASTS  project\n    KEY    label\n    SLOTS:\n        label:        TEXT               \"the label, as one lowercase kebab-case word group\"\n        description:  TEXT MAX_WORDS 30  \"what files with this label hold\"\n\nSTORE wiki-file-labels:\n    ABOUT  which wiki file has which label, one record per pair\n    DRIVER tabeli\n    LASTS  project\n    KEY    link\n    SLOTS:\n        link:   TEXT  \"the pair, as `<path>#<label>`\"\n        path:   TEXT  \"the file's path, as in wiki-files\"\n        label:  TEXT  \"the label, as in wiki-labels\"\n\nEXPORT SKILL wiki-paths:\n    ABOUT    Decides a wiki page's type, path and name — load it to create, move or rename a page, or to lint the wiki\n    APPLIES  #wiki\n    MANDATE  give each justified page one type and path, keep its links intact when it changes, and report misfits\n\n    WHEN choosing the path of a new page:\n        RUN  choose-new-page-path\n\n    WHEN a page fits none of the four types, or seems to need a new folder:\n        RUN  handle-unplaced-page\n\n    WHEN moving or renaming a page:\n        RUN  move-or-rename-page\n\n    WHEN a page could plausibly be of two types:\n        RUN  resolve-boundary-case\n\n    WHEN a wiki lint or a structural review is requested:\n        RUN  review-wiki-structure\n\n    WHEN asked which labels the wiki files have, or which files have a label:\n        RUN  show-file-labels\n\n    WHEN a wiki file is created, moved, renamed or deleted, or what it holds changes:\n        IN wiki-files:\n            DO  keep exactly one record per existing wiki file, with its current path and description\n        IN wiki-file-labels:\n            DO  keep one record per label of each existing wiki file, with its current path\n",
+  "# acceptance-criterion\n\nEXPORT TEMPLATE acceptance-criterion:\n    ABOUT  one testable condition a feature must meet\n    SLOTS:\n        criterion:  TEXT MAX_WORDS 25  \"the condition, stated so that a test can check it\"\n    BODY:\n        - {criterion}\n",
+  "# cleanup-finding — one cleanup a review of a change found, and how to fix it\n\nEXPORT TEMPLATE cleanup-finding:\n    ABOUT  one cleanup a review of a change found\n    SLOTS:\n        file:     TEXT  \"the file, from the project root\"\n        line:     NUMBER >=1  \"the line the finding anchors to\"\n        summary:  TEXT MAX_WORDS 25  \"what to clean up, in one sentence\"\n        cost:     TEXT MAX_WORDS 30  \"what is duplicated, wasted or harder to maintain\"\n        fix:      TEXT MAX_WORDS 30  \"the helper to call, the simpler form, the cheaper alternative or the deeper change\"\n    BODY:\n        - {file}:{line} — {summary} — cost: {cost} — fix: {fix}\n    EXAMPLE:\n        - src/apdoc/blocks.ts:829 — slices a reference's name by hand — cost: a second rule for a name that addressName already gives — fix: call addressName from src/apdoc/ids.ts\n",
+  "# cleanup-review — what one angle of a cleanup review found in a change\nIMPORT cleanup-finding FROM @main.templates\n\nEXPORT TEMPLATE cleanup-review:\n    ABOUT  what one angle of the review found in a change — cleanups only, never a correctness bug\n    SLOTS:\n        angle:     ENUM[reuse, simplification, efficiency, altitude]  \"the angle the change was reviewed from\"\n        findings:  LIST <cleanup-finding>  \"one row per finding, or none\"\n    BODY:\n        angle: {angle}\n        {findings}\n",
+  "# dependency-assessment — the assessment of one candidate npm package, from real data\nIMPORT dependency-criterion FROM @main.templates\n\nEXPORT TEMPLATE dependency-assessment:\n    ABOUT  one candidate npm package, each criterion with its value and source, and the verdict\n    SLOTS:\n        package:   TEXT MAX_WORDS 3  \"the package name and the version assessed, as name@version\"\n        criteria:  LIST <dependency-criterion> >=1  \"one row per criterion of validate-dependency\"\n        verdict:   ENUM[recommended, with-reservations, avoid]  \"whether to add it\"\n        reasons:   TEXT MAX_WORDS 60  \"why the verdict: the criteria that decided it\"\n    BODY:\n        package: {package}\n        {criteria}\n        verdict: {verdict} — {reasons}\n    EXAMPLE:\n        package: picomatch@4.0.2\n        - license: MIT, compatible with Apache-2.0 (npm view picomatch license)\n        - weekly downloads: 98,412,331 (api.npmjs.org/downloads/point/last-week/picomatch)\n        - last release: 2024-03-26 (gh api repos/micromatch/picomatch/releases)\n        - vulnerabilities: none (osv.dev query, npm audit on a scratch install)\n        - transitive dependencies: 0 (npm view picomatch dependencies)\n        verdict: recommended — permissive license, no dependency, no known vulnerability, used across the ecosystem\n",
+  "# dependency-criterion — one criterion of a dependency assessment\n\nEXPORT TEMPLATE dependency-criterion:\n    ABOUT  one criterion of a dependency assessment, its value and where it was read\n    SLOTS:\n        criterion:  TEXT MAX_WORDS 5  \"the criterion: versions, license, stars, last release, vulnerabilities, …\"\n        value:      TEXT MAX_WORDS 25  \"the value read, verbatim where it is a number or a date\"\n        source:     TEXT MAX_WORDS 12  \"the command or URL it was read from\"\n    BODY:\n        - {criterion}: {value} ({source})\n",
+  "# duplicate-copy\n\nEXPORT TEMPLATE duplicate-copy:\n    ABOUT  one copy of a duplicate, located and quoted\n    SLOTS:\n        location:  TEXT MAX_WORDS 3  \"where it is, as file:line or file:start-end\"\n        quote:     TEXT  \"the lines that show it, quoted verbatim\"\n    BODY:\n        - {location} — {quote}\n    EXAMPLE:\n        - src/invoices/parse.ts:63 — `const vat = amount * 0.2;`\n",
+  "# duplicate\nIMPORT duplicate-copy FROM @main.templates\n\nEXPORT TEMPLATE duplicate:\n    ABOUT  one piece of knowledge kept in more than one place\n    SLOTS:\n        kind:    ENUM[found, added, left]  \"in the scope, added by the diff, or left where it meant to remove it\"\n        claim:   TEXT MAX_WORDS 25  \"what is repeated, and why its copies change for the same reason\"\n        source:  TEXT MAX_WORDS 25  \"the single source of truth to keep\"\n        copies:  LIST <duplicate-copy> >=2  \"every copy, one per line\"\n    BODY:\n        - [{kind}] {claim}\n          source: {source}\n          {copies}\n    EXAMPLE:\n        - [found] the VAT rate is written by hand in two files, and changes when the law does\n          source: a VAT_RATE constant in src/invoices/tax.ts\n          - src/invoices/parse.ts:63 — `const vat = amount * 0.2;`\n          - src/invoices/total.ts:18 — `return net * 1.2;`\n",
+  "# duplication-review\nIMPORT duplicate FROM @main.templates\n\nEXPORT TEMPLATE duplication-review:\n    ABOUT  what was reviewed for duplication, at which depth, the duplicates found, and what could not be checked\n    SLOTS:\n        scope:          TEXT MAX_WORDS 30  \"the code scope or the diff that was reviewed\"\n        depth:          ENUM[surface, medium, deep]  \"the depth of the review\"\n        findings:       LIST <duplicate>  \"one finding per duplicate, or none\"\n        not-verified?:  TEXT MAX_WORDS 50  \"what could not be checked, and what would settle it\"\n    BODY:\n        scope: {scope}\n        depth: {depth}\n\n        findings:\n        {findings}\n\n        not-verified: {not-verified}\n",
+  "# escalation-decision\n\nEXPORT TEMPLATE escalation-decision:\n    ABOUT  what the user decided about the findings left after the last review round\n    SLOTS:\n        action:     ENUM[proceed, stop]  \"go on to the tests, or end the flow\"\n        accepted?:  TEXT  \"the findings the user accepts as they are, one per line\"\n    BODY:\n        action: {action}\n        accepted: {accepted}\n",
+  "# feature-brief — what the pm is handed: the request, and what is already settled\n\nEXPORT TEMPLATE feature-brief:\n    ABOUT  what the pm is handed: the request, and what is already settled\n    SLOTS:\n        request:          TEXT MAX_WORDS 40  \"the feature the user asked for, in their words, translated to English if needed\"\n        settled?:         TEXT  \"what the conversation already agreed: choices, plan, constraints, one per line\"\n        open-questions?:  TEXT  \"what the user has not answered yet, each with the default proposed, one per line\"\n        out-of-scope?:    TEXT  \"what the user already left out, one per line\"\n    BODY:\n        request: {request}\n\n        settled:\n        {settled}\n\n        open questions:\n        {open-questions}\n\n        out of scope:\n        {out-of-scope}\n",
+  "# feature-diff\n\nEXPORT TEMPLATE feature-diff:\n    ABOUT  what the reviewer of a feature is handed: its diff, nothing else\n    SLOTS:\n        diff:  TEXT  \"the feature's diff, new files included, none of the older uncommitted work\"\n    BODY:\n        {diff}\n",
+  "# feature-report\nIMPORT handled-finding, test-case FROM @main.templates\n\nEXPORT TEMPLATE feature-report:\n    ABOUT  how the feature ended: what was built, the review — quality and duplicates — and the tests\n    SLOTS:\n        built:     TEXT MAX_WORDS 60  \"what was built\"\n        rounds:    NUMBER 1..4  \"how many review rounds ran\"\n        findings:  LIST <handled-finding>  \"every quality finding of scope change and every duplicate of every round, or none\"\n        tests:     LIST <test-case>  \"the test results, or none if the flow stopped before them\"\n    BODY:\n        built: {built}\n        review rounds: {rounds}\n\n        findings:\n        {findings}\n\n        tests:\n        {tests}\n",
+  "# functional-design — what a feature does, for whom, and how to tell it is done, or why it stops here\nIMPORT acceptance-criterion FROM @main.templates\n\nEXPORT TEMPLATE functional-design:\n    ABOUT  the functional design of one feature, or why it stops before being built\n    SLOTS:\n        status:           ENUM[ready, reshape, rejected]  \"whether it advances, must change shape, or stops\"\n        feature:          TEXT MAX_WORDS 25  \"the one feature, in one line\"\n        reason:           TEXT MAX_WORDS 60  \"why it holds or stops: the problem, any surplus, the leaner alternative\"\n        for-whom?:        TEXT MAX_WORDS 25  \"who has the problem\"\n          MUST  fill it when the status is ready\n        behaviour?:       TEXT  \"what the feature does, as the user sees it\"\n          MUST  fill it when the status is ready\n        acceptance?:      LIST <acceptance-criterion> >=1  \"the testable acceptance criteria\"\n          MUST  fill it when the status is ready\n        out-of-scope?:    TEXT  \"what the feature does not do, one item per line\"\n        open-decisions?:  TEXT  \"the decisions still open, one per line\"\n    BODY:\n        status: {status}\n        feature: {feature}\n        reason: {reason}\n        for whom: {for-whom}\n\n        behaviour:\n        {behaviour}\n\n        acceptance:\n        {acceptance}\n\n        out of scope:\n        {out-of-scope}\n\n        open decisions:\n        {open-decisions}\n",
+  "# group-membership — a group whose members each declare it on themselves, read in one place\n\nEXPORT TEMPLATE group-membership:\n    ABOUT  a group whose members each declare it on themselves, and the one place that reads it\n    APPLIES  #coding\n    SLOTS:\n        group:     TEXT MAX_WORDS 15  \"the group, and the constant that names it\"\n        marker:    TEXT MAX_WORDS 25  \"where each member declares it belongs: the field, meta key or tag, on the member's definition\"\n        reader:    TEXT MAX_WORDS 25  \"the one place that reads the marker to know a thing's group\"\n        replaces?: TEXT MAX_WORDS 25  \"the hand-written list of members it replaces, if any\"\n    BODY:\n        group: {group}\n        declared on each member: {marker}\n        read by: {reader}\n        replaces: {replaces}\n    EXAMPLE:\n        group: the retired keywords — the lexer's keyword table in src/lexer.ts\n        declared on each member: `retired: '<its rewrite>'` on the keyword's entry in that table\n        read by: the lint's retired-keyword check in src/lint.ts\n        replaces: the REMOVED_KEYWORDS list in src/lint.ts\n",
+  "# handled-finding\n\nEXPORT TEMPLATE handled-finding:\n    ABOUT  one review finding — a quality result or a duplicate — and how it ended\n    SLOTS:\n        kind:      ENUM[quality, duplicate]  \"quality for a result of the quality check, duplicate for one of the DRY review\"\n        finding:   TEXT MAX_WORDS 25  \"the quality result or the duplicate\"\n        handling:  ENUM[fixed, accepted, open]  \"fixed, accepted by the user, or still open\"\n    BODY:\n        - [{handling}] {kind}: {finding}\n",
+  "# rule-proposal — the rule proposed for one problem, or why none is\n\nEXPORT TEMPLATE rule-proposal:\n    ABOUT  the rule proposed for one problem — a recorded consideration or a rule the user asks for — or why none is\n    SLOTS:\n        record?:            TEXT  \"the ref of the record in considerations\"\n          MUST  fill it when the rule answers a recorded consideration\n        verdict:            ENUM[rule, no-rule]  \"whether a rule is proposed\"\n        problem:            TEXT MAX_WORDS 30  \"the problem, which the rule prevents\"\n        cause:              TEXT MAX_WORDS 40  \"what allowed it: the source, routing line, brief or missing check\"\n        repeats?:           TEXT MAX_WORDS 40  \"the earlier record's ref and status, and what the repeat says of it\"\n        why_none?:          TEXT MAX_WORDS 40  \"why no rule would help\"\n          MUST  fill it when the verdict is no-rule\n        enforcement?:       ENUM[mechanical, structural, prose]  \"how the rule is enforced\"\n          MUST  fill it when the verdict is rule\n        why_not_stronger?:  TEXT MAX_WORDS 40  \"why no stronger enforcement fits\"\n          MUST  fill it when the enforcement is structural or prose\n        repo?:              TEXT  \"the absolute path of the root of the repo holding the file\"\n          MUST  fill it when the verdict is rule\n        file?:              TEXT  \"the file the rule goes in, from the root of that repo\"\n          MUST  fill it when the verdict is rule\n        text?:              TEXT  \"the exact text of the rule, as it would stand in the file\"\n          MUST  fill it when the verdict is rule\n        overlap?:           TEXT MAX_WORDS 40  \"the existing rule it changes, or `none` once they were checked\"\n          MUST  fill it when the verdict is rule\n    BODY:\n        record: {record}\n        verdict: {verdict}\n        problem: {problem}\n        cause: {cause}\n        repeats: {repeats}\n        why none: {why_none}\n        enforcement: {enforcement}\n        why not stronger: {why_not_stronger}\n        repo: {repo}\n        file: {file}\n        text: {text}\n        overlap: {overlap}\n    EXAMPLE:\n        record: 2026-10-30-single-step-flows\n        verdict: rule\n        problem: a flow made of one step with one delegate adds a layer and no structure\n        cause: the FLOW scaffold let a flow hold a single step with a single delegate\n        enforcement: prose\n        why not stronger: a lint needs a change to agent-pack's compiler; the scaffold reaches every author now\n        repo: /srv/projects/agent-pack\n        file: templates/library/templates/ap-scaffolds.ap\n        text: NEVER  write a FLOW whose whole body is one STEP holding one DELEGATE\n        overlap: none\n",
+  "# test-case\n\nEXPORT TEMPLATE test-case:\n    ABOUT  one acceptance criterion, and what its test showed\n    SLOTS:\n        criterion:  TEXT MAX_WORDS 25  \"the acceptance criterion\"\n        test:       TEXT MAX_WORDS 10  \"the test that covers it, as file:name\"\n        result:     ENUM[pass, fail, not-run]  \"what the run showed\"\n        detail:     TEXT MAX_WORDS 40  \"the failure as the run printed it, or none\"\n    BODY:\n        - [{result}] {criterion} — {test}: {detail}\n",
+  "# test-report\nIMPORT test-case FROM @main.templates\n\nEXPORT TEMPLATE test-report:\n    ABOUT  the tests written for a feature and what running them showed\n    SLOTS:\n        command:  TEXT MAX_WORDS 10  \"the command that ran the tests\"\n        cases:    LIST <test-case> >=1  \"one row per acceptance criterion\"\n    BODY:\n        command: {command}\n        {cases}\n",
+  "# develop-feature — what the steps of the flow hand each other\nIMPORT feature-brief, functional-design, escalation-decision, test-report, feature-report FROM @main.templates\n\nEXPORT VAR test-rules = write and run a test per acceptance criterion, never edit production code, report every failure\n\nEXPORT SESSION VAR brief AS feature-brief\nEXPORT SESSION VAR design AS functional-design\nEXPORT SESSION VAR build\nEXPORT SESSION VAR review-findings\nEXPORT SESSION VAR fix-report\nEXPORT SESSION VAR decision AS escalation-decision\nEXPORT SESSION VAR tests AS test-report\nEXPORT SESSION VAR closing AS feature-report\n",
+  "# project — the constants of this project\n\nEXPORT VAR project-name = agent-pack\nEXPORT VAR quality-check = ./quality-check.sh\n",
+  "# simplify — what the steps of the simplify flow hand each other\nIMPORT cleanup-review FROM @main.templates\n\nEXPORT SESSION VAR change\nEXPORT SESSION VAR reuse-review AS cleanup-review\nEXPORT SESSION VAR simplification-review AS cleanup-review\nEXPORT SESSION VAR efficiency-review AS cleanup-review\nEXPORT SESSION VAR altitude-review AS cleanup-review\nEXPORT SESSION VAR cleanups\n",
+  "# wiki-curator — keeps the project's wiki current, clean and ordered while the project is developed\nIMPORT wiki-paths FROM @main.skills\nIMPORT project-name FROM @main.vars\n\nDOMAIN wiki:\n    ABOUT   the wiki's pages, conventions and Obsidian configuration\n    WRITES  IN wiki/**\n\nSTORE raw-scans:\n    ABOUT  what each file of raw/ looked like at the last check\n    DRIVER tabeli\n    LASTS  project\n    KEY    path\n    SLOTS:\n        path:       TEXT  \"the file's path from the project root\"\n        last_scan:  TEXT  \"the date of the last check, as YYYY-MM-DD\"\n        hash:       TEXT  \"the file's sha256 at the last check\"\n\nTEMPLATE raw-state:\n    ABOUT  the files of raw/ now, and as the last check saw them\n    SLOTS:\n        current:    TEXT  \"every file of raw/ now, one `<sha256> <path>` per line\"\n        previous?:  TEXT  \"every record of raw-scans, one `<sha256> <path>` per line\"\n\nTEMPLATE raw-changes:\n    ABOUT  whether raw/ changed since the last check, and what changed\n    SLOTS:\n        changed:    ENUM[yes, no]  \"whether anything changed\"\n        added?:     TEXT  \"the paths that are new, one per line\"\n        modified?:  TEXT  \"the paths whose hash differs, one per line\"\n        removed?:   TEXT  \"the paths that are gone, one per line\"\n\nTEMPLATE raw-piece:\n    ABOUT  one subject of a raw file, and the page it goes to\n    SLOTS:\n        subject:  TEXT  \"the subject of this piece of information\"\n        action:   ENUM[enrich, new]  \"whether it enriches an existing page or needs a new one\"\n        page:     TEXT  \"the path of the page it goes to\"\n\nTEMPLATE raw-breakdown:\n    ABOUT  how the information of a raw file is split across the wiki\n    SLOTS:\n        category:  TEXT  \"a label of wiki-labels, or `new: <label>` when none fits\"\n        pieces:    LIST <raw-piece> >=1  \"one row per subject\"\n\nCOMPUTE detect-raw-changes:\n    ABOUT  whether raw/ changed since the last check, and what changed\n    NEVER  read a file, the network or the clock\n    REQUIRE:\n        MUST  every line of {{raw-now}} hold a hash and a path\n    RETURN AS raw-changes:\n        DO    compare the paths and hashes of current with those of previous, both in {{raw-now}}\n    ENSURE:\n        MUST  changed be no exactly when added, modified and removed are all empty\n\nPROCEDURE check-raw:\n    ABOUT  say whether raw/ changed since the last check, and what changed\n    DO  hash every file of raw/ with sha256sum and read the records of raw-scans, INTO raw-now\n    RUN  detect-raw-changes INTO raw-diff\n    DO  report the result, flagging any modified or removed file: files in raw/ are immutable\n    IN raw-scans:\n        DO  record each current file with today's date and its hash, and delete the records of removed files\n\n@WITH wiki-paths\nPROCEDURE ingest-raw-file:\n    ABOUT  bring one raw file into the wiki\n    DO  read the raw file and the labels of wiki-labels, and work out which label its information belongs to\n    DO  read wiki/index.md and the existing pages closest to that label\n    DO  split the file's information by subject, and decide for each piece its page INTO raw-pieces\n    DO  write the file's page in wiki/sources/\n    DO  add each piece marked enrich to its page, citing the source page, leaving out what the page already says\n    DO  open a page only for a piece marked new\n    IF a piece contradicts what a page says:\n        DO  flag it in that page, without choosing between them\n    DO  update wiki/index.md and add the ingest to wiki/log.md\n    DO  report the pieces and their pages, and every decision the user has to take\n\nPROCEDURE reconcile-with-development:\n    ABOUT  bring the wiki in line with a change made to the project\n    DO  compare the change with the wiki pages that describe what it touches\n    IF a file in raw/ already covers the change:\n        RUN  ingest-raw-file\n    ELSE\n        DO  flag the pages the change makes outdated, without rewriting their claims\n        DO  ask the user to deposit a note in raw/, saying what it has to cover\n\n@WITH wiki-paths\nPROCEDURE answer-from-wiki:\n    ABOUT  answer a question about the project from the wiki\n    DO  find the relevant pages through wiki/index.md and read them\n    DO  answer with a link to the source page behind each claim, and say what the wiki does not cover\n    IF the user asks to keep the answer:\n        DO  save it in wiki/syntheses/\n\n@WITH wiki-paths\nPROCEDURE maintain-wiki-structure:\n    ABOUT  move or rename a page, or lint the wiki\n    DO  carry out the request as the skill says\n\n@WITHIN wiki\nEXPORT AGENT wiki-curator:\n    ABOUT    Keeps the project's wiki current, clean and ordered — route here any request on its documentation or wiki\n    MANDATE  keep wiki/ a faithful, ordered and working Obsidian record of raw/ and of the project as it is developed\n    BUDGET   moderate\n\n    VAR raw-now AS raw-state\n    VAR raw-diff AS raw-changes\n    VAR raw-pieces AS raw-breakdown\n\n    NEVER   add a claim with no page in wiki/sources/ behind it\n    ALWAYS  keep the vault working in Obsidian: [[wikilinks]] and YAML frontmatter on every page\n\n    WHEN asked whether raw/ changed, or before looking for new files in raw/:\n        RUN  check-raw\n    WHEN a new file is in raw/, or an ingest is requested:\n        RUN  ingest-raw-file\n    WHEN a change to {{project-name}} touches what the wiki describes, or a development task ends:\n        RUN  reconcile-with-development\n    WHEN asked a question about {{project-name}}:\n        RUN  answer-from-wiki\n    WHEN a page move, a rename or a wiki lint is requested:\n        RUN  maintain-wiki-structure\n",
+  "# code-reviewer — reviews a change with the quality check and a DRY review, and never edits a file\nIMPORT reviewer FROM @main.roles\nIMPORT coding-policy, import-paths, error-handling, readable-code FROM @main.policies\nIMPORT dry-review FROM @main.skills\nIMPORT run-quality-check FROM @main.procedures\nIMPORT duplication-review FROM @main.templates\n\nTEMPLATE quality-finding:\n    ABOUT  one result of the quality check, a policy breach, a tool that failed, or a check that could not run\n    SLOTS:\n        tool:      TEXT MAX_WORDS 3  \"the tool that reported it, the policy a breach breaks, or `quality check` when the check could not run\"\n        scope:     ENUM[change, outside]  \"change for a result in a file the diff touches, a failed tool or exit 2; outside for any other\"\n        rule:      TEXT MAX_WORDS 5  \"the rule id the tool gives, `breach` for a policy breach, `failed` for a failed tool, or `exit 2`\"\n        file?:     TEXT  \"the file the result is in, from the project root\"\n        line?:     NUMBER >=1  \"the line the result starts at\"\n        message:   TEXT  \"the tool's message, quoted verbatim, the policy rule a breach breaks, or what the command printed\"\n    BODY:\n        - [{tool}] ({scope}) {rule} {file}:{line} — {message}\n    EXAMPLE:\n        - [eslint] (change) unicorn/prefer-switch src/apx/engine.ts:42 — Use `switch` instead of multiple `else-if`.\n\nTEMPLATE code-review:\n    ABOUT  what the quality check found, then the duplicates of the change\n    SLOTS:\n        report:       TEXT  \"the path of the report the check printed, or none when it printed none\"\n        quality:      LIST <quality-finding>  \"one finding per result, per failed tool, and for exit 2, change first, or none\"\n        duplication:  <duplication-review>  \"the DRY review of the change\"\n    BODY:\n        quality report: {report}\n\n        quality:\n        {quality}\n\n        duplication:\n        {duplication}\n\nEXPORT AGENT code-reviewer AS reviewer:\n    ABOUT     Reviews a change with the quality check and a DRY review — route here any code or DRY review, never a fix\n    MANDATE   report every quality result and every duplicate of the change, and fix nothing\n    BUDGET    moderate\n    LENS-OUT  code-review\n\n    MUST    hold every result of the check's report as a quality finding\n    MUST    hold a tool the check reports as failed as a quality finding, never as no finding\n    MUST    hold exit 2 of the check as a quality finding: the check could not run completely\n    MUST    report every quality finding, change and outside alike — scope sorts them, never filters them\n    MUST    mark a quality finding outside only when handed a diff and its file is not one the diff touches\n\n    WHEN asked to review a change, a code scope or a diff:\n        RUN  run-quality-check\n        IF the check exits 2:\n            DO  report it as a quality finding, with what the command printed\n        DO  report each result as a quality finding: its tool, rule, file, line and message\n        DO  report each tool the report marks as failed as a quality finding\n        @WITH coding-policy, import-paths, error-handling, readable-code:\n            DO  check the change against the policies of the agent that wrote it — coding-policy, import-paths, error-handling, readable-code\n            DO  report each breach as a quality finding, with the rule and the line\n        IF it is handed a diff:\n            DO  mark a finding change when its file is one the diff touches, and outside otherwise\n        ELSE\n            DO  mark every finding change\n        @WITH dry-review:\n            DO  review the change it is handed for duplication\n",
+  "# team — feature-delivery\nIMPORT feature-diff, feature-brief FROM @main.templates\nIMPORT clarify-task FROM @main.procedures\nIMPORT brief, design, build, review-findings, fix-report, decision, tests, closing, test-rules FROM @main.vars\nIMPORT change, reuse-review, simplification-review, efficiency-review, altitude-review, cleanups FROM @main.vars\n\nEXPORT TEAM feature-delivery:\n    ABOUT  Takes a feature from functional design to tested code; also takes a lone code change or code review\n    MEMBER pm, typescript-implementer, code-reviewer\n\n    WHEN asked to develop a feature:\n        RUN develop-feature\n    WHEN asked to simplify a change, or to clean it up:\n        RUN simplify\n    WHEN asked to change TypeScript code, outside a feature:\n        DELEGATE implement the requested change BY typescript-implementer\n    WHEN asked for a code review or a DRY review of a change, a code scope or a diff:\n        DELEGATE review the requested change, code scope or diff BY code-reviewer\n\n    FLOW develop-feature:\n        STEP make the task clear:\n            RUN clarify-task\n            IF the task is still unclear:\n                DO end the flow, and report what is still unclear\n\n        STEP design the feature:\n            DELEGATE write the functional design of {{brief}} INTO design BY pm AS feature-brief\n            IF {{design}} has a status other than ready:\n                DO end the flow, and report why\n\n        STEP implement the feature:\n            DELEGATE implement {{design}} INTO build BY typescript-implementer\n\n        UNTIL the round's review lists no quality finding of scope change and no duplicate — four rounds at most:\n            STEP review and fix:\n                DELEGATE review this diff INTO review-findings BY code-reviewer AS feature-diff\n                IF {{review-findings}} lists a quality finding of scope change or a duplicate, and this is not the fourth round:\n                    DELEGATE fix each quality finding of scope change and each duplicate of {{review-findings}} INTO fix-report BY typescript-implementer\n\n        IF the fourth round ended with findings:\n            STEP ask the user how to proceed:\n                FORK ask the user how to proceed on the open findings of {{review-findings}} INTO decision\n                IF {{decision}} says stop:\n                    DO end the flow, and report the rounds run and the open findings\n\n        STEP test the feature:\n            DELEGATE test {{design}}: {{test-rules}} INTO tests BY typescript-implementer AS test-report\n\n        STEP close:\n            DO write what was built, the rounds run, each finding's end and {{tests}} INTO closing\n            DO report {{closing}} to the user\n\n    FLOW simplify:\n        STEP take the change:\n            DO take the diff the request names, else `git diff HEAD` with the untracked files INTO change\n\n        STEP review it from four angles:\n            DELEGATE~ review {{change}} for reuse — name the existing helper each new piece of code should call INTO reuse-review BY code-reviewer\n            DELEGATE~ review {{change}} for simplification — redundant state, near copies, deep nesting, dead code: name a simpler form INTO simplification-review BY code-reviewer\n            DELEGATE~ review {{change}} for efficiency — repeated work or I/O, blocking work on a hot path: name the cheaper way INTO efficiency-review BY code-reviewer\n            DELEGATE~ review {{change}} for altitude — a symptom patched where the code beneath should change: name the deeper change INTO altitude-review BY code-reviewer\n            WAIT reuse-review, simplification-review, efficiency-review, altitude-review\n\n        STEP apply the cleanups:\n            DELEGATE apply the findings of {{reuse-review}}, {{simplification-review}}, {{efficiency-review}} and {{altitude-review}} INTO cleanups BY typescript-implementer:\n                DO  merge them into one list, keeping one finding per line or mechanism\n                DO  apply each finding of that list\n                IF a finding would change intended behaviour, need changes well outside {{change}}, or is a false positive:\n                    DO  skip it, and note why\n\n        STEP close:\n            DO report each finding fixed and each one skipped, with its reason, from {{cleanups}}\n",
+  "# pm — writes the functional design of one feature, and stops one not worth building\nIMPORT designer FROM @main.roles\nIMPORT functional-design FROM @main.templates\n\nEXPORT AGENT pm AS designer:\n    ABOUT     Writes the functional design of one feature, or stops one not worth building\n    MANDATE   hand on one feature's functional design, or say why it should not be built\n    BUDGET    moderate\n    LENS-OUT  functional-design\n\n    ALWAYS  default skeptical: the proposer's enthusiasm is no evidence\n    NEVER   ask the user anything: record each open point under open decisions, with its default\n    NEVER   write code or a technical design\n    NEVER   advance a non-problem: stop with rejected, or with reshape and the leaner shape\n\n    WHEN asked to design a feature:\n        DO  check the request is one atomic feature\n        IF it holds more than one:\n            DO  stop with reshape, and name the split features in the reason\n        DO  compare it with what the project already has, and name anything it duplicates\n        DO  name any surplus mechanism, and the leaner alternative\n        DO  record what the design still needs under open decisions, each with the default proposed\n        DO  write what it does, for whom, its acceptance criteria, its limits and its open decisions\n",
+  "# typescript-implementer — implements agent-pack's TypeScript code\nIMPORT implementer FROM @main.roles\nIMPORT coding-policy, import-paths, error-handling, readable-code FROM @main.policies\nIMPORT run-project-checks, validate-dependency FROM @main.procedures\nIMPORT common FROM @main.domains\nIMPORT group-membership FROM @main.templates\n\nDOMAIN typescript-code:\n    ABOUT   the project's TypeScript code, its tests and scripts, and its TypeScript config\n    WRITES  IN index.ts, src/**, adapters/**, reporters/**, scripts/**, test/**, tsconfig.json\n\n@WITHIN typescript-code, common\nEXPORT AGENT typescript-implementer AS implementer:\n    ABOUT    Implements agent-pack's TypeScript code — the compiler, the apx engine, the CLI and the adapters\n    MANDATE  deliver the change that was asked for, within the design\n    BUDGET   costly\n\n    WHEN a change adds an external dependency:\n        RUN  validate-dependency\n    WHEN about to hand back a build or a fix:\n        RUN  run-project-checks\n"
+ ]
+}

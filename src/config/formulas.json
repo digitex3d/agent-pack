@@ -468,6 +468,22 @@
       "chatUnknownKey": "chat: unknown key {keys} — it takes `boss`",
       "chatBoss": "chat.boss must name the harness the chat talks to, e.g. { boss: 'claude-code' }"
     },
+    "affinity": {
+      "notEntryList": "buildIndex: the entries are not an array",
+      "notEntry": "buildIndex: entry {position} is not an object with a string key and an array of string texts",
+      "duplicateKey": "buildIndex: the key \"{key}\" is given by more than one entry",
+      "badWeight": "buildIndex: the weight of the key \"{key}\" is not a finite number above zero",
+      "notLexicon": "buildIndex: the lexicon is not an object",
+      "notLexiconItems": "buildIndex: the lexicon of the key \"{key}\" is not an array of strings",
+      "orphanLexiconKey": "buildIndex: the lexicon key \"{key}\" has no entry",
+      "notBackground": "buildIndex: the background is not an array of strings",
+      "notObject": "openIndex: the index is not an object",
+      "missingVersion": "openIndex: the index carries no version",
+      "unknownVersion": "openIndex: the index version {version} is unknown — this module reads version {supported}",
+      "badKeys": "openIndex: the index keys are not an array of distinct strings",
+      "badWeights": "openIndex: the index weights are not one finite number above zero per key",
+      "badUnit": "openIndex: the index unit {position} is not shaped as one — stems, keys and weight"
+    },
     "chat": {
       "notSet": "chat.boss is not set — name the harness the chat talks to in agent-pack.config.mjs: chat: { boss: '<harness>' }, or run agent-pack chat on a terminal to pick one",
       "setup": {

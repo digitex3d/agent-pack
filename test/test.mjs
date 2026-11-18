@@ -355,4 +355,7 @@ await import('./executable.test.mjs');
 // the engine's own tables as stores, through the one store API
 await import('./engineStores.test.mjs');
 
+// the affinity engine: free text matched against keys through a prebuilt word table
+await import('./affinity.test.mjs');
+
 console.log('All tests passed.');

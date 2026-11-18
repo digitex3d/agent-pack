@@ -15,6 +15,7 @@ import type { AdapterPlugin } from '../../adapters/types.js';
 import { RUNTIME_DIR } from '../apx/paths.js';
 import { onPath } from '../harnesses.js';
 import { FORMULAS, fill } from '../formulas.js';
+import { isRecord } from '../guards.js';
 
 /**
  * The chat's first setup: when the config names no `chat.boss`, the harnesses
@@ -88,9 +89,6 @@ export function discoverBosses(path = process.env.PATH ?? ''): BossCandidate[] {
     return [];
   });
 }
-
-/** Whether a JSON value is an object of named values — no array, no null. */
-const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
 
 /**
  * The config's adapter that writes the agent files of the known harness kept
