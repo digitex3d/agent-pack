@@ -8,8 +8,6 @@
 import type { ApDocument } from '../apdoc/document.js';
 import type { ApBlock } from '../apdoc/block.js';
 import type { ApRef } from '../apdoc/types.js';
-import { scopeLabel } from '../withUse.js';
-import { SCOPED_KINDS } from '../services/tags.js';
 import { refName } from '../../adapters/md/phrases.js';
 
 /** The flag of `ls` that prints the listing as JSON. */
@@ -56,19 +54,13 @@ export function uniqueRefs(data: unknown): ApRef[] {
 }
 
 /** One block as a listing entry. */
-export function entryOf(doc: ApDocument, block: ApBlock, holder: string): ListingEntry {
+function entryOf(doc: ApDocument, block: ApBlock, holder: string): ListingEntry {
   // A block another document holds (a fellow agent) is named by the reference itself.
   const uses = uniqueRefs(block.toJSON()).map(ref => doc.resolve(ref)?.name ?? refName(ref));
   return {
     kind: block.kind, id: block.id, name: block.name, about: block.about ?? '', tags: block.tags,
-    scope: SCOPED_KINDS.includes(block.kind) ? scopeLabel(block.scopes) : null, uses, holder,
+    scope: block.perimeter, uses, holder,
   };
-}
-
-/** An entry as one line of `ls`: its id, name, tags, scope and about. */
-export function lsLine(entry: ListingEntry): string {
-  const tags = entry.tags.length > 0 ? `  ${entry.tags.map(tag => `#${tag}`).join(' ')}` : '';
-  return `${entry.id}  ${entry.name}${tags}${entry.scope !== null ? `  [${entry.scope}]` : ''}${entry.about ? `  — ${entry.about}` : ''}`;
 }
 
 /** Every block of the documents given — the same block held by several, once: by the first that holds it. */

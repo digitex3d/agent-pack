@@ -16,6 +16,8 @@ import type { ApDocument } from './document.js';
 import { stableId, blockContentHash } from './ids.js';
 import { measure } from './measure.js';
 import { renderNodes, shapeLine, type MdEnv } from '../../adapters/md/toolkit.js';
+import { scopeLabel } from '../withUse.js';
+import { SCOPED_KINDS } from '../services/tags.js';
 
 /** The universal (identity + catalog) fields a block is born with. */
 export interface ApBlockInit {
@@ -81,6 +83,57 @@ export abstract class ApBlock {
   /** The address the document (and every Ref) knows this block by. */
   get address(): string {
     return `${this.namespace}/${this.name}`;
+  }
+
+  /** `kind name` — how the block is named wherever it is cited. */
+  get title(): string {
+    return `${this.kind} ${this.name}`;
+  }
+
+  /** The apx verb that opens the block — `get`; a kind run step by step answers its own. */
+  get opener(): string {
+    return 'get';
+  }
+
+  /** `command opener id` — the command that opens it; the command is the apx's own. */
+  opening(command: string): string {
+    return `${command} ${this.opener} ${this.id}`;
+  }
+
+  /** `kind name  [command opener id]` — the title with the command that opens it. */
+  cited(command: string): string {
+    return `${this.title}  [${this.opening(command)}]`;
+  }
+
+  /** Its line in the agent's scope view — its citation; a kind that says more there overrides. */
+  inScope(command: string): string {
+    return this.cited(command);
+  }
+
+  /** A line followed by `— about` after the gap, when the block has an ABOUT — else the line as it is. */
+  described(line: string, gap = '  '): string {
+    return this.about ? `${line}${gap}— ${this.about}` : line;
+  }
+
+  /** `# kind name — about` — the heading of its views. */
+  get heading(): string {
+    return this.described(`# ${this.title}`, ' ');
+  }
+
+  /** `  #a #b` — its tags as its lines end with them; empty when it has none. */
+  get tagged(): string {
+    return this.tags.length > 0 ? `  ${this.tags.map(tag => `#${tag}`).join(' ')}` : '';
+  }
+
+  /** Where it holds, as a catalog shows it — a policy, a skill or a dimension (src/withUse.ts); null for any other kind. */
+  get perimeter(): string | null {
+    return SCOPED_KINDS.includes(this.kind) ? scopeLabel(this.scopes) : null;
+  }
+
+  /** `id  name  #tag  [perimeter]  — about` — its line in a catalog; the tags and the perimeter when it has them. */
+  listed(): string {
+    const perimeter = this.perimeter;
+    return this.described(`${this.id}  ${this.name}${this.tagged}${perimeter !== null ? `  [${perimeter}]` : ''}`);
   }
 
   /** Kind-specific args, in each kind's canonical order. Base: none. */

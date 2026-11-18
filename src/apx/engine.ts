@@ -19,7 +19,7 @@ import { spawnSync, type SpawnSyncOptionsWithStringEncoding } from 'node:child_p
 import type { ApDocument } from '../apdoc/document.js';
 import type { ApBlock } from '../apdoc/block.js';
 import type { ApRef, ApNode, ApWhenNode, ApRunNode, ApDirectiveNode } from '../apdoc/types.js';
-import { KIND_STRATEGIES, type AgentBlock, type TeamBlock, type MainBlock, type VarBlock, type DimensionBlock } from '../apdoc/blocks.js';
+import { KIND_STRATEGIES, type AgentBlock, type TeamBlock, type MainBlock, type VarBlock } from '../apdoc/blocks.js';
 import { mdEnv, renderPreamble, renderEntry, renderMd } from '../../adapters/md/index.js';
 import { renderNodes, type MdEnv } from '../../adapters/md/toolkit.js';
 import { FORMULAS, fill, type QuizQuestion } from '../formulas.js';
@@ -35,7 +35,7 @@ import { CREDIT } from '../credits.js';
 import { validateRecord, formatIssues, jsonExample } from '../shapeSchema.js';
 import { BLOCK_ID_RE, addressName, sha256Hex } from '../apdoc/ids.js';
 import { announceIdentity } from '../../adapters/acp/events.js';
-import { JSON_FLAG, entryOf, listingOf, lsLine, uniqueRefs } from './listing.js';
+import { JSON_FLAG, listingOf, uniqueRefs } from './listing.js';
 import type { DriverEntry } from '../storeDrivers/registry.js';
 import { installRecorded } from './stores.js';
 import { constantOf, readsOf } from '../vars.js';
@@ -286,7 +286,7 @@ export class ApxEngine {
   }
 
   private start(args: string[]): number {
-    this.out(this.headLine(this.root));
+    this.out(this.root.heading);
     const whole = renderMd(this.doc);
     if (whole.length <= this.budget.whole) {
       this.say(WORDS.start.whole);
@@ -371,33 +371,33 @@ export class ApxEngine {
 
   private scope(): number {
     const root = this.root;
-    this.out(this.headLine(root));
+    this.out(root.heading);
     this.out(`you:  ${this.label(root)}  — your definition, complete`);
     if (this.agent?.mandate) this.out(`mandate: ${this.agent.mandate}`);
     this.scopePerimeter();
     const roles = (this.agent?.roles ?? []).map(reference => this.doc.resolve(reference)).filter((block): block is ApBlock => block !== null);
-    for (const role of roles) this.out(`role: ${this.label(role)}`);
+    for (const role of roles) this.out(`role: ${role.inScope(this.cmd)}`);
     // Its team, by reference: the team's block — its members, its routing — is the team's own document's.
     if (this.agent?.team) this.out(`team: ${this.refLabel(this.agent.team)}`);
     const policies = this.doc.byKind('policy');
     if (policies.length > 0) {
       this.out('respect:');
-      for (const policy of policies) this.out(`  ${this.label(policy)}${policy.about ? `  — ${policy.about}` : ''}`);
+      for (const policy of policies) this.out(`  ${policy.inScope(this.cmd)}`);
     }
     this.scopeBehaviour([root, ...roles]);
     this.out('write to:');
     const stores = this.doc.agentStores();
     if (stores.length === 0) this.say(WORDS.scope.noStores);
-    for (const store of stores) this.out(`  ${this.label(store)}  — use: ${this.cmd} store <op> ${store.id} …`);
-    const dimensions = this.doc.byKind('dimension') as DimensionBlock[];
+    for (const store of stores) this.out(`  ${store.inScope(this.cmd)}`);
+    const dimensions = this.doc.byKind('dimension');
     if (dimensions.length > 0) {
       this.say(WORDS.scope.dimensions);
-      for (const dimension of dimensions) this.out(`  ${this.label(dimension)}  — files: ${dimension.globs.join(', ')}`);
+      for (const dimension of dimensions) this.out(`  ${dimension.inScope(this.cmd)}`);
     }
     const variables = this.doc.byKind('var');
     if (variables.length > 0) {
       this.out(`variables:  — read: ${this.cmd} get <name>, store: ${this.cmd} set <name> -`);
-      for (const variable of variables) this.out(`  ${variable.name}  — ${variable.about}`);
+      for (const variable of variables) this.out(`  ${variable.inScope(this.cmd)}`);
     }
     this.scopeJudgedAndDelegated();
     if (root.lensIn) this.say(WORDS.scope.requests, { shape: this.refLabel(root.lensIn.ref) });
@@ -425,7 +425,7 @@ export class ApxEngine {
     const own = blocks.flatMap(block => block.toJSON().body as ApNode[]);
     const whens = own.filter((node): node is ApWhenNode => node.type === NODE.when);
     if (whens.length > 0) {
-      this.out(`when:  — the steps: ${this.cmd} get ${this.root.id}`);
+      this.out(`when:  — the steps: ${this.root.opening(this.cmd)}`);
       for (const when of whens) {
         const runs = when.body.filter((child): child is ApRunNode => child.type === NODE.run).map(run => this.refLabel(run.ref));
         this.out(`  WHEN ${when.condition}${runs.length ? `  -> ${runs.join(', ')}` : ''}${when.shape ? `  — as ${this.refLabel(when.shape.ref)}` : ''}`);
@@ -471,7 +471,7 @@ export class ApxEngine {
     if (json) return this.print(JSON.stringify(listingOf([{ doc: this.doc, holder: this.inUnit ?? '' }], null)));
     for (const [kind, blocks] of this.groups(hits)) {
       this.out(`${kind} (${blocks.length})`);
-      if (!count) for (const block of blocks) this.out(`  ${lsLine(entryOf(this.doc, block, ''))}`);
+      if (!count) for (const block of blocks) this.out(`  ${block.listed()}`);
     }
     this.out(`# ${countOf(hits.length, 'block', 'blocks')}${hits.length === 0 && terms.length > 0 ? ' match' : ''}`);
     return 0;
@@ -487,8 +487,7 @@ export class ApxEngine {
     if (!block) return this.lastCode;
     if (args[1] === ARGUMENT.json) return this.print(JSON.stringify(block.toJSON(), null, 1));
     this.print(this.text(block));
-    const tags = block.tags.length > 0 ? `  ${block.tags.map(tag => `#${tag}`).join(' ')}` : '';
-    this.out(`# ${block.kind} ${block.name}  ${block.id}  ${block.chars}ch${tags}`);
+    this.out(`# ${block.title}  ${block.id}  ${block.chars}ch${block.tagged}`);
     this.links(block);
     return 0;
   }
@@ -508,7 +507,7 @@ export class ApxEngine {
       const lines = this.text(block).split('\n').filter(line => line.toLowerCase().includes(needle));
       if (lines.length === 0) continue;
       matched++;
-      this.out(lsLine(entryOf(this.doc, block, '')));
+      this.out(block.listed());
       for (const line of lines) this.out(`  > ${line.trim()}`);
     }
     this.out(`# ${countOf(matched, 'block', 'blocks')}${matched === 0 ? ' match' : ''}`);
@@ -733,7 +732,7 @@ export class ApxEngine {
     const writer = this.doc.byKind('procedure').find(block => block.name === WRITE_PROGRAM);
     return this.fail(10, [
       `no program yet for ${id} — write it now, in ${programDir(program)}/ at the project root (beside .agent-pack/): manifest.json, the script, tests.json`,
-      writer ? `how: ${this.cmd} get ${writer.id}` : `its contract: ${this.cmd} get ${id}`,
+      writer ? `how: ${writer.opening(this.cmd)}` : `its contract: ${this.cmd} get ${id}`,
       `manifest.json: {"version": 1, "timeout_ms": <n>${spec.lineage ? `, "lineage": "${spec.lineage}"` : ''}} — the script: script.<ext>, executable, JSON in on stdin, JSON out on stdout, exit 1 with the reason on stderr to refuse`,
       `tests.json: [{"why": "…", "input": {…}, "output": <the JSON it must answer>}, {"why": "…", "input": {…}, "exit": 1}] — a "why" starting with CHOICE: for each decision the block left open`,
       ...(previous ? [`its previous version is ${programDir(previous)}/ — start from it: version + 1, "previous": "${previous}", then delete that folder`] : []),
@@ -918,11 +917,11 @@ export class ApxEngine {
   private teamView(team: TeamBlock | MainBlock): string {
     const section = (title: string, rows: string[]): string[] => (rows.length > 0 ? [`${title}:`, ...rows.map(row => `  ${row}`)] : []);
     const memberRow = (memberRef: ApRef): string => {
-      const member = this.doc.reach(memberRef);
-      return `${this.refLabel(memberRef)}${member?.about ? `  — ${member.about}` : ''}`;
+      const label = this.refLabel(memberRef);
+      return this.doc.reach(memberRef)?.described(label) ?? label;
     };
     return `${[
-      this.headLine(team),
+      team.heading,
       ...section('members', team.members.map(memberRow)),
       ...section('teams', team.kind === KIND.main ? team.teams.map(teamRef => this.refLabel(teamRef)) : []),
       ...section('routing', renderNodes(this.env, team.body)),
@@ -949,7 +948,7 @@ export class ApxEngine {
 
   /** `kind name  [command]` — how a block reads in the engine's views. */
   private label(block: ApBlock): string {
-    return `${block.kind} ${block.name}  [${this.cmd} ${block.kind === KIND.flow ? 'flow' : 'get'} ${block.id}]`;
+    return block.cited(this.cmd);
   }
 
   /** A reference as a label: here → its block; a fellow agent → its own executable; a team → its apx, whose start prints its routing and flows. */
@@ -966,10 +965,6 @@ export class ApxEngine {
   private sibling(name: string): string {
     if (this.inUnit !== null) return `${runCommand(this.exe)} ${name}`;
     return runCommand(join(dirname(this.exe), isApx(this.exe) ? `${name}.apx` : name));
-  }
-
-  private headLine(block: ApBlock): string {
-    return `# ${block.kind} ${block.name}${block.about ? ` — ${block.about}` : ''}`;
   }
 
   /** Blocks grouped by kind, in reading order. */
@@ -1075,7 +1070,7 @@ export class ApxEngine {
     let stored: string | null;
     try { stored = variables.read(name, block.scope); } catch (error) { return this.fail(2, `reading ${name}: ${reasonOf(error)}`); }
     this.print(this.text(block));
-    this.out(`# var ${name}  ${block.id}`);
+    this.out(`# ${block.title}  ${block.id}`);
     this.links(block);
     this.out('read by:');
     const readers = this.doc.all().filter(candidate => readsOf(JSON.stringify(candidate.body)).some(read => read.name === name && !read.field));

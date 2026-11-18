@@ -92,6 +92,9 @@ function restore<T extends ApBlock>(block: T, data: ApBlockData): T {
   return block;
 }
 
+/** A class of rule block — RuleBlock or a kind of it that answers for itself: what the factories build. */
+type RuleClass = new (kind: string, init: ApBlockInit) => RuleBlock;
+
 /** policy | procedure | flow | skill — rule-bearing body, optional output shape. */
 export class RuleBlock extends ApBlock {
   /** The id prefixes of the four kinds this class covers. */
@@ -107,15 +110,14 @@ export class RuleBlock extends ApBlock {
     this.idPrefix = RuleBlock.PREFIXES[kind] ?? kind.slice(0, 3);
   }
 
-  /** A rule block from a raw body: construct, walk, capture the trailing AS. */
-  static fromBody(kind: string, init: ApBlockInit, body: string, cx: BlockCx): RuleBlock {
-    const block = new RuleBlock(kind, init);
+  /** A rule block from a raw body: the block given, walked, its trailing AS captured. */
+  static fromBody(block: RuleBlock, body: string, cx: BlockCx): RuleBlock {
     cx.walk(body, block.body, block);
     return block;
   }
 
-  static fromDefinition(def: Definition, cx: BlockCx): RuleBlock {
-    const block = new RuleBlock(def.kind, cx.defInit(def));
+  static fromDefinition(def: Definition, cx: BlockCx, Class: RuleClass = RuleBlock): RuleBlock {
+    const block = new Class(def.kind, cx.defInit(def));
     // The head's mark — carried by the definition, or on the header line a legacy
     // module keeps in its body — is known before the walk: the conditions read it.
     const executor = def.executor ?? headerExecutorOf(def.body, def.name);
@@ -124,8 +126,8 @@ export class RuleBlock extends ApBlock {
     return block;
   }
 
-  static fromData(data: ApBlockData): RuleBlock {
-    const block = restore(new RuleBlock(data.kind, initOf(data)), data);
+  static fromData(data: ApBlockData, Class: RuleClass = RuleBlock): RuleBlock {
+    const block = restore(new Class(data.kind, initOf(data)), data);
     block.shape = (data.args.shape as ApShape | undefined) ?? null;
     block.lensIn = (data.args.lensIn as ApShape | undefined) ?? null;
     block.executor = (data.args.executor as number | undefined) ?? null;
@@ -186,6 +188,22 @@ export class RuleBlock extends ApBlock {
     if (this.lensIn) body = `${fill(FORMULAS.keywords['LENS-IN'].input, { name: refName(this.lensIn.ref), ref: env.refOf(this.lensIn.ref.target) })}\n${body}`;
     if (this.executor) body = `${fill(FORMULAS.keywords.EXECUTOR.procedure[executorKey(this.executor)], { how: executorHow(env, this.exe, this.executor) })}\n${body}`;
     return body;
+  }
+}
+
+/** A flow — a rule block the apx runs step by step. */
+export class FlowBlock extends RuleBlock {
+  /** `flow` — the verb that runs it. */
+  override get opener(): string {
+    return 'flow';
+  }
+}
+
+/** A policy — a rule block whose line in the scope view carries its ABOUT. */
+class PolicyBlock extends RuleBlock {
+  /** Its citation, then its ABOUT. */
+  override inScope(command: string): string {
+    return this.described(this.cited(command));
   }
 }
 
@@ -278,6 +296,11 @@ export class StoreBlock extends ApBlock {
       ...(this.shape ? { shape: this.shape } : {}),
       slots: this.slots,
     };
+  }
+
+  /** Its citation, then the command that writes to it. */
+  override inScope(command: string): string {
+    return `${this.cited(command)}  — use: ${command} store <op> ${this.id} …`;
   }
 
   /** The store as a driver is handed it, for the agent it belongs to. */
@@ -396,6 +419,11 @@ export class DimensionBlock extends ApBlock {
       ...(this.store ? { store: this.store } : {}),
       ...(this.eachRef ? { eachRef: this.eachRef } : { each: this.each }),
     };
+  }
+
+  /** Its citation, then the files it covers. */
+  override inScope(command: string): string {
+    return `${this.cited(command)}  — files: ${this.globs.join(', ')}`;
   }
 
   /** Where it applies (src/withUse.ts), what it covers and its store, how to read, write and search it, then its rules. */
@@ -729,6 +757,11 @@ export class VarBlock extends ApBlock {
     return { scope: this.scope, ...(this.type ? { type: this.type } : {}), declared: this.declared };
   }
 
+  /** Its name and what it holds — read by name, never opened by a command. */
+  override inScope(_command: string): string {
+    return this.described(this.name);
+  }
+
   /** How to read and store it, through the apx. */
   override asMdBody(env: MdEnv): string {
     const apx = env.apxOf(null);
@@ -1019,8 +1052,8 @@ export const KIND_STRATEGIES: KindStrategy[] = [
   // Chapter kinds, in the md chapter order (mirror of definition.ts STRATEGIES:
   // policy → role → template → procedure → flow → goal) — the layout pass
   // iterates this list to number chapters.
-  { kind: 'policy', revive: RuleBlock.fromData, folder: 'policies', chapterTitle: FORMULAS.blocks.policy.chapter, prefix: RuleBlock.PREFIXES.policy,    ref: null,
-    entries: ctx => ctx.policies,   from: RuleBlock.fromDefinition },
+  { kind: 'policy', revive: data => RuleBlock.fromData(data, PolicyBlock), folder: 'policies', chapterTitle: FORMULAS.blocks.policy.chapter, prefix: RuleBlock.PREFIXES.policy,    ref: null,
+    entries: ctx => ctx.policies,   from: (def, cx) => RuleBlock.fromDefinition(def, cx, PolicyBlock) },
   { kind: 'role', revive: RoleBlock.fromData, folder: 'roles', chapterTitle: FORMULAS.blocks.role.chapter, prefix: RoleBlock.PREFIX,                ref: null,
     entries: (ctx, opts) => [...opts.boundRoles, ...ctx.roles],
     from: RoleBlock.fromDefinition },
@@ -1028,8 +1061,8 @@ export const KIND_STRATEGIES: KindStrategy[] = [
     entries: ctx => ctx.templates,  from: TemplateBlock.fromDefinition },
   { kind: 'procedure', revive: RuleBlock.fromData, folder: 'procedures', chapterTitle: FORMULAS.blocks.procedure.chapter, prefix: RuleBlock.PREFIXES.procedure, ref: 'runnables',
     entries: ctx => ctx.procedures, from: RuleBlock.fromDefinition },
-  { kind: 'flow', revive: RuleBlock.fromData, folder: 'flows', chapterTitle: FORMULAS.blocks.flow.chapter, prefix: RuleBlock.PREFIXES.flow,      ref: 'runnables',
-    entries: ctx => ctx.flows,      from: RuleBlock.fromDefinition },
+  { kind: 'flow', revive: data => RuleBlock.fromData(data, FlowBlock), folder: 'flows', chapterTitle: FORMULAS.blocks.flow.chapter, prefix: RuleBlock.PREFIXES.flow,      ref: 'runnables',
+    entries: ctx => ctx.flows,      from: (def, cx) => RuleBlock.fromDefinition(def, cx, FlowBlock) },
   { kind: 'skill', revive: RuleBlock.fromData, folder: 'skills', chapterTitle: FORMULAS.blocks.skill.chapter, prefix: RuleBlock.PREFIXES.skill, ref: null,
     entries: ctx => ctx.skills,     from: RuleBlock.fromDefinition },
   { kind: 'store', revive: StoreBlock.fromData, folder: 'stores', chapterTitle: FORMULAS.blocks.store.chapter, prefix: StoreBlock.PREFIX,               ref: 'stores',

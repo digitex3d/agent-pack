@@ -76,7 +76,7 @@ function stripColon(text: string): string {
 }
 import type { ApBlock, ApBlockInit } from './block.js';
 import {
-  type BlockCx, RuleBlock, TeamBlock, MainBlock, AgentBlock, VarBlock,type TeamScan, KIND_STRATEGIES, strategyOf, kindOfFolder, refId, namespaceOf, type RefClass,
+  type BlockCx, RuleBlock, FlowBlock, TeamBlock, MainBlock, AgentBlock, VarBlock,type TeamScan, KIND_STRATEGIES, strategyOf, kindOfFolder, refId, namespaceOf, type RefClass,
 } from './blocks.js';
 import { ApDocument, type BlockProvenance } from './document.js';
 import { COMPUTE_SECTIONS, executorMark, executorSpecs, returnShape } from '../executor.js';
@@ -685,7 +685,7 @@ export class DocumentBuilder implements BlockCx {
   private variable(token: Token & { kind: 'keyword' }, children: WalkNode[], sink: ApNode[], host: ApBlock | null, steps: ApStepNode[]): void {
     const decl = parseVarLine(token.keyword as string, token.rest);
     if (!decl || 'error' in decl || decl.form === 'constant') return;
-    const where = host ? `${host.kind} ${host.name}` : basename(this.sourcePath);
+    const where = host ? host.title : basename(this.sourcePath);
     this.varSites.push({ name: decl.name, scope: decl.scope, type: decl.type, block: decl.block, where, path: this.sourcePath, line: this.fileLine(token), inBody: true });
     if (!decl.block) return;
     const node = this.at(new VarNode(VarBlock.ref(decl.name), token.indent), token);
@@ -956,7 +956,7 @@ export class DocumentBuilder implements BlockCx {
     return [
       ...team.flows.map(flow => {
         const span = flow.block ? sources.nestedSpan(path, team.file.block, flow.block) : null;
-        return this.fromSource(span, () => RuleBlock.fromBody('flow', { name: flow.name, namespace: flowsNs }, flow.body, this), [...around, ...(span?.decorators ?? [])]);
+        return this.fromSource(span, () => RuleBlock.fromBody(new FlowBlock('flow', { name: flow.name, namespace: flowsNs }), flow.body, this), [...around, ...(span?.decorators ?? [])]);
       }),
       // The unit is its block: EXPORT TEAM, or MAIN.
       this.fromSource(sources.blockSpan(path, team.file.block), () => (team.kind === 'main' ? MainBlock.fromScan(team, this) : TeamBlock.fromScan(team, this)), []),

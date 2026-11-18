@@ -37,7 +37,7 @@ async function serve(host: ApxOutput & ApxContext & ApxSession, spec: PluginSpec
   const blocks = host.doc.byKind(spec.name) as PluginBlock[];
   const operations = spec.operations.map(operationSpec => operationSpec.op).join('|');
   if (!op) {
-    for (const pluginBlock of blocks) host.out(`${pluginBlock.id}  ${pluginBlock.name}${pluginBlock.about ? `  — ${pluginBlock.about}` : ''}`);
+    for (const pluginBlock of blocks) host.out(pluginBlock.listed());
     return 0;
   }
   const operation = spec.operations.find(candidate => candidate.op === op);
