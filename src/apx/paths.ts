@@ -77,5 +77,15 @@ export const STATE_DIR = '.agent-pack/state';
  */
 export const CACHE_DIR = '.agent-pack/cache';
 
+/**
+ * The call log — build output's sibling, outside git: one JSON line per call
+ * of an apx, appended by its file channel (apx/callLog.ts). Nothing reads it
+ * to decide anything.
+ */
+export const LOG_DIR = `${RUNTIME_DIR}/log`;
+
+/** The file the call log's file channel appends to. */
+export const CALL_LOG_FILE = `${LOG_DIR}/calls.jsonl`;
+
 /** The distilled scripts — written by agents, versioned with the sources. */
 export const DISTILLED_DIR = 'distilled';

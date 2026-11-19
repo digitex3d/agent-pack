@@ -30,7 +30,7 @@
 import { spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, appendFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { RUNTIME_DIR, WORK_DIR } from '../../src/apx/paths.js';
+import { LOG_DIR, RUNTIME_DIR, WORK_DIR } from '../../src/apx/paths.js';
 import { globRegExp, matchesAnyGlob } from '../../src/services/glob.js';
 import type { Allowed, Delivery, LandResult, MergeResult, Perimeter, Prefer, WorkspaceEngine, WorkspaceSession } from '../../src/workspace/types.js';
 
@@ -359,6 +359,8 @@ class GitSession implements WorkspaceSession {
     const links: string[] = [];
     const runtime = join(this.root, RUNTIME_DIR);
     if (existsSync(runtime)) {
+      // The call log is linked even before its first line: a call made from the copy is logged in the project's own.
+      mkdirSync(join(this.root, LOG_DIR), { recursive: true });
       mkdirSync(join(dir, RUNTIME_DIR), { recursive: true });
       for (const name of readdirSync(runtime)) {
         const rel = `${RUNTIME_DIR}/${name}`;

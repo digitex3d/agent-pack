@@ -358,4 +358,7 @@ await import('./engineStores.test.mjs');
 // the affinity engine: free text matched against keys through a prebuilt word table
 await import('./affinity.test.mjs');
 
+// the call envelope: the call template as the introduction to calling an apx, asked in the quiz; every call logged, its verb alone
+await import('./callEnvelope.test.mjs');
+
 console.log('All tests passed.');

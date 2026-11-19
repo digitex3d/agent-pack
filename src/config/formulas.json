@@ -274,6 +274,22 @@
       "missed": "# missed: {kinds} — read how each works, then your scope:",
       "opened": "\n# opened for you — the rest, when a step needs it: {cmd} get <id>"
     },
+    "call": {
+      "intro": "# how to call this apx — end any call with --call '<json>', last on the line, its JSON shaped as the `call` template — {cmd} start introduces it to whoever misses its quiz question",
+      "notJson": "not JSON ({error})",
+      "missing": "the built-in template `{name}` did not compile — check {file}",
+      "quiz": [
+        {
+          "ask": "How do you end each call you make to this apx?",
+          "options": [
+            "with nothing: the command alone says enough",
+            "with --call '<json>', last on the line, its JSON shaped as the `call` template",
+            "with a --why \"<reason>\" anywhere on the line"
+          ],
+          "right": "b"
+        }
+      ]
+    },
     "dispatch": {
       "renamed": "'{verb}' is now 'delegate' — {cmd} delegate {args}",
       "unknownVerb": "unknown verb '{verb}' — the verbs: {cmd} help"

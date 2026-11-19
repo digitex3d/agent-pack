@@ -229,14 +229,20 @@ export interface LibraryDef {
  * inside the package). The reserved aliases are set last so they can never be
  * shadowed by a declared library of the same alias.
  */
+export const BUILTIN_ALIAS = '@builtin';
+
+/** The reserved alias of the library shipped inside the package, with its path. */
+function builtinAliasMap(): Record<string, string> {
+  return { [BUILTIN_ALIAS]: BUILTIN_LIBRARY_ROOT };
+}
+
 export function librariesAliasMap(config: Config): Record<string, string> {
   const map: Record<string, string> = { '@main': config.libraryRoot };
   for (const lib of config.sharedLibraries ?? []) {
     map[normalizeAlias(lib.alias)] = lib.path;
   }
   if (config.userRoot) map['@user'] = config.userRoot;
-  map['@builtin'] = BUILTIN_LIBRARY_ROOT;
-  return map;
+  return { ...map, ...builtinAliasMap() };
 }
 
 export interface Config {

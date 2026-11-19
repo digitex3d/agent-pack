@@ -94,6 +94,8 @@ export interface Formulas {
       done: { delivered: Text; nothing: Text; leftOutLine: Text; leftOut: Text; answer: Text };
     };
     start: { whole: Text; quiz: Text; unsure: Text; badAnswer: Text; allCorrect: Text; missed: Text; opened: Text };
+    /** The envelope a call may end with — the line that frames its introduction, why one is no JSON, a built-in template that did not compile (src/apx/call.ts, src/compiler/index.ts). */
+    call: { intro: Text; notJson: Text; missing: Text; quiz: QuizQuestion[] };
     dispatch: { renamed: Text; unknownVerb: Text };
     scope: { perimeter: Text; writesNothing: Text; readsOnly: Text; readsAnything: Text; uncertain: Text; uncertainEntry: Text; noStores: Text; dimensions: Text; checks: Text; executors: Text; requests: Text; answer: Text };
     ls: { badFilter: Text };

@@ -20,7 +20,8 @@ import { isMainFile, readMainFile } from '../services/mainMetadata.js';
 import { apxCommand } from '../apx/paths.js';
 import { harnessesOf, harnessProblem, agentModels, modelProblem, type HarnessRow } from '../harnesses.js';
 import { delegateTargetErrors, delegationSiteErrors, executorErrors, usesPrograms, WRITE_PROGRAM, type AgentIndexEntry } from '../executor.js';
-import { BUILTIN_AGENTS_DIR, resolveDelegateConfig, type DelegateConfig } from '../config.js';
+import { BUILTIN_AGENTS_DIR, BUILTIN_ALIAS, resolveDelegateConfig, type DelegateConfig } from '../config.js';
+import { CALL_TEMPLATE } from '../apx/call.js';
 import { type LintError, checkVocabulary, lineOfName, checkedHeadIssues, dimensionBlockErrors, domainBlockErrors, pluginBlockErrors, teamFileErrors, mainBlockErrors } from '../lint.js';
 import { CompileError, reporter } from '../report.js';
 import { extractInlineDefinitions } from '../dispatch/inlineBlocks.js';
@@ -33,7 +34,7 @@ import { resolveShapeRefs } from '../shapeCompiler.js';
 import type { AdapterPlugin } from '../../adapters/types.js';
 import { renderMd } from '../../adapters/md/index.js';
 import { emitChapter } from '../bundlers/sections.js';
-import { STRATEGIES, type DefinitionStrategy, type Definition } from '../definition.js';
+import { STRATEGIES, strategyFor, type DefinitionStrategy, type Definition } from '../definition.js';
 import { DocumentBuilder } from '../apdoc/builder.js';
 import type { ApDocument } from '../apdoc/document.js';
 import type { StoreBlock, DimensionBlock, DomainBlock } from '../apdoc/blocks.js';
@@ -708,6 +709,35 @@ function buildChapterFromStrategy(strategy: DefinitionStrategy, ctx: BundleConte
   };
 }
 
+/** The one way to import a built-in block: `name` from the built-in `library` (`procedures`, `templates`, …), into `ctx`. */
+async function importBuiltinBlock(ctx: BundleContext, library: string, name: string, importerFile: string): Promise<void> {
+  await expandImports(`IMPORT ${name} FROM ${BUILTIN_ALIAS}.${library}`, ctx, importerFile);
+}
+
+/** The introductions every document carries that are built-in templates, by name: how to call the apx. */
+const TEMPLATE_INTROS: readonly string[] = [CALL_TEMPLATE];
+
+/**
+ * The introductions made of built-in templates: each imported into the
+ * agent's own context like any built-in block, rendered the way the template
+ * chapter renders a template, then taken out of the context again — an
+ * introduction is no block of the document.
+ */
+async function templateIntros(ctx: BundleContext, importerFile: string): Promise<Record<string, string>> {
+  const intros: Record<string, string> = {};
+  const strategy = strategyFor('template');
+  for (const name of TEMPLATE_INTROS) {
+    const before = new Set(ctx.templates);
+    await importBuiltinBlock(ctx, 'apx', name, importerFile);
+    const imported = ctx.templates.filter(template => !before.has(template));
+    const template = imported.find(candidate => candidate.name === name);
+    if (!template || !strategy) throw new Error(fill(FORMULAS.apx.call.missing, { name, file: importerFile }));
+    intros[name] = postProcessBody(renderShapeBody(strategy, template, ctx), ctx).trim();
+    ctx.templates = ctx.templates.filter(candidate => !imported.includes(candidate));
+  }
+  return intros;
+}
+
 export function emitCollectedSections(ctx: BundleContext): string {
   let out = '';
 
@@ -912,9 +942,11 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
   }
   const memberFiles = main ? main.members.map(member => opts.agentFileOf?.(member.name) ?? '').filter(file => file && existsSync(file)) : [];
   // A program carries out some of this agent's work: how to write one comes with it.
-  if (usesPrograms(agentBody, ctx.procedures) && opts.libraries?.['@builtin'] && !ctx.procedures.some(procedure => procedure.name === WRITE_PROGRAM)) {
-    await expandImports(`IMPORT ${WRITE_PROGRAM} FROM @builtin.procedures`, ctx, agentFilePath);
+  if (usesPrograms(agentBody, ctx.procedures) && opts.libraries?.[BUILTIN_ALIAS] && !ctx.procedures.some(procedure => procedure.name === WRITE_PROGRAM)) {
+    await importBuiltinBlock(ctx, 'procedures', WRITE_PROGRAM, agentFilePath);
   }
+  // How to call the apx, and every introduction made of a built-in template.
+  const introductions = opts.libraries?.[BUILTIN_ALIAS] ? await templateIntros(ctx, agentFilePath) : {};
   const variables = importedVariables(ctx.variables, opts.vars ?? {});
 
   // Role binding: `AS <role>` resolves the bound role's display name / ABOUT /
@@ -941,6 +973,7 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     agentFilePath,
     agentSpan: agentFile?.span ?? null,
     bootstrap,
+    templateIntros: introductions,
     vars: variables.constants,
     declaredVars: variables.variables,
     teams: opts.teams ?? [],

@@ -13,15 +13,18 @@
  * then the executable itself, `process.execPath`.
  */
 import { readFileSync } from 'node:fs';
-import { relative } from 'node:path';
+import { relative, resolve } from 'node:path';
 import { ApDocument } from '../apdoc/document.js';
 import { ApxEngine } from './engine.js';
 import { Pack } from './pack.js';
 import { heldNames, packPayload, packHolds, viewHolding, parsePayload, packBlock, MIN_NODE_MAJOR, UNIT_SECTION, type ApxPayload, type UnitSection } from './payload.js';
 import type { ApBlockData } from '../apdoc/types.js';
 import type { ApBlock } from '../apdoc/block.js';
-import { LS_VERB, isUnitVerb, runUnitVerb, throughUnit } from './unit.js';
+import { LS_VERB, isUnitVerb, runUnitVerb, throughUnit, unitHolds } from './unit.js';
 import { JSON_FLAG, listingOf } from './listing.js';
+import { readEnvelope, takeEnvelope } from './call.js';
+import { CallLog } from './callLog.js';
+import { projectRootOf } from './paths.js';
 
 /** The data lines a compiled binary carries — undefined when this engine heads an `.apx` file. */
 declare const __APX_PACK: string | undefined;
@@ -49,12 +52,22 @@ const self = embedded === null ? process.argv[1] : process.execPath;
 const exe = relative(process.cwd(), self) || self;
 const cmd = embedded === null ? `node ${exe}` : exe;
 let out = (line: string): void => { process.stdout.write(`${line}\n`); };
-const argv = process.argv.slice(2);
+// The envelope a call may end with is taken off before any command sees the words.
+const words = takeEnvelope(process.argv.slice(2));
+const argv = words.command;
+const envelope = words.envelope === null ? null : readEnvelope(words.envelope);
+
+/** This call's line in the log: the branch that serves the call says who serves it; it is written once, as the call ends — a pack that cannot be read too. */
+const log = new CallLog({ words: argv, envelope, projectRoot: resolve(projectRootOf(self)) });
+process.on('exit', code => log.write(code));
+
 const text = embedded === null ? readFileSync(self, 'utf-8') : null;
 const pack = embedded !== null ? Pack.fromData(embedded, self) : text !== null && Pack.isPack(text) ? Pack.fromText(text, self) : null;
 const unit = pack?.json<UnitSection>(UNIT_SECTION, '') ?? null;
 // In a unit, every command of an agent it holds goes through it.
 if (unit) {
+  // What a unit holds is named by a call to it: each agent, and — the main — each team.
+  log.holds(unitHolds(unit));
   const through = throughUnit(unit, cmd);
   const plain = out;
   out = line => plain(through(line));
@@ -72,9 +85,28 @@ function storeOf(from: Pack): (id: string) => ApBlock | null {
   };
 }
 
+const documents = new WeakMap<ApxPayload, ApDocument>();
+
+/** A payload's document, parsed once however many times it is asked for. */
+function documentOf(payload: ApxPayload): ApDocument {
+  const known = documents.get(payload);
+  if (known) return known;
+  const parsed = ApDocument.fromJson(payload.document);
+  documents.set(payload, parsed);
+  return parsed;
+}
+
+/** Who serves the call: the agent that answers it, from the document it is served from — the one place the log is told. */
+function servedBy(agent: string, from: ApxPayload | null): ApDocument | null {
+  const doc = from ? documentOf(from) : null;
+  log.servedBy(agent, doc);
+  return doc;
+}
+
 /** Serve one agent: the one this apx is, or — `inUnit` — the one a unit's first word names. */
 function serve(payload: ApxPayload, inUnit: string | null, args: string[]): void {
-  const doc = ApDocument.fromJson(payload.document);
+  const doc = documentOf(payload);
+  servedBy(inUnit ?? doc.root()?.name ?? '', payload);
   // One id, one block: a block the document only refers to — a member, a team — is read from the pack's store.
   if (pack) doc.readsFrom(storeOf(pack));
   const engine = new ApxEngine(doc, payload.build, exe, out, undefined, undefined, inUnit);
@@ -84,8 +116,14 @@ function serve(payload: ApxPayload, inUnit: string | null, args: string[]): void
 /** A unit's own document — its flows — when it has one: its image with no name. */
 const own = unit !== null && pack && packHolds(pack) ? packPayload(pack) : null;
 
+/** A call the unit answers itself: it is served by the unit, in the session its own document names. */
+function servedByUnit(name: string): void {
+  servedBy(name, own);
+}
+
 if (unit !== null && pack !== null && argv[0] === LS_VERB && argv[1] === JSON_FLAG) {
   // A unit's listing: every document it holds, its own first.
+  servedByUnit(unit.name);
   const store = storeOf(pack);
   const docs = heldNames(pack).map(holder => {
     const doc = ApDocument.fromJson(packPayload(pack, holder).document);
@@ -98,6 +136,7 @@ else if (unit === null) serve(packPayload(pack), null, argv);
 // A unit starts as an agent does: its own document — who it is, what it holds, its routing and flows.
 else if ((argv[0] === undefined || argv[0] === 'start') && own) serve(own, null, argv);
 else if (isUnitVerb(argv[0]) && !(argv[0] === 'ls' && argv.length > 1 && own)) {
+  servedByUnit(unit.name);
   runUnitVerb(argv[0], { unit, cmd, out, built: pack.header.built });
   // `ls` alone: what the unit holds, then its own blocks.
   if (argv[0] === 'ls' && own) serve(own, null, ['ls']);
@@ -109,6 +148,7 @@ else if (own) {
   else serve(own, null, argv);
 }
 else {
+  servedByUnit(unit.name);
   out(`# error: no agent '${argv[0]}' in this ${unit.kind} — the agents: ${cmd} ls`);
   process.exitCode = BAD_CALL;
 }

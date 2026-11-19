@@ -10,6 +10,7 @@
 import type { UnitSection } from './payload.js';
 import { apxCommand } from './paths.js';
 import { escapeRegex } from '../services/text.js';
+import { callFraming } from './call.js';
 
 /** One run of a unit verb: the unit, how it is run, where its lines go, when it was built. */
 export interface UnitRun {
@@ -46,6 +47,7 @@ const UNIT_VERBS: Record<string, (run: UnitRun) => void> = {
     out(`  ${cmd} ls                 the ${unit.kind === 'main' ? 'teams and agents' : 'members'} it holds`);
     out(`  ${cmd} version            its name, version and build`);
     out(`  ${cmd} <agent> <verb> …   an agent of the ${unit.kind} — its verbs: ${cmd} <agent> help`);
+    out(callFraming(cmd));
   },
 };
 

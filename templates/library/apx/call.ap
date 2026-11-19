@@ -1,0 +1,38 @@
+# call — the envelope a model ends a call to an apx with, as --call '<json>'
+
+EXPORT TEMPLATE call:
+  ABOUT   the envelope ending a call to an apx — the goal of the work, the situation now, why this call
+
+  SLOTS:
+    goal: TEXT MAX_WORDS 12  "the goal of the whole work"
+      MUST   write exactly one sentence, closed by a full stop — I as subject, a verb, a complement; one fact
+      MUST   keep the same goal in every call of one task
+      NEVER  write a subordinate clause
+    context: TEXT MAX_WORDS 30  "the situation right now — any subject"
+      MUST   write one to three sentences, one space between two
+      MUST   keep each sentence to one fact and ten words at most, closed by a full stop
+      NEVER  write a subordinate clause
+    why: TEXT MAX_WORDS 12  "why this call is made"
+      MUST   write exactly one sentence, closed by a full stop — I as subject, a verb, a complement; one fact
+      NEVER  write a subordinate clause
+    phase?: TEXT  "the title of the flow step in progress"
+      MUST   copy the title as it is written
+    next?: TEXT MAX_WORDS 10  "the next action or call"
+      MUST   write exactly one sentence, closed by a full stop — I as subject, a verb, a complement; one fact
+      NEVER  write a subordinate clause
+  BODY:
+    {
+      "goal": "{goal}",
+      "context": "{context}",
+      "why": "{why}",
+      "phase": "{phase}",
+      "next": "{next}"
+    }
+  EXAMPLE:
+    {
+      "goal": "I fix the crash of the date parser.",
+      "context": "The fix is done. The tests pass.",
+      "why": "I check the rules before saving.",
+      "phase": "implement the feature",
+      "next": "I commit the fix."
+    }

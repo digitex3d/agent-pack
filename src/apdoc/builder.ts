@@ -106,6 +106,8 @@ export interface RecorderFinishOpts {
   /** The lazy WHEN→RUN triggers of the Dynamic-rules chapter (bodies fetched on demand). */
   /** The md bootstrap prose (team membership + shared + runtime defaults). */
   bootstrap: string;
+  /** The introductions made of built-in templates, by name — how to call the apx — rendered by the compiler. */
+  templateIntros?: Record<string, string>;
   /** Body substitution vars ({{name}} …) — the constants. */
   vars: Record<string, string>;
   /** The variables the agent imports, with where (`` `@main.vars` ``). */
@@ -1118,6 +1120,7 @@ export class DocumentBuilder implements BlockCx {
       const text = renderedIntro(kind) || (pluginOf(kind)?.about ?? '');
       if (text) intros[kind] = text;
     }
+    Object.assign(intros, opts.templateIntros);
 
     const shapePos: Record<string, number> = {};
     for (const prov of ['definition', 'agent'] as const) {

@@ -22,8 +22,12 @@ import type { ApRef, ApNode, ApWhenNode, ApRunNode, ApDirectiveNode } from '../a
 import { KIND_STRATEGIES, type AgentBlock, type TeamBlock, type MainBlock, type VarBlock } from '../apdoc/blocks.js';
 import { mdEnv, renderPreamble, renderEntry, renderMd } from '../../adapters/md/index.js';
 import { renderNodes, type MdEnv } from '../../adapters/md/toolkit.js';
-import { FORMULAS, fill, type QuizQuestion } from '../formulas.js';
+import { FORMULAS, fill } from '../formulas.js';
 import { FLOWS_DIR, flowScriptStem, projectRootOf } from './paths.js';
+import { harnessSession } from './session.js';
+import { CALL_TEMPLATE, callFraming } from './call.js';
+import { Intro } from './intro.js';
+import { Quiz } from './quiz.js';
 import type { ApxVerb } from './verbs.js';
 import { openSessionVars, type SessionVars, type CheckRecord, type ExecutorRecord } from './sessionVars.js';
 import { checkedKeyword, roundLine, roundOf, stateOf, type ApCheckSpec } from '../check.js';
@@ -130,9 +134,6 @@ function coversGlob(globs: string[], glob: string): boolean {
 
 const FILTER_RE = /^(kind|tag|name|about)(=|~)(.+)$/;
 
-/** A session id as it may name a folder: no separator, never `.` or `..`. */
-const SESSION_ID_RE = /^(?!\.+$)[A-Za-z0-9._-]+$/;
-
 /** A program's manifest (`distilled/<dst-id>/manifest.json`) — written by the agent, `tested` by the apx. */
 interface ProgramManifest {
   version: number;
@@ -145,8 +146,6 @@ interface ProgramManifest {
 
 
 
-/** One question of the quiz, with the kind it is about. */
-type QuizItem = QuizQuestion & { kind: string };
 
 /** What `check` answers on its first line. */
 type Outcome = typeof OUTCOME[keyof typeof OUTCOME];
@@ -182,8 +181,6 @@ function stderrCause(stderr: string): string {
     .map(line => line.trim())
     .join(' | ');
 }
-const ANSWER_RE = /^(\d+)=(.*)$/;
-
 /**
  * When to read on demand, and when not to: a definition this small is printed
  * whole by `start` — no quiz, no `get` — because reading it costs less than
@@ -290,53 +287,20 @@ export class ApxEngine {
     const whole = renderMd(this.doc);
     if (whole.length <= this.budget.whole) {
       this.say(WORDS.start.whole);
-      return this.print(whole);
+      return this.introduceCall(this.print(whole));
     }
     const quiz = this.quiz();
-    if (quiz.length === 0) return this.opening();
-    if (args.length === 0) return this.askQuiz(quiz);
-    const given = this.givenAnswers(args, quiz.length);
-    if (typeof given === 'number') return given;
-    this.gradeQuiz(quiz, given);
+    if (quiz.size === 0) return this.introduceCall(this.opening());
+    if (args.length === 0) {
+      for (const line of quiz.asked()) this.out(line);
+      return 0;
+    }
+    const given = quiz.answers(args);
+    if ('bad' in given) return this.refuse(2, WORDS.start.badAnswer, { arg: given.bad, count: quiz.size });
+    const graded = quiz.graded(given);
+    this.out(graded.line);
+    for (const intro of graded.missed) this.print(intro.printed);
     return this.opening();
-  }
-
-  /** The quiz itself: how to answer it, then each question with its options. */
-  private askQuiz(quiz: QuizItem[]): number {
-    const form = quiz.map((question, index) => `${index + 1}=<${letters(question.options).join('|')}>`).join(' ');
-    this.say(WORDS.start.quiz, { form });
-    this.say(WORDS.start.unsure);
-    quiz.forEach((question, index) => {
-      this.out(`${index + 1}. [${question.kind}] ${question.ask}`);
-      this.out(`   ${question.options.map((option, optionIndex) => `${letters(question.options)[optionIndex]}) ${option}`).join('   ')}`);
-    });
-    return 0;
-  }
-
-  /** The answers given as `<n>=<letter>`, by question number — or the exit of the first one that is none. */
-  private givenAnswers(args: string[], questionCount: number): Map<number, string> | number {
-    const given = new Map<number, string>();
-    for (const arg of args) {
-      const match = ANSWER_RE.exec(arg);
-      const questionNumber = match ? Number(match[1]) : 0;
-      if (!match || questionNumber < 1 || questionNumber > questionCount) {
-        return this.refuse(2, WORDS.start.badAnswer, { arg, count: questionCount });
-      }
-      given.set(questionNumber, match[2].trim().toLowerCase());
-    }
-    return given;
-  }
-
-  /** What the answers earned: all correct, or the introduction of each kind missed. */
-  private gradeQuiz(quiz: QuizItem[], given: Map<number, string>): void {
-    const missed = [...new Set(quiz.filter((question, index) => given.get(index + 1) !== question.right).map(question => question.kind))];
-    if (missed.length === 0) {
-      this.say(WORDS.start.allCorrect, { count: quiz.length });
-      return;
-    }
-    this.say(WORDS.start.missed, { kinds: missed.join(', ') });
-    const intros = this.doc.mdSource?.intros ?? {};
-    for (const kind of missed) this.print(`\n## ${kind}\n\n${intros[kind] ?? ''}\n`);
   }
 
   /** The scope, then the agent's definition with every block it always needs or that costs less than a `get`. */
@@ -888,7 +852,19 @@ export class ApxEngine {
     const rows: [string, string][] = [...HELP, ...servicesOf(this.doc).flatMap(service => service.operations.map(operation => [`${service.kind} ${operation.op} ${operation.args}`.trim(), operation.about] as [string, string]))];
     const width = Math.max(...rows.map(([command]) => command.length));
     for (const [verb, what] of rows) this.out(`${this.cmd} ${verb.padEnd(width)}  ${what}`);
+    if (this.intros([CALL_TEMPLATE]).length > 0) this.out(callFraming(this.cmd));
     return 0;
+  }
+
+  /** The introductions of `names` this document gives — a block kind's, and how to call this apx. */
+  private intros(names: readonly string[]): Intro[] {
+    return Intro.of(this.doc, names, this.cmd);
+  }
+
+  /** After a start that asked no question on it and ended well, how to call this apx. Its exit, as given. */
+  private introduceCall(code: number): number {
+    if (code === 0) for (const intro of this.intros([CALL_TEMPLATE])) this.print(intro.printed);
+    return code;
   }
 
   // ------------------------------------------------------------ block views
@@ -987,14 +963,13 @@ export class ApxEngine {
     return file ? join(directory, file) : null;
   }
 
-  /** The quiz: the questions of every kind this agent holds, in reading order. */
-  /** Questions on the kinds the agent still reads on demand — an opened block needs no quiz. */
-  private quiz(): QuizItem[] {
-    const guides = FORMULAS.blocks as unknown as Record<string, { quiz?: QuizQuestion[] }>;
+  /** The quiz: the questions on the kinds the agent still reads on demand, in reading order — an opened block needs no quiz — then on calling this apx. */
+  private quiz(): Quiz {
     const opened = new Set(this.opened());
     const pending = this.doc.all().filter(block => block !== this.root && !opened.has(block));
-    if (pending.length === 0) return [];
-    return this.groups([this.root, ...pending]).flatMap(([kind]) => (guides[kind]?.quiz ?? []).map(question => ({ ...question, kind })));
+    if (pending.length === 0) return new Quiz([], this.cmd);
+    const kinds = this.groups([this.root, ...pending]).map(([kind]) => kind);
+    return new Quiz(this.intros([...kinds, CALL_TEMPLATE]), this.cmd);
   }
 
   /** The block named by a verb's id argument, or null after printing the error. */
@@ -1171,12 +1146,10 @@ export class ApxEngine {
 
   /** The session id the harness gives — or why there is none (the same rule the variables follow). */
   sessionIdOrReason(needs: string = WORDS.contract.needs): { id: string } | { reason: string } {
-    const sessionEnv = this.doc.meta.sessionEnv;
-    const id = sessionEnv ? process.env[sessionEnv] : undefined;
-    if (!sessionEnv) return { reason: fill(WORDS.variables.noAdapter, { needs }) };
-    if (!id) return { reason: fill(WORDS.variables.notSet, { needs, env: sessionEnv }) };
-    if (!SESSION_ID_RE.test(id)) return { reason: fill(WORDS.variables.unusable, { env: sessionEnv }) };
-    return { id };
+    const sessionEnv = this.doc.meta.sessionEnv ?? '';
+    const session = harnessSession(sessionEnv);
+    if ('id' in session) return session;
+    return { reason: fill(WORDS.variables[session.missing], { needs, env: sessionEnv }) };
   }
 }
 
@@ -1191,9 +1164,6 @@ function kindRank(kind: string): number {
   return index < 0 ? KIND_ORDER.length : index;
 }
 
-function letters(options: string[]): string[] {
-  return options.map((_option, index) => String.fromCharCode(97 + index));
-}
 
 /** One `ls` filter: the field it reads, how it compares (`=` exactly, `~` containing), and the text it looks for. */
 interface FilterTerm { key: FilterKey; operator: string; value: string }
