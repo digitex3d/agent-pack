@@ -5,8 +5,9 @@
  * `.agent-pack/log/calls.jsonl`. It tells what was called, never with which
  * data: of the command only its verb is kept — and, in a unit, the agent its
  * first word names — never a value typed on the line, read from stdin or kept
- * in a store. Logging never fails a call, and nothing reads the log to decide
- * anything.
+ * in a store — and the keys of the blocks the dashboard showed after the
+ * answer (ids alone, in the order printed). Logging never fails a call, and
+ * nothing reads the log to decide anything.
  */
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -34,6 +35,7 @@ interface CallLogInit {
 export class CallLog {
   private agent = '';
   private sessionEnv: string | undefined;
+  private shown: string[] = [];
   private readonly holders = new Set<string>();
 
   constructor(private readonly init: CallLogInit) {}
@@ -49,6 +51,11 @@ export class CallLog {
     this.sessionEnv = doc?.meta.sessionEnv;
   }
 
+  /** The keys of the blocks the dashboard showed after the answer, in the order printed — none when it showed nothing. */
+  showed(keys: readonly string[]): void {
+    this.shown = [...keys];
+  }
+
   /** Write the call's line, with the exit code it ended with — a log that cannot be written is left unwritten, silently. */
   write(exit: number): void {
     const session = harnessSession(this.sessionEnv);
@@ -59,6 +66,7 @@ export class CallLog {
       command: this.command(),
       call: this.init.envelope?.call ?? null,
       problem: this.init.envelope?.problem ?? null,
+      shown: this.shown,
       exit,
     };
     try {

@@ -64,11 +64,17 @@ const SAY = FORMULAS.messages.affinity;
 /** Whether a unit is shaped as one: stems a non-empty string array, keys valid key positions, weight finite and not negative. */
 function isUnit(value: unknown, keyCount: number): value is IndexUnit {
   if (!isRecord(value)) return false;
-  const { stems: unitStems, keys, weight } = value;
+  const { stems: unitStems, keys, weight, fields } = value;
   return isStringList(unitStems) && unitStems.length > 0 && !unitStems.includes('')
     && Array.isArray(keys) && keys.length > 0
     && keys.every(item => Number.isInteger(item) && (item as number) >= 0 && (item as number) < keyCount)
-    && isWeightOrZero(weight);
+    && isWeightOrZero(weight)
+    && areFieldWeights(fields, keys.length);
+}
+
+/** Whether a unit's field weights are absent, or one weight per key it stands for. */
+function areFieldWeights(fields: unknown, keyCount: number): boolean {
+  return fields === undefined || (Array.isArray(fields) && fields.length === keyCount && fields.every(isWeight));
 }
 
 /** Whether the keys are an array of distinct strings. */
@@ -150,10 +156,13 @@ function hitsOf(units: IndexUnit[], lookup: UnitLookup, text: string): Map<numbe
   return hits;
 }
 
-/** A key's score: its entry weight times the sum of the weights of the distinct units that lit it. */
+/** A key's score: its entry weight times the sum, over the distinct units that lit it, of each one's weight times its field weight for the key (1 without one). */
 function scoreOf(index: AffinityIndex, keyIndex: number, hit: KeyHit): number {
   let total = 0;
-  for (const unit of hit.units) total += index.units[unit].weight;
+  for (const unit of hit.units) {
+    const { weight, keys, fields } = index.units[unit];
+    total += weight * (fields?.[keys.indexOf(keyIndex)] ?? 1);
+  }
   return index.weights[keyIndex] * total;
 }
 

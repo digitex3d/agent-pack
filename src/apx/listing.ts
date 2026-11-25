@@ -10,9 +10,6 @@ import type { ApBlock } from '../apdoc/block.js';
 import type { ApRef } from '../apdoc/types.js';
 import { refName } from '../../adapters/md/phrases.js';
 
-/** The flag of `ls` that prints the listing as JSON. */
-export const JSON_FLAG = '--json';
-
 /** One block, listed. */
 export interface ListingEntry {
   kind: string;

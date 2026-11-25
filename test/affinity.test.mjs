@@ -219,4 +219,18 @@ const benchMatches = benchCase => benchEngine.match(benchCase.text, { threshold:
   assert.deepEqual(offenders, [], 'nothing outside src/affinity imports past its index');
 }
 
+// --- a corpus: rarity log(1 + texts / texts holding the stem), never split among keys; a weighted field weighs more, the strongest counting ---
+{
+  const corpus = ['alpha beta', 'beta', 'beta gamma', 'delta'];
+  const engine = openIndex(buildIndex(
+    [{ key: 'a', texts: ['alpha'], fields: [{ text: 'alpha', weight: 3 }] }, { key: 'b', texts: ['alpha beta'] }],
+    {}, { corpus },
+  ));
+  const scores = Object.fromEntries(engine.match('alpha beta').map(found => [found.key, found.score]));
+  const alpha = Math.log(1 + 4 / 1);
+  const beta = Math.log(1 + 4 / 3);
+  assert.ok(Math.abs(scores.a - 3 * alpha) < 1e-12, 'a: alpha in a field of weight 3 — its strongest — and whole, not split with b');
+  assert.ok(Math.abs(scores.b - (alpha + beta)) < 1e-12, 'b: each word at its corpus rarity');
+}
+
 console.log('affinity tests passed.');

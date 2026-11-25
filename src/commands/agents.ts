@@ -8,6 +8,7 @@ import type { Config } from '../config.js';
 import { standaloneDir } from '../services/teamMetadata.js';
 import { parseNamespace } from '../namespace.js';
 import { printUsage } from './usage.js';
+import { JSON_FLAG } from '../apx/verbs.js';
 
 /**
  * CLI command: `agent-pack agents list` — enumerate every discoverable agent,
@@ -132,7 +133,7 @@ export async function agents(args: string[]): Promise<void> {
         process.exit(1);
       }
       domain = value as Domain;
-    } else if (args[index] === '--json') json = true;
+    } else if (args[index] === JSON_FLAG) json = true;
     else if (args[index] === '--config') index++;
     else if (!args[index].startsWith('--') && !sub) sub = args[index];
   }

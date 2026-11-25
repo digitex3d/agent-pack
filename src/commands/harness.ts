@@ -3,6 +3,7 @@
 import { loadConfig } from '../config.js';
 import { harnessesOf, type HarnessRow } from '../harnesses.js';
 import { printUsage } from './usage.js';
+import { JSON_FLAG } from '../apx/verbs.js';
 
 /**
  * CLI command: `agent-pack harness list` — the harnesses a delegation can go
@@ -32,7 +33,7 @@ export async function harness(args: string[]): Promise<void> {
     process.exit(1);
   }
   const rows = harnessesOf(config.adapters);
-  if (args.includes('--json')) {
+  if (args.includes(JSON_FLAG)) {
     console.log(JSON.stringify(rows.map(row => ({
       harness: row.name, installed: true, enabled: row.enabled, delegable: row.enabled && row.invocation !== null,
       via: row.transport, cli: row.invocation?.cli ?? null, onPath: row.onPath, ...(row.problem ? { problem: row.problem } : {}),

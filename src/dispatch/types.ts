@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
 import type { ChecksConfig } from '../judge/types.js';
+import type { DashboardConfig } from '../config.js';
 import type { LintError, LintOptions } from '../lint.js';
 import type { Definition } from '../definition.js';
 import type { ExportedBlockBody } from '../services/text.js';
@@ -70,6 +71,8 @@ export interface BundleContext {
    * so `IF!` falls back to `IF` and `IF!!` fails. Its round limit words the prompt.
    */
   checks?: ChecksConfig | null;
+  /** The `dashboard` config key, resolved — the document carries it, and its reminders weighed by it; absent: no dashboard. */
+  dashboard?: DashboardConfig;
   /** The command that says how to run a flow, by its id — set while a team's routing renders. */
   flowCommand?: (id: string) => string;
   /** The unit whose flow a step's agent works in — set while a team's flows render: a checked condition there is the unit's. */

@@ -18,6 +18,7 @@ import type { RuleCriteria } from '../shapeCompiler.js';
 import type { ApExecutorSpec } from '../executor.js';
 import type { PluginSpec } from '../plugins.js';
 import type { ApBackgroundWork, ApMark, HarnessInvocation } from '../delegation.js';
+import type { ApDashboard } from '../dashboard.js';
 
 /**
  * A pointer to another block. `id` is the stable identity of the target
@@ -107,7 +108,7 @@ export interface ApRunNode {
   chars: number;
 }
 
-/** Verbatim text: RAW regions, prose lines. */
+/** Verbatim text: prose lines. */
 export interface ApTextNode {
   type: 'text';
   /** Where the node was written — provenance, never serialized. */
@@ -355,7 +356,7 @@ export interface ApBlockData {
  * the .ap.json alone must be able to reconstruct the md byte-for-byte.
  */
 export interface ApMdMeta {
-  /** Bootstrap prose (team membership + shared + runtime defaults), RAW-clean. */
+  /** Bootstrap prose (team membership + shared + runtime defaults). */
   bootstrap: string;
   /** Kind introductions, already rendered, keyed by kind — every kind the document holds. */
   intros: Record<string, string>;
@@ -464,6 +465,8 @@ export interface ApDocumentMeta {
   delegate?: string;
   /** The model this agent runs on, from the `delegate.models` config key — absent: the harness decides. */
   model?: string;
+  /** What the dashboard may remind this agent of, weighed (src/dashboard.ts) — absent: no `dashboard` config reached the compilation. */
+  dashboard?: ApDashboard;
   /** Md-projection metadata — present when the document renders prose. */
   md?: ApMdMeta;
 }

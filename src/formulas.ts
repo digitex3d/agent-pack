@@ -96,6 +96,7 @@ export interface Formulas {
     start: { whole: Text; quiz: Text; unsure: Text; badAnswer: Text; allCorrect: Text; missed: Text; opened: Text };
     /** The envelope a call may end with — the line that frames its introduction, why one is no JSON, a built-in template that did not compile (src/apx/call.ts, src/compiler/index.ts). */
     call: { intro: Text; notJson: Text; missing: Text; quiz: QuizQuestion[] };
+    dashboard: { separator: Text; next: Text; current: Text; laterBand: Text; entry: Text; trigger: Text; triggerCommand: Text; triggerFooter: Text; bands: { high: { one: Text; many: Text }; medium: Text; low: Text } };
     dispatch: { renamed: Text; unknownVerb: Text };
     scope: { perimeter: Text; writesNothing: Text; readsOnly: Text; readsAnything: Text; uncertain: Text; uncertainEntry: Text; noStores: Text; dimensions: Text; checks: Text; executors: Text; requests: Text; answer: Text };
     ls: { badFilter: Text };
@@ -118,7 +119,11 @@ export interface Formulas {
   };
   /** What the commands and the ACP client say (src/commands/, adapters/acp/). */
   messages: {
-    config: Record<'chatObject' | 'chatUnknownKey' | 'chatBoss', Text>;
+    dashboard: { weighFailed: Text };
+    forceLevels: Record<'needsCost' | 'undeclaredCost' | 'noRuleCost', Text>;
+    /** What a number must be, as a message says it: `{key} must be {rule}`. */
+    numbers: Record<'count' | 'positive' | 'nonNegative', Text>;
+    config: Record<'object' | 'unknownKey' | 'mustBe' | 'chatBoss' | 'dashboardBands', Text>;
     /** What the affinity engine (src/affinity/) says of an index or its inputs it refuses. */
     affinity: Record<
       | 'notEntryList' | 'notEntry' | 'duplicateKey' | 'badWeight' | 'notLexicon' | 'notLexiconItems' | 'orphanLexiconKey'

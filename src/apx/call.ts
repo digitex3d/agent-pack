@@ -7,7 +7,8 @@
  * compiler renders it into every document as the introduction to calling the
  * apx, which `start` prints to an agent that misses its quiz question. The
  * apx takes the envelope off the words and keeps it as received, for the call
- * log; it never changes what a call is served.
+ * log and for the dashboard printed after the answer (dashboard.ts); it never
+ * changes what a call is served.
  */
 import { FORMULAS, fill } from '../formulas.js';
 import { errorMessage } from '../errors.js';

@@ -1,17 +1,40 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Giuseppe Federico
 import FORCE_LEVELS_JSON from './config/force-levels.json' with { type: 'json' };
+import { FORMULAS, fill } from './formulas.js';
+import { isCount } from './guards.js';
 
 interface Family {
   name: string;
   levels: Record<string, string>;       // level (as string key) → intro
   aliases?: Record<string, number>;     // alias name → level (in this family)
+  costs?: Record<string, number>;       // level (as string key) → what forgetting such a line costs
 }
 
-interface Config { families: Family[]; }
+interface Config { families: Family[]; noRuleCost: number; }
 
 // Load + validate at module init
 const RAW: Config = FORCE_LEVELS_JSON as Config;
+
+/**
+ * The families whose lines are no rule — a shape (`AS`), a memory (`MEM`): those
+ * force-levels.json gives no costs. Every other family's line is a rule of the
+ * block it is in.
+ */
+const NON_RULE_FAMILIES: readonly string[] = RAW.families.filter(family => family.costs === undefined).map(family => family.name);
+
+/** A rule family — one with costs — has a cost for each of its levels, and only for them. */
+function validateCosts(family: Family): void {
+  const SAY = FORMULAS.messages.forceLevels;
+  const costs = family.costs;
+  if (costs === undefined) return;
+  for (const level of Object.keys(family.levels)) {
+    if (!isCount(costs[level])) throw new Error(fill(SAY.needsCost, { family: family.name, level, rule: FORMULAS.messages.numbers.count }));
+  }
+  for (const level of Object.keys(costs)) {
+    if (!(level in family.levels)) throw new Error(fill(SAY.undeclaredCost, { family: family.name, level }));
+  }
+}
 
 // Validation: throw on any drift
 function validate(cfg: Config): void {
@@ -43,9 +66,11 @@ function validate(cfg: Config): void {
       }
       seenAliasNames.add(aliasName);
     }
+    validateCosts(family);
   }
 }
 validate(RAW);
+if (!isCount(RAW.noRuleCost)) throw new Error(fill(FORMULAS.messages.forceLevels.noRuleCost, { rule: FORMULAS.messages.numbers.count }));
 
 // Derivation
 function deriveCanonical(family: string, level: number): string {
@@ -62,10 +87,21 @@ export function forceLevelFamilies(): readonly { name: string; levels: Record<st
 }
 
 /**
- * The families whose lines are no rule: a shape (`AS`), a memory (`MEM`), a
- * skill. Every other family's line is a rule of the block it is in.
+ * What forgetting a line of `family` at `level` costs — null when the family's
+ * lines are no rule (`AS`, `MEM`) or the level is not declared.
  */
-export const NON_RULE_FAMILIES: readonly string[] = ['AS', 'MEM'];
+export function ruleCost(family: string, level: number): number | null {
+  return RAW.families.find(candidate => candidate.name === family)?.costs?.[String(level)] ?? null;
+}
+
+/** Whether a keyword, in any declension or alias (`MUST!`, `NEVER`), opens a rule line — never a shape (`AS`) or a memory (`MEM`). */
+export function isRuleKeyword(keyword: string): boolean {
+  const family = forceLevelBaseOf(toCanonicalKeyword(keyword));
+  return family !== null && !NON_RULE_FAMILIES.includes(family);
+}
+
+/** The cost of a block, or a trigger, that holds no rule line. */
+export const NO_RULE_COST: number = RAW.noRuleCost;
 
 /** All family base names (e.g. ['MUST', 'ALWAYS', 'SHOULD', 'MAY']). */
 export function getFamilyBases(): string[] {

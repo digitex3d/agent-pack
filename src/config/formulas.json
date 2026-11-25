@@ -290,6 +290,22 @@
         }
       ]
     },
+    "dashboard": {
+      "$comment": "What the apx shows after a command's answer (src/apx/dashboard.ts): the separator, the opening from the agent's own words, then each band's sentence, the highest first — the high band's in two forms, one block or several — each sentence written as it follows the opening, and capitalized, apart from the band before, in each later band (`laterBand`), each block as `entry`. Calm, with a reason and what to do — the agent opens the ones that apply, from their name and ABOUT; no negation, no capital-letter emphasis.",
+      "separator": "---",
+      "next": "Before your next step — \"{next}\" —",
+      "current": "For your current work,",
+      "laterBand": "\n{sentence}",
+      "trigger": "{head} {condition}",
+      "triggerCommand": "{command} get {key}",
+      "triggerFooter": "# {title}  {key}  — in {holder}",
+      "entry": "\n  {title}\n  {command}",
+      "bands": {
+        "high": { "one": "this is often missed here and may apply to your next step — open it if it does:", "many": "these are often missed here and may apply to your next step — open the ones that do:" },
+        "medium": "these may apply to your next step — open the ones that do:",
+        "low": "these are further from your next step — open the ones that apply:"
+      }
+    },
     "dispatch": {
       "renamed": "'{verb}' is now 'delegate' — {cmd} delegate {args}",
       "unknownVerb": "unknown verb '{verb}' — the verbs: {cmd} help"
@@ -478,11 +494,22 @@
                          "entry": "{name}{ref}" }
   },
   "messages": {
+    "dashboard": {
+      "weighFailed": "to weigh the dashboards over every block of the project"
+    },
+    "forceLevels": {
+      "needsCost": "force-levels.json: family \"{family}\" level {level} needs a cost, {rule}",
+      "undeclaredCost": "force-levels.json: family \"{family}\" has a cost for level {level}, which it does not declare",
+      "noRuleCost": "force-levels.json: noRuleCost must be {rule}"
+    },
+    "numbers": { "count": "a whole number ≥ 1", "positive": "a number above zero", "nonNegative": "a number ≥ 0" },
     "$comment": "The messages of the commands and the ACP client — what they say when something fails or happens. A {placeholder} is filled by the code that says it.",
     "config": {
-      "chatObject": "chat must be an object, e.g. { boss: 'claude-code' }",
-      "chatUnknownKey": "chat: unknown key {keys} — it takes `boss`",
-      "chatBoss": "chat.boss must name the harness the chat talks to, e.g. { boss: 'claude-code' }"
+      "object": "{key} must be an object, e.g. {example}",
+      "unknownKey": "{key}: unknown key {unknown} — it takes {keys}",
+      "mustBe": "{key} must be {rule}",
+      "chatBoss": "chat.boss must name the harness the chat talks to, e.g. { boss: 'claude-code' }",
+      "dashboardBands": "dashboard.bands.medium must be below dashboard.bands.high — each band starts above the one under it"
     },
     "affinity": {
       "notEntryList": "buildIndex: the entries are not an array",

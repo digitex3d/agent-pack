@@ -24,11 +24,15 @@ import { mdEnv, renderPreamble, renderEntry, renderMd } from '../../adapters/md/
 import { renderNodes, type MdEnv } from '../../adapters/md/toolkit.js';
 import { FORMULAS, fill } from '../formulas.js';
 import { FLOWS_DIR, flowScriptStem, projectRootOf } from './paths.js';
-import { harnessSession } from './session.js';
+import { Session, harnessSession } from './session.js';
 import { CALL_TEMPLATE, callFraming } from './call.js';
 import { Intro } from './intro.js';
 import { Quiz } from './quiz.js';
-import type { ApxVerb } from './verbs.js';
+import { ARGUMENT, DASHBOARD_EXEMPT, DATA_FLAGS, HELP_FLAGS, JSON_FLAG, isOneOf, type ApxVerb } from './verbs.js';
+import { Dashboard, callTextOf, triggerTitle, type CallText } from './dashboard.js';
+import type { ApDashboard, ApReminder } from '../dashboard.js';
+import { triggerKeys } from '../apdoc/nodes.js';
+import type { ReceivedEnvelope } from './call.js';
 import { openSessionVars, type SessionVars, type CheckRecord, type ExecutorRecord } from './sessionVars.js';
 import { checkedKeyword, roundLine, roundOf, stateOf, type ApCheckSpec } from '../check.js';
 import { PROGRAM, WRITE_PROGRAM, executorKey, programDir, programFolders, type ApExecutorSpec } from '../executor.js';
@@ -39,7 +43,7 @@ import { CREDIT } from '../credits.js';
 import { validateRecord, formatIssues, jsonExample } from '../shapeSchema.js';
 import { BLOCK_ID_RE, addressName, sha256Hex } from '../apdoc/ids.js';
 import { announceIdentity } from '../../adapters/acp/events.js';
-import { JSON_FLAG, listingOf, uniqueRefs } from './listing.js';
+import { listingOf, uniqueRefs } from './listing.js';
 import type { DriverEntry } from '../storeDrivers/registry.js';
 import { installRecorded } from './stores.js';
 import { constantOf, readsOf } from '../vars.js';
@@ -64,8 +68,6 @@ const SITE = { procedure: 'procedure' } as const;
 /** What a `check` answers on its first line. */
 const OUTCOME = { open: 'open', closed: 'closed' } as const;
 
-/** The words a verb takes as an argument. */
-const ARGUMENT = { count: 'count', json: 'json' } as const;
 
 /** The fields `ls` filters on. */
 const FILTER_KEY = { kind: 'kind', tag: 'tag', name: 'name', about: 'about' } as const;
@@ -259,6 +261,20 @@ export class ApxEngine {
   /** Whether the config's store drivers were installed in this run. */
   private driversInstalled = false;
 
+  /**
+   * Whether this call's answer goes without the dashboard. Read from the verb
+   * table and the data flags (verbs.ts) as the call is dispatched; set where
+   * the answer prints in the two cases only the printing knows: the quiz
+   * `start` asks, a variable's value.
+   */
+  private exempt = false;
+
+  /** Whether this call is a `start`: the agent reads its definition again, so no block counts as shown lately. */
+  private restarted = false;
+
+  /** What this call's answer printed whole — block ids, and the keys of the triggers it printed alone: its dashboard never offers them again. */
+  private readonly printed = new Set<string>();
+
   /** Dispatch one invocation: a verb of the engine, or a served kind and its operation (`<kind> <op> [<id>] …`). No verb = start. `check` answers asynchronously. */
   run(argv: string[]): number | Promise<number> {
     // The config's own store drivers are installed before anything renders: a store they keep reads as usable in `get` and `md` too.
@@ -267,12 +283,50 @@ export class ApxEngine {
       return installRecorded(this).then(() => this.run(argv));
     }
     const [verb = 'start', ...args] = argv;
-    if (verb === '-h' || verb === '--help') return this.help();
+    this.exempt = isOneOf(DASHBOARD_EXEMPT, verb) || args.some(arg => DATA_FLAGS.includes(arg));
+    if (isOneOf(HELP_FLAGS, verb)) return this.help();
     if (Object.hasOwn(this.verbs, verb)) return this.verbs[verb as ApxVerb](args);
     const service = serviceOf(verb, this.doc);
     if (service) return service.serve(this, args[0], args.slice(1));
     if (verb === OLD_DELEGATE_KIND) return this.fail(2, this.phrase(WORDS.dispatch.renamed, { verb, args: args.join(' ') }).trimEnd());
     return this.refuse(2, WORDS.dispatch.unknownVerb, { verb });
+  }
+
+  /**
+   * After the answer, the dashboard: the blocks the agent is likeliest to
+   * forget for its next step — when the call carries an envelope and the
+   * document was compiled with a dashboard. The session counts the call
+   * (`start` clears what was shown), the dashboard prints unless the command
+   * is exempt, and the session records the blocks it showed. Their keys, in
+   * the order printed — none when it showed nothing.
+   */
+  remind(envelope: ReceivedEnvelope | null): string[] {
+    const compiled = this.doc.meta.dashboard;
+    const call = callTextOf(envelope);
+    // A `start` clears what was shown, envelope or not: the agent reads its definition again.
+    if (!compiled || (!call && !this.restarted)) return [];
+    try {
+      return this.reminded(compiled, call);
+    } catch {
+      // The dashboard never fails a call: one it cannot compute — an index it cannot read — is not shown.
+      return [];
+    }
+  }
+
+  /** The session's part, then the dashboard's: what `remind` shows, and records. */
+  private reminded(compiled: ApDashboard, call: CallText | null): string[] {
+    const session = Session.open(this.projectRoot, this.doc.meta.sessionEnv, this.root.name);
+    if (this.restarted) session.clear();
+    if (call === null) {
+      session.showed([], compiled.settings.recall);
+      return [];
+    }
+    session.count();
+    const reminded = this.exempt ? null : Dashboard.of(compiled, id => this.byId.get(id), this.cmd, this.printed).show(call, key => session.ago(key));
+    for (const line of reminded?.lines ?? []) this.out(line);
+    const shown = reminded?.shown ?? [];
+    session.showed(shown, compiled.settings.recall);
+    return shown;
   }
 
   // ------------------------------------------------------------------ verbs
@@ -283,15 +337,19 @@ export class ApxEngine {
   }
 
   private start(args: string[]): number {
+    this.restarted = true;
     this.out(this.root.heading);
     const whole = renderMd(this.doc);
     if (whole.length <= this.budget.whole) {
+      for (const block of this.doc.all()) this.printed.add(block.id);
       this.say(WORDS.start.whole);
       return this.introduceCall(this.print(whole));
     }
     const quiz = this.quiz();
     if (quiz.size === 0) return this.introduceCall(this.opening());
     if (args.length === 0) {
+      // The answers come with the next call: the dashboard follows them, never the questions.
+      this.exempt = true;
       for (const line of quiz.asked()) this.out(line);
       return 0;
     }
@@ -310,6 +368,7 @@ export class ApxEngine {
     this.say(WORDS.start.opened);
     this.print(this.text(this.root));
     for (const block of opened) this.print(`\n${this.text(block)}`);
+    for (const block of [this.root, ...opened]) this.printed.add(block.id);
     return 0;
   }
 
@@ -447,12 +506,26 @@ export class ApxEngine {
     if (check) return this.getCheck(args[0], check);
     const executor = args[0] ? this.doc.meta.executors?.[args[0]] : undefined;
     if (executor) return this.getExecutor(args[0], executor);
+    const trigger = args[0] ? this.doc.meta.dashboard?.reminders.find(reminder => reminder.key === args[0] && reminder.when !== undefined) : undefined;
+    if (trigger) return this.getTrigger(trigger);
     const block = this.blockArg('get', args);
     if (!block) return this.lastCode;
+    this.printed.add(block.id);
     if (args[1] === ARGUMENT.json) return this.print(JSON.stringify(block.toJSON(), null, 1));
     this.print(this.text(block));
     this.out(`# ${block.title}  ${block.id}  ${block.chars}ch${block.tagged}`);
     this.links(block);
+    return 0;
+  }
+
+  /** `get <whn-…>`: one trigger alone — its condition and its body, as its block holds it — then the block it is written in. */
+  private getTrigger(trigger: ApReminder): number {
+    const holder = this.byId.get(trigger.block);
+    const node = holder ? triggerKeys(holder).get(trigger.key) : undefined;
+    if (!holder || !node) return this.notFound(trigger.key);
+    this.printed.add(trigger.key);
+    this.print(renderNodes(this.env, [node]).join('\n'));
+    this.say(WORDS.dashboard.triggerFooter, { title: triggerTitle(node.condition), key: trigger.key, holder: holder.cited(this.cmd) });
     return 0;
   }
 
@@ -1033,6 +1106,8 @@ export class ApxEngine {
    * is still empty). The value is printed last, as stored, byte for byte.
    */
   private getVariable(name: string): number {
+    // A variable's view ends with its value, data a program may read: the dashboard never follows it.
+    this.exempt = true;
     const constant = constantOf(this.doc.mdSource?.vars, name);
     if (constant !== undefined) {
       this.say(WORDS.variables.constant, { name, value: constant });

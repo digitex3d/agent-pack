@@ -826,7 +826,7 @@ export class TeamBlock extends ApBlock {
 
     const teamAp = resolve(scan.root, 'team.ap');
     if (existsSync(teamAp)) {
-      const shared = readFileSync(teamAp, 'utf-8').replace(/^RAW:\s*$/m, '').replace(/^:RAW\s*$/m, '').trim();
+      const shared = readFileSync(teamAp, 'utf-8').trim();
       if (shared) block.shared = shared;
     }
     return block;
@@ -1046,6 +1046,8 @@ export interface KindStrategy {
   revive: (data: ApBlockData) => ApBlock;
   /** Md chapter title (chapter kinds only). */
   chapterTitle?: string;
+  /** A kind a flow, a RUN or a shape already points the agent at when it is needed: the dashboard leaves its blocks out (src/dashboard.ts). */
+  pointedAt?: true;
 }
 
 export const KIND_STRATEGIES: KindStrategy[] = [
@@ -1057,13 +1059,13 @@ export const KIND_STRATEGIES: KindStrategy[] = [
   { kind: 'role', revive: RoleBlock.fromData, folder: 'roles', chapterTitle: FORMULAS.blocks.role.chapter, prefix: RoleBlock.PREFIX,                ref: null,
     entries: (ctx, opts) => [...opts.boundRoles, ...ctx.roles],
     from: RoleBlock.fromDefinition },
-  { kind: 'template', revive: TemplateBlock.fromData, folder: 'templates', chapterTitle: FORMULAS.blocks.template.chapter, prefix: TemplateBlock.PREFIX,            ref: 'templates',
+  { kind: 'template', pointedAt: true, revive: TemplateBlock.fromData, folder: 'templates', chapterTitle: FORMULAS.blocks.template.chapter, prefix: TemplateBlock.PREFIX,            ref: 'templates',
     entries: ctx => ctx.templates,  from: TemplateBlock.fromDefinition },
-  { kind: 'procedure', revive: RuleBlock.fromData, folder: 'procedures', chapterTitle: FORMULAS.blocks.procedure.chapter, prefix: RuleBlock.PREFIXES.procedure, ref: 'runnables',
+  { kind: 'procedure', pointedAt: true, revive: RuleBlock.fromData, folder: 'procedures', chapterTitle: FORMULAS.blocks.procedure.chapter, prefix: RuleBlock.PREFIXES.procedure, ref: 'runnables',
     entries: ctx => ctx.procedures, from: RuleBlock.fromDefinition },
-  { kind: 'flow', revive: data => RuleBlock.fromData(data, FlowBlock), folder: 'flows', chapterTitle: FORMULAS.blocks.flow.chapter, prefix: RuleBlock.PREFIXES.flow,      ref: 'runnables',
+  { kind: 'flow', pointedAt: true, revive: data => RuleBlock.fromData(data, FlowBlock), folder: 'flows', chapterTitle: FORMULAS.blocks.flow.chapter, prefix: RuleBlock.PREFIXES.flow,      ref: 'runnables',
     entries: ctx => ctx.flows,      from: (def, cx) => RuleBlock.fromDefinition(def, cx, FlowBlock) },
-  { kind: 'skill', revive: RuleBlock.fromData, folder: 'skills', chapterTitle: FORMULAS.blocks.skill.chapter, prefix: RuleBlock.PREFIXES.skill, ref: null,
+  { kind: 'skill', pointedAt: true, revive: RuleBlock.fromData, folder: 'skills', chapterTitle: FORMULAS.blocks.skill.chapter, prefix: RuleBlock.PREFIXES.skill, ref: null,
     entries: ctx => ctx.skills,     from: RuleBlock.fromDefinition },
   { kind: 'store', revive: StoreBlock.fromData, folder: 'stores', chapterTitle: FORMULAS.blocks.store.chapter, prefix: StoreBlock.PREFIX,               ref: 'stores',
     entries: ctx => ctx.stores,     from: StoreBlock.fromDefinition },

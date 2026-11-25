@@ -7,7 +7,7 @@ import { parseDomainLine, domainLineIssue } from './domains.js';
 import { ACTION_VERBS } from './actionVerbs.js';
 import { desugar } from './desugar.js';
 import { parseApplies, PERIMETER_FORMS, PERIMETER_KINDS } from './services/tags.js';
-import { getFamilyBases, getIntroByKeyword, forceLevelBaseOf, splitBangs, forceLevelFamilies, toCanonicalKeyword, NON_RULE_FAMILIES } from './forceLevelConfig.js';
+import { getFamilyBases, getIntroByKeyword, forceLevelBaseOf, splitBangs, forceLevelFamilies, toCanonicalKeyword, isRuleKeyword } from './forceLevelConfig.js';
 import { enumPrimitiveFor } from './primitives.js';
 import { BLOCK_CONTRACTS, type BlockContract, VAR_BLOCK } from './blockContracts.js';
 import { TEAM_KEY } from './services/teamMetadata.js';
@@ -104,7 +104,7 @@ function lengthErrors(file: string, tokens: Token[], maxLen: number): LintError[
 function nextSubstantive(tokens: Token[], from: number): number {
   for (let tokenIndex = from; tokenIndex < tokens.length; tokenIndex++) {
     const token = tokens[tokenIndex];
-    if (token.kind === 'blank' || token.kind === 'comment' || token.kind === 'rawLine') continue;
+    if (token.kind === 'blank' || token.kind === 'comment') continue;
     return tokenIndex;
   }
   return -1;
@@ -261,7 +261,7 @@ function runLint(spec: LintSpec, file: string, body: string, options: LintOption
 
   for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex++) {
     const token = tokens[tokenIndex];
-    if (token.kind === 'blank' || token.kind === 'comment' || token.kind === 'rawLine') continue;
+    if (token.kind === 'blank' || token.kind === 'comment') continue;
     if (ex.usesExport) {
       // The `EXPORT <KIND> <name>:` opener lexes as a blockOpener; in an EXPORT
       // file it is the unit header, not an unexpected line.
@@ -372,7 +372,7 @@ function ifElseErrors(token: KeywordToken, tokens: Token[], index: number, file:
     let hasIf = false;
     for (let previousIndex = index - 1; previousIndex >= 0 && !hasIf; previousIndex--) {
       const previous = tokens[previousIndex];
-      if (previous.kind === 'blank' || previous.kind === 'comment' || previous.kind === 'rawLine' || previous.indent > token.indent) continue;
+      if (previous.kind === 'blank' || previous.kind === 'comment' || previous.indent > token.indent) continue;
       if (previous.indent < token.indent) break;
       hasIf = previous.kind === 'keyword' && previous.keyword === 'IF';
     }
@@ -1424,7 +1424,7 @@ function decoratorLineErrors(key: string, rest: string): string[] {
  * keyword, an undeclared force level, an enum value outside its set, the old
  * DISTILL suffix, and DISTILL's place — alone, directly inside a PROCEDURE that
  * has an `AS` result, once. VAR's place and form, a trailing INTO, a `{{…}}` read
- * where none is possible. Template regions and RAW blocks are the author's text.
+ * where none is possible. Template regions are the author's text.
  */
 export function checkVocabulary(file: string, body: string): LintError[] {
   const errors: LintError[] = [];
@@ -1439,7 +1439,7 @@ export function checkVocabulary(file: string, body: string): LintError[] {
   let regionKey = '';
 
   for (const [index, token] of tokens.entries()) {
-    if (token.kind === 'blank' || token.kind === 'comment' || token.kind === 'rawLine') continue;
+    if (token.kind === 'blank' || token.kind === 'comment') continue;
     if (region >= 0) {
       if (token.indent > region) {
         const typeError = regionKey === 'SLOTS' && 'raw' in token ? slotTypeError(token.raw) : null;
@@ -1591,15 +1591,22 @@ export function checkVocabulary(file: string, body: string): LintError[] {
 function computeBlockErrors(file: string, body: string): LintError[] {
   const errors: LintError[] = [];
   const err = (line: number, message: string) => errors.push({ file, line, message });
-  const isRule = (keyword: string) => forceLevelBaseOf(keyword) !== null && !NON_RULE_FAMILIES.includes(forceLevelBaseOf(keyword)!);
   const RETURN_LINES = new Set(['DO', 'COMPUTE']);
   const RETURN_BLOCKS = new Set(['IF', 'ELSE', 'UNTIL']);
+  /** Beside rules, what every section admits — then what each admits of lines and of blocks: RETURN its own, the others an IF alone. */
+  const ANYWHERE = new Set(['ELSE']);
+  const SECTION_ADMITS: Record<string, Record<Node['type'], ReadonlySet<string>>> = { RETURN: { line: RETURN_LINES, block: RETURN_BLOCKS } };
+  const OTHER_SECTION_ADMITS: Record<Node['type'], ReadonlySet<string>> = { line: new Set(), block: new Set(['IF']) };
+  /** The lines that may stand on top of a COMPUTE block beside its rules. */
+  const TOP_LINES = new Set(['ABOUT', 'APPLIES']);
+  const topLineErrors = (child: Line, name: string): void => {
+    if (TOP_LINES.has(child.keyword) || isRuleKeyword(child.keyword)) return;
+    err(child.line, `${child.keyword} is not allowed on top of COMPUTE \`${name}\` — ABOUT and rules on how the script is written, then REQUIRE:, RETURN AS <template>: and ENSURE:`);
+  };
   const check = (nodes: Node[], section: string, name: string): void => {
     for (const child of nodes) {
       const kw = child.type === 'line' ? child.keyword : child.key;
-      const allowed = section === 'RETURN'
-        ? isRule(kw) || kw === 'ELSE' || (child.type === 'line' ? RETURN_LINES.has(kw) : RETURN_BLOCKS.has(kw))
-        : isRule(kw) || kw === 'ELSE' || (child.type === 'block' && kw === 'IF');
+      const allowed = isRuleKeyword(kw) || ANYWHERE.has(kw) || (SECTION_ADMITS[section] ?? OTHER_SECTION_ADMITS)[child.type].has(kw);
       const line = child.type === 'line' ? child.line : child.startLine;
       if (!allowed) {
         err(line, section === 'RETURN'
@@ -1618,9 +1625,7 @@ function computeBlockErrors(file: string, body: string): LintError[] {
       const seen: string[] = [];
       for (const child of block.children) {
         if (child.type === 'line') {
-          if (child.keyword !== 'ABOUT' && child.keyword !== 'APPLIES' && !isRule(child.keyword)) {
-            err(child.line, `${child.keyword} is not allowed on top of COMPUTE \`${name}\` — ABOUT and rules on how the script is written, then REQUIRE:, RETURN AS <template>: and ENSURE:`);
-          }
+          topLineErrors(child, name);
           continue;
         }
         if (!(COMPUTE_SECTIONS as readonly string[]).includes(child.key)) {

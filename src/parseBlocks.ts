@@ -404,7 +404,7 @@ export function parseBlocks(source: string): ParseResult {
       continue;
     }
 
-    if (token.kind === 'procRef' || token.kind === 'unknown' || token.kind === 'rawLine') {
+    if (token.kind === 'procRef' || token.kind === 'unknown') {
       dangling();
       // Opaque content — attach to the current block under a sentinel keyword
       // so PR3 renderers can roundtrip them verbatim. No error: the lexer's

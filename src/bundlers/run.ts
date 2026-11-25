@@ -31,13 +31,22 @@ export async function bundleAndEmit(
   }
   const files = emit(bundle, ctx);
   if (bundle.structure) {
-    const document = bundle.structure.asJson();
-    files.push({ path: resolve(config.outputDir, `${bundle.name}.ap.json`), content: document });
     // Every agent — and every skill, an agent too — gets its apx, whatever the adapter writes into its harness.
-    files.push(...apxFiles(bundle.name, document, ctx.projectRoot, config.bundle.apxCompress === true, apxChecks(config, ctx.projectRoot), { waitMax: config.wait?.max ?? null, markMax: config.mark?.max ?? null, drivers: config.drivers ?? null }));
+    files.push(...agentArtifacts(bundle.name, bundle.structure.asJson(), config, ctx));
     files.push(...flowScriptFiles(bundle.structure, adapter, ctx.projectRoot));
   }
   return { bundle, files };
+}
+
+/** A document's compiled file, `<outputDir>/<name>.ap.json` — an agent's or a unit's. */
+export function compiledFile(name: string, document: string, config: Config): EmittedFile {
+  return { path: resolve(config.outputDir, `${name}.ap.json`), content: document };
+}
+
+/** An agent's own artifacts, from its document: its compiled file and its apx. */
+export function agentArtifacts(name: string, document: string, config: Config, ctx: AdapterCtx): EmittedFile[] {
+  const limits = { waitMax: config.wait?.max ?? null, markMax: config.mark?.max ?? null, drivers: config.drivers ?? null };
+  return [compiledFile(name, document, config), ...apxFiles(name, document, ctx.projectRoot, config.bundle.apxCompress === true, apxChecks(config, ctx.projectRoot), limits)];
 }
 
 /** The flows a document holds, as the harness's own scripts — when its adapter runs flows so. */
@@ -62,5 +71,5 @@ export async function unitDocument(name: string, config: Config, ctx: AdapterCtx
   });
   if (!structure) throw new Error(`${name}: no document was compiled`);
   const document = structure.asJson();
-  return { structure, document, files: [{ path: resolve(config.outputDir, `${name}.ap.json`), content: document }, ...flowScriptFiles(structure, adapter, ctx.projectRoot)] };
+  return { structure, document, files: [compiledFile(name, document, config), ...flowScriptFiles(structure, adapter, ctx.projectRoot)] };
 }

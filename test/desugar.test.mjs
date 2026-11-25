@@ -158,3 +158,17 @@ assert.ok(
 }
 
 console.log('desugar tests passed.');
+
+// --- RAW is no longer a keyword: `RAW:` lexes like any other uppercase opener ---
+
+{
+  const tokens = lexRaw('RAW:\nIF ready\n# a note\n:RAW');
+  assert.deepEqual(
+    tokens.map(token => token.kind),
+    lexRaw('FOO:\nIF ready\n# a note\n:FOO').map(token => token.kind),
+    'RAW: … :RAW lexes like FOO: … :FOO',
+  );
+  assert.deepEqual(tokens.map(token => token.kind), ['blockOpener', 'keyword', 'comment', 'unknown'],
+    'the lines between RAW: and :RAW are lexed, not passed through verbatim');
+  assert.equal(tokens[0].key, 'RAW');
+}

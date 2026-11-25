@@ -5,7 +5,10 @@ import { resolve, dirname, relative, sep } from 'node:path';
 import { loadConfig, type Config, libraryRoots as libraryRootsOf, librariesAliasMap, BUILTIN_LIBRARY_ROOT, packageInfo } from '../config.js';
 import { AdapterRegistry } from '../adapter-registry.js';
 import type { AdapterCtx, AdapterPlugin, EmittedFile } from '../../adapters/types.js';
-import { bundleAndEmit, unitDocument } from '../bundlers/run.js';
+import { agentArtifacts, bundleAndEmit, compiledFile, unitDocument } from '../bundlers/run.js';
+import { corpusOf, withCorpus } from '../dashboard.js';
+import { ApDocument } from '../apdoc/document.js';
+import { FORMULAS } from '../formulas.js';
 import { orphanPrograms } from '../executor.js';
 import { emitProjectContext, ensureProjectPointers, AGENTS_MD } from '../projectContext.js';
 import { readMainFile } from '../services/mainMetadata.js';
@@ -203,6 +206,14 @@ export async function bundleAllOnce(
 
   /** The agents whose build failed: the main carries them as their last apx has them. */
   const failed = new Set<string>();
+  /** Each agent's document, as the first adapter compiled it — the one its apx holds. */
+  const agentDocuments = new Map<string, string>();
+  /** The files under `.agent-pack/` — an agent's apx and compiled document among them — written once, after the dashboards are weighed over the project. */
+  const pending: EmittedFile[] = [];
+  const deferOrWrite = (file: EmittedFile): void => {
+    if (file.path.startsWith(shared)) pending.push(file);
+    else writeFiles([file]);
+  };
   // The default delegate joins the build when some agent hands it work and the project has none of that name.
   const queue = [...agents];
   for (let queueIndex = 0; queueIndex < queue.length; queueIndex++) {
@@ -210,6 +221,7 @@ export async function bundleAllOnce(
     for (const adapter of adapters) {
       try {
         const { bundle, files } = await bundleAndEmit(agent.name, config, adapter, ctx, { judge });
+        keepFirstDocument(agentDocuments, agent.name, bundle.structure);
         for (const spec of Object.values(bundle.structure?.meta.executors ?? {})) if (spec.program) programIds.add(spec.program);
         if (bundle.structure) for (const hash of documentDefHashes(bundle.structure)) defhashes.add(hash);
         const meta = bundle.structure?.meta;
@@ -225,7 +237,7 @@ export async function bundleAllOnce(
             continue;
           }
           written.set(file.path, { adapter: adapter.name, content: file.content });
-          writeFiles([file]);
+          deferOrWrite(file);
         }
       } catch (err) {
         report.failed(err, `agent ${agent.name} on ${adapter.name}`);
@@ -243,7 +255,7 @@ export async function bundleAllOnce(
   for (const name of [...teamNamesUnder(config.teamsDir), ...(mainName ? [mainName] : [])]) {
     try {
       const unit = await unitDocument(name, config, ctx, { adapter: adapters[0], judge });
-      writeFiles(unit.files);
+      pending.push(...unit.files);
       unitDocuments.set(name, unit.document);
       const meta = unit.structure.meta;
       if (meta.background || meta.marks) guarded = true;
@@ -251,6 +263,22 @@ export async function bundleAllOnce(
       report.failed(err, name === mainName ? `the main ${name}` : `team ${name}`);
       totalErrors++;
     }
+  }
+
+  let weighed: Weighed | null = null;
+  try {
+    weighed = weighOverProject(agentDocuments, unitDocuments, config, ctx);
+  } catch (err) {
+    // Every document then keeps the rarity of its own blocks: none is left on the project's.
+    report.failed(err, FORMULAS.messages.dashboard.weighFailed);
+    totalErrors++;
+  }
+  for (const [name, document] of weighed?.units ?? []) unitDocuments.set(name, document);
+  for (const file of pending) {
+    const content = weighed?.files.get(file.path) ?? file.content;
+    const prior = written.get(file.path);
+    if (prior) written.set(file.path, { ...prior, content });
+    writeFiles([{ ...file, content }]);
   }
 
   // The project context and the orchestration go to AGENTS.md — the file every
@@ -360,6 +388,35 @@ export async function bundleAllOnce(
 
   report.done({ agents: queue.length, adapters: adapters.length, files: written.size, failures: totalErrors });
   return totalErrors === 0;
+}
+
+/** An agent's document as the first adapter compiled it — the one its apx holds; a later adapter's is left. */
+function keepFirstDocument(documents: Map<string, string>, name: string, structure: ApDocument | undefined): void {
+  if (structure && !documents.has(name)) documents.set(name, structure.asJson());
+}
+
+/** The documents weighed over the project: the files that carry them, by path — an agent's apx and compiled document, a unit's compiled document — and each unit's document. */
+interface Weighed {
+  files: Map<string, string>;
+  units: Map<string, string>;
+}
+
+/**
+ * The dashboard's word rarity counted over every block this build compiled —
+ * not one document's alone: every document weighed again, all of them before
+ * any is written, so a failure leaves none of them on the project's corpus.
+ */
+function weighOverProject(agentDocuments: Map<string, string>, unitDocuments: Map<string, string>, config: Config, context: AdapterCtx): Weighed {
+  const parsed = (documents: Map<string, string>) => new Map([...documents].map(([name, document]) => [name, ApDocument.fromJson(document)]));
+  const agents = parsed(agentDocuments);
+  const units = parsed(unitDocuments);
+  const corpus = corpusOf([...agents.values(), ...units.values()]);
+  const weighedUnits = new Map([...units].map(([name, document]) => [name, withCorpus(document, corpus)]));
+  const files = [
+    ...[...agents].flatMap(([name, document]) => agentArtifacts(name, withCorpus(document, corpus), config, context)),
+    ...[...weighedUnits].map(([name, document]) => compiledFile(name, document, config)),
+  ];
+  return { files: new Map(files.map(file => [file.path, file.content])), units: weighedUnits };
 }
 
 /** Compile a unit's apx into its executable — when Bun fails on the main's, AGENTS.md goes back to the apx it can run; then it throws. */

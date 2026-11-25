@@ -18,7 +18,7 @@
  */
 import { resolve as resolvePath } from 'node:path';
 import type { ApBlockData, ApDocumentMeta, ApMdMeta, ApOutlineItem, ApOutlinePart, ApRef, ApNode, ApLine } from './types.js';
-import { walk, type LineHead } from './nodes.js';
+import { lineHeadOf, walk } from './nodes.js';
 import { DISTILLED_DIR } from '../apx/paths.js';
 import type { ApBlock } from './block.js';
 import type { AgentBlock, DimensionBlock, DomainBlock, TemplateBlock } from './blocks.js';
@@ -166,7 +166,7 @@ export class ApDocument {
   lines(primitive?: string): ApLine[] {
     const out: ApLine[] = [];
     for (const { node, block, containers } of this.nodes()) {
-      const head = (node as unknown as { asLine(): LineHead | null }).asLine();
+      const head = lineHeadOf(node);
       if (!head || (primitive !== undefined && head.primitive !== primitive)) continue;
       out.push({
         ...head,

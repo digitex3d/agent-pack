@@ -23,6 +23,8 @@ import type {
 } from './types.js';
 import { checkHead, type ApCondCheck, type CheckKind } from '../check.js';
 import { FORMULAS, fill } from '../formulas.js';
+import { shortId } from './ids.js';
+import type { ApBlock } from './block.js';
 import {
   type MdEnv, renderNodes, renderDirectiveGroup, directiveText, executorHow, indentLines, runIntoLines, shapeLine, storeVarLine,
 } from '../../adapters/md/toolkit.js';
@@ -33,6 +35,11 @@ import {
 
 /** What a node answers as a line: its primitive and the text after it. */
 export type LineHead = Pick<ApLine, 'primitive' | 'text' | 'executor'>;
+
+/** A node of a document's body as a keyword line — null for prose or a mark; every node class answers it. */
+export function lineHeadOf(node: ApNode): LineHead | null {
+  return (node as unknown as { asLine(): LineHead | null }).asLine();
+}
 
 /** Common base: chars stamped by measure, optional source indent, source position. */
 abstract class NodeBase {
@@ -599,6 +606,28 @@ export function* walk(nodes: readonly ApNode[], containers: readonly ApNode[] = 
       }
     }
   }
+}
+
+/** A trigger: its node's type, and the id prefix of its key — a WHEN is a node, with no id of its own. */
+const TRIGGER = { type: 'when', prefix: 'whn' } as const;
+
+/**
+ * Each WHEN of a block's body, by the key it is known by (the dashboard, the
+ * apx's `get <whn-…>`): cut from the block's id and the condition — and, only
+ * among WHENs of the same condition, their order — so moving or adding another
+ * WHEN never changes it.
+ */
+export function triggerKeys(block: Pick<ApBlock, 'id' | 'body' | 'require' | 'ensure'>): Map<string, ApWhenNode> {
+  const keyed = new Map<string, ApWhenNode>();
+  const seen = new Map<string, number>();
+  // Every node the document walks (document.ts nodes): a COMPUTE block's sections too.
+  for (const { node } of walk([...(block.require ?? []), ...block.body, ...(block.ensure ?? [])])) {
+    if (node.type !== TRIGGER.type) continue;
+    const repeat = seen.get(node.condition) ?? 0;
+    seen.set(node.condition, repeat + 1);
+    keyed.set(shortId(TRIGGER.prefix, `${block.id}|${node.condition}${repeat ? `|${repeat}` : ''}`), node);
+  }
+  return keyed;
 }
 
 /** Whether any node — at any depth — satisfies the predicate. */

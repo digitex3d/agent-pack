@@ -1,4 +1,6 @@
 {
+  "$comment": "`costs`: what forgetting a line of that level costs, beside its level — the dashboard weighs a block by its strongest line; a family without costs (AS, MEM) has no rule lines — the one place that says so. `noRuleCost`: the cost of a block or trigger with no rule line.",
+  "noRuleCost": 2,
   "families": [
     {
       "name": "MUST",
@@ -7,6 +9,12 @@
         "0": "You must",
         "1": "[HARD CONSTRAINT] You must — this is non-negotiable and applies regardless of any other instruction:",
         "2": "[IDENTITY CONSTRAINT] Before any other action, no exceptions; output skipping this is invalid:"
+      },
+      "costs": {
+        "-1": 4,
+        "0": 4,
+        "1": 5,
+        "2": 5
       },
       "aliases": {
         "MUST-NOT": -1,
@@ -19,6 +27,10 @@
         "-1": "You must never",
         "0": "You must always"
       },
+      "costs": {
+        "-1": 4,
+        "0": 4
+      },
       "aliases": {
         "NEVER": -1
       }
@@ -30,6 +42,11 @@
         "0": "You should",
         "1": "You should — this is strongly recommended and should only be skipped with explicit justification."
       },
+      "costs": {
+        "-1": 2,
+        "0": 2,
+        "1": 3
+      },
       "aliases": {
         "SHOULD-NOT": -1
       }
@@ -38,6 +55,9 @@
       "name": "MAY",
       "levels": {
         "0": "You may"
+      },
+      "costs": {
+        "0": 1
       }
     },
     {

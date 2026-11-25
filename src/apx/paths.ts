@@ -87,5 +87,10 @@ export const LOG_DIR = `${RUNTIME_DIR}/log`;
 /** The file the call log's file channel appends to. */
 export const CALL_LOG_FILE = `${LOG_DIR}/calls.jsonl`;
 
+/** The file a harness session's state between calls lives in, beside the call log (apx/session.ts). */
+export function sessionFile(sessionId: string): string {
+  return `${LOG_DIR}/sessions/${sessionId}.json`;
+}
+
 /** The distilled scripts — written by agents, versioned with the sources. */
 export const DISTILLED_DIR = 'distilled';

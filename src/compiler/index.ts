@@ -7,7 +7,7 @@ import { resolve, dirname, basename, sep } from 'node:path';
 import { unitNameFromPath } from '../ingest.js';
 import type { MainFile } from '../services/mainMetadata.js';
 import { projectAgentFiles } from '../agentDiscovery.js';
-import { type Config, type BundleConfig, type LintConfig, libraryRoots as libraryRootsOf, librariesAliasMap } from '../config.js';
+import { type Config, type BundleConfig, type DashboardConfig, type LintConfig, libraryRoots as libraryRootsOf, librariesAliasMap } from '../config.js';
 import type { BundleContext, RoleEntry } from '../dispatch/index.js';
 import { parseAgentSignature } from '../definitionArgs.js';
 import { processImports, SKILL_IMPORT_HINT } from '../dispatch/imports.js';
@@ -79,6 +79,8 @@ export interface BundleOptions {
   judge?: JudgeRun | null;
   /** The judge of checked conditions (`checks` config key) — absent: none. */
   checks?: ChecksConfig | null;
+  /** The `dashboard` config key, resolved — absent: the document has no dashboard. */
+  dashboard?: DashboardConfig;
   /** Every agent of the project and its team — what `DELEGATE … BY` may name. Absent: not checked. */
   agentIndex?: AgentIndexEntry[];
   /** The harnesses installed, enabled and delegable (src/harnesses.ts) — what `BY <harness>:<agent>` depends on (D66). Absent: none. */
@@ -192,6 +194,7 @@ function buildBundleOpts(
     adapter: overrides.adapter,
     judge: overrides.judge,
     checks: config.checks ?? null,
+    dashboard: config.dashboard,
     agentIndex: agentIndexOf(config),
     harnesses: harnessesOf(config.adapters),
     teams: teamNamesUnder(config.teamsDir),
@@ -270,6 +273,8 @@ export interface MakeContextOpts {
   sources?: SourceRegistry;
   /** The judge of checked conditions — absent: none. */
   checks?: ChecksConfig | null;
+  /** The `dashboard` config key, resolved — absent: no dashboard. */
+  dashboard?: DashboardConfig;
 }
 
 export function makeBundleContext(opts: MakeContextOpts): BundleContext {
@@ -296,6 +301,7 @@ export function makeBundleContext(opts: MakeContextOpts): BundleContext {
     renderings: opts.renderings,
     sessionEnv: opts.sessionEnv,
     checks: opts.checks ?? null,
+    ...(opts.dashboard ? { dashboard: opts.dashboard } : {}),
     importedPaths: new Set<string>(),
     sources: opts.sources ?? new SourceRegistry(),
   };
@@ -889,6 +895,7 @@ export async function bundleAgentObject(opts: BundleOptions): Promise<{
     sessionEnv: opts.adapter?.sessionEnv,
     sources: opts.sources,
     checks: opts.checks,
+    dashboard: opts.dashboard,
   });
   // The document builder — walks the resolved sources directly (no events)
   // and assembles the ApDocument in `finish()` below.

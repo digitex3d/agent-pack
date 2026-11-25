@@ -10,7 +10,8 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { APX_DIR } from '../../src/apx/paths.js';
-import { JSON_FLAG, type Listing, type ListingEntry } from '../../src/apx/listing.js';
+import type { Listing, ListingEntry } from '../../src/apx/listing.js';
+import { JSON_FLAG } from '../../src/apx/verbs.js';
 
 /** A listed block, with the apx it was read from (from the project root) and the unit that holds it. */
 export interface CatalogEntry extends ListingEntry {

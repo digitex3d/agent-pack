@@ -10,6 +10,7 @@ import {
   STORE_EXIT, StoreRefusal, checkWrite, countLine, fieldsOf, filtersOf, open, optionalOp, recordLine, requireCapability, storesOf, type OpenStore,
 } from '../stores.js';
 import type { ApxContext, ApxOutput, ApxService } from '../service.js';
+import { ARGUMENT } from '../verbs.js';
 
 const OPERATIONS = [
   { op: 'put', args: '<sto-id> <field>=<value> …', about: 'add a record — with the KEY already present, update it instead' },
@@ -50,19 +51,19 @@ const get: Op = async (host, store, args) => {
   const key = keyArg(store, args, 'get');
   const doc = await (await open(store)).get(key);
   if (!doc) return host.fail(STORE_EXIT.missing, `${store.spec.name}: no record ${key}`);
-  host.out(args.includes('json') ? JSON.stringify(doc) : recordLine(doc));
+  host.out(args.includes(ARGUMENT.json) ? JSON.stringify(doc) : recordLine(doc));
   return 0;
 };
 
 const find: Op = async (host, store, args) => {
-  const flags = new Set<string>(args.filter(arg => arg === 'count' || arg === 'json'));
+  const flags = new Set<string>(args.filter(arg => arg === ARGUMENT.count || arg === ARGUMENT.json));
   const limitArg = args.find(arg => arg.startsWith('limit='));
   const limit = limitArg ? Number(limitArg.slice('limit='.length)) : undefined;
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) throw new StoreRefusal(STORE_EXIT.usage, `${store.spec.name}: limit takes a whole number above 0`);
   const filters = filtersOf(store, args.filter(arg => !flags.has(arg) && arg !== limitArg));
   const docs = await (await open(store)).find(filters, limit);
-  if (flags.has('count')) host.out(countLine(docs.length));
-  else if (flags.has('json')) host.out(JSON.stringify(docs));
+  if (flags.has(ARGUMENT.count)) host.out(countLine(docs.length));
+  else if (flags.has(ARGUMENT.json)) host.out(JSON.stringify(docs));
   else {
     for (const doc of docs) host.out(recordLine(doc));
     host.out(countLine(docs.length));

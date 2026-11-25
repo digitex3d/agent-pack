@@ -83,6 +83,7 @@ import { COMPUTE_SECTIONS, executorMark, executorSpecs, returnShape } from '../e
 import { DirectiveNode, RunNode, TextNode, IfNode, UntilNode, WhenNode, StepNode, EachNode, InNode, VarNode } from './nodes.js';
 import { splitList } from '../lists.js';
 import { parseTemplate, type Slot } from '../shapeCompiler.js';
+import { dashboardOf } from '../dashboard.js';
 
 
 /** Bullet-group keywords (DO, BY, WHEN, LOG, …) that group like force levels. */
@@ -1098,7 +1099,7 @@ export class DocumentBuilder implements BlockCx {
 
   /**
    * The md-projection metadata, SERIALIZED into meta.md — everything a
-   * decompiler needs beyond the blocks: bootstrap prose (RAW-clean), the
+   * decompiler needs beyond the blocks: bootstrap prose, the
    * chapter intros (pre-rendered, and ONLY for chapters this document
    * actually has — anything else is wasted bytes), substitution vars,
    * presentation positions.
@@ -1130,8 +1131,7 @@ export class DocumentBuilder implements BlockCx {
     }
 
     return {
-      // RAW block delimiters are lexer syntax — cleaned at the source.
-      bootstrap: opts.bootstrap.split('\n').filter(line => !/^\s*(RAW:|:RAW)\s*$/.test(line)).join('\n'),
+      bootstrap: opts.bootstrap,
       intros,
       vars: opts.vars,
       agentBodyLead: (/^\n*/.exec(opts.agentBody)?.[0].length ?? 0) || 1,
@@ -1141,6 +1141,11 @@ export class DocumentBuilder implements BlockCx {
   }
 
   // ------------------------------------------------------------------ finish
+
+  /** What each rule and trigger weighs for the dashboard, into the meta — cut from the sealed blocks, by their ids; none without a `dashboard` config. */
+  private weighReminders(document: ApDocument, context: BundleContext): void {
+    if (context.dashboard) document.meta.dashboard = dashboardOf(document, context.dashboard);
+  }
 
   /**
    * Assemble the document: scan the team, index the referenceable identities,
@@ -1197,6 +1202,7 @@ export class DocumentBuilder implements BlockCx {
     const used = Object.fromEntries(plugins().filter(plugin => doc.byKind(plugin.name).length > 0).map(plugin => [plugin.name, plugin]));
     if (Object.keys(used).length > 0) doc.meta.plugins = used;
     doc.seal();
+    this.weighReminders(doc, ctx);
     const md = this.buildMdMeta(doc, opts, provenanceMap);
     doc.attachMdSource(md);
     const stores: Record<string, ApStoreProjection> = {};

@@ -225,8 +225,6 @@ const LIFECYCLE_BARE_RE = new RegExp(`^([ \\t]*)(${LIFECYCLE_ALT})([ \\t]*:)?[ \
 const PROC_REF_RE = /^([ \t]*)(@[a-zA-Z0-9][\w-]*)\b[ \t]*(.*?)[ \t]*$/;
 // A block decorator: the mark, an uppercase key, its items, a colon when it opens a block (src/decorators.ts).
 const DECORATOR_RE = /^([ \t]*)@([A-Z][A-Z0-9-]*)(?:[ \t]+(.*?))?[ \t]*(:)?[ \t]*$/;
-const RAW_OPEN_RE = /^[ \t]*RAW:[ \t]*$/;
-const RAW_CLOSE_RE = /^[ \t]*:RAW[ \t]*$/;
 
 /**
  * Block-opener line: `<KEY>[ <rest>]:` at any indent.
@@ -262,7 +260,6 @@ export interface Position {
 export type Token =
   | (Position & { kind: 'blank' })
   | (Position & { kind: 'comment'; raw: string })
-  | (Position & { kind: 'rawLine'; raw: string })
   // `level`: the level of an IF/UNTIL head (`IF!` 1, `IF!!` 2, `!IF` -1 — splitControl) or of a DOMAIN line (`WRITES!` 1 — splitDomainLine); absent = 0.
   // `executor`: the stars of an IF/UNTIL head (`IF*` 1 a delegate, `IF**` 2 a program); absent = the agent.
   // `async`: a delegation verb marked `~` (`DELEGATE~`) — it starts the work and goes on (src/delegation.ts).
@@ -292,19 +289,9 @@ function procedureMark(keyword: string): { word: string; executor: number } | nu
 export function lexRaw(source: string): Token[] {
   const out: Token[] = [];
   const lines = source.split(/\r?\n/);
-  let inRaw = false;
   for (let index = 0; index < lines.length; index++) {
     const raw = lines[index];
     const line = index + 1;
-
-    // RAW: ... :RAW block — verbatim passthrough. Delimiter lines emit no
-    // token; inner lines become rawLine tokens.
-    if (inRaw) {
-      if (RAW_CLOSE_RE.test(raw)) { inRaw = false; continue; }
-      out.push({ kind: 'rawLine', line, col: 1, indent: 0, raw });
-      continue;
-    }
-    if (RAW_OPEN_RE.test(raw)) { inRaw = true; continue; }
 
     if (raw.trim() === '') {
       out.push({ kind: 'blank', line, col: 1, indent: 0 });

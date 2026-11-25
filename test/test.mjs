@@ -361,4 +361,7 @@ await import('./affinity.test.mjs');
 // the call envelope: the call template as the introduction to calling an apx, asked in the quiz; every call logged, its verb alone
 await import('./callEnvelope.test.mjs');
 
+// the dashboard: what each rule and trigger weighs, and what the apx reminds the agent of after a command's answer
+await import('./dashboard.test.mjs');
+
 console.log('All tests passed.');

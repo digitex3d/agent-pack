@@ -13,6 +13,7 @@ import type { DimensionCache } from '../dimensions.js';
 import { matchesAnyGlob } from '../../services/glob.js';
 import { STORE_EXIT, fieldsText } from '../stores.js';
 import { countOf, type ApxContext, type ApxOutput } from '../service.js';
+import { ARGUMENT } from '../verbs.js';
 
 /** A dimension of this agent: its block, its store, the files it covers, its cache. */
 export interface Dimension {
@@ -35,8 +36,8 @@ export type Op = (host: ApxOutput & ApxContext, dim: Dimension, args: string[]) 
 
 /** `q <dim-id> [<field><op><value> …] [json]` — the instances every filter holds for, each with its file; fresh answers only. */
 export const q: Op = async (host, dim, args) => {
-  const json = args.includes('json');
-  const filters = filtersOn(args.filter(arg => arg !== 'json'), dim.store.slots.map(slot => slot.name), '_file');
+  const json = args.includes(ARGUMENT.json);
+  const filters = filtersOn(args.filter(arg => arg !== ARGUMENT.json), dim.store.slots.map(slot => slot.name), '_file');
   if (typeof filters === 'string') return host.fail(STORE_EXIT.usage, `${dim.name}: ${filters}`);
   const { rows, stale } = await dim.cache.query(filters);
   if (json) host.out(JSON.stringify(rows));

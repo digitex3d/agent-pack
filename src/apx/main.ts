@@ -21,7 +21,8 @@ import { heldNames, packPayload, packHolds, viewHolding, parsePayload, packBlock
 import type { ApBlockData } from '../apdoc/types.js';
 import type { ApBlock } from '../apdoc/block.js';
 import { LS_VERB, isUnitVerb, runUnitVerb, throughUnit, unitHolds } from './unit.js';
-import { JSON_FLAG, listingOf } from './listing.js';
+import { listingOf } from './listing.js';
+import { JSON_FLAG } from './verbs.js';
 import { readEnvelope, takeEnvelope } from './call.js';
 import { CallLog } from './callLog.js';
 import { projectRootOf } from './paths.js';
@@ -110,7 +111,8 @@ function serve(payload: ApxPayload, inUnit: string | null, args: string[]): void
   // One id, one block: a block the document only refers to — a member, a team — is read from the pack's store.
   if (pack) doc.readsFrom(storeOf(pack));
   const engine = new ApxEngine(doc, payload.build, exe, out, undefined, undefined, inUnit);
-  void Promise.resolve(engine.run(args)).then(code => { process.exitCode = code; });
+  // The dashboard comes last, after the command's answer.
+  void Promise.resolve(engine.run(args)).then(code => { process.exitCode = code; log.showed(engine.remind(envelope)); });
 }
 
 /** A unit's own document — its flows — when it has one: its image with no name. */

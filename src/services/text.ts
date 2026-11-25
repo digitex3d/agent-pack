@@ -225,8 +225,8 @@ export function extractPrimitives(body: string, keyword: Keyword): string[] {
 
 /**
  * Remove every top-level (indent 0) line whose keyword is in the given set.
- * Indented occurrences are preserved verbatim (they may be inside RAW blocks
- * or nested examples). Blanks and unknown lines are preserved. Comment lines
+ * Indented occurrences are preserved verbatim (they may be inside nested
+ * examples). Blanks and unknown lines are preserved. Comment lines
  * (#-prefixed) are stripped — they are compiler-internal. Leading blank lines
  * are stripped.
  */

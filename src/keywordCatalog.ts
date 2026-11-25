@@ -16,7 +16,7 @@
  */
 import { KEYWORDS } from './lexer.js';
 import { BLOCK_TYPES } from './blockTypes.js';
-import { forceLevelBaseOf, toCanonicalKeyword, NON_RULE_FAMILIES } from './forceLevelConfig.js';
+import { forceLevelBaseOf, toCanonicalKeyword, isRuleKeyword } from './forceLevelConfig.js';
 import { AGENT_METADATA_KEYWORDS } from './primitives.js';
 import { COMPUTE_SECTIONS } from './executor.js';
 
@@ -31,7 +31,7 @@ export function keywordCatalog(): Record<string, KeywordRole> {
   const roleOf = (word: string): KeywordRole => {
     if (word in BLOCK_TYPES) return 'block';
     const family = forceLevelBaseOf(toCanonicalKeyword(word));
-    if (family) return NON_RULE_FAMILIES.includes(family) ? 'keyword' : 'rule';
+    if (family) return isRuleKeyword(word) ? 'rule' : 'keyword';
     return meta.has(word) ? 'meta' : 'keyword';
   };
   const words = new Set([...KEYWORDS, ...Object.keys(BLOCK_TYPES), ...COMPUTE_SECTIONS, ...PATTERN_WORDS]);

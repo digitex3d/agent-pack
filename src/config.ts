@@ -16,7 +16,7 @@ import { parseDuration, DURATION_FORM } from './delegation.js';
 import { DEFAULT_DOMAIN_THRESHOLDS, type DomainThresholds } from './domains.js';
 import { isProbability } from './judge/lock.js';
 import { FORMULAS, fill } from './formulas.js';
-import { isRecord } from './guards.js';
+import { isCount, isFiniteNumber, isPositive, isRecord } from './guards.js';
 
 function expandHome(filePath: string): string {
   if (filePath === '~') return homedir();
@@ -296,6 +296,8 @@ export interface Config {
   chat?: ChatConfig | null;
   /** The store drivers the project adds to files and tabeli (`drivers: ['agent-pack-driver-sqlite']`), installed — src/storeDrivers/. */
   drivers?: DriverEntry[];
+  /** What the apx shows after a command's answer, and how a block is weighed for it — the defaults when absent. */
+  dashboard?: DashboardConfig;
 }
 
 /**
@@ -362,6 +364,44 @@ function judgeOf(key: string, entry: unknown, threshold: unknown): JudgePlugin {
   return adapter;
 }
 
+/** What a config number must be — each rule's words are `FORMULAS.messages.numbers`. */
+const NUMBER = {
+  count: isCount,
+  positive: isPositive,
+  nonNegative: (value: unknown) => isFiniteNumber(value) && value >= 0,
+} as const;
+
+/** What a config number must be, by name. */
+type NumberRule = keyof typeof NUMBER;
+
+/** One number of a config key, checked against what it must be. */
+function configNumber(key: string, value: unknown, rule: NumberRule): number {
+  if (!NUMBER[rule](value)) throw new Error(fill(FORMULAS.messages.config.mustBe, { key, rule: FORMULAS.messages.numbers[rule] }));
+  return value as number;
+}
+
+/** A config value as an author writes it: `{ max: 20 }`, `{ boss: 'claude-code' }`. */
+function writtenValue(value: unknown): string {
+  if (typeof value === 'string') return `'${value}'`;
+  if (isRecord(value)) return `{ ${Object.entries(value).map(([name, item]) => `${name}: ${writtenValue(item)}`).join(', ')} }`;
+  return String(value);
+}
+
+/**
+ * A config key's object: refused when it is none, or when it holds a key
+ * `shape` does not — `shape` being its defaults, or an example of it, which
+ * the refusal shows.
+ */
+function configObject(key: string, raw: unknown, shape: Record<string, unknown>): Record<string, unknown> {
+  const SAY = FORMULAS.messages.config;
+  if (!isRecord(raw)) throw new Error(fill(SAY.object, { key, example: writtenValue(shape) }));
+  const keys = Object.keys(shape);
+  const unknown = Object.keys(raw).filter(name => !keys.includes(name));
+  const quoted = (names: string[]) => names.map(name => `\`${name}\``).join(', ');
+  if (unknown.length) throw new Error(fill(SAY.unknownKey, { key, unknown: quoted(unknown), keys: quoted(keys) }));
+  return raw;
+}
+
 /**
  * The `judge` key resolved: a built-in judge by name or a judge object, the
  * defaults filled in, the lock anchored to the project root. Absent →
@@ -376,8 +416,7 @@ function resolveJudgeConfig(raw: unknown, projectRoot: string): JudgeConfig | nu
   noMargin('judge', judge);
   if (offline !== 'warn' && offline !== 'error') throw new Error("judge.offline must be 'warn' or 'error'");
   if (typeof lock !== 'string' || lock.trim() === '') throw new Error('judge.lock must be a file path');
-  if (!Number.isInteger(concurrency) || (concurrency as number) < 1) throw new Error('judge.concurrency must be a whole number ≥ 1');
-  return { adapter, threshold: threshold as number, offline, lock: resolve(projectRoot, expandHome(lock)), concurrency: concurrency as number };
+  return { adapter, threshold: threshold as number, offline, lock: resolve(projectRoot, expandHome(lock)), concurrency: configNumber('judge.concurrency', concurrency, 'count') };
 }
 
 /**
@@ -387,10 +426,7 @@ function resolveJudgeConfig(raw: unknown, projectRoot: string): JudgeConfig | nu
  */
 function resolveDomainThresholds(raw: unknown): DomainThresholds {
   if (raw === undefined || raw === null) return { ...DEFAULT_DOMAIN_THRESHOLDS };
-  if (!isRecord(raw)) throw new Error('domains must be an object, e.g. { in: 0.8, out: 0.2 }');
-  const unknown = Object.keys(raw).filter(key => key !== 'in' && key !== 'out');
-  if (unknown.length) throw new Error(`domains: unknown key ${unknown.map(key => `\`${key}\``).join(', ')} — it takes \`in\` and \`out\``);
-  const thresholds = { ...DEFAULT_DOMAIN_THRESHOLDS, ...raw } as Record<string, unknown>;
+  const thresholds = { ...DEFAULT_DOMAIN_THRESHOLDS, ...configObject('domains', raw, { ...DEFAULT_DOMAIN_THRESHOLDS }) } as Record<string, unknown>;
   for (const key of ['in', 'out']) if (!isProbability(thresholds[key])) throw new Error(`domains.${key} must be a number between 0 and 1`);
   if ((thresholds.out as number) >= (thresholds.in as number)) throw new Error('domains.out must be below domains.in — between them the agent decides');
   return { in: thresholds.in as number, out: thresholds.out as number };
@@ -406,12 +442,72 @@ export const MARK_DEFAULTS: MarkConfig = { max: 20 };
 /** The `mark` key resolved: `max` a whole number ≥ 1 — absent, the default. */
 function resolveMarkConfig(raw: unknown): MarkConfig {
   if (raw === undefined || raw === null) return { ...MARK_DEFAULTS };
-  if (!isRecord(raw)) throw new Error('mark must be an object, e.g. { max: 20 }');
-  const unknown = Object.keys(raw).filter(key => key !== 'max');
-  if (unknown.length) throw new Error(`mark: unknown key ${unknown.map(key => `\`${key}\``).join(', ')} — it takes \`max\``);
-  const max = (raw as Record<string, unknown>).max ?? MARK_DEFAULTS.max;
-  if (!Number.isInteger(max) || (max as number) < 1) throw new Error('mark.max must be a whole number ≥ 1');
-  return { max: max as number };
+  const mark = configObject('mark', raw, { ...MARK_DEFAULTS });
+  return { max: configNumber('mark.max', mark.max ?? MARK_DEFAULTS.max, 'count') };
+}
+
+/** The two kinds the dashboard ranks apart, each by the name of its section in the `dashboard` config. */
+export const DASHBOARD_KIND = { rules: 'rules', triggers: 'triggers' } as const;
+export type DashboardKind = typeof DASHBOARD_KIND[keyof typeof DASHBOARD_KIND];
+
+/**
+ * The `dashboard` key: what the apx shows after a command's answer
+ * (src/apx/dashboard.ts) and how a block is weighed for it (src/dashboard.ts).
+ * `manyRules`, `recall` and the bands are provisional — never measured, to be
+ * tuned on the call log.
+ */
+export interface DashboardConfig {
+  /** Blocks shown at most, every kind together. */
+  maxEntries: number;
+  /** Each kind's own limit, before the lists merge. */
+  kinds: Record<DashboardKind, { max: number }>;
+  /** What goal and context weigh, against next. */
+  contextWeight: number;
+  /** An agent with more rule lines than this adds 1 to the risk of each of its blocks. */
+  manyRules: number;
+  /** Calls after which a block shown has no penalty left. */
+  recall: number;
+  /** The score where each band starts. */
+  bands: { medium: number; high: number };
+  /** What a word weighs by the field of a block it stands in — the strongest counting: its name and tags (a WHEN's condition), its ABOUT, its lines. */
+  fields: { name: number; about: number; lines: number };
+}
+
+export const DASHBOARD_DEFAULTS: DashboardConfig = {
+  maxEntries: 6,
+  kinds: { [DASHBOARD_KIND.rules]: { max: 4 }, [DASHBOARD_KIND.triggers]: { max: 3 } },
+  contextWeight: 0.5,
+  manyRules: 20,
+  recall: 8,
+  bands: { medium: 5, high: 12 },
+  fields: { name: 3, about: 2, lines: 1 },
+};
+
+/** The `dashboard` key resolved over its defaults, every number checked — absent, the defaults. */
+function resolveDashboardConfig(raw: unknown): DashboardConfig {
+  if (raw === undefined || raw === null) return structuredClone(DASHBOARD_DEFAULTS);
+  const given = configObject('dashboard', raw, { ...DASHBOARD_DEFAULTS });
+  const { kinds: kindDefaults, bands: bandDefaults, fields: fieldDefaults, ...topDefaults } = DASHBOARD_DEFAULTS;
+  const section = <Names extends string>(name: string, defaults: Record<Names, number>, rules: Record<Names, NumberRule>) =>
+    numbersOf(`dashboard.${name}`, configObject(`dashboard.${name}`, given[name] ?? {}, defaults), defaults, rules);
+  const kindsGiven = configObject('dashboard.kinds', given.kinds ?? {}, kindDefaults);
+  const kinds = Object.fromEntries(Object.values(DASHBOARD_KIND).map(kind => {
+    const key = `dashboard.kinds.${kind}`;
+    return [kind, numbersOf(key, configObject(key, kindsGiven[kind] ?? {}, kindDefaults[kind]), kindDefaults[kind], { max: 'count' })];
+  })) as DashboardConfig['kinds'];
+  const bands = section('bands', bandDefaults, { medium: 'positive', high: 'positive' });
+  if (bands.medium >= bands.high) throw new Error(FORMULAS.messages.config.dashboardBands);
+  return {
+    ...numbersOf('dashboard', given, topDefaults, { maxEntries: 'count', contextWeight: 'positive', manyRules: 'nonNegative', recall: 'count' }),
+    kinds,
+    bands,
+    fields: section('fields', fieldDefaults, { name: 'positive', about: 'positive', lines: 'positive' }),
+  };
+}
+
+/** The numbers of a config section, each given or its default, checked against its rule. */
+function numbersOf<Names extends string>(key: string, given: Record<string, unknown>, defaults: Record<Names, number>, rules: Record<Names, NumberRule>): Record<Names, number> {
+  return Object.fromEntries((Object.keys(defaults) as Names[]).map(name => [name, configNumber(`${key}.${name}`, given[name] ?? defaults[name], rules[name])])) as Record<Names, number>;
 }
 
 /** The `chat` key: `boss` the harness `agent-pack chat` talks to — an acp server, or a harness with the acp option. */
@@ -419,18 +515,14 @@ interface ChatConfig {
   boss: string;
 }
 
-/** The keys the `chat` key takes. */
-const CHAT_KEYS: readonly string[] = ['boss'];
+/** The `chat` key as an author writes it — its keys, and the example a refusal shows. */
+const CHAT_EXAMPLE: ChatConfig = { boss: 'claude-code' };
 
 /** The `chat` key resolved: `boss` a harness name — absent, no chat. Whether it names an ACP server is the chat's to check. */
 function resolveChatConfig(raw: unknown): ChatConfig | null {
   if (raw === undefined || raw === null) return null;
-  const SAY = FORMULAS.messages.config;
-  if (!isRecord(raw)) throw new Error(SAY.chatObject);
-  const unknown = Object.keys(raw).filter(key => !CHAT_KEYS.includes(key));
-  if (unknown.length) throw new Error(fill(SAY.chatUnknownKey, { keys: unknown.map(key => `\`${key}\``).join(', ') }));
-  const boss = (raw as Record<string, unknown>).boss;
-  if (typeof boss !== 'string' || boss.trim() === '') throw new Error(SAY.chatBoss);
+  const boss = configObject('chat', raw, { ...CHAT_EXAMPLE }).boss;
+  if (typeof boss !== 'string' || boss.trim() === '') throw new Error(FORMULAS.messages.config.chatBoss);
   return { boss };
 }
 
@@ -444,10 +536,7 @@ export const WAIT_DEFAULTS: WaitConfig = { max: '30m' };
 /** The `wait` key resolved: `max` a duration (`90s`, `30m`, `2h`) — absent, the default. */
 function resolveWaitConfig(raw: unknown): WaitConfig {
   if (raw === undefined || raw === null) return { ...WAIT_DEFAULTS };
-  if (!isRecord(raw)) throw new Error("wait must be an object, e.g. { max: '30m' }");
-  const unknown = Object.keys(raw).filter(key => key !== 'max');
-  if (unknown.length) throw new Error(`wait: unknown key ${unknown.map(key => `\`${key}\``).join(', ')} — it takes \`max\``);
-  const max = (raw as Record<string, unknown>).max ?? WAIT_DEFAULTS.max;
+  const max = configObject('wait', raw, { ...WAIT_DEFAULTS }).max ?? WAIT_DEFAULTS.max;
   if (typeof max !== 'string' || parseDuration(max) === null) throw new Error(`wait.max must be a duration — ${DURATION_FORM}`);
   return { max };
 }
@@ -565,6 +654,7 @@ export async function loadConfig(args: string[]): Promise<Config> {
     mark: resolveMarkConfig(userConfig.mark),
     chat: resolveChatConfig(userConfig.chat),
     delegate: resolveDelegateConfig(userConfig.delegate),
+    dashboard: resolveDashboardConfig(userConfig.dashboard),
     // Each plugin folder, from the project root — loaded and installed before any agent compiles.
     plugins: await loadPlugins(((userConfig.plugins ?? []) as string[]).map(dir => resolve(projectRoot, expandHome(dir)))),
     // Each driver module, from the project root — installed before any store compiles, recorded for the apx.

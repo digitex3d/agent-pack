@@ -19,6 +19,7 @@ import {
 import { STORE_EXIT, StoreRefusal, fieldsText, installRecorded, resolveStore, type OpenStore } from '../stores.js';
 import { mark, next, q, since, writeUsage, type Dimension, type Op } from './dimensionQuery.js';
 import { countOf, serviceCommand, type ApxContext, type ApxOutput, type ApxService } from '../service.js';
+import { ARGUMENT } from '../verbs.js';
 
 /** How many hex digits of a fingerprint a message shows. */
 const HASH_SHOWN = 12;
@@ -73,7 +74,7 @@ const read: Op = async (host, dim, args) => {
   const { entry, state } = found;
   if (!entry || state?.state !== 'fresh') return miss(host, dim, file, state);
   cache.count('hits');
-  if (args[1] === 'json') return host.print(JSON.stringify(entry.value));
+  if (args[1] === ARGUMENT.json) return host.print(JSON.stringify(entry.value));
   host.out(`hit ${dim.name} ${file} — by ${entry.by}, ${entry.at.slice(0, 10)}`);
   return host.print(valueText(dim, entry.value));
 };

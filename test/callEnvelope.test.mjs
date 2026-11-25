@@ -22,7 +22,7 @@ import { ApxEngine } from '../dist/src/apx/engine.js';
 import { TABELI_ENGINE } from '../dist/src/config.js';
 import { apxFiles } from '../dist/src/apx/write.js';
 import { apxPath, CALL_LOG_FILE, LOG_DIR } from '../dist/src/apx/paths.js';
-import { BUILTIN_LIBRARY_ROOT } from '../dist/src/config.js';
+import { BUILTIN_LIBRARY_ROOT, DASHBOARD_DEFAULTS } from '../dist/src/config.js';
 import { FORMULAS } from '../dist/src/formulas.js';
 
 const FIXTURE = resolve(dirname(fileURLToPath(import.meta.url)), 'fixtures/apx');
@@ -133,7 +133,8 @@ try {
     rmSync(join(project, LOG_DIR), { recursive: true, force: true });
     run('ls', '--call', JSON.stringify(ENVELOPE));
     let entry = lastLog();
-    assert.deepEqual(Object.keys(entry), ['at', 'session', 'agent', 'command', 'call', 'problem', 'exit']);
+    assert.deepEqual(Object.keys(entry), ['at', 'session', 'agent', 'command', 'call', 'problem', 'shown', 'exit']);
+    assert.deepEqual(entry.shown, [], 'a document compiled without a dashboard shows none');
     assert.equal(entry.agent, 'pm');
     assert.deepEqual(entry.command, ['ls']);
     assert.deepEqual(entry.call, ENVELOPE);
@@ -173,6 +174,42 @@ try {
   }
 } finally {
   rmSync(project, { recursive: true, force: true });
+}
+
+// --- the dashboard's keys: what it showed after the answer, in the order printed — ids alone; [] without an envelope ---
+const lit = mkdtempSync(join(tmpdir(), 'apx-call-shown-'));
+try {
+  const withDashboard = await bundleAgentObject({
+    agentName: 'pm',
+    agentFile: join(FIXTURE, 'teams/product/pm.ap'),
+    agentDir: join(FIXTURE, 'teams/product'),
+    libraryRoot: library,
+    libraryRoots: [library],
+    libraries: { '@main': library, '@builtin': BUILTIN_LIBRARY_ROOT },
+    dashboard: DASHBOARD_DEFAULTS,
+  });
+  const document = withDashboard.structure.asJson();
+  for (const file of apxFiles('pm', document, lit, false)) {
+    mkdirSync(dirname(file.path), { recursive: true });
+    writeFileSync(file.path, file.content);
+  }
+  const run = (...args) => spawnSync('node', [apxPath('pm'), ...args], { cwd: lit, encoding: 'utf-8' }).stdout;
+  const logFile = join(lit, CALL_LOG_FILE);
+  const lastLog = () => JSON.parse(readFileSync(logFile, 'utf-8').trim().split('\n').at(-1));
+  const boardRules = Object.values(JSON.parse(document).blocks).find(block => block.name === 'board-rules').id;
+  const next = 'I keep one card per task on the board.';
+  const out = run('ls', '--call', JSON.stringify({ ...ENVELOPE, next }));
+  assert.ok(out.includes('board-rules —'), `the call lights the board's rules:\n${out}`);
+  const entry = lastLog();
+  assert.ok(entry.shown.includes(boardRules), `its key is logged: ${JSON.stringify(entry.shown)}`);
+  assert.ok(entry.shown.every(key => /^[a-z]{3}-[0-9a-f]{8}$/.test(key)), 'keys alone');
+  assert.ok(!JSON.stringify(entry.shown).includes('board'), 'never a name');
+  run('ls');
+  assert.deepEqual(lastLog().shown, [], 'no envelope: none shown');
+  run('version', '--call', JSON.stringify({ ...ENVELOPE, next }));
+  assert.deepEqual(lastLog().shown, [], 'an exempt command: none shown');
+} finally {
+  rmSync(lit, { recursive: true, force: true });
 }
 
 console.log('call envelope and call log tests passed.');
