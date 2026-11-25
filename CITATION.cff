@@ -12,7 +12,7 @@ keywords:
   - programming language
   - agent orchestration
   - context engineering
-version: "0.28.0"
+version: "0.29.0"
 repository-code: "https://github.com/digitex3d/agent-pack"
-date-released: "2026-10-12"
+date-released: "2026-11-25"
 # To fill at release: doi (Zenodo).

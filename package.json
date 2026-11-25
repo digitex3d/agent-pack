@@ -1,6 +1,6 @@
 {
   "name": "agent-pack",
-  "version": "0.28.0",
+  "version": "0.29.0",
   "description": "A language for your agents, with imports, types and a compiler that catches mistakes before they run. One source, every harness.",
   "author": "Giuseppe Federico <giuseppefeder@gmail.com>",
   "license": "Apache-2.0",
