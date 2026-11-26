@@ -19,7 +19,6 @@ import { fileURLToPath } from 'node:url';
 import { bundleAgentObject } from '../dist/src/compiler/index.js';
 import { ApDocument } from '../dist/src/apdoc/document.js';
 import { ApxEngine } from '../dist/src/apx/engine.js';
-import { TABELI_ENGINE } from '../dist/src/config.js';
 import { apxFiles } from '../dist/src/apx/write.js';
 import { apxPath, CALL_LOG_FILE, LOG_DIR } from '../dist/src/apx/paths.js';
 import { BUILTIN_LIBRARY_ROOT, DASHBOARD_DEFAULTS } from '../dist/src/config.js';
@@ -54,7 +53,7 @@ const ENVELOPE = { goal: 'I fix the crash of the date parser.', context: 'The fi
 // --- the quiz, every block read on demand: it asks how to call the apx, after the kinds ---
 {
   const doc = ApDocument.fromJson(json);
-  const BUILD = { builtAt: '2026-11-19T10:00:00Z', agentPackVersion: '0.28.0', hash: 'c0ffee', tabeli: TABELI_ENGINE };
+  const BUILD = { builtAt: '2026-11-19T10:00:00Z', agentPackVersion: '0.28.0', hash: 'c0ffee' };
   const start = (...args) => {
     const lines = [];
     const code = new ApxEngine(doc, BUILD, 'apx/pm.apx', line => lines.push(line), { whole: 0, block: 0 }).run(['start', ...args]);

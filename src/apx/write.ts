@@ -7,7 +7,7 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { PACKAGE_ROOT, TABELI_ENGINE, JUDGE_LOCK_DEFAULT, packageVersion, type Config } from '../config.js';
+import { PACKAGE_ROOT, JUDGE_LOCK_DEFAULT, packageVersion, type Config } from '../config.js';
 import type { EmittedFile } from '../../adapters/types.js';
 import { apxFile, payloadFor, packPayload, storeSections, unitApxFile, type ApxLimits, type ApxPayload, type Held, type UnitSection } from './payload.js';
 import { unitHolds } from './unit.js';
@@ -27,7 +27,7 @@ let engine: string | null = null;
 export function apxFiles(agent: string, document: string, projectRoot: string, compress: boolean, checks: ApxChecks | null = null, limits: ApxLimits = {}): EmittedFile[] {
   engine ??= readFileSync(resolve(PACKAGE_ROOT, 'dist/apx-engine.js'), 'utf-8');
   return [
-    { path: resolve(projectRoot, apxPath(agent)), content: apxFile(engine, document, packageVersion(), TABELI_ENGINE, compress, checks, limits, agent) },
+    { path: resolve(projectRoot, apxPath(agent)), content: apxFile(engine, document, packageVersion(), compress, checks, limits, agent) },
     { path: resolve(projectRoot, APX_DIR, 'package.json'), content: '{ "type": "commonjs" }\n' },
   ];
 }
@@ -56,7 +56,7 @@ export function unitApxFiles(unit: UnitSection, projectRoot: string, own: ApxPay
 
 /** The payload of a unit's own document, as every apx's is made. */
 export function unitPayload(document: string, checks: ApxChecks | null = null, limits: ApxLimits = {}): ApxPayload {
-  return payloadFor(document, { agentPackVersion: packageVersion(), tabeli: TABELI_ENGINE, checks, limits });
+  return payloadFor(document, { agentPackVersion: packageVersion(), checks, limits });
 }
 
 /**

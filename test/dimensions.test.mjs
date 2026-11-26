@@ -77,13 +77,13 @@ try {
     await assert.rejects(compile(dimension({ store: '    STORE  nope' })), /nope/);
     // AS is a dimension's no more: the rewrite to STORE
     await assert.rejects(compile(dimension({ rest: ['    AS     steps'] })), /AS is not allowed inside DIMENSION — a dimension's records have the fields of its store — write `STORE <store>`/);
-    await assert.rejects(compile(dimension({ rest: ['    DRIVER tabeli'] })), /DRIVER is not allowed inside DIMENSION \(expected one of: ABOUT, FOR, EACH, STORE/);
+    await assert.rejects(compile(dimension({ rest: ['    DRIVER files'] })), /DRIVER is not allowed inside DIMENSION \(expected one of: ABOUT, FOR, EACH, STORE/);
     await assert.rejects(compile(dimension({ rest: ['    FOR    lib/*.py'] })), /DIMENSION block has 2 occurrences of FOR/);
     await assert.rejects(compile(dimension({ rest: ['    MEM    the steps'] })), /MEM is not allowed inside DIMENSION — a dimension's rules say how its value is produced/);
     await assert.rejects(compile(dimension({ rest: ['    EACH   class'] })), /DIMENSION block has 2 occurrences of EACH/);
     // its store: fields, no session, no KEY of its own, a driver that takes and guards
     const withStore = lines => compile(dimension({ store: '    STORE  own' }), ['STORE own:', '    ABOUT  own', ...lines, '']);
-    await withStore(['    DRIVER tabeli', '    LASTS  project', '    AS     steps']);
+    await withStore(['    LASTS  project', '    AS     steps']);
     await assert.rejects(withStore(['    LASTS  session', '    AS     steps']), /DIMENSION pseudocode: its store `own` says LASTS session — a dimension's answers are kept for the project/);
     await assert.rejects(withStore(['    KEY    name', '    AS     steps']), /DIMENSION pseudocode: its store `own` says KEY name — a dimension keeps its records by file itself/);
     await assert.rejects(withStore([]), /DIMENSION pseudocode: its store `own` has no fields — give it SLOTS, or AS <template>/);
@@ -209,7 +209,7 @@ try {
 
   // --- the defhash: the content without the names — a rename keeps it, an edit changes it ---
   {
-    const hashOf = async (name, template, rule = 'write one step per decision', slot = 'its steps', { each = 'function', unit = 'a function', store = 'steps-table', glob = 'src/**/*.py', driver = null } = {}) => {
+    const hashOf = async (name, template, rule = 'write one step per decision', slot = 'its steps', { each = 'function', unit = 'a function', store = 'steps-table', glob = 'src/**/*.py' } = {}) => {
       const file = join(root, 'h.ap');
       writeFileSync(file, [
         'EXPORT AGENT h AS h-role:', '    ABOUT    h', '    MANDATE  m', `    @WITH    ${name}:`, '        DO  read it first', '',
@@ -217,7 +217,7 @@ try {
         `TEMPLATE ${template}:`, '    ABOUT  the steps', '    SLOTS:', '        name: TEXT "the function"', `        steps: TEXT "${slot}"`, '',
         'TEMPLATE unit:', '    ABOUT  what to translate', '    SLOTS:', `        what: TEXT "${unit}"`, '',
         'TEMPLATE fn:', '    ABOUT  what to translate', '    SLOTS:', `        what: TEXT "${unit}"`, '',
-        `STORE ${store}:`, '    ABOUT  the steps', ...(driver ? [`    DRIVER ${driver}`] : []), `    AS     ${template}`, '',
+        `STORE ${store}:`, '    ABOUT  the steps', `    AS     ${template}`, '',
         `DIMENSION ${name}:`, '    ABOUT  what each function does', `    FOR    ${glob}`, `    EACH   ${each}`, `    STORE  ${store}`, `    MUST   ${rule}`, '',
       ].join('\n'));
       const c = await bundleAgentObject({ agentName: 'h', agentFile: file, agentDir: root, projectRoot: root, libraryRoot: lib, libraryRoots: [lib], bundleConfig: { runtime: false } });
@@ -231,7 +231,6 @@ try {
     assert.notEqual(await hashOf('pseudocode', 'steps', 'write one step per branch'), base, 'a rule edited: a new definition');
     assert.notEqual(await hashOf('pseudocode', 'steps', undefined, 'the steps, in order'), base, 'its store\'s fields edited: a new definition');
     assert.notEqual(await hashOf('pseudocode', 'steps', undefined, undefined, { glob: 'lib/**/*.py' }), base, 'its FOR edited: a new definition');
-    assert.notEqual(await hashOf('pseudocode', 'steps', undefined, undefined, { driver: 'tabeli' }), base, 'another driver: a new definition');
     // N1: the template EACH names counts with its content, not its name
     const eachBase = await hashOf('pseudocode', 'steps', undefined, undefined, { each: 'unit' });
     assert.notEqual(eachBase, base, 'EACH naming a template is another definition');
@@ -509,21 +508,6 @@ try {
     has(bundle(), `.agent-pack/cache/${hash}.json removed`);
     assert.ok(!existsSync(join(proj, '.agent-pack', 'cache', live)));
     has(apx(['dimension', 'read', DIM, 'src/moved.py']).out, 'miss pseudocode src/moved.py — never written');
-  }
-
-  // --- its store kept by tabeli: the same answers, in a .tbl of the cache ---
-  {
-    write(storeFile, readFileSync(storeFile, 'utf-8').replace('    AS     pseudo-steps', '    DRIVER tabeli\n    AS     pseudo-steps'));
-    bundle();
-    const w = apx(['dimension', 'write', DIM, 'src/moved.py', '-'], json([{ name: 'b', steps: 'returns 1' }]));
-    assert.equal(w.code, 0, w.out);
-    has(w.out, '.tbl');
-    has(apx(['dimension', 'read', DIM, 'src/moved.py']).out, 'hit pseudocode src/moved.py', 'b: returns 1');
-    has(apx(['dimension', 'q', DIM, 'name=b']).out, "src/moved.py  name=b steps='returns 1'");
-    has(apx(['dimension', 'next', DIM]).out, 'src/util/c.py — never written');
-    assert.equal(apx(['dimension', 'next', DIM]).code, 1, 'taken, with tabeli too');
-    write(storeFile, readFileSync(storeFile, 'utf-8').replace('    DRIVER tabeli\n', ''));
-    bundle();
   }
 
   // --- B6: a dimension is an agent's — a standalone file or a team's file that imports one fails the build ---

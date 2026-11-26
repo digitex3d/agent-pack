@@ -21,7 +21,6 @@ import { apxFiles } from '../dist/src/apx/write.js';
 import { apxPath, sessionFile, CALL_LOG_FILE } from '../dist/src/apx/paths.js';
 import { ApDocument } from '../dist/src/apdoc/document.js';
 import { ApxEngine } from '../dist/src/apx/engine.js';
-import { TABELI_ENGINE } from '../dist/src/config.js';
 
 // --- the design's complete example (dossier-v1/PLAN-dashboard.md), its made-up ids and affinities: exactly the dashboard printed there ---
 {
@@ -437,7 +436,7 @@ try {
   {
     const parsed = await compile(DASHBOARD_DEFAULTS);
     const doc = ApDocument.fromJson(JSON.stringify(parsed));
-    const BUILD = { builtAt: '2026-11-20T10:00:00Z', agentPackVersion: '0.28.0', hash: 'c0ffee', tabeli: TABELI_ENGINE };
+    const BUILD = { builtAt: '2026-11-20T10:00:00Z', agentPackVersion: '0.28.0', hash: 'c0ffee' };
     const received = { call: { goal: 'I ship the fix.', context: 'The tests pass.', why: 'I check.', next: 'I commit the change once the developer gives consent.' }, problem: null };
     const start = async (...args) => {
       const lines = [];

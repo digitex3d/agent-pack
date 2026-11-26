@@ -11,7 +11,7 @@
  *   //apx:end::json:{ hash, header }
  *
  * `type` and `name` identify a section (`image`, `store:verb-linter/vocab`,
- * `compute:dst-05154e81`, `tabeli:linux-x64`); a reader ignores the types it
+ * `compute:dst-05154e81`); a reader ignores the types it
  * does not know. `encoding` says how `data` holds the content: `json` as it
  * is, `gzip` and `tar+gzip` as the base64 of the gzipped bytes. `data` never
  * holds a line break — that is what makes the line a comment.

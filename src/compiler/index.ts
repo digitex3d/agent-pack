@@ -599,7 +599,7 @@ function dimensionStoreErrors(store: StoreBlock, err: (name: string, message: st
   if (store.storeKey) errors.push(err(store.name, `its store \`${store.name}\` says KEY ${store.storeKey} — a dimension keeps its records by file itself: drop the line`));
   const driver = storeDriverOf(store.storeDriver);
   const lacks = driver ? DIMENSION_CAPABILITIES.filter(capability => !driver.capabilities.includes(capability)) : [];
-  if (lacks.length > 0) errors.push(err(store.name, `its store's driver \`${store.storeDriver}\` has no ${lacks.join(' and ')} — a dimension takes and guards its records: keep it with files or tabeli`));
+  if (lacks.length > 0) errors.push(err(store.name, `its store's driver \`${store.storeDriver}\` has no ${lacks.join(' and ')} — a dimension takes and guards its records: keep it with files, or a driver of the config that has them`));
   return errors;
 }
 

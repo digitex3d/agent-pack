@@ -225,7 +225,7 @@ You must:
 You must not touch a store's files directly
 
 ## `considerations` — the user's considerations on the agents' work, one record per consideration
-Its records live in `stores/agent-feedback/considerations.tbl`, from the project root — read and write them only with the commands below, never the file. It survives between sessions — what you write stays.
+Its records live in `stores/agent-feedback/considerations.json`, from the project root — read and write them only with the commands below, never the file. It survives between sessions — what you write stays.
 
 Fields:
 - **ref** — text — the record's name, as <date>-<kebab-case-problem> — identifies the record

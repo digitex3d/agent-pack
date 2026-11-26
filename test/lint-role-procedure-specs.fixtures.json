@@ -4930,7 +4930,7 @@
   "expected": [
    [
     6,
-    "TYPE became DRIVER — write `DRIVER <driver>` (tabeli, files, or a driver of the config); a store with no DRIVER is kept by files: \"TYPE something\"",
+    "TYPE became DRIVER — write `DRIVER <driver>` (files, or a driver of the config); a store with no DRIVER is kept by files: \"TYPE something\"",
     null,
     "agents/library/roles/r.ap"
    ],
@@ -4957,7 +4957,7 @@
   "expected": [
    [
     6,
-    "TYPE became DRIVER — write `DRIVER <driver>` (tabeli, files, or a driver of the config); a store with no DRIVER is kept by files: \"TYPE something\"",
+    "TYPE became DRIVER — write `DRIVER <driver>` (files, or a driver of the config); a store with no DRIVER is kept by files: \"TYPE something\"",
     null,
     "agents/library/procedures/p.ap"
    ],

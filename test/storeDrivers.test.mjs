@@ -15,9 +15,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CLI = join(ROOT, 'dist', 'index.js');
 const write = (file, text) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, text); };
 const { runDriverContract } = await import('../dist/src/storeDrivers/contract.js');
-const { loadDrivers, storeDriverOf, useTabeliEngine } = await import('../dist/src/storeDrivers/registry.js');
+const { loadDrivers, storeDriverOf } = await import('../dist/src/storeDrivers/registry.js');
 const { parseFilter } = await import('../dist/src/storeDrivers/filters.js');
-const { TABELI_ENGINE } = await import('../dist/src/config.js');
 
 const holds = async name => {
   const failed = (await runDriverContract(storeDriverOf(name))).filter(r => !r.ok);
@@ -30,10 +29,8 @@ assert.deepEqual(parseFilter('topic~a=b'), { field: 'topic', op: '~', value: 'a=
 assert.deepEqual(parseFilter('note=x>y'), { field: 'note', op: '=', value: 'x>y' });
 assert.equal(parseFilter('no-operator'), null);
 
-// --- the shipped drivers ---
-useTabeliEngine(TABELI_ENGINE);
+// --- the shipped driver ---
 await holds('files');
-await holds('tabeli');
 
 // --- a driver of the config: a module, as anyone writes one, installed under the name it answers ---
 // It keeps its records the way files does, under its own name — the contract tests a driver loaded from a module.

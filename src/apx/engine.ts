@@ -77,8 +77,6 @@ export interface ApxBuild {
   builtAt: string;
   agentPackVersion: string;
   hash: string;
-  /** The tabeli engine of the agent-pack that wrote the apx — absent in an apx written before it shipped one. */
-  tabeli?: string;
   /** What `check` needs at run time, from the `checks` config key — absent: no judge was configured. */
   checks?: ApxChecks;
   /** How long `wait` waits at most when a WAIT names no MAX — the `wait.max` config key; absent: the default. */

@@ -1,13 +1,12 @@
 # Store drivers
 
-A [`STORE`](/reference/language#store) says what an agent keeps: its fields, what identifies a record, how long it lasts. A **driver** says how it is kept: a JSON file, a tabeli table, a database. The agent never sees it — it reads and writes the store with the [same commands](./apx.md#stores) whatever driver keeps it, and the apx's store API turns them into the driver's operations.
+A [`STORE`](/reference/language#store) says what an agent keeps: its fields, what identifies a record, how long it lasts. A **driver** says how it is kept: a JSON file, a database. The agent never sees it — it reads and writes the store with the [same commands](./apx.md#stores) whatever driver keeps it, and the apx's store API turns them into the driver's operations.
 
-Two drivers ship and need no config:
+One driver ships and needs no config:
 
 | Driver | Keeps a store in | Needs |
 |---|---|---|
 | `files` — the default | one JSON file per store, written under a lock | nothing |
-| `tabeli` | a tabeli table (`.tbl`) | the engine agent-pack builds: `make` and a C compiler |
 
 A store names its driver with `DRIVER <name>`; without the line it is kept by `files`.
 
@@ -158,4 +157,4 @@ agent-pack driver test ./drivers/sqlite.mjs
 agent-pack driver test agent-pack-driver-notion --options '{"token": "NOTION_TOKEN", "databases": {…}}'
 ```
 
-Each case opens a fresh store and checks one operation — the base ones, then those of each capability the driver declares. The command prints one line per case and exits `1` when one fails. `agent-pack driver test files` and `agent-pack driver test tabeli` run it on the shipped drivers.
+Each case opens a fresh store and checks one operation — the base ones, then those of each capability the driver declares. The command prints one line per case and exits `1` when one fails. `agent-pack driver test files` runs it on the shipped driver.

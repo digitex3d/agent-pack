@@ -255,7 +255,6 @@ PROCEDURE review-wiki-structure:
 
 STORE wiki-files:
     ABOUT  every file of the wiki: where it is and what it holds
-    DRIVER tabeli
     LASTS  project
     KEY    path
     SLOTS:
@@ -264,7 +263,6 @@ STORE wiki-files:
 
 STORE wiki-labels:
     ABOUT  the labels available for wiki files, and what each one means
-    DRIVER tabeli
     LASTS  project
     KEY    label
     SLOTS:
@@ -273,7 +271,6 @@ STORE wiki-labels:
 
 STORE wiki-file-labels:
     ABOUT  which wiki file has which label, one record per pair
-    DRIVER tabeli
     LASTS  project
     KEY    link
     SLOTS:

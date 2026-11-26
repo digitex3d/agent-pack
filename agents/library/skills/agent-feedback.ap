@@ -97,7 +97,6 @@ PROCEDURE apply-approved-rule:
 
 STORE considerations:
     ABOUT  the user's considerations on the agents' work, one record per consideration
-    DRIVER tabeli
     LASTS  project
     KEY    ref
     SLOTS:

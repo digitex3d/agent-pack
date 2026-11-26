@@ -5,7 +5,7 @@
  * variables declared in a body or exported by a module and imported, assigned by `VAR x:` blocks and
  * `DO … INTO x`, typed by a template (declared or inferred from a procedure's
  * AS), read as `{{x}}` through the apx, which keeps their values per harness
- * session in one tabeli table the project's agents share.
+ * session in one store the project's agents share.
  */
 import { strict as assert } from 'node:assert';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, chmodSync } from 'node:fs';
@@ -19,7 +19,6 @@ const { ApDocument } = await import('../dist/src/apdoc/document.js');
 const { ApxEngine } = await import('../dist/src/apx/engine.js');
 const { apxFiles } = await import('../dist/src/apx/write.js');
 const { apxPath } = await import('../dist/src/apx/paths.js');
-const { TABELI_ENGINE } = await import('../dist/src/config.js');
 const { default: claudeCode } = await import('../dist/adapters/claude-code/index.js');
 
 const tmp = mkdtempSync(join(tmpdir(), 'ap-vars-'));
@@ -279,8 +278,8 @@ try {
     const extra = ['IMPORT answer, the-verdict, board FROM @main.vars'];
     const docOf = async name => ApDocument.fromJson((await compile(['    VAR mine', '    DO  read {{answer}} on {{board}}, with {{mine}}', '    DO  decide INTO the-verdict'], { name, extra })).structure.asJson());
     const docs = { a: await docOf('a'), b: await docOf('b') };
-    const BUILD = { builtAt: '', agentPackVersion: '', hash: '', tabeli: TABELI_ENGINE };
-    /** One run of `agent`'s engine; `build` names the tabeli it creates tables with. */
+    const BUILD = { builtAt: '', agentPackVersion: '', hash: '' };
+    /** One run of `agent`'s engine, with its build provenance. */
     const apxBuilt = (build, agent, ...args) => {
       const lines = [];
       const code = new ApxEngine(docs[agent], build, join(project, apxPath(agent)), l => lines.push(l)).run(args);

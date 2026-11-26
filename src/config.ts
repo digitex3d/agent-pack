@@ -69,13 +69,6 @@ export function packageVersion(): string {
   return packageInfo().version;
 }
 
-/**
- * The tabeli engine that ships with agent-pack — `npm run build` compiles it
- * from `tabeli/tabeli.c` with tabeli's own Makefile. `bundle all` records its
- * absolute path in every `.apx`, which runs from the project, not from here.
- */
-export const TABELI_ENGINE = resolve(PACKAGE_ROOT, 'tabeli/tabeli');
-
 /** The project-level instructions file every harness reads: the open AGENTS.md standard. */
 export const AGENTS_MD = 'AGENTS.md';
 
@@ -294,7 +287,7 @@ export interface Config {
   plugins?: PluginSpec[];
   /** `agent-pack chat`: the ACP server the chat talks to — null (no `chat` key): no chat. */
   chat?: ChatConfig | null;
-  /** The store drivers the project adds to files and tabeli (`drivers: ['agent-pack-driver-sqlite']`), installed — src/storeDrivers/. */
+  /** The store drivers the project adds to files (`drivers: ['agent-pack-driver-sqlite']`), installed — src/storeDrivers/. */
   drivers?: DriverEntry[];
   /** What the apx shows after a command's answer, and how a block is weighed for it — the defaults when absent. */
   dashboard?: DashboardConfig;

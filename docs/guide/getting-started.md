@@ -3,7 +3,6 @@
 ## Requirements
 
 - Node 20 or newer.
-- `make` and a C compiler (gcc or clang): the build compiles tabeli, the engine behind session variables and the `tabeli` store driver, which works on Linux (see [The apx](./apx.md#stores)). A store with no `DRIVER` needs none of it: it is kept in a JSON file.
 
 ## Install
 

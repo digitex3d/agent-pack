@@ -27,7 +27,7 @@ const anApx = existsSync(join(apxDir, `${AGENT}.apx`)) ? readFileSync(join(apxDi
 const engine = anApx ? splitPack(anApx).engine : readFileSync(join(ROOT, 'dist', 'apx-engine.js'), 'utf-8');
 
 // --- split is the inverse of packFile; the data alone reads as the file does ---
-const payload = `{"build":{"agentPackVersion":"0.0.0","hash":"abc","tabeli":"/t"},"document":{"blocks":[]}}`;
+const payload = `{"build":{"agentPackVersion":"0.0.0","hash":"abc"},"document":{"blocks":[]}}`;
 const file = packFile(engine, { name: 'x', version: '0.0.0', engine: 'agent-pack 0.0.0' }, [{ type: 'image', name: '', encoding: 'json', data: payload }]);
 const { engine: head, data } = splitPack(file);
 assert.equal(head + data, file, 'engine + data give the file back');

@@ -98,7 +98,7 @@ A filter is `<field><op><value>`: `=`, `!=`, `>`, `<`, `>=`, `<=`, and `~` for "
 
 `take`, `set … if` and `mark`/`since` are what a driver may add to the base operations; both shipped drivers have all three. With a driver that lacks one the operation is refused (exit `2`), and the compiled definition never shows its command.
 
-The data is never touched directly. Where it lives is the driver's: with `files`, the default, a `LASTS project` store is `stores/<agent>/<store>.json` at the project root — yours to version or not — and a `LASTS session` store sits beside the apx, in `.agent-pack/apx/<agent>.state/`; with `tabeli`, the same places with `.tbl`. The tabeli driver uses the engine agent-pack builds (`tabeli/`, MIT, Linux): building agent-pack needs `make` and a C compiler, and `bundle all` records the engine's path in every `.apx`. Other drivers come from the config: [Store drivers](./drivers.md).
+The data is never touched directly. Where it lives is the driver's: with `files`, the default, a `LASTS project` store is `stores/<agent>/<store>.json` at the project root — yours to version or not — and a `LASTS session` store sits beside the apx, in `.agent-pack/apx/<agent>.state/`. Other drivers come from the config: [Store drivers](./drivers.md).
 
 ## Dimensions
 
@@ -132,14 +132,14 @@ node .agent-pack/apx/coder.apx dimension write dim-3f2a9c1e src/billing/empty.py
 | `dimension find <dim-id> <text>` | every instance kept, across the dimension's files, whose text holds `<text>` (case aside) — fresh entries only; exit `1` when none does |
 | `dimension q <dim-id> [<field><op><value> …] [json]` | the instances every filter holds for, each with its file — filters as a [store's](#stores), on the store's fields or `_file`; fresh answers only, and the files left out for having none |
 | `dimension next <dim-id>` | the next file it covers with no fresh answer, taken for you: no other agent gets it meanwhile (for thirty minutes, or until it is written) — exit `1` when every file is answered or taken |
-| `dimension mark <dim-id>`, then `dimension since <dim-id> <mark>` | a mark of now, then the files answered after it — with tabeli, a file written in the same second as the mark may come back too |
+| `dimension mark <dim-id>`, then `dimension since <dim-id> <mark>` | a mark of now, then the files answered after it |
 | `dimension ls <dim-id> [glob]` | the entries kept — `fresh`, `stale` or `gone`, and why — then the counts, hits, misses and hit rate |
 | `dimension why <dim-id> <file>` | the state of one entry, file by file: the fingerprint kept and the current one |
 | `dimension clear <dim-id> [glob] [--by <agent>]` | delete entries: all, those matching a glob, those an agent wrote |
 | `dimension gc <dim-id>` | delete the entries of files that no longer exist |
 | `dimension` | every dimension of the agent, by its id: what it covers, its defhash and its counts |
 
-The cache lives at the project root, outside git, and is never touched directly: each dimension's answers are a store of their own, `.agent-pack/cache/<defhash>.<ext>` — the fields and the driver of its `STORE`, the extension the driver's (`.json` for files, `.tbl` for tabeli) — with one record per file answered (its fingerprint, its refs, who wrote it) and one per instance; the counters apart in `.agent-pack/cache/stats/<defhash>.json`. Every agent that has the dimension reads and writes the same store. A write is guarded: the file's record is claimed while its instances change, so two agents answering one file never mix their records — the one that loses exits `4`. The defhash is the dimension's content, its store's and the template `EACH` names, without their names: renaming any of them keeps the cache, any other edit starts a new store, and `agent-pack bundle all` deletes the stores no dimension produces any more. A file's fingerprint ignores line endings, trailing whitespace and blank lines; indentation and comments count.
+The cache lives at the project root, outside git, and is never touched directly: each dimension's answers are a store of their own, `.agent-pack/cache/<defhash>.<ext>` — the fields and the driver of its `STORE`, the extension the driver's (`.json` for files) — with one record per file answered (its fingerprint, its refs, who wrote it) and one per instance; the counters apart in `.agent-pack/cache/stats/<defhash>.json`. Every agent that has the dimension reads and writes the same store. A write is guarded: the file's record is claimed while its instances change, so two agents answering one file never mix their records — the one that loses exits `4`. The defhash is the dimension's content, its store's and the template `EACH` names, without their names: renaming any of them keeps the cache, any other edit starts a new store, and `agent-pack bundle all` deletes the stores no dimension produces any more. A file's fingerprint ignores line endings, trailing whitespace and blank lines; indentation and comments count.
 
 ## Variables
 
@@ -157,7 +157,7 @@ node .agent-pack/apx/reviewer.apx get verdict
 
 `get` and `set` find the variable's scope themselves. A **private** variable is the agent's own: another agent of the session, even one running the same procedure, never sees its value, and the same agent called again in the session finds it. A **SESSION** variable is one value for every agent of the project in the session — a team shares it.
 
-`get` and `set` are the only way to a variable: how the apx keeps the values is its own business, and may change. Today they sit in tabeli tables under `.agent-pack/state/<session id>/`, never touched directly.
+`get` and `set` are the only way to a variable: how the apx keeps the values is its own business, and may change. Today they sit in JSON files under `.agent-pack/state/<session id>/`, never touched directly.
 
 The session is the harness's: each adapter names the environment variable that holds its id (`claude-code` and `claude-code-apx`: `CLAUDE_CODE_SESSION_ID`). Without it — an adapter that names none, the variable unset, or an id that is no folder name — `get` and `set` of a variable refuse (exit `2`) and read or write nothing; every other verb works as usual.
 
@@ -243,11 +243,11 @@ node .agent-pack/apx/clerk.apx run exe-8c21d4e0
 
 **Rounds.** For an `UNTIL*` or `UNTIL**`, each `holds: false` is a round: the apx adds `round 2 of 3 — do the next round, then ask again`, and at the limit (the head's `MAX <n>`) `round limit reached (3 of 3): stop and report that the condition never held`, with exit `7` — so a command chained after it with `&&` never starts another round. A `holds: true` starts the count again, and so does an answer given after the limit: the loop was left, a later entry is a new loop at round 1.
 
-Every delegate's answer and every program run is recorded in the session, in `.agent-pack/state/<session id>/executors.tbl`: the contract id, the executor, who carried it out (the delegate's name, or `program`), a sha256 fingerprint of the input (not the input), the outcome (`answered`, `ran`, `refused`, `timeout`, `broken`), the condition's answer, and the time.
+Every delegate's answer and every program run is recorded in the session, in `.agent-pack/state/<session id>/executors.json`: the contract id, the executor, who carried it out (the delegate's name, or `program`), a sha256 fingerprint of the input (not the input), the outcome (`answered`, `ran`, `refused`, `timeout`, `broken`), the condition's answer, and the time.
 
 ## Background work
 
-What a flow starts with `DELEGATE~` or `FORK~` has an id like `dlg-28f9d7d3` and a record in the session's registry, `.agent-pack/state/<session id>/delegations.tbl`: shared by every agent of the session, on disk — it outlives the conversation that started it. The compiled flow names the commands on each line (`get <flw-id>`):
+What a flow starts with `DELEGATE~` or `FORK~` has an id like `dlg-28f9d7d3` and a record in the session's registry, `.agent-pack/state/<session id>/delegations.json`: shared by every agent of the session, on disk — it outlives the conversation that started it. The compiled flow names the commands on each line (`get <flw-id>`):
 
 ```bash
 node .agent-pack/apx/lead.apx delegate start dlg-28f9d7d3          # the lead, before handing it over
@@ -268,7 +268,7 @@ dlg-1d06e0a6  check  running  → checker-b  — still running after 10m
 
 ## Contracts
 
-A flow's `MARK` has an id like `mrk-5b0e2a71`, and each contract it binds an id like `ctr-4a1f0c92` — a record in the same registry, `delegations.tbl`, beside the background pieces. The compiled flow names the commands:
+A flow's `MARK` has an id like `mrk-5b0e2a71`, and each contract it binds an id like `ctr-4a1f0c92` — a record in the same registry, `delegations.json`, beside the background pieces. The compiled flow names the commands:
 
 ```bash
 node .agent-pack/apx/lead.apx contract mark mrk-5b0e2a71 - < spec.json    # whoever runs the flow: one zone, its spec on stdin
@@ -346,7 +346,7 @@ agent-pack bundle reviewer --executable
 .agent-pack/bin/reviewer start
 ```
 
-The executable is the same engine with the apx's data lines carried inside it; it answers the verbs as the apx does, and, run from the project, keeps to the same state, stores and programs — `.agent-pack/bin/` is as deep as `.agent-pack/apx/`. `--target <bun target>` builds for another platform. Only the agent's context is inside: the stores, the distilled programs and the tabeli engine stay where they are, and the verbs that run another program may still need Node.
+The executable is the same engine with the apx's data lines carried inside it; it answers the verbs as the apx does, and, run from the project, keeps to the same state, stores and programs — `.agent-pack/bin/` is as deep as `.agent-pack/apx/`. `--target <bun target>` builds for another platform. Only the agent's context is inside: the stores and the distilled programs stay where they are, and the verbs that run another program may still need Node.
 
 ## Compression
 

@@ -5,7 +5,7 @@
  * parses what the agent wrote; a driver gets `Filter`s and translates them,
  * or, keeping records in memory (the files driver), tests them with `holds`.
  *
- * The semantics are tabeli's, the language agents already wrote: values are
+ * The semantics are the language agents already write: values are
  * compared as numbers when both sides are numbers, as text otherwise; `~`
  * means "contains".
  */

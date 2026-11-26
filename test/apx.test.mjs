@@ -26,7 +26,6 @@ import { apxFiles } from '../dist/src/apx/write.js';
 import { apxPath, FLOWS_DIR, flowScriptFile } from '../dist/src/apx/paths.js';
 import { compileWorkflow } from '../dist/adapters/claude-code/workflow.js';
 import { buildOrchestrationContent } from '../dist/src/orchestrationSection.js';
-import { TABELI_ENGINE } from '../dist/src/config.js';
 
 const FIXTURE = resolve(dirname(fileURLToPath(import.meta.url)), 'fixtures/apx');
 const library = join(FIXTURE, 'library');
@@ -49,7 +48,7 @@ const compiledTeam = await bundleAgentObject({
   libraries: { '@main': library },
 });
 const teamDoc = ApDocument.fromJson(compiledTeam.structure.asJson());
-const BUILD = { builtAt: '2026-09-24T10:00:00Z', agentPackVersion: '0.26.0', hash: 'c0ffee', tabeli: TABELI_ENGINE };
+const BUILD = { builtAt: '2026-09-24T10:00:00Z', agentPackVersion: '0.26.0', hash: 'c0ffee' };
 
 /** Run one invocation of an engine over `document`, called as `exe`; returns { out, code }. */
 function drive({ document = doc, exe = EXE, budget } = {}, ...args) {

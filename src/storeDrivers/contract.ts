@@ -2,8 +2,8 @@
 // Copyright (c) 2026 Giuseppe Federico
 /**
  * The driver contract, as cases — what every driver must answer, the same
- * for the shipped ones and for anyone's. The test suite runs it on files and
- * tabeli; `agent-pack driver test <module>` runs it on a driver of the config,
+ * for the shipped one and for anyone's. The test suite runs it on files;
+ * `agent-pack driver test <module>` runs it on a driver of the config,
  * so its author knows it holds before publishing it.
  *
  * Each case opens a fresh store in its own folder. Values are compared as

@@ -1403,7 +1403,7 @@ const REMOVED_KEYWORDS: Record<string, string> = {
   CONTRACT: `CONTRACT blocks were removed — a contract is what a MARK makes: ${CONTRACTS_REWRITE}`,
   WITHIN: 'a WITHIN line was a CONTRACT\'s — a contract may write beyond its zones by its MARK: `MARK … AS <spec> WITHIN <domain>`; work is put within a domain by `@WITHIN <domain>`',
   PARALLEL: 'PARALLEL was removed — in one STEP, start each piece with `DELEGATE~ <task> INTO <name> BY <agent>`, then `WAIT ALL`; one run per element of a list: `EACH <item> IN {{<list>}} MAX <n>:` with its DELEGATE or FORK lines beneath',
-  TYPE: 'TYPE became DRIVER — write `DRIVER <driver>` (tabeli, files, or a driver of the config); a store with no DRIVER is kept by files',
+  TYPE: 'TYPE became DRIVER — write `DRIVER <driver>` (files, or a driver of the config); a store with no DRIVER is kept by files',
   CONTEXT: 'CONTEXT was removed — the form of a DELEGATE says the context: `DELEGATE … BY <agent>` hands over all of it, `DELEGATE … BY <agent> AS <template>` only what the template holds, `FORK …` the conversation itself',
 };
 

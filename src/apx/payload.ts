@@ -2,8 +2,8 @@
 // Copyright (c) 2026 Giuseppe Federico
 /**
  * An agent's `.apx` as a pack (pack.ts) with one section, `image`: the
- * payload `{ build, document }` — build provenance (the tabeli engine and
- * the `checks` a checked condition needs included) and the agent's compiled
+ * payload `{ build, document }` — build provenance (the agent-pack version
+ * and the `checks` a checked condition needs included) and the agent's compiled
  * document, exactly as `ApDocument.asJson()` wrote it. Written by `bundle
  * all`, read back by the engine at the head of the same file.
  *
@@ -59,10 +59,9 @@ export interface ApxLimits {
   drivers?: DriverEntry[] | null;
 }
 
-/** How a document's payload is built: the agent-pack that builds it, the tabeli engine, the checks and limits it records. */
+/** How a document's payload is built: the agent-pack that builds it, the checks and limits it records. */
 export interface PayloadBuild {
   agentPackVersion: string;
-  tabeli: string;
   checks?: ApxChecks | null;
   limits?: ApxLimits;
 }
@@ -73,13 +72,12 @@ export interface PayloadBuild {
  * same hash.
  */
 export function payloadFor(document: string, how: PayloadBuild): ApxPayload {
-  const { agentPackVersion, tabeli, checks = null, limits = {} } = how;
+  const { agentPackVersion, checks = null, limits = {} } = how;
   const compact = JSON.stringify(JSON.parse(document));
   const build: ApxBuild = {
     builtAt: new Date().toISOString(),
     agentPackVersion,
     hash: sha256Hex(compact).slice(0, 12),
-    tabeli,
     ...(checks ? { checks } : {}),
     ...(limits.waitMax ? { waitMax: limits.waitMax } : {}),
     ...(limits.markMax ? { markMax: limits.markMax } : {}),
@@ -131,8 +129,8 @@ export function storeSections(held: readonly Held[], compress: boolean): Section
 }
 
 /** The whole `.apx` file of an agent: the bundled engine, then the pack lines — its view and its blocks. */
-export function apxFile(engine: string, document: string, agentPackVersion: string, tabeli: string, compress: boolean, checks: ApxChecks | null = null, limits: ApxLimits = {}, name = ''): string {
-  const payload = payloadFor(document, { agentPackVersion, tabeli, checks, limits });
+export function apxFile(engine: string, document: string, agentPackVersion: string, compress: boolean, checks: ApxChecks | null = null, limits: ApxLimits = {}, name = ''): string {
+  const payload = payloadFor(document, { agentPackVersion, checks, limits });
   return packFile(engine, { name, version: agentPackVersion, engine: `agent-pack ${agentPackVersion}` }, storeSections([{ name: '', payload }], compress));
 }
 

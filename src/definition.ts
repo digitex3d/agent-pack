@@ -142,7 +142,7 @@ export const STRATEGIES: DefinitionStrategy[] = [
   // registry, and with no `renderBody` here they fall through to the generic
   // verbatim body.
   //
-  // So a standalone file that imports a store prints its RAW SOURCE — `TYPE tabeli`,
+  // So a standalone file that imports a store prints its RAW SOURCE — `DRIVER <driver>`,
   // `LASTS project`, the SLOTS region as written — instead of the field list
   // and the commands. Not an error, and silent.
   //

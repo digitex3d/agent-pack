@@ -20,7 +20,6 @@ const { ApDocument } = await import('../dist/src/apdoc/document.js');
 const { ApxEngine } = await import('../dist/src/apx/engine.js');
 const { apxPath, STATE_DIR } = await import('../dist/src/apx/paths.js');
 const { fileCollection } = await import('../dist/src/storeDrivers/files/index.js');
-const { TABELI_ENGINE } = await import('../dist/src/config.js');
 const { checkId } = await import('../dist/src/check.js');
 const { JudgeError } = await import('../dist/src/judge/types.js');
 const { buildOrchestrationContent } = await import('../dist/src/orchestrationSection.js');
@@ -74,7 +73,7 @@ const stderrOf = async run => {
   try { return { result: await run(), stderr: seen.join('\n') }; } finally { console.error = prior; }
 };
 
-const BUILD = { builtAt: '', agentPackVersion: '', hash: '', tabeli: TABELI_ENGINE, checks: { adapter: 'fake', threshold: 0.7 } };
+const BUILD = { builtAt: '', agentPackVersion: '', hash: '', checks: { adapter: 'fake', threshold: 0.7 } };
 const project = join(tmp, 'project');
 /** One run of an agent's apx engine, with the fake judge loaded by name. */
 const apx = async (doc, agent, ...args) => {

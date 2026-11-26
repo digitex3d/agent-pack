@@ -3,7 +3,7 @@
 /**
  * Store-driver registry — what `DRIVER` in a STORE block resolves to.
  *
- * Two drivers ship and need no config: `files`, the default, and `tabeli`.
+ * One driver ships and needs no config: `files`, the default.
  * Any other is a module the project names in its config (`drivers:`), written
  * by anyone: its default export is a factory taking the entry's options and
  * answering a driver. The compiler installs it when the config loads; the
@@ -15,7 +15,6 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import filesDriver from './files/index.js';
-import { tabeliDriver } from './tabeli/index.js';
 import { DRIVER_API, type StoreDriver } from './types.js';
 
 /** A driver of the config, as the apx records it: the module to import again and the options to call it with. */
@@ -25,8 +24,8 @@ export interface DriverEntry {
   options: Record<string, unknown>;
 }
 
-const BUILTIN = new Set(['files', 'tabeli']);
-const installed = new Map<string, StoreDriver>([['files', filesDriver], ['tabeli', tabeliDriver()]]);
+const BUILTIN = new Set(['files']);
+const installed = new Map<string, StoreDriver>([['files', filesDriver]]);
 
 /** Resolve a `DRIVER` value. Null when none is installed by that name — callers report, never guess. */
 export function storeDriverOf(name: string): StoreDriver | null {
@@ -36,11 +35,6 @@ export function storeDriverOf(name: string): StoreDriver | null {
 /** Every installed driver's name, for error messages that teach. */
 export function storeDriverNames(): string[] {
   return [...installed.keys()].sort();
-}
-
-/** Put the tabeli driver back with the engine an apx records: it opens its tables with it. */
-export function useTabeliEngine(engine: string | undefined): void {
-  installed.set('tabeli', tabeliDriver(engine));
 }
 
 /** Why a value is no driver this agent-pack can run, or null when it is one. */

@@ -33,7 +33,7 @@ export const STATE = Object.fromEntries(DELEGATION_STATES.map(state => [state, s
 /** The states a WAIT returns on: the piece will not move without the lead. */
 export const SETTLED_STATES: readonly DelegationState[] = ['delivered', 'merged', 'blocked', 'ended'];
 
-/** One piece, as the table holds it. Every field is text: tabeli is flat. */
+/** One piece, as the table holds it. Every field is text: a record is flat. */
 export interface DelegationRecord {
   /** The piece's id: `dlg-<8 hex>` for a background delegation (the compiled flow's, `meta.background`), `ctr-<8 hex>` for a contract. */
   dlg: string;
@@ -41,7 +41,7 @@ export interface DelegationRecord {
   step: string;
   /** Its INTO variable — for a contract, the list its MARK fills; '' when none. */
   into: string;
-  /** Who carries it out; '' for a fork of whoever runs the flow, or a contract not started yet. (Not `by`: tabeli keeps that name for itself.) */
+  /** Who carries it out; '' for a fork of whoever runs the flow, or a contract not started yet. */
   assignee: string;
   state: DelegationState;
   /** What it delivered, as JSON text — '' until then. */

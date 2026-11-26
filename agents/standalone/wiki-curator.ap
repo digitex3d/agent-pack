@@ -8,7 +8,6 @@ DOMAIN wiki:
 
 STORE raw-scans:
     ABOUT  what each file of raw/ looked like at the last check
-    DRIVER tabeli
     LASTS  project
     KEY    path
     SLOTS:

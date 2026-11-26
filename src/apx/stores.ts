@@ -18,7 +18,7 @@ import type { StoreBlock } from '../apdoc/blocks.js';
 import type { ApSlot } from '../apdoc/types.js';
 import { formatIssues, slotSpecsOf, validateRecord } from '../shapeSchema.js';
 import { filtersOn } from '../storeDrivers/filters.js';
-import { installDriver, storeDriverNames, storeDriverOf, useTabeliEngine, type DriverEntry } from '../storeDrivers/registry.js';
+import { installDriver, storeDriverNames, storeDriverOf, type DriverEntry } from '../storeDrivers/registry.js';
 import type { Collection, Doc, DriverCapability, Filter, MaybePromise, StoreDecl, StoreDriver, StoreLifetime, StoreRef } from '../storeDrivers/types.js';
 import { CACHE_DIR, STATE_DIR } from './paths.js';
 import type { ApxContext } from './service.js';
@@ -67,10 +67,9 @@ export class StoreRefusal extends Error {
 
 let driversReady: Promise<void> | null = null;
 
-/** Install, once per run, the drivers the apx's bundle recorded: the tabeli engine, then the config's own drivers. */
+/** Install, once per run, the drivers the apx's bundle recorded: the config's own. */
 export function installRecorded(host: ApxContext): Promise<void> {
   driversReady ??= (async () => {
-    useTabeliEngine(host.build.tabeli);
     for (const driver of (host.build.drivers ?? []) as DriverEntry[]) await installDriver(driver.module, driver.options);
   })();
   return driversReady;

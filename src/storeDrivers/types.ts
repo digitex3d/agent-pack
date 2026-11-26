@@ -5,7 +5,7 @@
  *
  * A store declares WHAT it holds (SLOTS), what identifies a record (KEY) and
  * how long it lives (LASTS). A *driver* decides HOW that is kept: a JSON file,
- * a tabeli table, a database. Agents never see the driver: they talk to the
+ * a database. Agents never see the driver: they talk to the
  * store through the apx's store API (src/apx/stores.ts), in the same verbs
  * whatever keeps the records.
  *

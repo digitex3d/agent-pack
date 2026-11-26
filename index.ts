@@ -44,7 +44,7 @@ Commands:
                                  over ACP — the work of the harnesses it delegates to shown in one log
   ask <harness>[:<agent>] "<task>"  Run one task on a harness reached over ACP — as that agent, when named — in this folder;
                                  its answer on stdout — inside a chat, its work in the chat's log
-  driver test <driver>           Run the store-driver contract on a driver: files, tabeli, or a
+  driver test <driver>           Run the store-driver contract on a driver: files, or a
                                  module or path, with --options '<json>'; exits 1 when a case fails
 
 Options:

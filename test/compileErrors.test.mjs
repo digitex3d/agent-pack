@@ -54,7 +54,7 @@ try {
   await compile(['    ALWAYS  write in {{lang}}'], { lang: 'English' });
 
   // --- a store slot no store can keep, whatever its driver ---
-  await assert.rejects(compile(['', 'STORE notes:', '    ABOUT  notes', '    DRIVER tabeli', '    LASTS  project', '    KEY    note-id', '    SLOTS:', '        note-id: TEXT "the id"']),
+  await assert.rejects(compile(['', 'STORE notes:', '    ABOUT  notes', '    LASTS  project', '    KEY    note-id', '    SLOTS:', '        note-id: TEXT "the id"']),
     /STORE notes: slot "note-id": a store field name uses letters, digits and _ only — write note_id/);
   await assert.rejects(compile(['', 'STORE notes:', '    ABOUT  notes', '    SLOTS:', '        id: TEXT "the id"']),
     /STORE notes: slot "id": id is the record's own identifier, given by the driver/);
@@ -62,11 +62,11 @@ try {
   // --- a store's driver: files when it names none; an unknown one, or the old TYPE line, fails ---
   await compile(['', 'STORE notes:', '    ABOUT  notes', '    SLOTS:', '        topic: TEXT "the topic"']);
   await assert.rejects(compile(['', 'STORE notes:', '    ABOUT  notes', '    DRIVER mongo', '    SLOTS:', '        topic: TEXT "the topic"']),
-    /STORE notes: unknown DRIVER `mongo` \(installed: files, tabeli\)/);
-  await assert.rejects(compile(['', 'STORE notes:', '    ABOUT  notes', '    TYPE   tabeli', '    SLOTS:', '        topic: TEXT "the topic"']),
+    /STORE notes: unknown DRIVER `mongo` \(installed: files\)/);
+  await assert.rejects(compile(['', 'STORE notes:', '    ABOUT  notes', '    TYPE   files', '    SLOTS:', '        topic: TEXT "the topic"']),
     /TYPE became DRIVER — write `DRIVER <driver>`/);
 
-  const store = (lasts, key, type) => compile(['', 'STORE notes:', '    ABOUT  notes', '    DRIVER tabeli', `    LASTS  ${lasts}`, `    KEY    ${key}`, '    SLOTS:', `        topic: ${type} "the topic"`]);
+  const store = (lasts, key, type) => compile(['', 'STORE notes:', '    ABOUT  notes', `    LASTS  ${lasts}`, `    KEY    ${key}`, '    SLOTS:', `        topic: ${type} "the topic"`]);
   await store('project', 'topic', 'TEXT MAX_WORDS 1');
   await assert.rejects(store('forever', 'topic', 'TEXT'), /LASTS: unknown value `forever` \(allowed: session, project\)/);
   await assert.rejects(store('projetc', 'topic', 'TEXT'), /LASTS: unknown value `projetc` — did you mean `project`\?/);
